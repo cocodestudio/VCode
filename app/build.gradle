@@ -36,9 +36,7 @@ android {
 
     packaging {
         resources {
-            excludes += ['plugin.properties', 'about.html', 'META-INF/eclipse.inf',
-                         'META-INF/ECLIPSE_.RSA', 'META-INF/ECLIPSE_.SF',
-                         'META-INF/INDEX.LIST', 'META-INF/*.kotlin_module']
+            excludes += ['plugin.properties', 'about.html', 'META-INF/*','META-INF/*.kotlin_module']
         }
     }
 }
