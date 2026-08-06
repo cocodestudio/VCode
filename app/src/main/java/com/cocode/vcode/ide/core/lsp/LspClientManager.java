@@ -2,12 +2,10 @@ package com.cocode.vcode.ide.core.lsp;
 
 import android.content.Context;
 
-import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -37,13 +35,18 @@ public final class LspClientManager {
 
     private static volatile LspClientManager sInstance;
 
-    /** Active servers keyed by LSP language id (e.g. "html", "javascript"). */
+    /**
+     * Active servers keyed by LSP language id (e.g. "html", "javascript").
+     */
     private final ConcurrentHashMap<String, LspServer> servers = new ConcurrentHashMap<>();
 
-    /** Application context — used to pass to server engines for JSON asset loading. */
+    /**
+     * Application context — used to pass to server engines for JSON asset loading.
+     */
     private volatile Context appContext;
 
-    private LspClientManager() {}
+    private LspClientManager() {
+    }
 
     public static LspClientManager getInstance() {
         if (sInstance == null) {
@@ -77,7 +80,7 @@ public final class LspClientManager {
      * @param callback result delivered on the main thread
      */
     public void requestCompletion(LspDocument doc, LspPosition pos,
-                                   LspCallback<List<LspCompletionItem>> callback) {
+                                  LspCallback<List<LspCompletionItem>> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
@@ -100,7 +103,7 @@ public final class LspClientManager {
      * @param callback result delivered on the main thread
      */
     public void requestDiagnostics(LspDocument doc,
-                                    LspCallback<List<LspDiagnostic>> callback) {
+                                   LspCallback<List<LspDiagnostic>> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
@@ -124,7 +127,7 @@ public final class LspClientManager {
      * @param callback result delivered on the main thread; result may be null if not found
      */
     public void requestDefinition(LspDocument doc, LspPosition pos,
-                                   LspCallback<LspLocation> callback) {
+                                  LspCallback<LspLocation> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
@@ -148,7 +151,7 @@ public final class LspClientManager {
      * @param callback result delivered on the main thread
      */
     public void requestReferences(LspDocument doc, LspPosition pos,
-                                   LspCallback<List<LspLocation>> callback) {
+                                  LspCallback<List<LspLocation>> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
@@ -172,7 +175,7 @@ public final class LspClientManager {
      * @param callback result delivered on the main thread; result may be null if not applicable
      */
     public void requestSignatureHelp(LspDocument doc, LspPosition pos,
-                                      LspCallback<LspSignatureHelp> callback) {
+                                     LspCallback<LspSignatureHelp> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
@@ -201,7 +204,8 @@ public final class LspClientManager {
             for (LspServer server : servers.values()) {
                 try {
                     server.shutdown();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
             servers.clear();
             ProjectIndex.getInstance().clear();

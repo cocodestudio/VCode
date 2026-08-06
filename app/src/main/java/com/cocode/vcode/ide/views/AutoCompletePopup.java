@@ -18,7 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.core.autocomplete.CompletionItem;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.databinding.ItemAutocompleteSuggestionBinding;
 import com.cocode.vcode.ide.utils.FileIconHelper;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -87,10 +87,9 @@ public class AutoCompletePopup {
         popupWindow.setWidth(popupWidth);
 
         int itemCount = Math.min(items.size(), MAX_VISIBLE_ITEMS);
-        int popupHeight = itemCount * UiUtils.dpToPx(context, ITEM_HEIGHT_DP);
-        int estimatedHeight = popupHeight;
+        int estimatedHeight = itemCount * UiUtils.dpToPx(context, ITEM_HEIGHT_DP);
 
-        popupWindow.setHeight(popupHeight);
+        popupWindow.setHeight(estimatedHeight);
 
         // AD-2: getCursorScreenCoords() already returns window-absolute pixel coordinates
         // (it calls getLocationInWindow() internally and factors in scroll + padding).
@@ -104,8 +103,8 @@ public class AutoCompletePopup {
             CodeEditText codeEditor = (CodeEditText) editorView;
             int[] coords = codeEditor.getCursorScreenCoords(cursorOffset);
             // coords[0] = window-absolute X, coords[1] = window-absolute top Y, coords[2] = bottom Y
-            windowX       = coords[0];
-            windowYTop    = coords[1];
+            windowX = coords[0];
+            windowYTop = coords[1];
             windowYBottom = coords[2];
         }
 
@@ -130,7 +129,7 @@ public class AutoCompletePopup {
         x = Math.max(0, x);
 
         if (popupWindow.isShowing()) {
-            popupWindow.update(x, y, popupWidth, popupHeight);
+            popupWindow.update(x, y, popupWidth, estimatedHeight);
         } else {
             popupWindow.showAtLocation(editorView, Gravity.NO_GRAVITY, x, y);
         }
@@ -185,7 +184,12 @@ public class AutoCompletePopup {
      */
     private class AutoCompleteAdapter extends RecyclerView.Adapter<AutoCompleteAdapter.ViewHolder> {
 
-        private final int colorPrimary, colorSecondary, colorSuccess, colorWarning, colorJson, colorTextSecondary, colorTextPrimary;
+        private final int colorPrimary;
+        private final int colorSecondary;
+        private final int colorSuccess;
+        private final int colorWarning;
+        private final int colorJson;
+        private final int colorTextSecondary;
         private final Typeface uiFont, uiFontBold, codeFont;
         private List<CompletionItem> items = new ArrayList<>();
         private OnItemSelectedListener listener;
@@ -198,7 +202,7 @@ public class AutoCompletePopup {
             colorWarning = ContextCompat.getColor(context, R.color.vcode_accent_warning);
             colorJson = ContextCompat.getColor(context, R.color.vcode_accent_json);
             colorTextSecondary = ContextCompat.getColor(context, R.color.vcode_text_secondary);
-            colorTextPrimary = ContextCompat.getColor(context, R.color.vcode_text_primary);
+            int colorTextPrimary = ContextCompat.getColor(context, R.color.vcode_text_primary);
             uiFont = FontManager.getInstance().getUiFont(context);
             uiFontBold = Typeface.create(uiFont, Typeface.BOLD);
             codeFont = FontManager.getInstance().getCodeFont(context);

@@ -39,67 +39,11 @@ public class ProjectStateRepository {
     // --- Section: Save ---
 
     /**
-     * Saves layout configuration mappings asynchronously to prevent visual freezing on UI layers.
-     */
-    public void saveState(File projectDir, ProjectState state) {
-        MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
-        if (projectDir == null || state == null) {
-            liveData.setValue(Result.error("Invalid project directory or state"));
-            return;
-        }
-        ExecutorProvider.getInstance().runOnIo(() -> {
-            try {
-                writeStateToDisk(projectDir, state);
-                ExecutorProvider.getInstance().runOnMain(() -> liveData.setValue(Result.success(true)));
-            } catch (Exception e) {
-                ExecutorProvider.getInstance()
-                        .runOnMain(() -> liveData.setValue(Result.error("Failed to save state: " + e.getMessage())));
-            }
-        });
-    }
-
-    /**
-     * Synchronous save — call only from a background thread (e.g., inside onStop lifecycle closures).
-     * Bypasses message queues to guarantee disk writes happen immediately before system component destructions.
-     */
-    public void saveStateSync(File projectDir, ProjectState state) {
-        if (projectDir == null || state == null)
-            return;
-        try {
-            writeStateToDisk(projectDir, state);
-        } catch (Exception e) {
-            // Ambient failure exception trap logs anomalies without stopping lifecycle execution threads
-        }
-    }
-
-    // --- Section: Load ---
-
-    /**
-     * Synchronous load — call only from a background thread. Returns empty state on any failure.
-     * Guarantees context initialization stability by feeding back a default state vector if reads encounter problems.
-     */
-    public ProjectState loadStateSync(File projectDir, String projectId) {
-        if (projectDir == null)
-            return new ProjectState(projectId);
-        try {
-            return readStateFromDisk(projectDir, projectId);
-        } catch (Exception e) {
-            return new ProjectState(projectId);
-        }
-    }
-
-    // --- Section: Disk I/O ---
-
-    private File getSessionFile(File projectDir) {
-        return new File(getSessionStorageDir(projectDir), SESSION_FILE);
-    }
-
-    /**
      * Determines where session data should be persisted.
-     *
+     * <p>
      * For VCode-owned projects (inside the VCodeProjects/ directory) the session file is stored
      * alongside the project files — same behaviour as before.
-     *
+     * <p>
      * For ANY external directory (Downloads, Documents, WhatsApp, etc.) the session is stored
      * entirely inside the app's private internal storage so VCode never creates stray files in
      * folders it doesn't own.  The sub-folder name is a stable hex hash of the absolute path,
@@ -121,6 +65,62 @@ public class ProjectStateRepository {
             bucket.mkdirs();
         }
         return bucket;
+    }
+
+    /**
+     * Saves layout configuration mappings asynchronously to prevent visual freezing on UI layers.
+     */
+    public void saveState(File projectDir, ProjectState state) {
+        MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
+        if (projectDir == null || state == null) {
+            liveData.setValue(Result.error("Invalid project directory or state"));
+            return;
+        }
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                writeStateToDisk(projectDir, state);
+                ExecutorProvider.getInstance().runOnMain(() -> liveData.setValue(Result.success(true)));
+            } catch (Exception e) {
+                ExecutorProvider.getInstance()
+                        .runOnMain(() -> liveData.setValue(Result.error("Failed to save state: " + e.getMessage())));
+            }
+        });
+    }
+
+    // --- Section: Load ---
+
+    /**
+     * Synchronous save — call only from a background thread (e.g., inside onStop lifecycle closures).
+     * Bypasses message queues to guarantee disk writes happen immediately before system component destructions.
+     */
+    public void saveStateSync(File projectDir, ProjectState state) {
+        if (projectDir == null || state == null)
+            return;
+        try {
+            writeStateToDisk(projectDir, state);
+        } catch (Exception e) {
+            // Ambient failure exception trap logs anomalies without stopping lifecycle execution threads
+        }
+    }
+
+    // --- Section: Disk I/O ---
+
+    /**
+     * Synchronous load — call only from a background thread. Returns empty state on any failure.
+     * Guarantees context initialization stability by feeding back a default state vector if reads encounter problems.
+     */
+    public ProjectState loadStateSync(File projectDir, String projectId) {
+        if (projectDir == null)
+            return new ProjectState(projectId);
+        try {
+            return readStateFromDisk(projectDir, projectId);
+        } catch (Exception e) {
+            return new ProjectState(projectId);
+        }
+    }
+
+    private File getSessionFile(File projectDir) {
+        return new File(getSessionStorageDir(projectDir), SESSION_FILE);
     }
 
     /**

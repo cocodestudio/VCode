@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * Contract that every in-process language server must fulfil.
- *
+ * <p>
  * Servers are instantiated lazily (when the first file of their language is opened) and run
  * exclusively on background threads supplied by {@link com.cocode.vcode.ide.utils.ExecutorProvider}.
  * All return values are plain Java objects — no JSON-RPC transport is used.

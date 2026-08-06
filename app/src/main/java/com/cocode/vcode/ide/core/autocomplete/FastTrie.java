@@ -1,5 +1,7 @@
 package com.cocode.vcode.ide.core.autocomplete;
 
+import com.cocode.vcode.ide.core.model.CompletionItem;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,15 +40,6 @@ public class FastTrie {
         }
         current.isEndOfWord = true;
         current.item = item;
-    }
-
-    /**
-     * Inserts a list of CompletionItems.
-     */
-    public void insertAll(List<CompletionItem> items) {
-        for (CompletionItem item : items) {
-            insert(item);
-        }
     }
 
     /**

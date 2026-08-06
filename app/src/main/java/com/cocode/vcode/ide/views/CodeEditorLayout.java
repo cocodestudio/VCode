@@ -3,8 +3,6 @@ package com.cocode.vcode.ide.views;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -20,8 +18,8 @@ public class CodeEditorLayout extends LinearLayout {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private LineNumberView lineNumberView;
     private CodeEditText codeEditText;
-    private SelectionToolbar selectionToolbar;
     private final Runnable syncRunnable = this::syncLineNumberView;
+    private SelectionToolbar selectionToolbar;
 
     public CodeEditorLayout(Context context) {
         super(context);
@@ -42,7 +40,7 @@ public class CodeEditorLayout extends LinearLayout {
         setOrientation(HORIZONTAL);
 
         lineNumberView = new LineNumberView(context);
-        codeEditText   = new CodeEditText(context);
+        codeEditText = new CodeEditText(context);
 
         LayoutParams lineParams = new LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);

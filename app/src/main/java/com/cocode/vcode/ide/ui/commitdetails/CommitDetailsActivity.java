@@ -9,14 +9,14 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.ActivityCommitDetailsBinding;
 import com.cocode.vcode.ide.git.model.CommitItem;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
-import com.cocode.vcode.ide.ui.sheets.DiffViewerBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.ResetConfirmBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.DiffViewerBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.ResetConfirmBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.R;
 
 /**
  * CommitDetailsActivity displays granular information about a specific Git commit.

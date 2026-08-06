@@ -19,12 +19,13 @@ import androidx.lifecycle.ViewModelProvider;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.FragmentGitRemoteBinding;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
+import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.github.GitHubApiClient;
 import com.cocode.vcode.ide.git.model.BranchItem;
-import com.cocode.vcode.ide.git.repository.GitRepository;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.cocode.vcode.ide.ui.sheets.GitConflictBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.GitHubLoginBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.CreateGitHubRepoBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitHubLoginBottomSheet;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 
@@ -119,7 +120,7 @@ public class GitRemoteFragment extends Fragment {
 
             binding.tvAccountUsername.setText(R.string.vcode_not_logged_in);
         }
-        
+
         if (binding.etRemoteUrl != null && binding.etRemoteUrl.getText() != null) {
             updateCreateButtonVisibility(binding.etRemoteUrl.getText().toString());
         }
@@ -245,8 +246,8 @@ public class GitRemoteFragment extends Fragment {
 
         if (binding.btnOpenOnGithub != null) {
             binding.btnOpenOnGithub.setOnClickListener(v -> {
-                String url = binding.etRemoteUrl.getText() != null 
-                    ? binding.etRemoteUrl.getText().toString().trim() : "";
+                String url = binding.etRemoteUrl.getText() != null
+                        ? binding.etRemoteUrl.getText().toString().trim() : "";
                 if (url.isEmpty()) {
                     Toast.makeText(requireContext(), R.string.vcode_no_remote_url_configured, Toast.LENGTH_SHORT).show();
                     return;
@@ -282,8 +283,8 @@ public class GitRemoteFragment extends Fragment {
                     // GitHub repos typically don't have spaces, replace with dashes
                     name = name.replace(" ", "-");
                 }
-                
-                com.cocode.vcode.ide.ui.sheets.CreateGitHubRepoBottomSheet.show(getChildFragmentManager(), name, (repoName, desc, isPrivate) -> {
+
+                CreateGitHubRepoBottomSheet.show(getChildFragmentManager(), name, (repoName, desc, isPrivate) -> {
                     createGitHubRepo(repoName, desc, isPrivate);
                 });
             });
@@ -311,9 +312,9 @@ public class GitRemoteFragment extends Fragment {
             try {
                 GitHubApiClient client = new GitHubApiClient(finalToken);
                 GitHubApiClient.CreateRepoResult result = client.createRepository(name, desc, isPrivate);
-                
+
                 String cloneUrl = result.getCloneUrl();
-                
+
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (binding != null) {
                         binding.etRemoteUrl.setText(cloneUrl);

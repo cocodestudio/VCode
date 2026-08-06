@@ -1,7 +1,9 @@
 package com.cocode.vcode.ide.ui.projects;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -16,6 +18,7 @@ import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -34,11 +37,11 @@ import com.cocode.vcode.ide.git.model.CommitInfo;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.settings.SettingsActivity;
-import com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.CloneRepoBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.GitHubLoginBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.NewProjectBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.NewProjectBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.CloneRepoBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitHubLoginBottomSheet;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -156,7 +159,9 @@ public class ProjectsActivity extends BaseActivity {
         // Re-evaluate storage permissions and project list when returning to this screen
         refreshUIState();
 
-        registerReceiver(cloneCompleteReceiver, new android.content.IntentFilter("com.cocode.vcode.ide.ACTION_CLONE_COMPLETE"), android.content.Context.RECEIVER_NOT_EXPORTED);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(cloneCompleteReceiver, new IntentFilter("com.cocode.vcode.ide.ACTION_CLONE_COMPLETE"), Context.RECEIVER_NOT_EXPORTED);
+            }
     }
 
     @Override

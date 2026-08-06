@@ -2,9 +2,7 @@ package com.cocode.vcode.ide.ui.editor;
 
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
-
 import android.util.TypedValue;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -21,20 +19,21 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
+import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.data.model.FileNode;
 import com.cocode.vcode.ide.databinding.ActivityEditorBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
+import com.cocode.vcode.ide.ui.editor.helper.EditorMenuHelper;
+import com.cocode.vcode.ide.ui.editor.helper.EditorPreviewHelper;
 import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import com.cocode.vcode.ide.ui.editor.viewer.IFileViewer;
 import com.cocode.vcode.ide.ui.editor.viewer.ViewerManager;
 import com.cocode.vcode.ide.ui.filetree.FileTreeFragment;
-import com.cocode.vcode.ide.ui.git.GitActivity;
-import com.cocode.vcode.ide.ui.preview.PreviewActivity;
-import com.cocode.vcode.ide.ui.sheets.EditorOptionsBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.GoToLineBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.SnippetsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.editor.GoToLineBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.editor.ProblemsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.editor.SnippetsBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -44,7 +43,6 @@ import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.CodeEditText;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 
 public class EditorActivity extends BaseActivity implements FileTreeFragment.FileSelectionListener, IEditorCallback {
@@ -119,13 +117,13 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     binding.findReplaceBar.slideUp();
                     return;
                 }
-                
+
                 CodeEditText codeEditText = getActiveCodeEditor();
                 if (codeEditText != null && codeEditText.getSelectionStart() != codeEditText.getSelectionEnd()) {
                     codeEditText.collapseSelection();
                     return;
                 }
-                
+
                 navigateWithUnsavedCheck(EditorActivity.this::finish);
             }
         });
@@ -150,7 +148,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     private void extractPendingOpenIntent(Intent intent) {
         if (intent != null && intent.hasExtra(EXTRA_OPEN_FILE_PATH)) {
-            pendingOpenFilePath  = intent.getStringExtra(EXTRA_OPEN_FILE_PATH);
+            pendingOpenFilePath = intent.getStringExtra(EXTRA_OPEN_FILE_PATH);
             pendingOpenSourceUri = intent.getStringExtra(EXTRA_SOURCE_URI);
         }
     }
@@ -234,7 +232,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
 
         binding.diagnosticBar.setOnClickListener(v -> {
-            com.cocode.vcode.ide.ui.sheets.ProblemsBottomSheet sheet = new com.cocode.vcode.ide.ui.sheets.ProblemsBottomSheet();
+            ProblemsBottomSheet sheet = new ProblemsBottomSheet();
             sheet.setListener(this::jumpToLine);
             Integer activeIndex = viewModel.getActiveTabIndex().getValue();
             if (activeIndex != null && activeIndex >= 0) {
@@ -405,9 +403,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 // file. Doing this here avoids the race where restoreTabsFromState() would wipe
                 // the file from openFilesLiveData if we opened it earlier in onCreate().
                 if (pendingOpenFilePath != null) {
-                    String path      = pendingOpenFilePath;
+                    String path = pendingOpenFilePath;
                     String sourceUri = pendingOpenSourceUri;
-                    pendingOpenFilePath  = null;
+                    pendingOpenFilePath = null;
                     pendingOpenSourceUri = null;
                     File file = new File(path);
                     if (file.exists() && file.isFile()) {
@@ -491,7 +489,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 binding.diagnosticBar.setVisibility(View.GONE);
                 return;
             }
-            
+
             boolean isEmpty;
             if (activeViewer != null && activeViewer.getCodeEditor() != null) {
                 isEmpty = activeViewer.getCodeEditor().length() == 0;
@@ -499,7 +497,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 String content = files.get(idx).getContent();
                 isEmpty = (content == null || content.trim().isEmpty());
             }
-            
+
             if (isEmpty) {
                 binding.diagnosticBar.setVisibility(View.GONE);
                 return;
@@ -840,7 +838,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     @Override
-    public void reportProblems(File file, List<com.cocode.vcode.ide.data.model.Problem> problems) {
+    public void reportProblems(File file, List<Problem> problems) {
         if (viewModel != null) {
             viewModel.reportProblems(file, problems);
         }

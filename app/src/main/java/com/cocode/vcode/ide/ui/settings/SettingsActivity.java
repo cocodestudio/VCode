@@ -12,7 +12,8 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.databinding.ActivitySettingsBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
-import com.cocode.vcode.ide.ui.sheets.GitAuthorInfoBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitAuthorInfoBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.SshKeyBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
@@ -85,7 +86,7 @@ public class SettingsActivity extends BaseActivity {
 
         // Launch SSH Key sheet
         binding.opSshKey.setOnClickListener(_view -> {
-            com.cocode.vcode.ide.ui.sheets.SshKeyBottomSheet sheet = com.cocode.vcode.ide.ui.sheets.SshKeyBottomSheet.newInstance();
+            SshKeyBottomSheet sheet = SshKeyBottomSheet.newInstance();
             sheet.show(getSupportFragmentManager(), "SshKeyBottomSheet");
         });
 

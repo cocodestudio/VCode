@@ -26,11 +26,9 @@ public final class MarkdownLspServer implements LspServer {
     private static final Pattern LINK_PATTERN = Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
 
     private volatile boolean ready = false;
-    private ProjectIndex projectIndex;
 
     @Override
     public void initialize(ProjectIndex index) {
-        this.projectIndex = index;
         this.ready = true;
     }
 

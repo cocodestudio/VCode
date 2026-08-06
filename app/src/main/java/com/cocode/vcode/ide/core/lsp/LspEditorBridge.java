@@ -3,9 +3,9 @@ package com.cocode.vcode.ide.core.lsp;
 import android.os.Handler;
 import android.os.Looper;
 
-import com.cocode.vcode.ide.core.autocomplete.CompletionItem;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
-import com.cocode.vcode.ide.data.model.Problem;
+import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.views.CodeEditText;
 
 import java.io.File;
@@ -46,29 +46,31 @@ public final class LspEditorBridge {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    /** Monotonically increasing document version counter — invalidates stale responses. */
+    /**
+     * Monotonically increasing document version counter — invalidates stale responses.
+     */
     private final AtomicInteger docVersion = new AtomicInteger(0);
 
     private CodeEditText editor;
     private File currentFile;
     private FileType fileType;
 
-    /** Whether the bridge is actively connected to an editor instance. */
+    /**
+     * Whether the bridge is actively connected to an editor instance.
+     */
     private boolean attached = false;
+    private final Runnable diagnosticRunnable = this::performDiagnostics;
 
+    // -------------------------------------------------------------------------
+    // Debounce runnables — cancelled and rescheduled on every keystroke
+    // -------------------------------------------------------------------------
     /**
      * True when the current language has a registered LSP server.
      * When true, the legacy autocomplete engine in {@link CodeEditText} is suppressed
      * and all completions flow exclusively through the LSP pipeline.
      */
     private boolean hasLspServer = false;
-
-    // -------------------------------------------------------------------------
-    // Debounce runnables — cancelled and rescheduled on every keystroke
-    // -------------------------------------------------------------------------
-
-    private final Runnable diagnosticRunnable = this::performDiagnostics;
-    private final Runnable completionRunnable  = this::performCompletion;
+    private final Runnable completionRunnable = this::performCompletion;
 
     // -------------------------------------------------------------------------
     // ContentChangeListener wired to the editor
@@ -92,6 +94,49 @@ public final class LspEditorBridge {
     // -------------------------------------------------------------------------
 
     /**
+     * Maps an LSP completion kind integer to the editor's {@link CompletionItem.Type} enum.
+     */
+    private static CompletionItem.Type mapKindToLegacy(int kind) {
+        switch (kind) {
+            case LspCompletionItem.KIND_FUNCTION:
+                return CompletionItem.Type.FUNCTION;
+            case LspCompletionItem.KIND_CLASS:
+                return CompletionItem.Type.TAG;
+            case LspCompletionItem.KIND_PROPERTY:
+                return CompletionItem.Type.CSS_PROPERTY;
+            case LspCompletionItem.KIND_VALUE:
+                return CompletionItem.Type.CSS_VALUE;
+            case LspCompletionItem.KIND_KEYWORD:
+                return CompletionItem.Type.KEYWORD;
+            case LspCompletionItem.KIND_SNIPPET:
+                return CompletionItem.Type.SNIPPET;
+            case LspCompletionItem.KIND_FILE:
+                return CompletionItem.Type.FILE;
+            case LspCompletionItem.KIND_FOLDER:
+                return CompletionItem.Type.FOLDER;
+            case LspCompletionItem.KIND_TEXT:
+                return CompletionItem.Type.VALUE;
+            default:
+                return CompletionItem.Type.BUILTIN;
+        }
+    }
+
+    /**
+     * Converts a flat character offset to a zero-based LSP Position.
+     */
+    static LspPosition offsetToLspPosition(String text, int offset) {
+        int line = 0;
+        int lastNl = -1;
+        for (int i = 0; i < offset && i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+                lastNl = i;
+            }
+        }
+        return new LspPosition(line, Math.max(0, offset - lastNl - 1));
+    }
+
+    /**
      * Attaches this bridge to the given editor instance and file.
      * Safe to call multiple times — detaches from the previous editor first.
      *
@@ -99,7 +144,7 @@ public final class LspEditorBridge {
      */
     public void attach(CodeEditText codeEditor) {
         detach();
-        this.editor   = codeEditor;
+        this.editor = codeEditor;
         this.fileType = codeEditor.getFileType();
         this.attached = true;
         codeEditor.addContentChangeListener(contentListener);
@@ -191,6 +236,10 @@ public final class LspEditorBridge {
         LspClientManager.getInstance().requestReferences(doc, cursorPosition(), callback);
     }
 
+    // -------------------------------------------------------------------------
+    // Private — debounced operations
+    // -------------------------------------------------------------------------
+
     /**
      * Requests signature help at the current caret position.
      * Typically called when the user types {@code (} or {@code ,}.
@@ -222,7 +271,7 @@ public final class LspEditorBridge {
     }
 
     // -------------------------------------------------------------------------
-    // Private — debounced operations
+    // Private — LSP → legacy CompletionItem conversion
     // -------------------------------------------------------------------------
 
     private void performDiagnostics() {
@@ -255,7 +304,7 @@ public final class LspEditorBridge {
         LspDocument doc = buildSnapshot();
         if (doc == null || doc.text == null) return;
 
-        // Fast-path: prevent autocomplete popup from flashing/triggering on 
+        // Fast-path: prevent autocomplete popup from flashing/triggering on
         // newlines, spaces, backspaces on empty lines, and non-trigger symbols.
         int flatCursor = getCursorFlatOffset();
         if (flatCursor <= 0 || flatCursor > doc.text.length()) {
@@ -305,7 +354,7 @@ public final class LspEditorBridge {
     }
 
     // -------------------------------------------------------------------------
-    // Private — LSP → legacy CompletionItem conversion
+    // Private — helpers
     // -------------------------------------------------------------------------
 
     /**
@@ -333,26 +382,6 @@ public final class LspEditorBridge {
         }
         return out;
     }
-
-    /** Maps an LSP completion kind integer to the editor's {@link CompletionItem.Type} enum. */
-    private static CompletionItem.Type mapKindToLegacy(int kind) {
-        switch (kind) {
-            case LspCompletionItem.KIND_FUNCTION: return CompletionItem.Type.FUNCTION;
-            case LspCompletionItem.KIND_CLASS:    return CompletionItem.Type.TAG;
-            case LspCompletionItem.KIND_PROPERTY: return CompletionItem.Type.CSS_PROPERTY;
-            case LspCompletionItem.KIND_VALUE:    return CompletionItem.Type.CSS_VALUE;
-            case LspCompletionItem.KIND_KEYWORD:  return CompletionItem.Type.KEYWORD;
-            case LspCompletionItem.KIND_SNIPPET:  return CompletionItem.Type.SNIPPET;
-            case LspCompletionItem.KIND_FILE:     return CompletionItem.Type.FILE;
-            case LspCompletionItem.KIND_FOLDER:   return CompletionItem.Type.FOLDER;
-            case LspCompletionItem.KIND_TEXT:     return CompletionItem.Type.VALUE;
-            default:                              return CompletionItem.Type.BUILTIN;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Private — helpers
-    // -------------------------------------------------------------------------
 
     /**
      * Builds an immutable {@link LspDocument} snapshot from the editor's current content.
@@ -398,20 +427,9 @@ public final class LspEditorBridge {
         }
     }
 
-    /** Converts a flat character offset to a zero-based LSP Position. */
-    static LspPosition offsetToLspPosition(String text, int offset) {
-        int line = 0;
-        int lastNl = -1;
-        for (int i = 0; i < offset && i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
-                lastNl = i;
-            }
-        }
-        return new LspPosition(line, Math.max(0, offset - lastNl - 1));
-    }
-
-    /** Updates the {@link ProjectIndex} with the latest in-memory snapshot of the current file. */
+    /**
+     * Updates the {@link ProjectIndex} with the latest in-memory snapshot of the current file.
+     */
     private void updateProjectIndex() {
         LspDocument doc = buildSnapshot();
         if (doc != null) {
@@ -428,8 +446,8 @@ public final class LspEditorBridge {
         List<Problem> problems = new ArrayList<>(lspDiagnostics.size());
         for (LspDiagnostic d : lspDiagnostics) {
             if (d == null || d.range == null) continue;
-            int line   = d.range.start.line;
-            int col    = d.range.start.character;
+            int line = d.range.start.line;
+            int col = d.range.start.character;
             int endCol = d.range.end.character;
             int length = Math.max(1, endCol - col);
             Problem.Severity severity = d.severity == LspDiagnostic.SEVERITY_ERROR

@@ -2,6 +2,8 @@ package com.cocode.vcode.ide.core.autocomplete;
 
 import android.content.Context;
 
+import com.cocode.vcode.ide.core.model.CompletionItem;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

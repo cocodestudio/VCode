@@ -1,10 +1,14 @@
 package com.cocode.vcode.ide.ui.editor;
 
+import android.content.Context;
+import android.net.Uri;
+
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
 import com.cocode.vcode.ide.core.model.FileType;
+import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.data.model.FileNode;
@@ -15,6 +19,8 @@ import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.data.repository.ProjectStateRepository;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
 import com.cocode.vcode.ide.git.model.FileStatus;
+import com.cocode.vcode.ide.ui.editor.helper.EditorGitHelper;
+import com.cocode.vcode.ide.ui.editor.helper.ProjectMetaHelper;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 
@@ -24,9 +30,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import android.content.Context;
-import android.net.Uri;
 
 /**
  * EditorViewModel serves as the centralized state manager for the EditorActivity.
@@ -55,28 +58,24 @@ public class EditorViewModel extends ViewModel {
      * This is used to provide visual feedback (colored overlays) in the File Tree.
      */
     private final MutableLiveData<Map<String, FileStatus.Type>> gitStatusesLiveData = new MutableLiveData<>(new HashMap<>());
-    private final MutableLiveData<List<com.cocode.vcode.ide.data.model.Problem>> problemsLiveData = new MutableLiveData<>(new ArrayList<>());
-    private final Map<String, List<com.cocode.vcode.ide.data.model.Problem>> fileProblemsMap = new HashMap<>();
+    private final MutableLiveData<List<Problem>> problemsLiveData = new MutableLiveData<>(new ArrayList<>());
+    private final Map<String, List<Problem>> fileProblemsMap = new HashMap<>();
     private final MutableLiveData<int[]> activeFileDiagnostics = new MutableLiveData<>();
 
     private File projectRoot;
     private String projectId;
+    private String projectName;
+    private ProjectState currentState;
     /**
      * Background task for periodic automatic saving of all dirty files.
      */
     private final Runnable autoSaveRunnable = this::saveAll;
-    private String projectName;
-    private ProjectState currentState;
     /**
      * When true, the default "open project mainFile" step inside restoreTabsFromState is skipped.
      * Set by EditorActivity when the editor is launched from an external file intent so that the
      * externally-requested file (opened after session restore) stays as the active tab.
      */
     private boolean skipDefaultFileOpen = false;
-
-    public void setSkipDefaultFileOpen(boolean skip) {
-        this.skipDefaultFileOpen = skip;
-    }
 
     public EditorViewModel(Context appContext, FileRepository fileRepo, ProjectStateRepository stateRepo, SettingsRepository settingsRepo, ProjectRepository projectRepo) {
         this.appContext = appContext;
@@ -85,6 +84,10 @@ public class EditorViewModel extends ViewModel {
         this.settingsRepo = settingsRepo;
         this.projectRepo = projectRepo;
         reloadSettings();
+    }
+
+    public void setSkipDefaultFileOpen(boolean skip) {
+        this.skipDefaultFileOpen = skip;
     }
 
     // --- Getters for reactive data streams ---
@@ -116,7 +119,7 @@ public class EditorViewModel extends ViewModel {
         return projectName;
     }
 
-    public LiveData<List<com.cocode.vcode.ide.data.model.Problem>> getProblems() {
+    public LiveData<List<Problem>> getProblems() {
         return problemsLiveData;
     }
 
@@ -124,7 +127,7 @@ public class EditorViewModel extends ViewModel {
         return activeFileDiagnostics;
     }
 
-    public void reportProblems(File file, List<com.cocode.vcode.ide.data.model.Problem> problems) {
+    public void reportProblems(File file, List<Problem> problems) {
         if (file == null) return;
         String path = file.getAbsolutePath();
         if (problems == null || problems.isEmpty()) {
@@ -133,8 +136,8 @@ public class EditorViewModel extends ViewModel {
             fileProblemsMap.put(path, problems);
         }
 
-        List<com.cocode.vcode.ide.data.model.Problem> allProblems = new ArrayList<>();
-        for (List<com.cocode.vcode.ide.data.model.Problem> list : fileProblemsMap.values()) {
+        List<Problem> allProblems = new ArrayList<>();
+        for (List<Problem> list : fileProblemsMap.values()) {
             allProblems.addAll(list);
         }
         problemsLiveData.postValue(allProblems);
@@ -149,13 +152,13 @@ public class EditorViewModel extends ViewModel {
     }
 
     private void recalculateActiveDiagnostics(String path) {
-        List<com.cocode.vcode.ide.data.model.Problem> problems = fileProblemsMap.get(path);
+        List<Problem> problems = fileProblemsMap.get(path);
         int[] counts = new int[]{0, 0, 0};
         if (problems != null) {
-            for (com.cocode.vcode.ide.data.model.Problem p : problems) {
-                if (p.getSeverity() == com.cocode.vcode.ide.data.model.Problem.Severity.ERROR) {
+            for (Problem p : problems) {
+                if (p.getSeverity() == Problem.Severity.ERROR) {
                     counts[0]++;
-                } else if (p.getSeverity() == com.cocode.vcode.ide.data.model.Problem.Severity.WARNING) {
+                } else if (p.getSeverity() == Problem.Severity.WARNING) {
                     counts[1]++;
                 } else {
                     counts[2]++;
@@ -204,13 +207,13 @@ public class EditorViewModel extends ViewModel {
         this.projectRoot = root;
         this.projectId = pId;
         this.projectName = pName;
-        
+
         // Cleanup legacy virtual files that may have been written to disk previously
         File legacyApiFile = new File(projectRoot, "vcode_api_tester.api");
         if (legacyApiFile.exists() && legacyApiFile.isFile()) {
             legacyApiFile.delete();
         }
-        
+
         refreshFileTree();
         isEditorLoadingLiveData.setValue(true);
 
@@ -258,7 +261,7 @@ public class EditorViewModel extends ViewModel {
                 File file = new File(projectRoot, relativePath);
                 FileType fileType = FileType.fromExtension(com.cocode.vcode.ide.utils.FileUtils.getExtension(file.getName()));
                 boolean isVirtual = (state.getVirtualFiles() != null && state.getVirtualFiles().containsKey(relativePath)) || fileType == FileType.API_TESTER;
-                
+
                 if (isVirtual || (file.exists() && file.isFile())) {
                     try {
                         EditorFile ef = new EditorFile(UUID.randomUUID().toString(), file, "", fileType);
@@ -392,7 +395,7 @@ public class EditorViewModel extends ViewModel {
 
             for (EditorFile doc : currentDocs) {
                 if (doc.isVirtual()) continue;
-                
+
                 File fileOnDisk = doc.getFile();
                 if (!fileOnDisk.exists()) {
                     missingPaths.add(fileOnDisk.getAbsolutePath());
@@ -402,7 +405,8 @@ public class EditorViewModel extends ViewModel {
                         if (!diskContent.equals(doc.getContent())) {
                             updatedContent.put(fileOnDisk.getAbsolutePath(), diskContent);
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
             }
 
@@ -411,7 +415,7 @@ public class EditorViewModel extends ViewModel {
                     List<EditorFile> latestDocs = new java.util.ArrayList<>(getOpenFilesList());
                     boolean actuallyAltered = false;
                     int activeIndex = getActiveTabIndexValue();
-                    
+
                     java.util.Iterator<EditorFile> iterator = latestDocs.iterator();
                     int i = 0;
                     while (iterator.hasNext()) {
@@ -602,7 +606,8 @@ public class EditorViewModel extends ViewModel {
                     activeTabIndexLiveData.setValue(updated.size() - 1);
                     persistStateAsync();
                 });
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         });
     }
 
@@ -673,7 +678,7 @@ public class EditorViewModel extends ViewModel {
         if (projectRoot == null) return;
         String virtualName = "vcode_api_tester.api";
         File virtualFile = new File(projectRoot, virtualName);
-        
+
         List<EditorFile> currentDocs = getOpenFilesList();
         for (int i = 0; i < currentDocs.size(); i++) {
             if (currentDocs.get(i).getFile().getAbsolutePath().equals(virtualFile.getAbsolutePath())) {
@@ -681,7 +686,7 @@ public class EditorViewModel extends ViewModel {
                 return;
             }
         }
-        
+
         EditorFile newFile = new EditorFile(UUID.randomUUID().toString(), virtualFile, "", FileType.API_TESTER);
         newFile.setVirtual(true);
         if (currentState != null) {
@@ -693,7 +698,7 @@ public class EditorViewModel extends ViewModel {
         }
         newFile.markSaved();
         newFile.setContentLoaded(true);
-        
+
         List<EditorFile> updated = new ArrayList<>(currentDocs);
         updated.add(newFile);
         openFilesLiveData.setValue(updated);
@@ -838,7 +843,8 @@ public class EditorViewModel extends ViewModel {
                         ExecutorProvider.getInstance().runOnIo(() -> {
                             try {
                                 FileUtils.writeToUri(appContext, Uri.parse(ef.getSourceUriString()), ef.getContent());
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         });
                     }
 
@@ -899,7 +905,8 @@ public class EditorViewModel extends ViewModel {
                             if (ef.getSourceUriString() != null) {
                                 try {
                                     FileUtils.writeToUri(appContext, Uri.parse(ef.getSourceUriString()), ef.getContent());
-                                } catch (Exception ignored) {}
+                                } catch (Exception ignored) {
+                                }
                             }
                         } catch (Exception e) {
                             allSuccess = false;
@@ -992,7 +999,8 @@ public class EditorViewModel extends ViewModel {
                         if (ef.getSourceUriString() != null) {
                             try {
                                 FileUtils.writeToUri(appContext, Uri.parse(ef.getSourceUriString()), ef.getContent());
-                            } catch (Exception ignored2) {}
+                            } catch (Exception ignored2) {
+                            }
                         }
                     } catch (Exception ignored) {
                     }

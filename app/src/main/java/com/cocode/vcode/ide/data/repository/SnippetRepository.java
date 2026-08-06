@@ -297,12 +297,11 @@ public class SnippetRepository {
     }
 
     private SnippetItem fromJson(JSONObject obj) {
-        SnippetItem item = new SnippetItem(
+        return new SnippetItem(
                 obj.optString("id", UUID.randomUUID().toString()),
                 obj.optString("title", "Untitled"),
                 obj.optString("content", ""),
                 FileType.valueOf(obj.optString("fileType", obj.optString("language", FileType.TEXT.name())))
         );
-        return item;
     }
 }

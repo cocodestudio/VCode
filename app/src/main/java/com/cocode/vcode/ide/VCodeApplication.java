@@ -7,7 +7,7 @@ import android.util.Log;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
-import com.cocode.vcode.ide.core.parser.HtmlTagCache;
+import com.cocode.vcode.ide.core.language.html.HtmlTagCache;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
 import com.cocode.vcode.ide.ui.debug.DebugActivity;
@@ -32,7 +32,7 @@ public class VCodeApplication extends Application {
         // Setup custom crash handler
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             Log.e("VCodeApplication", "Uncaught exception", throwable);
-            handleUncaughtException(thread, throwable);
+            handleUncaughtException(throwable);
         });
 
         // Force the theme to load the exact millisecond the app launches
@@ -47,7 +47,7 @@ public class VCodeApplication extends Application {
         AppCompatDelegate.setDefaultNightMode(mode);
     }
 
-    private void handleUncaughtException(Thread thread, Throwable throwable) {
+    private void handleUncaughtException(Throwable throwable) {
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         throwable.printStackTrace(pw);

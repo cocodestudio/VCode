@@ -18,10 +18,10 @@ import com.cocode.vcode.ide.git.adapters.BranchAdapter;
 import com.cocode.vcode.ide.git.model.BranchItem;
 import com.cocode.vcode.ide.ui.dialogs.MergeConfirmDialog;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.GitOptionsBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.NewBranchBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitOptionsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.NewBranchBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 
 /**

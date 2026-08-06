@@ -48,7 +48,7 @@ public class EditorFile {
         } else {
             this.fileType = FileType.fromExtension(FileUtils.getExtension(file.getName()));
         }
-        
+
         if (this.fileType == FileType.API_TESTER) {
             this.isVirtual = true;
         }
@@ -69,10 +69,6 @@ public class EditorFile {
         this.fileType = fileType;
     }
 
-    public void setDirty(boolean dirty) {
-        this.manuallyDirty = dirty;
-    }
-
     /**
      * Compares active working text lines against disk persistence states to look for unsaved edits.
      * Prevents tracking mutations on external asset models.
@@ -86,6 +82,10 @@ public class EditorFile {
         if (content == null && savedContent == null) return false;
         if (content == null || savedContent == null) return true;
         return !content.equals(savedContent);
+    }
+
+    public void setDirty(boolean dirty) {
+        this.manuallyDirty = dirty;
     }
 
     /**

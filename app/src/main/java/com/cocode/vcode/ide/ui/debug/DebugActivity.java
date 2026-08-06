@@ -8,14 +8,15 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.ActivityDebugBinding;
 import com.cocode.vcode.ide.ui.projects.ProjectsActivity;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.R;
 
 public class DebugActivity extends AppCompatActivity {
 
@@ -66,18 +67,7 @@ public class DebugActivity extends AppCompatActivity {
             } catch (Exception ignored) {
             }
 
-            String issueBody = "## Bug Report\n\n"
-                    + "**App version:** " + versionName + "\n"
-                    + "**Device:** " + deviceInfo + "\n\n"
-                    + "### Steps to reproduce\n"
-                    + "<!-- Describe what you were doing when the crash occurred -->\n\n"
-                    + "### Crash log\n"
-                    + "```\n" + finalCrashLog + "\n```\n";
-
-            Intent shareIntent = new Intent(Intent.ACTION_SEND);
-            shareIntent.setType("text/plain");
-            shareIntent.putExtra(Intent.EXTRA_SUBJECT, "[VCode] Crash Report");
-            shareIntent.putExtra(Intent.EXTRA_TEXT, issueBody);
+            Intent shareIntent = getIntent(versionName, deviceInfo, finalCrashLog);
             startActivity(Intent.createChooser(shareIntent, "Share crash report"));
         });
 
@@ -88,5 +78,22 @@ public class DebugActivity extends AppCompatActivity {
             finish();
             Runtime.getRuntime().exit(0);
         });
+    }
+
+    @NonNull
+    private Intent getIntent(String versionName, String deviceInfo, String finalCrashLog) {
+        String issueBody = "## Bug Report\n\n"
+                + "**App version:** " + versionName + "\n"
+                + "**Device:** " + deviceInfo + "\n\n"
+                + "### Steps to reproduce\n"
+                + "<!-- Describe what you were doing when the crash occurred -->\n\n"
+                + "### Crash log\n"
+                + "```\n" + finalCrashLog + "\n```\n";
+
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.setType("text/plain");
+        shareIntent.putExtra(Intent.EXTRA_SUBJECT, "[VCode] Crash Report");
+        shareIntent.putExtra(Intent.EXTRA_TEXT, issueBody);
+        return shareIntent;
     }
 }

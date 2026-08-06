@@ -2,7 +2,7 @@ package com.cocode.vcode.ide.core.lsp;
 
 /**
  * Generic asynchronous callback for LSP server results.
- *
+ * <p>
  * Results are always delivered on the Android main thread via
  * {@link com.cocode.vcode.ide.utils.ExecutorProvider#runOnMain(Runnable)}.
  *

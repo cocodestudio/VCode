@@ -2,9 +2,8 @@ package com.cocode.vcode.ide.core.lsp.servers;
 
 import android.content.Context;
 
-import com.cocode.vcode.ide.core.autocomplete.CompletionItem;
-import com.cocode.vcode.ide.core.autocomplete.CssAutoCompleteEngine;
-import com.cocode.vcode.ide.core.diagnostic.linters.CssLinter;
+import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.css.CssLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -14,8 +13,8 @@ import com.cocode.vcode.ide.core.lsp.LspRange;
 import com.cocode.vcode.ide.core.lsp.LspServer;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
-import com.cocode.vcode.ide.core.lsp.SymbolEntry;
-import com.cocode.vcode.ide.data.model.Problem;
+import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -46,11 +45,9 @@ public final class CssLspServer implements LspServer {
             Pattern.compile("([.#][\\w-]+)");
     private static final Pattern IMPORT_PATTERN =
             Pattern.compile("@import\\s+[\"']([^\"']+)[\"']");
-
+    private final CssAutoCompleteEngine completeEngine;
     private volatile boolean ready = false;
     private ProjectIndex projectIndex;
-
-    private final CssAutoCompleteEngine completeEngine;
 
     public CssLspServer(Context context) {
         this.completeEngine = new CssAutoCompleteEngine(context);
@@ -63,165 +60,6 @@ public final class CssLspServer implements LspServer {
     // -------------------------------------------------------------------------
     // LspServer contract
     // -------------------------------------------------------------------------
-
-    @Override
-    public void initialize(ProjectIndex index) {
-        this.projectIndex = index;
-        ready = true;
-    }
-
-    @Override
-    public void shutdown() {
-        ready = false;
-    }
-
-    @Override
-    public boolean isReady() {
-        return ready;
-    }
-
-    @Override
-    public String getLanguageId() {
-        return "css";
-    }
-
-    // -------------------------------------------------------------------------
-    // Completions
-    // -------------------------------------------------------------------------
-
-    @Override
-    public List<LspCompletionItem> completion(LspDocument doc, LspPosition pos) {
-        if (doc == null || doc.text == null) return Collections.emptyList();
-
-        int flatOffset = doc.toOffset(pos);
-        if (flatOffset < 0) flatOffset = doc.text.length();
-
-        completeEngine.setCurrentFile(new File(doc.uri));
-        List<CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
-        return convertCompletions(legacy);
-    }
-
-    // -------------------------------------------------------------------------
-    // Diagnostics
-    // -------------------------------------------------------------------------
-
-    @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
-        if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        File file = new File(doc.uri);
-        List<Problem> problems = CssLinter.analyze(file, doc.text);
-        return convertProblems(problems);
-    }
-
-    // -------------------------------------------------------------------------
-    // Go to Definition
-    // -------------------------------------------------------------------------
-
-    @Override
-    public LspLocation definition(LspDocument doc, LspPosition pos) {
-        if (doc == null || doc.text == null || pos == null) return null;
-
-        String lineText = doc.getLine(pos.line);
-
-        // @import "..." → resolve imported CSS file
-        Matcher importMatcher = IMPORT_PATTERN.matcher(lineText);
-        while (importMatcher.find()) {
-            if (pos.character >= importMatcher.start() && pos.character <= importMatcher.end()) {
-                String importPath = importMatcher.group(1);
-                File base = new File(doc.uri).getParentFile();
-                File target = new File(base, importPath);
-                if (target.exists()) {
-                    return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-                }
-            }
-        }
-
-        // .class or #id selector → find HTML file that uses it
-        String selector = extractSelectorAtCursor(lineText, pos.character);
-        if (selector != null && projectIndex != null) {
-            return findSelectorUsageInHtml(selector);
-        }
-
-        return null;
-    }
-
-    // -------------------------------------------------------------------------
-    // Find References
-    // -------------------------------------------------------------------------
-
-    @Override
-    public List<LspLocation> references(LspDocument doc, LspPosition pos) {
-        if (doc == null || doc.text == null || pos == null) return Collections.emptyList();
-
-        String lineText = doc.getLine(pos.line);
-        String selector = extractSelectorAtCursor(lineText, pos.character);
-        if (selector == null || projectIndex == null) return Collections.emptyList();
-
-        // Strip leading . or # for plain name lookup
-        String plainName = selector.startsWith(".") || selector.startsWith("#")
-                ? selector.substring(1) : selector;
-
-        List<LspLocation> result = new ArrayList<>();
-        for (String uri : projectIndex.getAllUris()) {
-            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
-            LspDocument htmlDoc = projectIndex.getDocument(uri);
-            if (htmlDoc == null || htmlDoc.text == null) continue;
-
-            // Look for class="...plainName..." or id="plainName"
-            String searchTerm = selector.startsWith("#")
-                    ? "id=\"" + plainName + "\""
-                    : plainName; // class may appear in class="... name ..."
-            int idx = htmlDoc.text.indexOf(searchTerm);
-            if (idx >= 0) {
-                LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor
-                        .offsetToPosition(htmlDoc.text, idx);
-                result.add(new LspLocation(uri, new LspRange(
-                        refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
-            }
-        }
-        return result;
-    }
-
-    // -------------------------------------------------------------------------
-    // Signature Help — not applicable for CSS
-    // -------------------------------------------------------------------------
-
-    @Override
-    public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
-        return null;
-    }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
-    private LspLocation findSelectorUsageInHtml(String selector) {
-        if (projectIndex == null) return null;
-        String plainName = selector.startsWith(".") || selector.startsWith("#")
-                ? selector.substring(1) : selector;
-        boolean isId = selector.startsWith("#");
-
-        for (String uri : projectIndex.getAllUris()) {
-            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
-            LspDocument htmlDoc = projectIndex.getDocument(uri);
-            if (htmlDoc == null || htmlDoc.text == null) continue;
-
-            String searchTerm = isId
-                    ? "id=\"" + plainName + "\""
-                    : "class=\"" + plainName;
-            int idx = htmlDoc.text.indexOf(searchTerm);
-            if (idx >= 0) {
-                LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor
-                        .offsetToPosition(htmlDoc.text, idx);
-                return new LspLocation(uri, new LspRange(refPos,
-                        new LspPosition(refPos.line, refPos.character + searchTerm.length())));
-            }
-        }
-        return null;
-    }
 
     private static String extractSelectorAtCursor(String line, int cursorChar) {
         Matcher m = SELECTOR_AT_CURSOR.matcher(line);
@@ -260,11 +98,16 @@ public final class CssLspServer implements LspServer {
     private static int mapKind(CompletionItem.Type type) {
         if (type == null) return LspCompletionItem.KIND_TEXT;
         switch (type) {
-            case CSS_PROPERTY: return LspCompletionItem.KIND_PROPERTY;
-            case CSS_VALUE:    return LspCompletionItem.KIND_VALUE;
-            case SNIPPET:      return LspCompletionItem.KIND_SNIPPET;
-            case KEYWORD:      return LspCompletionItem.KIND_KEYWORD;
-            default:           return LspCompletionItem.KIND_TEXT;
+            case CSS_PROPERTY:
+                return LspCompletionItem.KIND_PROPERTY;
+            case CSS_VALUE:
+                return LspCompletionItem.KIND_VALUE;
+            case SNIPPET:
+                return LspCompletionItem.KIND_SNIPPET;
+            case KEYWORD:
+                return LspCompletionItem.KIND_KEYWORD;
+            default:
+                return LspCompletionItem.KIND_TEXT;
         }
     }
 
@@ -278,11 +121,11 @@ public final class CssLspServer implements LspServer {
             // a spurious squiggle at the top of the file.
             if (p.getLine() <= 0) continue;
             int line = p.getLine() - 1; // Convert 1-based → 0-based
-            int col  = Math.max(0, p.getColumn());
+            int col = Math.max(0, p.getColumn());
             // getLength() from CssLinter covers the whole declaration span; clamp to a
             // reasonable maximum so the squiggle stays within the token that caused the error.
             int length = p.getLength() > 0 ? Math.min(p.getLength(), 80) : 1;
-            int end  = col + length;
+            int end = col + length;
             int severity = p.getSeverity() == Problem.Severity.ERROR
                     ? LspDiagnostic.SEVERITY_ERROR
                     : p.getSeverity() == Problem.Severity.WARNING
@@ -297,6 +140,165 @@ public final class CssLspServer implements LspServer {
             ));
         }
         return result;
+    }
+
+    // -------------------------------------------------------------------------
+    // Completions
+    // -------------------------------------------------------------------------
+
+    @Override
+    public void initialize(ProjectIndex index) {
+        this.projectIndex = index;
+        ready = true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Diagnostics
+    // -------------------------------------------------------------------------
+
+    @Override
+    public void shutdown() {
+        ready = false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Go to Definition
+    // -------------------------------------------------------------------------
+
+    @Override
+    public boolean isReady() {
+        return ready;
+    }
+
+    // -------------------------------------------------------------------------
+    // Find References
+    // -------------------------------------------------------------------------
+
+    @Override
+    public String getLanguageId() {
+        return "css";
+    }
+
+    // -------------------------------------------------------------------------
+    // Signature Help — not applicable for CSS
+    // -------------------------------------------------------------------------
+
+    @Override
+    public List<LspCompletionItem> completion(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null) return Collections.emptyList();
+
+        int flatOffset = doc.toOffset(pos);
+        if (flatOffset < 0) flatOffset = doc.text.length();
+
+        completeEngine.setCurrentFile(new File(doc.uri));
+        List<CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
+        return convertCompletions(legacy);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    @Override
+    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+        if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        File file = new File(doc.uri);
+        List<Problem> problems = CssLinter.analyze(file, doc.text);
+        return convertProblems(problems);
+    }
+
+    @Override
+    public LspLocation definition(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return null;
+
+        String lineText = doc.getLine(pos.line);
+
+        // @import "..." → resolve imported CSS file
+        Matcher importMatcher = IMPORT_PATTERN.matcher(lineText);
+        while (importMatcher.find()) {
+            if (pos.character >= importMatcher.start() && pos.character <= importMatcher.end()) {
+                String importPath = importMatcher.group(1);
+                File base = new File(doc.uri).getParentFile();
+                File target = new File(base, importPath);
+                if (target.exists()) {
+                    return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
+                }
+            }
+        }
+
+        // .class or #id selector → find HTML file that uses it
+        String selector = extractSelectorAtCursor(lineText, pos.character);
+        if (selector != null && projectIndex != null) {
+            return findSelectorUsageInHtml(selector);
+        }
+
+        return null;
+    }
+
+    @Override
+    public List<LspLocation> references(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return Collections.emptyList();
+
+        String lineText = doc.getLine(pos.line);
+        String selector = extractSelectorAtCursor(lineText, pos.character);
+        if (selector == null || projectIndex == null) return Collections.emptyList();
+
+        // Strip leading . or # for plain name lookup
+        String plainName = selector.startsWith(".") || selector.startsWith("#")
+                ? selector.substring(1) : selector;
+
+        List<LspLocation> result = new ArrayList<>();
+        for (String uri : projectIndex.getAllUris()) {
+            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
+            LspDocument htmlDoc = projectIndex.getDocument(uri);
+            if (htmlDoc == null || htmlDoc.text == null) continue;
+
+            // Look for class="...plainName..." or id="plainName"
+            String searchTerm = selector.startsWith("#")
+                    ? "id=\"" + plainName + "\""
+                    : plainName; // class may appear in class="... name ..."
+            int idx = htmlDoc.text.indexOf(searchTerm);
+            if (idx >= 0) {
+                LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor
+                        .offsetToPosition(htmlDoc.text, idx);
+                result.add(new LspLocation(uri, new LspRange(
+                        refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
+        return null;
+    }
+
+    private LspLocation findSelectorUsageInHtml(String selector) {
+        if (projectIndex == null) return null;
+        String plainName = selector.startsWith(".") || selector.startsWith("#")
+                ? selector.substring(1) : selector;
+        boolean isId = selector.startsWith("#");
+
+        for (String uri : projectIndex.getAllUris()) {
+            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
+            LspDocument htmlDoc = projectIndex.getDocument(uri);
+            if (htmlDoc == null || htmlDoc.text == null) continue;
+
+            String searchTerm = isId
+                    ? "id=\"" + plainName + "\""
+                    : "class=\"" + plainName;
+            int idx = htmlDoc.text.indexOf(searchTerm);
+            if (idx >= 0) {
+                LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor
+                        .offsetToPosition(htmlDoc.text, idx);
+                return new LspLocation(uri, new LspRange(refPos,
+                        new LspPosition(refPos.line, refPos.character + searchTerm.length())));
+            }
+        }
+        return null;
     }
 }
 

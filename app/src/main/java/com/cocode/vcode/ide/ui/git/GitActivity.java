@@ -17,6 +17,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.ActivityGitBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.ui.git.tabs.GitBranchFragment;
@@ -28,7 +29,6 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayoutMediator;
 
 import java.io.File;
-import com.cocode.vcode.ide.R;
 
 /**
  * GitActivity provides a comprehensive interface for Git version control management.

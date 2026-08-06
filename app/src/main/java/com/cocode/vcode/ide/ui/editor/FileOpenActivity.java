@@ -6,17 +6,17 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Toast;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 
 import java.io.File;
-import com.cocode.vcode.ide.R;
 
 /**
  * Transparent trampoline Activity that handles ACTION_VIEW intents for supported file types
  * dispatched by external apps (file managers, email clients, browsers).
- *
+ * <p>
  * It resolves the incoming URI to a local File, determines the correct project root,
  * then immediately launches EditorActivity before finishing itself — no UI is ever shown.
  */

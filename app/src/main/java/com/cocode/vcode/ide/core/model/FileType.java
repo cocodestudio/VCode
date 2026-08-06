@@ -102,15 +102,24 @@ public enum FileType {
      */
     public String getLspLanguageId() {
         switch (this) {
-            case HTML:       return "html";
-            case CSS:        return "css";
-            case SCSS:       return "scss";
-            case JAVASCRIPT: return "javascript";
-            case TYPESCRIPT: return "typescript";
-            case JSON:       return "json";
-            case MARKDOWN:   return "markdown";
-            case SVG:        return "svg";
-            default:         return "plaintext";
+            case HTML:
+                return "html";
+            case CSS:
+                return "css";
+            case SCSS:
+                return "scss";
+            case JAVASCRIPT:
+                return "javascript";
+            case TYPESCRIPT:
+                return "typescript";
+            case JSON:
+                return "json";
+            case MARKDOWN:
+                return "markdown";
+            case SVG:
+                return "svg";
+            default:
+                return "plaintext";
         }
     }
 

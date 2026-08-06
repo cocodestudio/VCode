@@ -1,7 +1,5 @@
 package com.cocode.vcode.ide.git.github;
 
-import androidx.annotation.NonNull;
-
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -161,17 +159,21 @@ public class GitHubApiClient {
 
     public static class CreateRepoResult {
         private final String fullName, cloneUrl, htmlUrl;
+
         public CreateRepoResult(String fullName, String cloneUrl, String htmlUrl) {
             this.fullName = fullName;
             this.cloneUrl = cloneUrl;
             this.htmlUrl = htmlUrl;
         }
+
         public String getFullName() {
             return fullName;
         }
+
         public String getCloneUrl() {
             return cloneUrl;
         }
+
         public String getHtmlUrl() {
             return htmlUrl;
         }

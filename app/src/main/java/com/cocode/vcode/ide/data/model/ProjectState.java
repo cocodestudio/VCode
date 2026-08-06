@@ -18,7 +18,7 @@ public class ProjectState {
     private Map<String, Integer> cursorPositions; // Maps file paths to their last caret offset index
     private Map<String, Integer> scrollPositions; // Maps file paths to their vertical scroll viewport pixel positions
     private Map<String, Boolean> previewStates; // Maps file paths to their toggle preview state (true = preview, false = text)
-    private Map<String, String> virtualFiles; // Maps virtual file paths to their persisted content
+    private final Map<String, String> virtualFiles; // Maps virtual file paths to their persisted content
 
     /**
      * Initializes blank tracking parameters for view tracking containers.

@@ -1,5 +1,9 @@
 package com.cocode.vcode.ide.core.autocomplete;
 
+import androidx.annotation.NonNull;
+
+import com.cocode.vcode.ide.core.model.CompletionItem;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -178,19 +182,7 @@ public class ProjectSymbolIndex {
         String content = readFile(file);
         if (content == null) return;
         List<CompletionItem> exports = new ArrayList<>();
-        Map<String, String> signatures = new HashMap<>();
-
-        // 1. Find signatures first so we can attach them to exports later
-        Matcher mFunc = PAT_FUNC_SIG.matcher(content);
-        while (mFunc.find()) {
-            signatures.put(mFunc.group(1), mFunc.group(2));
-        }
-        Matcher mArrow = PAT_ARROW_FUNC.matcher(content);
-        while (mArrow.find()) {
-            String args = mArrow.group(2);
-            if (!args.startsWith("(")) args = "(" + args + ")";
-            signatures.put(mArrow.group(1), args);
-        }
+        Map<String, String> signatures = getSignatures(content);
 
         // 2. Standard exports: export const foo ...
         Matcher mDecl = PAT_JS_EXPORT_DECL.matcher(content);
@@ -275,6 +267,24 @@ public class ProjectSymbolIndex {
             }
         }
         indexClassMembers(file, content);
+    }
+
+    @NonNull
+    private Map<String, String> getSignatures(String content) {
+        Map<String, String> signatures = new HashMap<>();
+
+        // 1. Find signatures first so we can attach them to exports later
+        Matcher mFunc = PAT_FUNC_SIG.matcher(content);
+        while (mFunc.find()) {
+            signatures.put(mFunc.group(1), mFunc.group(2));
+        }
+        Matcher mArrow = PAT_ARROW_FUNC.matcher(content);
+        while (mArrow.find()) {
+            String args = mArrow.group(2);
+            if (!args.startsWith("(")) args = "(" + args + ")";
+            signatures.put(mArrow.group(1), args);
+        }
+        return signatures;
     }
 
     private void indexClassMembers(File file, String content) {

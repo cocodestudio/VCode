@@ -24,9 +24,9 @@ public class SelectionToolbar {
 
     private final ViewSelectionToolbarBinding binding;
     private final Context context;
-    private CodeEditText editor;
     private final PopupWindow popupWindow;
     private final ClipboardManager clipboardManager;
+    private CodeEditText editor;
 
     public SelectionToolbar(Context context) {
         this.context = context;
@@ -62,12 +62,16 @@ public class SelectionToolbar {
         clipboardManager = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
     }
 
-    /** Binds this toolbar to an editor. Must be called before show(). */
+    /**
+     * Binds this toolbar to an editor. Must be called before show().
+     */
     public void bindEditor(CodeEditText editor) {
         this.editor = editor;
     }
 
-    /** Shows or repositions the floating toolbar. Safe to call repeatedly. */
+    /**
+     * Shows or repositions the floating toolbar. Safe to call repeatedly.
+     */
     public void show() {
         if (editor == null) return;
 
@@ -81,14 +85,18 @@ public class SelectionToolbar {
         updatePosition();
     }
 
-    /** Hides the toolbar. */
+    /**
+     * Hides the toolbar.
+     */
     public void hide() {
         if (popupWindow.isShowing()) {
             popupWindow.dismiss();
         }
     }
 
-    /** Returns true if the toolbar is currently showing. */
+    /**
+     * Returns true if the toolbar is currently showing.
+     */
     public boolean isVisible() {
         return popupWindow.isShowing();
     }
@@ -99,7 +107,7 @@ public class SelectionToolbar {
         if (editor == null || !popupWindow.isShowing()) return;
 
         int selStart = editor.getSelectionStart();
-        int selEnd   = editor.getSelectionEnd();
+        int selEnd = editor.getSelectionEnd();
         if (selStart == -1 || selEnd == -1) {
             hide();
             return;
@@ -109,21 +117,21 @@ public class SelectionToolbar {
         binding.getRoot().measure(
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int popupWidth  = binding.getRoot().getMeasuredWidth();
+        int popupWidth = binding.getRoot().getMeasuredWidth();
         int popupHeight = binding.getRoot().getMeasuredHeight();
 
-        float density   = context.getResources().getDisplayMetrics().density;
-        int   screenW   = context.getResources().getDisplayMetrics().widthPixels;
-        int   screenH   = context.getResources().getDisplayMetrics().heightPixels;
-        int   margin    = (int) (8 * density);  // gap between toolbar and selection anchor
-        int   graceH    = (int) (24 * density); // minimum distance from left/right screen edge
-        int   graceV    = (int) (16 * density); // minimum distance from top/bottom screen edge
+        float density = context.getResources().getDisplayMetrics().density;
+        int screenW = context.getResources().getDisplayMetrics().widthPixels;
+        int screenH = context.getResources().getDisplayMetrics().heightPixels;
+        int margin = (int) (8 * density);  // gap between toolbar and selection anchor
+        int graceH = (int) (24 * density); // minimum distance from left/right screen edge
+        int graceV = (int) (16 * density); // minimum distance from top/bottom screen edge
 
         int firstOffset = Math.min(selStart, selEnd);
-        int[] coords    = editor.getCursorScreenCoords(firstOffset);
-        int anchorX     = coords[0];
-        int anchorYTop  = coords[1];
-        int anchorYBot  = coords[2];
+        int[] coords = editor.getCursorScreenCoords(firstOffset);
+        int anchorX = coords[0];
+        int anchorYTop = coords[1];
+        int anchorYBot = coords[2];
 
         // ── Horizontal: center over anchor, clamp to screen ───────────────────
         int x = anchorX - (popupWidth / 2);

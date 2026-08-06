@@ -21,8 +21,9 @@ import com.cocode.vcode.ide.databinding.FragmentGitChangesBinding;
 import com.cocode.vcode.ide.git.adapters.GitFilesAdapter;
 import com.cocode.vcode.ide.git.model.GitFileItem;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.cocode.vcode.ide.ui.sheets.DiffViewerBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.GitAuthorInfoBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.DiffViewerBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitAuthorInfoBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
@@ -131,9 +132,9 @@ public class GitChangesFragment extends Fragment implements GitFilesAdapter.GitF
 
         if (binding.btnDiscardAll != null) {
             binding.btnDiscardAll.setOnClickListener(v -> {
-                com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet.show(
+                DeleteBottomSheet.show(
                         getChildFragmentManager(),
-                        com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet.DeleteType.DISCARD,
+                        DeleteBottomSheet.DeleteType.DISCARD,
                         "",
                         null,
                         () -> viewModel.discardAll()
@@ -224,9 +225,9 @@ public class GitChangesFragment extends Fragment implements GitFilesAdapter.GitF
 
     @Override
     public void onDiscardClick(GitFileItem item) {
-        com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet.show(
+        DeleteBottomSheet.show(
                 getChildFragmentManager(),
-                com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet.DeleteType.DISCARD,
+                DeleteBottomSheet.DeleteType.DISCARD,
                 item.getFileName(),
                 null,
                 () -> viewModel.discardFile(item.getPath())

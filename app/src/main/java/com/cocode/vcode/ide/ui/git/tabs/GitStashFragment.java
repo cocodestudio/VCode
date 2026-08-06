@@ -16,8 +16,8 @@ import com.cocode.vcode.ide.databinding.FragmentGitStashBinding;
 import com.cocode.vcode.ide.git.adapters.StashAdapter;
 import com.cocode.vcode.ide.git.model.StashItem;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.StashMessageBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.StashMessageBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 
 public class GitStashFragment extends Fragment implements StashAdapter.StashListener {

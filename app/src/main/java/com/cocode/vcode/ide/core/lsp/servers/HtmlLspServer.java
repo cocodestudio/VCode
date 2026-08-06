@@ -1,8 +1,10 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
-import com.cocode.vcode.ide.core.autocomplete.CompletionItem;
-import com.cocode.vcode.ide.core.autocomplete.HtmlAutoCompleteEngine;
-import com.cocode.vcode.ide.core.diagnostic.linters.HtmlLinter;
+import android.content.Context;
+
+import com.cocode.vcode.ide.core.language.html.HtmlAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.html.HtmlLinter;
+import com.cocode.vcode.ide.core.language.html.HtmlTagParser;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -13,10 +15,8 @@ import com.cocode.vcode.ide.core.lsp.LspServer;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.lsp.SymbolEntry;
-import com.cocode.vcode.ide.core.parser.HtmlTagParser;
-import com.cocode.vcode.ide.data.model.Problem;
-
-import android.content.Context;
+import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -52,27 +52,147 @@ public final class HtmlLspServer implements LspServer {
 
     private static final Pattern ATTR_AT_CURSOR =
             Pattern.compile("(?:id|class|src|href|action|data-[\\w-]+)\\s*=\\s*[\"']([^\"']*)[\"']");
-    private static final Pattern ID_ATTR    = Pattern.compile("\\bid\\s*=\\s*[\"']([^\"']+)[\"']");
+    private static final Pattern ID_ATTR = Pattern.compile("\\bid\\s*=\\s*[\"']([^\"']+)[\"']");
     private static final Pattern CLASS_ATTR = Pattern.compile("\\bclass\\s*=\\s*[\"']([^\"']+)[\"']");
-    private static final Pattern SRC_ATTR   = Pattern.compile("\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']");
-    private static final Pattern HREF_ATTR  = Pattern.compile("\\bhref\\s*=\\s*[\"']([^\"']+)[\"']");
-
+    private static final Pattern SRC_ATTR = Pattern.compile("\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']");
+    private static final Pattern HREF_ATTR = Pattern.compile("\\bhref\\s*=\\s*[\"']([^\"']+)[\"']");
+    private static final Pattern CSS_CLASS_PATTERN =
+            Pattern.compile("\\.([\\w-]+)\\s*[{,]");
+    private static final Pattern HTML_ID_PATTERN =
+            Pattern.compile("\\bid\\s*=\\s*[\"']([^\"']+)[\"']");
+    private final HtmlAutoCompleteEngine completeEngine;
     private volatile boolean ready = false;
     private ProjectIndex projectIndex;
 
-    private final HtmlAutoCompleteEngine completeEngine;
+    // -------------------------------------------------------------------------
+    // LspServer contract
+    // -------------------------------------------------------------------------
 
     public HtmlLspServer(Context context) {
         this.completeEngine = new HtmlAutoCompleteEngine(context);
     }
 
-    /** No-arg constructor for backwards compatibility (no asset loading). */
+    /**
+     * No-arg constructor for backwards compatibility (no asset loading).
+     */
     public HtmlLspServer() {
         this(null);
     }
 
+    private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacyItems) {
+        if (legacyItems == null || legacyItems.isEmpty()) return Collections.emptyList();
+        List<LspCompletionItem> result = new ArrayList<>(legacyItems.size());
+        for (CompletionItem ci : legacyItems) {
+            String insert = ci.getEffectiveInsertText();
+            int curOffset = ci.getCursorOffset();
+            if (curOffset < 0) {
+                int pipeIdx = insert.length() + curOffset;
+                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
+                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+                }
+            }
+            int kind = mapKind(ci.getType());
+            result.add(new LspCompletionItem(
+                    ci.getLabel(),
+                    insert,
+                    kind,
+                    ci.getDetail(),
+                    null
+            ));
+        }
+        return result;
+    }
+
+    private static int mapKind(CompletionItem.Type type) {
+        if (type == null) return LspCompletionItem.KIND_TEXT;
+        switch (type) {
+            case TAG:
+                return LspCompletionItem.KIND_CLASS;
+            case ATTRIBUTE:
+                return LspCompletionItem.KIND_PROPERTY;
+            case VALUE:
+                return LspCompletionItem.KIND_VALUE;
+            case SNIPPET:
+                return LspCompletionItem.KIND_SNIPPET;
+            case KEYWORD:
+                return LspCompletionItem.KIND_KEYWORD;
+            case FILE:
+                return LspCompletionItem.KIND_FILE;
+            case FOLDER:
+                return LspCompletionItem.KIND_FOLDER;
+            default:
+                return LspCompletionItem.KIND_TEXT;
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // LspServer contract
+    // Completions
+    // -------------------------------------------------------------------------
+
+    private static List<LspDiagnostic> convertProblems(List<Problem> problems) {
+        if (problems == null || problems.isEmpty()) return Collections.emptyList();
+        List<LspDiagnostic> result = new ArrayList<>(problems.size());
+        for (Problem p : problems) {
+            if (p == null) continue;
+            // Problem uses 1-based line; LSP uses 0-based
+            int line = Math.max(0, p.getLine() - 1);
+            int col = Math.max(0, p.getColumn());
+            int end = col + Math.max(1, p.getLength());
+            int severity = p.getSeverity() == Problem.Severity.ERROR
+                    ? LspDiagnostic.SEVERITY_ERROR
+                    : p.getSeverity() == Problem.Severity.WARNING
+                    ? LspDiagnostic.SEVERITY_WARNING
+                    : LspDiagnostic.SEVERITY_INFORMATION;
+            result.add(new LspDiagnostic(
+                    new LspRange(line, col, line, end),
+                    severity,
+                    p.getMessage(),
+                    null,
+                    "html"
+            ));
+        }
+        return result;
+    }
+
+    // -------------------------------------------------------------------------
+    // Diagnostics
+    // -------------------------------------------------------------------------
+
+    /**
+     * Extracts the value of the named attribute if the cursor is positioned inside it.
+     * Returns null otherwise.
+     */
+    private static String extractAttrValue(String line, String attrName, int cursorChar) {
+        Pattern p = Pattern.compile("\\b" + Pattern.quote(attrName) + "\\s*=\\s*[\"']([^\"']*)[\"']");
+        Matcher m = p.matcher(line);
+        while (m.find()) {
+            if (cursorChar >= m.start() && cursorChar <= m.end()) {
+                return m.group(1);
+            }
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Go to Definition
+    // -------------------------------------------------------------------------
+
+    /**
+     * Extracts the first class name from a {@code class="..."} attribute if the cursor is inside it.
+     */
+    private static String extractFirstClass(String line, int cursorChar) {
+        Matcher m = CLASS_ATTR.matcher(line);
+        while (m.find()) {
+            if (cursorChar >= m.start() && cursorChar <= m.end()) {
+                String[] classes = m.group(1).split("\\s+");
+                return classes.length > 0 ? classes[0] : null;
+            }
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Find References
     // -------------------------------------------------------------------------
 
     @Override
@@ -81,10 +201,18 @@ public final class HtmlLspServer implements LspServer {
         ready = true;
     }
 
+    // -------------------------------------------------------------------------
+    // Signature Help — not applicable for HTML
+    // -------------------------------------------------------------------------
+
     @Override
     public void shutdown() {
         ready = false;
     }
+
+    // -------------------------------------------------------------------------
+    // Private helpers — conversion
+    // -------------------------------------------------------------------------
 
     @Override
     public boolean isReady() {
@@ -95,10 +223,6 @@ public final class HtmlLspServer implements LspServer {
     public String getLanguageId() {
         return "html";
     }
-
-    // -------------------------------------------------------------------------
-    // Completions
-    // -------------------------------------------------------------------------
 
     @Override
     public List<LspCompletionItem> completion(LspDocument doc, LspPosition pos) {
@@ -131,7 +255,7 @@ public final class HtmlLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Diagnostics
+    // Private helpers — definition resolution
     // -------------------------------------------------------------------------
 
     @Override
@@ -144,10 +268,6 @@ public final class HtmlLspServer implements LspServer {
         List<Problem> problems = HtmlLinter.analyze(file, doc.text);
         return convertProblems(problems);
     }
-
-    // -------------------------------------------------------------------------
-    // Go to Definition
-    // -------------------------------------------------------------------------
 
     @Override
     public LspLocation definition(LspDocument doc, LspPosition pos) {
@@ -178,10 +298,6 @@ public final class HtmlLspServer implements LspServer {
         return null;
     }
 
-    // -------------------------------------------------------------------------
-    // Find References
-    // -------------------------------------------------------------------------
-
     @Override
     public List<LspLocation> references(LspDocument doc, LspPosition pos) {
         if (doc == null || doc.text == null || pos == null) return Collections.emptyList();
@@ -204,94 +320,21 @@ public final class HtmlLspServer implements LspServer {
         return refs;
     }
 
-    // -------------------------------------------------------------------------
-    // Signature Help — not applicable for HTML
-    // -------------------------------------------------------------------------
-
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return null;
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers — conversion
-    // -------------------------------------------------------------------------
-
-    private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacyItems) {
-        if (legacyItems == null || legacyItems.isEmpty()) return Collections.emptyList();
-        List<LspCompletionItem> result = new ArrayList<>(legacyItems.size());
-        for (CompletionItem ci : legacyItems) {
-            String insert = ci.getEffectiveInsertText();
-            int curOffset = ci.getCursorOffset();
-            if (curOffset < 0) {
-                int pipeIdx = insert.length() + curOffset;
-                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                }
-            }
-            int kind = mapKind(ci.getType());
-            result.add(new LspCompletionItem(
-                    ci.getLabel(),
-                    insert,
-                    kind,
-                    ci.getDetail(),
-                    null
-            ));
-        }
-        return result;
-    }
-
-    private static int mapKind(CompletionItem.Type type) {
-        if (type == null) return LspCompletionItem.KIND_TEXT;
-        switch (type) {
-            case TAG:           return LspCompletionItem.KIND_CLASS;
-            case ATTRIBUTE:     return LspCompletionItem.KIND_PROPERTY;
-            case VALUE:         return LspCompletionItem.KIND_VALUE;
-            case SNIPPET:       return LspCompletionItem.KIND_SNIPPET;
-            case KEYWORD:       return LspCompletionItem.KIND_KEYWORD;
-            case FILE:          return LspCompletionItem.KIND_FILE;
-            case FOLDER:        return LspCompletionItem.KIND_FOLDER;
-            default:            return LspCompletionItem.KIND_TEXT;
-        }
-    }
-
-    private static List<LspDiagnostic> convertProblems(List<Problem> problems) {
-        if (problems == null || problems.isEmpty()) return Collections.emptyList();
-        List<LspDiagnostic> result = new ArrayList<>(problems.size());
-        for (Problem p : problems) {
-            if (p == null) continue;
-            // Problem uses 1-based line; LSP uses 0-based
-            int line = Math.max(0, p.getLine() - 1);
-            int col  = Math.max(0, p.getColumn());
-            int end  = col + Math.max(1, p.getLength());
-            int severity = p.getSeverity() == Problem.Severity.ERROR
-                    ? LspDiagnostic.SEVERITY_ERROR
-                    : p.getSeverity() == Problem.Severity.WARNING
-                    ? LspDiagnostic.SEVERITY_WARNING
-                    : LspDiagnostic.SEVERITY_INFORMATION;
-            result.add(new LspDiagnostic(
-                    new LspRange(line, col, line, end),
-                    severity,
-                    p.getMessage(),
-                    null,
-                    "html"
-            ));
-        }
-        return result;
-    }
-
-    // -------------------------------------------------------------------------
-    // Private helpers — definition resolution
-    // -------------------------------------------------------------------------
-
-    /** Resolves src="..." or href="..." to an actual file in the project. */
+    /**
+     * Resolves src="..." or href="..." to an actual file in the project.
+     */
     private LspLocation resolveFileReference(String lineText, LspPosition pos, LspDocument doc) {
         String path = extractAttrValue(lineText, "src", pos.character);
         if (path == null) path = extractAttrValue(lineText, "href", pos.character);
         if (path == null) return null;
         if (path.startsWith("http://") || path.startsWith("https://")) return null;
 
-        File base   = new File(doc.uri).getParentFile();
+        File base = new File(doc.uri).getParentFile();
         File target = new File(base, path);
         if (target.exists() && target.isFile()) {
             return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
@@ -299,7 +342,13 @@ public final class HtmlLspServer implements LspServer {
         return null;
     }
 
-    /** Finds the first JS file in the project index that calls getElementById with the given id. */
+    // -------------------------------------------------------------------------
+    // Private helpers — attribute value extraction
+    // -------------------------------------------------------------------------
+
+    /**
+     * Finds the first JS file in the project index that calls getElementById with the given id.
+     */
     private LspLocation findIdUsageInJs(String idValue) {
         if (projectIndex == null || idValue == null) return null;
         String pattern = "getElementById(\"" + idValue + "\")";
@@ -311,7 +360,9 @@ public final class HtmlLspServer implements LspServer {
         return null;
     }
 
-    /** Finds the CSS rule for the given class name in any CSS file in the project. */
+    /**
+     * Finds the CSS rule for the given class name in any CSS file in the project.
+     */
     private LspLocation findCssRule(String className) {
         if (projectIndex == null || className == null) return null;
         String cssSelector = "." + className;
@@ -323,7 +374,13 @@ public final class HtmlLspServer implements LspServer {
         return null;
     }
 
-    /** Scans all indexed files for occurrences of the given literal string pattern. */
+    // -------------------------------------------------------------------------
+    // Cross-file completion helpers (Phase 2 IntelliSense)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Scans all indexed files for occurrences of the given literal string pattern.
+     */
     private List<LspLocation> findReferencesInProject(String searchTerm, String regexOverride) {
         List<LspLocation> result = new ArrayList<>();
         if (projectIndex == null || searchTerm == null) return result;
@@ -334,7 +391,9 @@ public final class HtmlLspServer implements LspServer {
         return result;
     }
 
-    /** Finds the first occurrence of a literal string in an indexed document. */
+    /**
+     * Finds the first occurrence of a literal string in an indexed document.
+     */
     private LspLocation findPatternInDocument(String uri, String literal) {
         com.cocode.vcode.ide.core.lsp.LspDocument doc = projectIndex.getDocument(uri);
         if (doc == null || doc.text == null) return null;
@@ -343,48 +402,6 @@ public final class HtmlLspServer implements LspServer {
         LspPosition pos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, idx);
         return new LspLocation(uri, new LspRange(pos, new LspPosition(pos.line, pos.character + literal.length())));
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers — attribute value extraction
-    // -------------------------------------------------------------------------
-
-    /**
-     * Extracts the value of the named attribute if the cursor is positioned inside it.
-     * Returns null otherwise.
-     */
-    private static String extractAttrValue(String line, String attrName, int cursorChar) {
-        Pattern p = Pattern.compile("\\b" + Pattern.quote(attrName) + "\\s*=\\s*[\"']([^\"']*)[\"']");
-        Matcher m = p.matcher(line);
-        while (m.find()) {
-            if (cursorChar >= m.start() && cursorChar <= m.end()) {
-                return m.group(1);
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Extracts the first class name from a {@code class="..."} attribute if the cursor is inside it.
-     */
-    private static String extractFirstClass(String line, int cursorChar) {
-        Matcher m = CLASS_ATTR.matcher(line);
-        while (m.find()) {
-            if (cursorChar >= m.start() && cursorChar <= m.end()) {
-                String[] classes = m.group(1).split("\\s+");
-                return classes.length > 0 ? classes[0] : null;
-            }
-        }
-        return null;
-    }
-
-    // -------------------------------------------------------------------------
-    // Cross-file completion helpers (Phase 2 IntelliSense)
-    // -------------------------------------------------------------------------
-
-    private static final Pattern CSS_CLASS_PATTERN =
-            Pattern.compile("\\.([\\w-]+)\\s*[{,]");
-    private static final Pattern HTML_ID_PATTERN =
-            Pattern.compile("\\bid\\s*=\\s*[\"']([^\"']+)[\"']");
 
     /**
      * Scans all indexed CSS files for {@code .className} selectors and returns them

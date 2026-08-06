@@ -14,7 +14,6 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.databinding.ItemEditorTabBinding;
-import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
 
 import java.util.ArrayList;
@@ -103,7 +102,7 @@ public class TabBar extends HorizontalScrollView {
             boolean showDot = dirty;
             if (tabs.get(index).getFileType() == FileType.API_TESTER) showDot = false;
             else if (isAutoSaveOn) showDot = false;
-            
+
             binding.dotDirty.setVisibility(showDot ? VISIBLE : GONE);
         }
     }
@@ -160,7 +159,7 @@ public class TabBar extends HorizontalScrollView {
         boolean showDot = file.isDirty();
         if (file.getFileType() == FileType.API_TESTER) showDot = false;
         else if (isAutoSaveOn) showDot = false;
-        
+
         binding.dotDirty.setVisibility(showDot ? VISIBLE : GONE);
 
         updateTabActiveState(binding, index == activeIndex);

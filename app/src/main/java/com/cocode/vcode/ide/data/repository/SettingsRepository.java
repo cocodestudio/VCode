@@ -3,10 +3,17 @@ package com.cocode.vcode.ide.data.repository;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.Nullable;
+
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.prefs.PreferenceKeys;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -102,21 +109,7 @@ public class SettingsRepository {
             java.io.File targetFile = settingsFile.exists() ? settingsFile : metaFile;
 
             if (targetFile.exists()) {
-                StringBuilder sb = new StringBuilder();
-                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(targetFile), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        sb.append(line);
-                    }
-                }
-                org.json.JSONObject obj = new org.json.JSONObject(sb.toString());
-                org.json.JSONObject sObj = null;
-
-                if (targetFile == metaFile && obj.has("settings")) {
-                    sObj = obj.getJSONObject("settings");
-                } else if (targetFile == settingsFile) {
-                    sObj = obj; // project_settings.json itself is the settings object
-                }
+                JSONObject sObj = getJsonObject(targetFile, metaFile, settingsFile);
 
                 if (sObj != null) {
                     if (sObj.has("tabSize")) global.tabSize = sObj.getInt("tabSize");
@@ -134,6 +127,26 @@ public class SettingsRepository {
             // Ignore
         }
         return global;
+    }
+
+    @Nullable
+    private JSONObject getJsonObject(File targetFile, File metaFile, File settingsFile) throws IOException, JSONException {
+        StringBuilder sb = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(targetFile), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+        }
+        JSONObject obj = new JSONObject(sb.toString());
+        JSONObject sObj = null;
+
+        if (targetFile == metaFile && obj.has("settings")) {
+            sObj = obj.getJSONObject("settings");
+        } else if (targetFile == settingsFile) {
+            sObj = obj; // project_settings.json itself is the settings object
+        }
+        return sObj;
     }
 
     // --- Section: Save ---

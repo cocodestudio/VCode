@@ -1,8 +1,9 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
-import com.cocode.vcode.ide.core.autocomplete.CompletionItem;
-import com.cocode.vcode.ide.core.autocomplete.JsonAutoCompleteEngine;
-import com.cocode.vcode.ide.core.lsp.LspCallback;
+import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.json.JsonError;
+import com.cocode.vcode.ide.core.language.json.JsonValidator;
+import com.cocode.vcode.ide.core.language.json.ValidationReport;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -12,9 +13,7 @@ import com.cocode.vcode.ide.core.lsp.LspRange;
 import com.cocode.vcode.ide.core.lsp.LspServer;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
-import com.cocode.vcode.ide.core.parser.json.JsonError;
-import com.cocode.vcode.ide.core.parser.json.JsonValidator;
-import com.cocode.vcode.ide.core.parser.json.ValidationReport;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,11 +37,10 @@ import java.util.List;
  */
 public final class JsonLspServer implements LspServer {
 
-    private volatile boolean ready = false;
-
-    /** Reusable validator — stateless, safe to call from any thread. */
+    /**
+     * Reusable validator — stateless, safe to call from any thread.
+     */
     private final JsonValidator validator = new JsonValidator();
-
     /**
      * Reusable autocomplete engine.
      * {@link JsonAutoCompleteEngine} requires a {@link android.content.Context} only for
@@ -50,9 +48,107 @@ public final class JsonLspServer implements LspServer {
      * rely on the statically-initialised schema maps in the engine.
      */
     private final JsonAutoCompleteEngine completeEngine = new JsonAutoCompleteEngine(null);
+    private volatile boolean ready = false;
 
     // -------------------------------------------------------------------------
     // LspServer contract
+    // -------------------------------------------------------------------------
+
+    /**
+     * Converts the legacy {@link CompletionItem} list (from the existing engine) to LSP
+     * {@link LspCompletionItem} list.
+     */
+    private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
+        if (legacy == null || legacy.isEmpty()) return Collections.emptyList();
+        List<LspCompletionItem> result = new ArrayList<>(legacy.size());
+        for (CompletionItem ci : legacy) {
+            String insert = ci.getEffectiveInsertText();
+            int curOffset = ci.getCursorOffset();
+            if (curOffset < 0) {
+                int pipeIdx = insert.length() + curOffset;
+                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
+                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+                }
+            }
+            int kind = mapKind(ci.getType());
+            result.add(new LspCompletionItem(
+                    ci.getLabel(),
+                    insert,
+                    kind,
+                    ci.getDetail(),
+                    null
+            ));
+        }
+        return result;
+    }
+
+    /**
+     * Maps legacy {@link CompletionItem.Type} to LSP completion item kind constants.
+     */
+    private static int mapKind(CompletionItem.Type type) {
+        if (type == null) return LspCompletionItem.KIND_TEXT;
+        switch (type) {
+            case SNIPPET:
+                return LspCompletionItem.KIND_SNIPPET;
+            case JSON_KEY:
+                return LspCompletionItem.KIND_PROPERTY;
+            case VALUE:
+                return LspCompletionItem.KIND_VALUE;
+            case KEYWORD:
+                return LspCompletionItem.KIND_KEYWORD;
+            default:
+                return LspCompletionItem.KIND_TEXT;
+        }
+    }
+
+    /**
+     * Determines the token length at a 1-based (line, column) position for error range reporting.
+     * Mirrors the logic in the existing {@code JsonLinter.getTokenLength()}.
+     */
+    private static int getTokenLength(String text, int line, int column) {
+        int l = 1;
+        int idx = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (l == line) {
+                idx = i + column - 1;
+                break;
+            }
+            if (text.charAt(i) == '\n') l++;
+        }
+        if (idx < 0 || idx >= text.length()) return 1;
+        int end = idx;
+        char c = text.charAt(idx);
+        if (c == '"' || c == '\'') {
+            do end++;
+            while (end < text.length() && text.charAt(end) != c && text.charAt(end) != '\n');
+            if (end < text.length()) end++;
+        } else if (Character.isLetterOrDigit(c)) {
+            while (end < text.length() && Character.isLetterOrDigit(text.charAt(end))) end++;
+        } else {
+            end = idx + 1;
+        }
+        return Math.max(1, end - idx);
+    }
+
+    /**
+     * Extracts the string value of the JSON key or value at the given flat offset.
+     * Returns null if the cursor is not inside a string.
+     */
+    private static String extractStringValueAtCursor(String text, int offset) {
+        if (text == null || offset < 0 || offset >= text.length()) return null;
+        // Walk backward to find opening quote
+        int start = offset - 1;
+        while (start >= 0 && text.charAt(start) != '"' && text.charAt(start) != '\n') start--;
+        if (start < 0 || text.charAt(start) != '"') return null;
+        // Walk forward to find closing quote
+        int end = offset;
+        while (end < text.length() && text.charAt(end) != '"' && text.charAt(end) != '\n') end++;
+        if (end >= text.length() || text.charAt(end) != '"') return null;
+        return text.substring(start + 1, end);
+    }
+
+    // -------------------------------------------------------------------------
+    // Completions
     // -------------------------------------------------------------------------
 
     @Override
@@ -62,15 +158,27 @@ public final class JsonLspServer implements LspServer {
         ready = true;
     }
 
+    // -------------------------------------------------------------------------
+    // Diagnostics
+    // -------------------------------------------------------------------------
+
     @Override
     public void shutdown() {
         ready = false;
     }
 
+    // -------------------------------------------------------------------------
+    // Go to Definition
+    // -------------------------------------------------------------------------
+
     @Override
     public boolean isReady() {
         return ready;
     }
+
+    // -------------------------------------------------------------------------
+    // Find References — not meaningful for JSON
+    // -------------------------------------------------------------------------
 
     @Override
     public String getLanguageId() {
@@ -78,7 +186,7 @@ public final class JsonLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Completions
+    // Signature Help — not applicable for JSON
     // -------------------------------------------------------------------------
 
     @Override
@@ -95,7 +203,7 @@ public final class JsonLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Diagnostics
+    // Private helpers
     // -------------------------------------------------------------------------
 
     @Override
@@ -112,7 +220,7 @@ public final class JsonLspServer implements LspServer {
         for (JsonError err : errors) {
             // JsonError uses 1-based line; LSP uses 0-based
             int line = Math.max(0, err.line - 1);
-            int col  = Math.max(0, err.column - 1);
+            int col = Math.max(0, err.column - 1);
             int tokenLen = getTokenLength(doc.text, err.line, err.column);
 
             int severity = "WARNING".equalsIgnoreCase(err.severity)
@@ -124,10 +232,6 @@ public final class JsonLspServer implements LspServer {
         }
         return result;
     }
-
-    // -------------------------------------------------------------------------
-    // Go to Definition
-    // -------------------------------------------------------------------------
 
     @Override
     public LspLocation definition(LspDocument doc, LspPosition pos) {
@@ -162,111 +266,13 @@ public final class JsonLspServer implements LspServer {
         return null;
     }
 
-    // -------------------------------------------------------------------------
-    // Find References — not meaningful for JSON
-    // -------------------------------------------------------------------------
-
     @Override
     public List<LspLocation> references(LspDocument doc, LspPosition pos) {
         return Collections.emptyList();
     }
 
-    // -------------------------------------------------------------------------
-    // Signature Help — not applicable for JSON
-    // -------------------------------------------------------------------------
-
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return null;
-    }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * Converts the legacy {@link CompletionItem} list (from the existing engine) to LSP
-     * {@link LspCompletionItem} list.
-     */
-    private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
-        if (legacy == null || legacy.isEmpty()) return Collections.emptyList();
-        List<LspCompletionItem> result = new ArrayList<>(legacy.size());
-        for (CompletionItem ci : legacy) {
-            String insert = ci.getEffectiveInsertText();
-            int curOffset = ci.getCursorOffset();
-            if (curOffset < 0) {
-                int pipeIdx = insert.length() + curOffset;
-                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                }
-            }
-            int kind = mapKind(ci.getType());
-            result.add(new LspCompletionItem(
-                    ci.getLabel(),
-                    insert,
-                    kind,
-                    ci.getDetail(),
-                    null
-            ));
-        }
-        return result;
-    }
-
-    /** Maps legacy {@link CompletionItem.Type} to LSP completion item kind constants. */
-    private static int mapKind(CompletionItem.Type type) {
-        if (type == null) return LspCompletionItem.KIND_TEXT;
-        switch (type) {
-            case SNIPPET:   return LspCompletionItem.KIND_SNIPPET;
-            case JSON_KEY:  return LspCompletionItem.KIND_PROPERTY;
-            case VALUE:     return LspCompletionItem.KIND_VALUE;
-            case KEYWORD:   return LspCompletionItem.KIND_KEYWORD;
-            default:        return LspCompletionItem.KIND_TEXT;
-        }
-    }
-
-    /**
-     * Determines the token length at a 1-based (line, column) position for error range reporting.
-     * Mirrors the logic in the existing {@code JsonLinter.getTokenLength()}.
-     */
-    private static int getTokenLength(String text, int line, int column) {
-        int l = 1;
-        int idx = 0;
-        for (int i = 0; i < text.length(); i++) {
-            if (l == line) {
-                idx = i + column - 1;
-                break;
-            }
-            if (text.charAt(i) == '\n') l++;
-        }
-        if (idx < 0 || idx >= text.length()) return 1;
-        int end = idx;
-        char c = text.charAt(idx);
-        if (c == '"' || c == '\'') {
-            end++;
-            while (end < text.length() && text.charAt(end) != c && text.charAt(end) != '\n') end++;
-            if (end < text.length()) end++;
-        } else if (Character.isLetterOrDigit(c)) {
-            while (end < text.length() && Character.isLetterOrDigit(text.charAt(end))) end++;
-        } else {
-            end = idx + 1;
-        }
-        return Math.max(1, end - idx);
-    }
-
-    /**
-     * Extracts the string value of the JSON key or value at the given flat offset.
-     * Returns null if the cursor is not inside a string.
-     */
-    private static String extractStringValueAtCursor(String text, int offset) {
-        if (text == null || offset < 0 || offset >= text.length()) return null;
-        // Walk backward to find opening quote
-        int start = offset - 1;
-        while (start >= 0 && text.charAt(start) != '"' && text.charAt(start) != '\n') start--;
-        if (start < 0 || text.charAt(start) != '"') return null;
-        // Walk forward to find closing quote
-        int end = offset;
-        while (end < text.length() && text.charAt(end) != '"' && text.charAt(end) != '\n') end++;
-        if (end >= text.length() || text.charAt(end) != '"') return null;
-        return text.substring(start + 1, end);
     }
 }

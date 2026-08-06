@@ -9,12 +9,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Project-wide symbol index.
- *
+ * <p>
  * Maintains an in-memory snapshot of every source file in the open project and the
  * symbols declared in each file. Used by language servers for:
  * <ul>
@@ -33,22 +32,26 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ProjectIndex {
 
-    /** Singleton per app session. Replaced when a new project is opened. */
+    /**
+     * Singleton per app session. Replaced when a new project is opened.
+     */
     private static volatile ProjectIndex sInstance;
-
-    /** Absolute path of the currently indexed project root. */
-    private volatile String projectRoot;
-
-    /** Full text of every indexed file, keyed by absolute file path (URI). */
+    /**
+     * Full text of every indexed file, keyed by absolute file path (URI).
+     */
     private final ConcurrentHashMap<String, LspDocument> documents = new ConcurrentHashMap<>();
-
     /**
      * Symbols declared in each file, keyed by absolute file path.
      * Updated after a file is (re-)indexed.
      */
     private final ConcurrentHashMap<String, List<SymbolEntry>> fileSymbols = new ConcurrentHashMap<>();
+    /**
+     * Absolute path of the currently indexed project root.
+     */
+    private volatile String projectRoot;
 
-    private ProjectIndex() {}
+    private ProjectIndex() {
+    }
 
     public static ProjectIndex getInstance() {
         if (sInstance == null) {
@@ -61,6 +64,49 @@ public final class ProjectIndex {
 
     // -------------------------------------------------------------------------
     // Lifecycle
+    // -------------------------------------------------------------------------
+
+    private static boolean isSupportedFile(File file) {
+        String name = file.getName().toLowerCase();
+        return name.endsWith(".html") || name.endsWith(".htm")
+                || name.endsWith(".css") || name.endsWith(".scss")
+                || name.endsWith(".js") || name.endsWith(".ts")
+                || name.endsWith(".json") || name.endsWith(".md")
+                || name.endsWith(".svg");
+    }
+
+    private static String getLanguageId(String fileName) {
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
+        if (lower.endsWith(".css")) return "css";
+        if (lower.endsWith(".scss")) return "scss";
+        if (lower.endsWith(".ts")) return "typescript";
+        if (lower.endsWith(".js")) return "javascript";
+        if (lower.endsWith(".json")) return "json";
+        if (lower.endsWith(".md")) return "markdown";
+        if (lower.endsWith(".svg")) return "svg";
+        return "plaintext";
+    }
+
+    // -------------------------------------------------------------------------
+    // Incremental update
+    // -------------------------------------------------------------------------
+
+    private static String readFile(File file) throws Exception {
+        // Limit indexing to files <= 1 MB to avoid OOM on large minified assets
+        if (file.length() > 1024 * 1024) return "";
+        FileInputStream fis = new FileInputStream(file);
+        InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8);
+        char[] buffer = new char[8192];
+        StringBuilder sb = new StringBuilder((int) file.length());
+        int n;
+        while ((n = reader.read(buffer)) != -1) sb.append(buffer, 0, n);
+        reader.close();
+        return sb.toString();
+    }
+
+    // -------------------------------------------------------------------------
+    // Query API
     // -------------------------------------------------------------------------
 
     /**
@@ -83,16 +129,14 @@ public final class ProjectIndex {
         });
     }
 
-    /** Clears all indexed data. Should be called when the project is closed. */
+    /**
+     * Clears all indexed data. Should be called when the project is closed.
+     */
     public void clear() {
         projectRoot = null;
         documents.clear();
         fileSymbols.clear();
     }
-
-    // -------------------------------------------------------------------------
-    // Incremental update
-    // -------------------------------------------------------------------------
 
     /**
      * Updates the index with the latest snapshot of a single document.
@@ -108,10 +152,6 @@ public final class ProjectIndex {
             fileSymbols.put(doc.uri, symbols);
         });
     }
-
-    // -------------------------------------------------------------------------
-    // Query API
-    // -------------------------------------------------------------------------
 
     /**
      * Returns the latest document snapshot for the given file path, or null if not indexed.
@@ -162,6 +202,10 @@ public final class ProjectIndex {
         return locations;
     }
 
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
     /**
      * Returns all symbols declared in a specific file.
      *
@@ -173,19 +217,19 @@ public final class ProjectIndex {
         return symbols != null ? symbols : Collections.emptyList();
     }
 
-    /** Returns all URIs currently tracked in the index. */
+    /**
+     * Returns all URIs currently tracked in the index.
+     */
     public List<String> getAllUris() {
         return new ArrayList<>(documents.keySet());
     }
 
-    /** Returns the absolute path of the currently indexed project root. */
+    /**
+     * Returns the absolute path of the currently indexed project root.
+     */
     public String getProjectRoot() {
         return projectRoot;
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
 
     private void indexDirectory(File dir) {
         File[] files = dir.listFiles();
@@ -216,40 +260,5 @@ public final class ProjectIndex {
         } catch (Exception ignored) {
             // Skip files that cannot be read
         }
-    }
-
-    private static boolean isSupportedFile(File file) {
-        String name = file.getName().toLowerCase();
-        return name.endsWith(".html") || name.endsWith(".htm")
-                || name.endsWith(".css") || name.endsWith(".scss")
-                || name.endsWith(".js") || name.endsWith(".ts")
-                || name.endsWith(".json") || name.endsWith(".md")
-                || name.endsWith(".svg");
-    }
-
-    private static String getLanguageId(String fileName) {
-        String lower = fileName.toLowerCase();
-        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
-        if (lower.endsWith(".css"))  return "css";
-        if (lower.endsWith(".scss")) return "scss";
-        if (lower.endsWith(".ts"))   return "typescript";
-        if (lower.endsWith(".js"))   return "javascript";
-        if (lower.endsWith(".json")) return "json";
-        if (lower.endsWith(".md"))   return "markdown";
-        if (lower.endsWith(".svg"))  return "svg";
-        return "plaintext";
-    }
-
-    private static String readFile(File file) throws Exception {
-        // Limit indexing to files <= 1 MB to avoid OOM on large minified assets
-        if (file.length() > 1024 * 1024) return "";
-        FileInputStream fis = new FileInputStream(file);
-        InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8);
-        char[] buffer = new char[8192];
-        StringBuilder sb = new StringBuilder((int) file.length());
-        int n;
-        while ((n = reader.read(buffer)) != -1) sb.append(buffer, 0, n);
-        reader.close();
-        return sb.toString();
     }
 }

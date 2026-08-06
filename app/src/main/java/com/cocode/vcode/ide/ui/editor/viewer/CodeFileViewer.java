@@ -3,19 +3,18 @@ package com.cocode.vcode.ide.ui.editor.viewer;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
+import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.views.CodeEditText;
 import com.cocode.vcode.ide.views.CodeEditorLayout;
-import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 
 
 public class CodeFileViewer implements IFileViewer {
@@ -196,7 +195,9 @@ public class CodeFileViewer implements IFileViewer {
         return codeEditText;
     }
 
-    /** Returns the LSP bridge so callers can trigger Go to Definition / Find References. */
+    /**
+     * Returns the LSP bridge so callers can trigger Go to Definition / Find References.
+     */
     public com.cocode.vcode.ide.core.lsp.LspEditorBridge getLspBridge() {
         return lspBridge;
     }
@@ -253,7 +254,7 @@ public class CodeFileViewer implements IFileViewer {
                     }
 
                     // 4. Run language diagnostics
-                    java.util.List<com.cocode.vcode.ide.data.model.Problem> problems =
+                    java.util.List<Problem> problems =
                             com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(capturedFile.getFile(), textSnapshot, capturedFile.getFileType());
 
                     ExecutorProvider.getInstance().runOnMain(() -> {

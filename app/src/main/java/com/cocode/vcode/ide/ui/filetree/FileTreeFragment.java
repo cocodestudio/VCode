@@ -3,12 +3,10 @@ package com.cocode.vcode.ide.ui.filetree;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.OpenableColumns;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -24,7 +22,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
-import androidx.documentfile.provider.DocumentFile;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -37,20 +34,17 @@ import com.cocode.vcode.ide.databinding.ItemCustomPopupBinding;
 import com.cocode.vcode.ide.databinding.LayoutCustomPopupBinding;
 import com.cocode.vcode.ide.ui.dialogs.ImportDestinationDialog;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
-import com.cocode.vcode.ide.ui.sheets.DeleteBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.NewFileBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.NewFolderBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.RenameBottomSheet;
-import com.cocode.vcode.ide.utils.ExecutorProvider;
-import com.cocode.vcode.ide.utils.FileOperationManager;
-import com.cocode.vcode.ide.utils.FileUtils;
+import com.cocode.vcode.ide.ui.filetree.helper.FileClipboardHelper;
+import com.cocode.vcode.ide.ui.filetree.helper.FileImportHelper;
+import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.NewFileBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.NewFolderBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
 
@@ -131,7 +125,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
         binding.btnSearch.setOnClickListener(v -> {
             if (viewModel.getProjectRoot() != null) {
-                com.cocode.vcode.ide.ui.sheets.ProjectSearchBottomSheet bottomSheet = new com.cocode.vcode.ide.ui.sheets.ProjectSearchBottomSheet();
+                ProjectSearchBottomSheet bottomSheet = new ProjectSearchBottomSheet();
                 bottomSheet.setProjectRoot(viewModel.getProjectRoot());
                 bottomSheet.setListener((file, lineNumber) -> {
                     if (selectionListener != null) {
@@ -225,7 +219,6 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         });
         dialog.show(getChildFragmentManager(), "ImportDestinationDialog");
     }
-
 
 
     @Override

@@ -15,10 +15,10 @@ import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.ActivityPreviewBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.R;
 
 /**
  * PreviewActivity provides an in-app web environment for viewing HTML and web projects.

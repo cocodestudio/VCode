@@ -217,8 +217,9 @@
                             android:text="@string/vcode_none"
                             android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                             android:textColor="?attr/colorPrimary"
-                            android:textSize="9dp"
-                            android:visibility="gone" />
+                            android:textSize="9sp"
+                            android:visibility="gone"
+                            tools:ignore="SmallSp" />
 
                         <Space
                             android:layout_width="0dp"

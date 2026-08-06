@@ -35,7 +35,8 @@
             android:defaultFocusHighlightEnabled="false"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="12dp">
+            android:paddingHorizontal="12dp"
+            tools:targetApi="26">
 
             <ImageView
                 android:layout_width="14dp"

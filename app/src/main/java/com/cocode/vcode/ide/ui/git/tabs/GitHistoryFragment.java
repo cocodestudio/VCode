@@ -25,8 +25,9 @@ import com.cocode.vcode.ide.git.adapters.CommitHistoryAdapter;
 import com.cocode.vcode.ide.git.model.CommitItem;
 import com.cocode.vcode.ide.ui.commitdetails.CommitDetailsActivity;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.cocode.vcode.ide.ui.sheets.GitOptionsBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.ResetConfirmBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitOptionsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.ResetConfirmBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
@@ -89,9 +90,9 @@ public class GitHistoryFragment extends Fragment implements CommitHistoryAdapter
         // Observe the commit history stream and update the list or empty state UI
         viewModel.getConflictEvent().observe(getViewLifecycleOwner(), conflict -> {
             if (conflict != null) {
-                com.cocode.vcode.ide.ui.sheets.GitConflictBottomSheet.show(getChildFragmentManager(), 
-                        viewModel.getRepository(), 
-                        conflict.getConflictingFiles(), 
+                GitConflictBottomSheet.show(getChildFragmentManager(),
+                        viewModel.getRepository(),
+                        conflict.getConflictingFiles(),
                         () -> viewModel.refreshAll());
             }
         });

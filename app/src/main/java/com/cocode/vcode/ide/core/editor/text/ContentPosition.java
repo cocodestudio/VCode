@@ -14,18 +14,36 @@ package com.cocode.vcode.ide.core.editor.text;
  */
 public final class ContentPosition {
 
-    /** Zero-indexed line index within the document. */
+    /**
+     * Canonical start-of-document position.
+     */
+    public static final ContentPosition ZERO = new ContentPosition(0, 0);
+    /**
+     * Zero-indexed line index within the document.
+     */
     public final int line;
-
-    /** Zero-indexed column index within the line (character position, not pixel position). */
+    /**
+     * Zero-indexed column index within the line (character position, not pixel position).
+     */
     public final int column;
 
-    /** Canonical start-of-document position. */
-    public static final ContentPosition ZERO = new ContentPosition(0, 0);
-
     public ContentPosition(int line, int column) {
-        this.line   = line;
+        this.line = line;
         this.column = column;
+    }
+
+    /**
+     * Returns the earlier of {@code a} and {@code b} in document order.
+     */
+    public static ContentPosition min(ContentPosition a, ContentPosition b) {
+        return a.isBefore(b) ? a : b;
+    }
+
+    /**
+     * Returns the later of {@code a} and {@code b} in document order.
+     */
+    public static ContentPosition max(ContentPosition a, ContentPosition b) {
+        return a.isBefore(b) ? b : a;
     }
 
     /**
@@ -41,20 +59,6 @@ public final class ContentPosition {
      */
     public boolean isSameAs(ContentPosition other) {
         return this.line == other.line && this.column == other.column;
-    }
-
-    /**
-     * Returns the earlier of {@code a} and {@code b} in document order.
-     */
-    public static ContentPosition min(ContentPosition a, ContentPosition b) {
-        return a.isBefore(b) ? a : b;
-    }
-
-    /**
-     * Returns the later of {@code a} and {@code b} in document order.
-     */
-    public static ContentPosition max(ContentPosition a, ContentPosition b) {
-        return a.isBefore(b) ? b : a;
     }
 
     @Override

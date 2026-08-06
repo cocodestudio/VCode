@@ -10,10 +10,10 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.preference.PreferenceManager;
 
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
+import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.model.BranchItem;
 import com.cocode.vcode.ide.git.model.CommitItem;
 import com.cocode.vcode.ide.git.model.GitFileItem;
-import com.cocode.vcode.ide.git.repository.GitRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.io.File;

@@ -14,13 +14,12 @@ package com.cocode.vcode.ide.core.editor.text;
 public final class ContentLine {
 
     private static final int MIN_CAPACITY = 32;
-
+    public java.util.List<com.cocode.vcode.ide.core.editor.highlight.HighlightToken> tokens;
     char[] buffer;
     int gapStart;
     int gapEnd;
     int tokenizerStartState;
     int tokenizerEndState;
-    public java.util.List<com.cocode.vcode.ide.core.editor.highlight.HighlightToken> tokens;
 
     public ContentLine() {
         this.buffer = new char[MIN_CAPACITY];
@@ -66,12 +65,12 @@ public final class ContentLine {
         int currentLength = length();
         int newCap = Math.max(currentLength + required + MIN_CAPACITY, buffer.length * 2);
         char[] newBuffer = new char[newCap];
-        
+
         System.arraycopy(buffer, 0, newBuffer, 0, gapStart);
         int afterGapCount = buffer.length - gapEnd;
         int newGapEnd = newCap - afterGapCount;
         System.arraycopy(buffer, gapEnd, newBuffer, newGapEnd, afterGapCount);
-        
+
         buffer = newBuffer;
         gapEnd = newGapEnd;
     }

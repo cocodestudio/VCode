@@ -4,8 +4,6 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
 import android.text.TextWatcher;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
@@ -15,8 +13,8 @@ import android.widget.LinearLayout;
 import androidx.core.content.ContextCompat;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.core.search.SearchEngine;
-import com.cocode.vcode.ide.core.search.SearchResult;
+import com.cocode.vcode.ide.core.editor.search.SearchEngine;
+import com.cocode.vcode.ide.core.model.SearchResult;
 import com.cocode.vcode.ide.databinding.ViewFindReplaceBinding;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -39,8 +37,6 @@ public class FindReplaceBar extends LinearLayout {
     private final Handler debounceHandler = new Handler(Looper.getMainLooper());
 
     private final ViewFindReplaceBinding binding;
-    private final int highlightColor;
-    private final int activeHighlightColor;
     private CodeEditText editor;
     private List<SearchResult> results = new ArrayList<>();
     private int currentIndex = -1;
@@ -52,9 +48,6 @@ public class FindReplaceBar extends LinearLayout {
     public FindReplaceBar(Context context, AttributeSet attrs) {
         super(context, attrs);
         binding = ViewFindReplaceBinding.inflate(LayoutInflater.from(context), this, true);
-
-        highlightColor = ContextCompat.getColor(context, R.color.vcode_selection_color);
-        activeHighlightColor = ContextCompat.getColor(context, R.color.vcode_accent_warning);
 
         setupTypefaces(context);
         setupListeners();
@@ -260,15 +253,4 @@ public class FindReplaceBar extends LinearLayout {
                 ContextCompat.getColor(getContext(), active ? R.color.vcode_accent_primary : R.color.vcode_divider)));
     }
 
-    private static class SearchHighlightSpan extends SolidHighlightSpan {
-        SearchHighlightSpan(int color) {
-            super(androidx.core.graphics.ColorUtils.setAlphaComponent(color, 90));
-        }
-    }
-
-    private static class ActiveHighlightSpan extends SolidHighlightSpan {
-        ActiveHighlightSpan(int color) {
-            super(androidx.core.graphics.ColorUtils.setAlphaComponent(color, 140));
-        }
-    }
 }

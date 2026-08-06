@@ -65,9 +65,9 @@ public class LineNumberView extends View {
         dividerPaint.setStrokeWidth(DIVIDER_WIDTH_PX);
 
         // Pre-load colors once — ContextCompat.getColor() is non-trivial
-        colorPrimary   = ContextCompat.getColor(getContext(), R.color.vcode_text_primary);
+        colorPrimary = ContextCompat.getColor(getContext(), R.color.vcode_text_primary);
         colorSecondary = ContextCompat.getColor(getContext(), R.color.vcode_line_number_text);
-        colorsLoaded   = true;
+        colorsLoaded = true;
     }
 
     public void setCursorOffset(int cursorOffset) {
@@ -91,10 +91,10 @@ public class LineNumberView extends View {
         int lineH = editor.getEditorLineHeight();
         if (lineH <= 0) return;
 
-        int scrollY    = editor.getScrollY();
-        int firstLine  = editor.getFirstVisibleLine();
-        int lineCount  = editor.getLogicalLineCount();
-        int lastLine   = Math.min(lineCount - 1, firstLine + getHeight() / lineH + 2);
+        int scrollY = editor.getScrollY();
+        int firstLine = editor.getFirstVisibleLine();
+        int lineCount = editor.getLogicalLineCount();
+        int lastLine = Math.min(lineCount - 1, firstLine + getHeight() / lineH + 2);
 
         // Active line for highlighting — getCurrentLine() returns 1-indexed
         int activeLine = editor.getCurrentLine() - 1; // convert to 0-indexed
@@ -106,7 +106,7 @@ public class LineNumberView extends View {
         numberPaint.getFontMetricsInt(fm);
         int ascent = fm.ascent;
 
-        int _colorPrimary   = colorsLoaded ? colorPrimary   : ContextCompat.getColor(getContext(), R.color.vcode_text_primary);
+        int _colorPrimary = colorsLoaded ? colorPrimary : ContextCompat.getColor(getContext(), R.color.vcode_text_primary);
         int _colorSecondary = colorsLoaded ? colorSecondary : ContextCompat.getColor(getContext(), R.color.vcode_line_number_text);
 
         for (int i = firstLine; i <= lastLine; i++) {

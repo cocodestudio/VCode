@@ -1,11 +1,11 @@
 package com.cocode.vcode.ide.utils;
 
-import com.cocode.vcode.ide.core.formatter.BaseFormatter;
-import com.cocode.vcode.ide.core.formatter.CssFormatter;
-import com.cocode.vcode.ide.core.formatter.HtmlFormatter;
-import com.cocode.vcode.ide.core.formatter.JsFormatter;
-import com.cocode.vcode.ide.core.formatter.JsonFormatter;
-import com.cocode.vcode.ide.core.formatter.TsFormatter;
+import com.cocode.vcode.ide.core.language.base.BaseFormatter;
+import com.cocode.vcode.ide.core.language.css.CssFormatter;
+import com.cocode.vcode.ide.core.language.html.HtmlFormatter;
+import com.cocode.vcode.ide.core.language.js.JsFormatter;
+import com.cocode.vcode.ide.core.language.json.JsonFormatter;
+import com.cocode.vcode.ide.core.language.ts.TsFormatter;
 import com.cocode.vcode.ide.core.model.FileType;
 
 import java.util.EnumMap;

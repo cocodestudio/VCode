@@ -21,37 +21,9 @@ public class GitHubDeviceFlowClient {
 
     // Human action required: Replace with actual Client ID from GitHub OAuth App
     public static final String CLIENT_ID = "Ov23li6GbHl3HBgK3EEG";
-    
+
     private static final String BASE_URL = "https://github.com/login/device/code";
     private static final String TOKEN_URL = "https://github.com/login/oauth/access_token";
-
-    public static class DeviceCodeResponse {
-        public final String deviceCode;
-        public final String userCode;
-        public final String verificationUriComplete;
-        public final int expiresInSeconds;
-        public final int intervalSeconds;
-
-        public DeviceCodeResponse(String deviceCode, String userCode, String verificationUriComplete, int expiresInSeconds, int intervalSeconds) {
-            this.deviceCode = deviceCode;
-            this.userCode = userCode;
-            this.verificationUriComplete = verificationUriComplete;
-            this.expiresInSeconds = expiresInSeconds;
-            this.intervalSeconds = intervalSeconds;
-        }
-    }
-
-    public interface DeviceCodeCallback {
-        void onSuccess(DeviceCodeResponse response);
-        void onError(String error);
-    }
-
-    public interface TokenPollListener {
-        void onSuccess(String accessToken);
-        void onExpired();
-        void onDenied();
-        void onError(String error);
-    }
 
     public void requestDeviceCode(DeviceCodeCallback callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
@@ -126,9 +98,9 @@ public class GitHubDeviceFlowClient {
                     conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
                     conn.setDoOutput(true);
 
-                    String body = "client_id=" + CLIENT_ID + 
-                                  "&device_code=" + deviceCode + 
-                                  "&grant_type=urn:ietf:params:oauth:grant-type:device_code";
+                    String body = "client_id=" + CLIENT_ID +
+                            "&device_code=" + deviceCode +
+                            "&grant_type=urn:ietf:params:oauth:grant-type:device_code";
 
                     try (OutputStream os = conn.getOutputStream()) {
                         os.write(body.getBytes(StandardCharsets.UTF_8));
@@ -170,15 +142,47 @@ public class GitHubDeviceFlowClient {
     }
 
     private String readResponse(HttpURLConnection conn) throws IOException {
-        InputStream is = (conn.getResponseCode() >= 200 && conn.getResponseCode() < 300) 
-            ? conn.getInputStream() : conn.getErrorStream();
+        InputStream is = (conn.getResponseCode() >= 200 && conn.getResponseCode() < 300)
+                ? conn.getInputStream() : conn.getErrorStream();
         if (is == null) return "{}";
-        
+
         StringBuilder sb = new StringBuilder();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) sb.append(line);
         }
         return sb.toString();
+    }
+
+    public interface DeviceCodeCallback {
+        void onSuccess(DeviceCodeResponse response);
+
+        void onError(String error);
+    }
+
+    public interface TokenPollListener {
+        void onSuccess(String accessToken);
+
+        void onExpired();
+
+        void onDenied();
+
+        void onError(String error);
+    }
+
+    public static class DeviceCodeResponse {
+        public final String deviceCode;
+        public final String userCode;
+        public final String verificationUriComplete;
+        public final int expiresInSeconds;
+        public final int intervalSeconds;
+
+        public DeviceCodeResponse(String deviceCode, String userCode, String verificationUriComplete, int expiresInSeconds, int intervalSeconds) {
+            this.deviceCode = deviceCode;
+            this.userCode = userCode;
+            this.verificationUriComplete = verificationUriComplete;
+            this.expiresInSeconds = expiresInSeconds;
+            this.intervalSeconds = intervalSeconds;
+        }
     }
 }

@@ -1,8 +1,13 @@
 package com.cocode.vcode.ide.core.autocomplete;
 
+import androidx.annotation.NonNull;
+
+import com.cocode.vcode.ide.core.language.css.EmmetCssDefinitions;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,7 +36,7 @@ public class EmmetParser {
     // ─── HTML Patterns ──────────────────────────────────────────────────────────
     private static final Pattern PAT_ABBR = Pattern.compile("^[a-zA-Z0-9_.#*()+>^\\[\\]=\"{} $!:\\-]+$");
     private static final Pattern PAT_EMMET_PARSE = Pattern.compile(
-            "^([a-zA-Z0-9_-]*)(#[a-zA-Z0-9_$\\-]+)?((?:\\.[a-zA-Z0-9_$\\-]+)*)(?:\\[([^\\]]+)\\])?(?:\\{([^}]*)\\})?(?:\\*([0-9]+))?$");
+            "^([a-zA-Z0-9_-]*)(#[a-zA-Z0-9_$\\-]+)?((?:\\.[a-zA-Z0-9_$\\-]+)*)(?:\\[([^]]+)])?(?:\\{([^}]*)\\})?(?:\\*([0-9]+))?$");
 
     // ─── CSS Patterns ───────────────────────────────────────────────────────────
     private static final Pattern PAT_CSS_NUMERIC = Pattern.compile(
@@ -92,8 +97,9 @@ public class EmmetParser {
 
             // Resolve unit
             String unit;
-            switch (unitSuffix) {
+            switch (Objects.requireNonNull(unitSuffix)) {
                 case "p":
+                case "%":
                     unit = "%";
                     break;
                 case "e":
@@ -111,40 +117,43 @@ public class EmmetParser {
                 case "vw":
                     unit = "vw";
                     break;
-                case "%":
-                    unit = "%";
-                    break;
                 default:
                     unit = unitSuffix.isEmpty() ? "px" : unitSuffix;
                     break;
             }
 
             // Handle multi-value (e.g. "10-20-30")
-            String[] parts = numPart.split("-");
-            StringBuilder value = new StringBuilder();
-            for (int i = 0; i < parts.length; i++) {
-                if (parts[i].isEmpty()) continue;
-                String val = parts[i];
-                // Zero doesn't need a unit
-                if (val.equals("0")) {
-                    value.append("0");
-                } else {
-                    // z-index, opacity, font-weight, line-height don't use px
-                    if (property.equals("z-index") || property.equals("opacity")
-                            || property.equals("font-weight") || property.equals("line-height")) {
-                        value.append(val);
-                    } else {
-                        value.append(val).append(unit);
-                    }
-                }
-                if (i < parts.length - 1) value.append(" ");
-            }
+            StringBuilder value = getValue(numPart, property, unit);
 
             if (value.length() == 0) return null;
             return property + ": " + value + ";";
         }
 
         return null;
+    }
+
+    @NonNull
+    private static StringBuilder getValue(String numPart, String property, String unit) {
+        String[] parts = Objects.requireNonNull(numPart).split("-");
+        StringBuilder value = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty()) continue;
+            String val = parts[i];
+            // Zero doesn't need a unit
+            if (val.equals("0")) {
+                value.append("0");
+            } else {
+                // z-index, opacity, font-weight, line-height don't use px
+                if (property.equals("z-index") || property.equals("opacity")
+                        || property.equals("font-weight") || property.equals("line-height")) {
+                    value.append(val);
+                } else {
+                    value.append(val).append(unit);
+                }
+            }
+            if (i < parts.length - 1) value.append(" ");
+        }
+        return value;
     }
 
     // ─── HTML Parser ────────────────────────────────────────────────────────────
@@ -167,7 +176,7 @@ public class EmmetParser {
             }
 
             // Handle grouping with parentheses
-            if (i < len && abbr.charAt(i) == '(') {
+            if (abbr.charAt(i) == '(') {
                 int closeIdx = findMatchingParen(abbr, i);
                 if (closeIdx < 0) return null;
                 String groupAbbr = abbr.substring(i + 1, closeIdx);
@@ -210,7 +219,7 @@ public class EmmetParser {
                     if (current.parent != null) current = current.parent;
                 }
                 // Don't consume another char — the next iteration will parse the element
-                if (i < len && abbr.charAt(i) != '>' && abbr.charAt(i) != '+' && abbr.charAt(i) != '^') {
+                if (abbr.charAt(i) != '>' && abbr.charAt(i) != '+' && abbr.charAt(i) != '^') {
                     // Parse the element at current position
                 } else {
                     continue;
@@ -250,7 +259,7 @@ public class EmmetParser {
 
         StringBuilder sb = new StringBuilder();
         for (int r = 0; r < roots.size(); r++) {
-            renderNode(roots.get(r), sb, 0, r == roots.size() - 1, 1);
+            renderNode(roots.get(r), sb, 0, r == roots.size() - 1);
         }
 
         String result = sb.toString();
@@ -355,7 +364,7 @@ public class EmmetParser {
         return nodes;
     }
 
-    private static void renderNode(Node node, StringBuilder sb, int indent, boolean isLast, int itemNum) {
+    private static void renderNode(Node node, StringBuilder sb, int indent, boolean isLast) {
         String ind = getIndent(indent);
 
         // Group nodes render their pre-expanded content directly
@@ -386,10 +395,8 @@ public class EmmetParser {
 
         boolean isSelfClosing = isVoidElement(node.tag);
 
-        if (isSelfClosing) {
-            sb.append(">");
-        } else {
-            sb.append(">");
+        sb.append(">");
+        if (!isSelfClosing) {
             if (node.textContent != null) {
                 sb.append(node.textContent).append("</").append(node.tag).append(">");
             } else if (node.children.isEmpty()) {
@@ -397,7 +404,7 @@ public class EmmetParser {
             } else {
                 sb.append("\n");
                 for (int i = 0; i < node.children.size(); i++) {
-                    renderNode(node.children.get(i), sb, indent + 1, i == node.children.size() - 1, i + 1);
+                    renderNode(node.children.get(i), sb, indent + 1, i == node.children.size() - 1);
                 }
                 sb.append(ind).append("</").append(node.tag).append(">");
             }

@@ -29,10 +29,10 @@ public class TokenMask {
         int lastTokenType = 0;
 
         while (i < len) {
-            char c = source.charAt(i);
+            char quote = source.charAt(i);
 
             // ── HTML comment <!-- --> ──────────────────────────────────────
-            if (isHtml && c == '<' && i + 3 < len
+            if (isHtml && quote == '<' && i + 3 < len
                     && source.charAt(i + 1) == '!'
                     && source.charAt(i + 2) == '-'
                     && source.charAt(i + 3) == '-') {
@@ -55,7 +55,7 @@ public class TokenMask {
             }
 
             // ── Block comment /* */ ────────────────────────────────────────
-            if ((isJs || isCss || isHtml) && c == '/' && i + 1 < len && source.charAt(i + 1) == '*') {
+            if ((isJs || isCss || isHtml) && quote == '/' && i + 1 < len && source.charAt(i + 1) == '*') {
                 int start = i;
                 i += 2;
                 while (i + 1 < len) {
@@ -72,7 +72,7 @@ public class TokenMask {
             }
 
             // ── Line comment // ────────────────────────────────────────────
-            if (isJs && c == '/' && i + 1 < len && source.charAt(i + 1) == '/') {
+            if (isJs && quote == '/' && i + 1 < len && source.charAt(i + 1) == '/') {
                 int start = i;
                 while (i < len && source.charAt(i) != '\n') i++;
                 for (int k = start; k < Math.min(i, len); k++) inComment[k] = true;
@@ -81,8 +81,7 @@ public class TokenMask {
             }
 
             // ── String literals ' " ────────────────────────────────────────
-            if (!isCss && (c == '\'' || c == '"')) {
-                char quote = c;
+            if (!isCss && (quote == '\'' || quote == '"')) {
                 int start = i;
                 i++;
                 while (i < len) {
@@ -104,8 +103,7 @@ public class TokenMask {
             }
 
             // CSS strings
-            if (isCss && (c == '\'' || c == '"')) {
-                char quote = c;
+            if (isCss && (quote == '\'' || quote == '"')) {
                 int start = i;
                 i++;
                 while (i < len) {
@@ -126,7 +124,7 @@ public class TokenMask {
             }
 
             // ── Template literal ` ─────────────────────────────────────────
-            if (isJs && c == '`') {
+            if (isJs && quote == '`') {
                 int start = i;
                 i++;
                 int braceDepth = 0;
@@ -143,17 +141,16 @@ public class TokenMask {
                         braceDepth = 1;
                         // scan expression — nested backticks not handled recursively (rare edge)
                         while (i < len && braceDepth > 0) {
-                            char ec = source.charAt(i);
-                            if (ec == '{') braceDepth++;
-                            else if (ec == '}') {
+                            char q2 = source.charAt(i);
+                            if (q2 == '{') braceDepth++;
+                            else if (q2 == '}') {
                                 braceDepth--;
                                 if (braceDepth == 0) {
                                     i++;
                                     break;
                                 }
-                            } else if (ec == '\'' || ec == '"') {
+                            } else if (q2 == '\'' || q2 == '"') {
                                 // skip inner string
-                                char q2 = ec;
                                 i++;
                                 while (i < len) {
                                     if (source.charAt(i) == '\\') {
@@ -189,7 +186,7 @@ public class TokenMask {
             }
 
             // ── Regex literal / ────────────────────────────────────────────
-            if (isJs && c == '/' && lastTokenType == 0) {
+            if (isJs && quote == '/' && lastTokenType == 0) {
                 // Confirm next char is not * or / (those are comments, handled above)
                 if (i + 1 < len && source.charAt(i + 1) != '*' && source.charAt(i + 1) != '/') {
                     int start = i;
@@ -212,9 +209,9 @@ public class TokenMask {
                             continue;
                         }
                         if (rc == '/' && !inCharClass) {
-                            i++; // consume closing /
                             // skip flags
-                            while (i < len && Character.isLetter(source.charAt(i))) i++;
+                            do i++;
+                            while (i < len && Character.isLetter(source.charAt(i)));
                             break;
                         }
                         if (rc == '\n') break; // unterminated
@@ -227,9 +224,9 @@ public class TokenMask {
             }
 
             // ── Track last token type for regex disambiguation ──────────────
-            if (c == ')' || c == ']' || Character.isDigit(c)) {
+            if (quote == ')' || quote == ']' || Character.isDigit(quote)) {
                 lastTokenType = 1;
-            } else if (Character.isLetter(c) || c == '_' || c == '$') {
+            } else if (Character.isLetter(quote) || quote == '_' || quote == '$') {
                 // peek ahead to check if identifier
                 int wstart = i;
                 while (i < len && (Character.isLetterOrDigit(source.charAt(i)) || source.charAt(i) == '_' || source.charAt(i) == '$'))
@@ -244,10 +241,10 @@ public class TokenMask {
                     lastTokenType = 1;
                 }
                 continue;
-            } else if (c == '=' || c == '(' || c == ',' || c == '[' || c == '!'
-                    || c == '&' || c == '|' || c == '?' || c == ':' || c == ';'
-                    || c == '+' || c == '-' || c == '*' || c == '%' || c == '<'
-                    || c == '>' || c == '{' || c == '\n') {
+            } else if (quote == '=' || quote == '(' || quote == ',' || quote == '[' || quote == '!'
+                    || quote == '&' || quote == '|' || quote == '?' || quote == ':' || quote == ';'
+                    || quote == '+' || quote == '-' || quote == '*' || quote == '%' || quote == '<'
+                    || quote == '>' || quote == '{' || quote == '\n') {
                 lastTokenType = 0;
             }
 

@@ -11,10 +11,10 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -324,10 +324,6 @@ public class FileUtils {
         return count;
     }
 
-    public interface ProgressListener {
-        void onProgress(File file, long bytesRead);
-    }
-
     /**
      * Returns the root VCodeProjects directory on external storage.
      */
@@ -342,8 +338,8 @@ public class FileUtils {
      */
     public static File resolveProjectRoot(File file) {
         File projectsDir = getProjectsDirectory();
-        String filePath  = file.getAbsolutePath();
-        String pdPath    = projectsDir.getAbsolutePath();
+        String filePath = file.getAbsolutePath();
+        String pdPath = projectsDir.getAbsolutePath();
 
         if (filePath.startsWith(pdPath + File.separator)) {
             // Walk up until the immediate child of VCodeProjects is found
@@ -364,14 +360,14 @@ public class FileUtils {
 
     /**
      * Resolves an Android URI (file:// or content://) to a java.io.File.
-     *
+     * <p>
      * Strategy for content:// URIs:
-     *  1. Try to resolve the real on-disk path (via _data column or DocumentsContract).
-     *     This handles local file managers (Files by Google, Solid Explorer, etc.) which
-     *     always send content:// URIs even for plain local files.
-     *  2. Only if no real path exists (true cloud providers: Drive, WhatsApp, Gmail, etc.)
-     *     copy the stream into the app's cache directory.
-     *
+     * 1. Try to resolve the real on-disk path (via _data column or DocumentsContract).
+     * This handles local file managers (Files by Google, Solid Explorer, etc.) which
+     * always send content:// URIs even for plain local files.
+     * 2. Only if no real path exists (true cloud providers: Drive, WhatsApp, Gmail, etc.)
+     * copy the stream into the app's cache directory.
+     * <p>
      * Returns null if the URI cannot be resolved.
      */
     public static File resolveUri(Context context, Uri uri) {
@@ -415,7 +411,8 @@ public class FileUtils {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         // Method B: DocumentsContract — handles Storage Access Framework URIs
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
@@ -458,7 +455,8 @@ public class FileUtils {
                                         }
                                     }
                                 }
-                            } catch (NumberFormatException ignored) {}
+                            } catch (NumberFormatException ignored) {
+                            }
                         }
                     }
 
@@ -469,10 +467,17 @@ public class FileUtils {
                         if (parts.length == 2) {
                             Uri mediaUri;
                             switch (parts[0]) {
-                                case "image": mediaUri = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI; break;
-                                case "video": mediaUri = android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI;  break;
-                                case "audio": mediaUri = android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;  break;
-                                default: mediaUri = null;
+                                case "image":
+                                    mediaUri = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                                    break;
+                                case "video":
+                                    mediaUri = android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                                    break;
+                                case "audio":
+                                    mediaUri = android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+                                    break;
+                                default:
+                                    mediaUri = null;
                             }
                             if (mediaUri != null) {
                                 try (android.database.Cursor c = context.getContentResolver().query(
@@ -492,7 +497,8 @@ public class FileUtils {
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         return null; // Could not resolve — caller will copy to cache
@@ -512,7 +518,8 @@ public class FileUtils {
             if (cursor != null && cursor.moveToFirst()) {
                 fileName = cursor.getString(0);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         if (fileName == null || fileName.isEmpty()) {
             fileName = "vcode_tmp_" + System.currentTimeMillis();
@@ -563,5 +570,9 @@ public class FileUtils {
             if (out == null) throw new IOException("Cannot open output stream for URI: " + uri);
             out.write(content != null ? content.getBytes(StandardCharsets.UTF_8) : new byte[0]);
         }
+    }
+
+    public interface ProgressListener {
+        void onProgress(File file, long bytesRead);
     }
 }

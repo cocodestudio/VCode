@@ -8,69 +8,37 @@ public final class UndoStack {
 
     private static final int MAX_HISTORY = 200;
     private static final long GROUP_TIMEOUT_MS = 800L;
-
-    private enum RecordType { INSERT, DELETE }
-
-    public static final class EditorSnapshot {
-        public final ContentPosition cursor;
-        public final ContentPosition selectionAnchor;
-        public final int scrollX;
-        public final int scrollY;
-
-        public EditorSnapshot(ContentPosition cursor, ContentPosition selectionAnchor, int scrollX, int scrollY) {
-            this.cursor = cursor;
-            this.selectionAnchor = selectionAnchor;
-            this.scrollX = scrollX;
-            this.scrollY = scrollY;
-        }
-    }
-
-    private static final class UndoRecord {
-        final RecordType type;
-        final int startLine;
-        final int startColumn;
-        final int endLine;
-        final int endColumn;
-        final String text;
-        final EditorSnapshot before;
-        final EditorSnapshot after;
-
-        UndoRecord(RecordType type,
-                   int startLine, int startColumn,
-                   int endLine, int endColumn,
-                   String text,
-                   EditorSnapshot before,
-                   EditorSnapshot after) {
-            this.type        = type;
-            this.startLine   = startLine;
-            this.startColumn = startColumn;
-            this.endLine     = endLine;
-            this.endColumn   = endColumn;
-            this.text        = text;
-            this.before      = before;
-            this.after       = after;
-        }
-    }
-
-    private static final class UndoUnit {
-        final UndoRecord[] records;
-        UndoUnit(UndoRecord[] records) { this.records = records; }
-    }
-
     private final ArrayList<UndoRecord> pendingGroup = new ArrayList<>();
+    private final Deque<UndoUnit> undoStack = new ArrayDeque<>();
+    private final Deque<UndoUnit> redoStack = new ArrayDeque<>();
     private RecordType pendingType = null;
     private long lastEditTimeMs = 0L;
     private EditorSnapshot lastAfter = null;
     private boolean lastCharWasWordChar = false;
     private boolean lastWasBackspace = false;
 
-    private final Deque<UndoUnit> undoStack = new ArrayDeque<>();
-    private final Deque<UndoUnit> redoStack = new ArrayDeque<>();
+    private static boolean isWordChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+
+    public static ContentPosition advancePosition(int startLine, int startColumn, String text) {
+        int line = startLine;
+        int col = startColumn;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+                col = 0;
+            } else {
+                col++;
+            }
+        }
+        return new ContentPosition(line, col);
+    }
 
     public void recordInsert(int startLine, int startColumn,
-                              String insertedText,
-                              EditorSnapshot before,
-                              EditorSnapshot after) {
+                             String insertedText,
+                             EditorSnapshot before,
+                             EditorSnapshot after) {
         if (insertedText == null || insertedText.isEmpty()) return;
 
         long now = System.currentTimeMillis();
@@ -108,16 +76,16 @@ public final class UndoStack {
     }
 
     public void recordDelete(int startLine, int startColumn,
-                              int endLine, int endColumn,
-                              String deletedText,
-                              EditorSnapshot before,
-                              EditorSnapshot after) {
+                             int endLine, int endColumn,
+                             String deletedText,
+                             EditorSnapshot before,
+                             EditorSnapshot after) {
         if (deletedText == null || deletedText.isEmpty()) return;
 
         long now = System.currentTimeMillis();
         boolean isSingleChar = deletedText.length() == 1 && deletedText.charAt(0) != '\n';
         ContentPosition rangeStart = new ContentPosition(startLine, startColumn);
-        ContentPosition rangeEnd   = new ContentPosition(endLine, endColumn);
+        ContentPosition rangeEnd = new ContentPosition(endLine, endColumn);
         boolean isBackspace = isSingleChar && after.cursor.isSameAs(rangeStart) && before.cursor.isSameAs(rangeEnd);
         boolean isForwardDelete = isSingleChar && before.cursor.isSameAs(rangeStart) && after.cursor.isSameAs(rangeStart);
 
@@ -151,9 +119,9 @@ public final class UndoStack {
     }
 
     public void recordReplace(int startLine, int startColumn,
-                               int endLine, int endColumn,
-                               String deletedText, String insertedText,
-                               EditorSnapshot before, EditorSnapshot after) {
+                              int endLine, int endColumn,
+                              String deletedText, String insertedText,
+                              EditorSnapshot before, EditorSnapshot after) {
         commitPending();
 
         ArrayList<UndoRecord> records = new ArrayList<>(2);
@@ -238,7 +206,7 @@ public final class UndoStack {
     private void pushUndo(UndoUnit unit) {
         undoStack.push(unit);
         while (undoStack.size() > MAX_HISTORY) {
-            ((ArrayDeque<UndoUnit>) undoStack).removeLast();
+            undoStack.removeLast();
         }
     }
 
@@ -260,21 +228,54 @@ public final class UndoStack {
         return record.after;
     }
 
-    private static boolean isWordChar(char c) {
-        return Character.isLetterOrDigit(c) || c == '_';
+    private enum RecordType {INSERT, DELETE}
+
+    public static final class EditorSnapshot {
+        public final ContentPosition cursor;
+        public final ContentPosition selectionAnchor;
+        public final int scrollX;
+        public final int scrollY;
+
+        public EditorSnapshot(ContentPosition cursor, ContentPosition selectionAnchor, int scrollX, int scrollY) {
+            this.cursor = cursor;
+            this.selectionAnchor = selectionAnchor;
+            this.scrollX = scrollX;
+            this.scrollY = scrollY;
+        }
     }
 
-    public static ContentPosition advancePosition(int startLine, int startColumn, String text) {
-        int line = startLine;
-        int col  = startColumn;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
-                col = 0;
-            } else {
-                col++;
-            }
+    private static final class UndoRecord {
+        final RecordType type;
+        final int startLine;
+        final int startColumn;
+        final int endLine;
+        final int endColumn;
+        final String text;
+        final EditorSnapshot before;
+        final EditorSnapshot after;
+
+        UndoRecord(RecordType type,
+                   int startLine, int startColumn,
+                   int endLine, int endColumn,
+                   String text,
+                   EditorSnapshot before,
+                   EditorSnapshot after) {
+            this.type = type;
+            this.startLine = startLine;
+            this.startColumn = startColumn;
+            this.endLine = endLine;
+            this.endColumn = endColumn;
+            this.text = text;
+            this.before = before;
+            this.after = after;
         }
-        return new ContentPosition(line, col);
+    }
+
+    private static final class UndoUnit {
+        final UndoRecord[] records;
+
+        UndoUnit(UndoRecord[] records) {
+            this.records = records;
+        }
     }
 }

@@ -2,18 +2,19 @@ package com.cocode.vcode.ide.core.lsp;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Lightweight, language-aware symbol extractor.
- *
+ * <p>
  * Parses a {@link LspDocument} and returns a list of {@link SymbolEntry} objects
  * representing the top-level declarations found in the file. This is intentionally
  * kept fast and simple — it does NOT perform full AST parsing. Pattern-based heuristics
  * are sufficient for populating the project index with completion candidates and
  * definition targets.
- *
+ * <p>
  * Language-specific servers can build richer scope trees on top of this baseline.
  */
 public final class SymbolExtractor {
@@ -27,7 +28,7 @@ public final class SymbolExtractor {
     private static final Pattern JS_CLASS = Pattern.compile(
             "(?:^|\\s)(?:export\\s+)?(?:abstract\\s+)?class\\s+(\\w+)", Pattern.MULTILINE);
     private static final Pattern JS_VAR = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*(?:=|;)", Pattern.MULTILINE);
+            "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*[=;]", Pattern.MULTILINE);
 
     // CSS patterns
     private static final Pattern CSS_CLASS_SELECTOR = Pattern.compile(
@@ -41,7 +42,8 @@ public final class SymbolExtractor {
     private static final Pattern HTML_CLASS = Pattern.compile(
             "\\bclass=[\"']([^\"']+)[\"']");
 
-    private SymbolExtractor() {}
+    private SymbolExtractor() {
+    }
 
     /**
      * Extracts symbols from the given document based on its language.
@@ -95,14 +97,14 @@ public final class SymbolExtractor {
         Matcher m = CSS_CLASS_SELECTOR.matcher(text);
         while (m.find()) {
             LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + m.group(1).length()));
+            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + Objects.requireNonNull(m.group(1)).length()));
             results.add(new SymbolEntry("." + m.group(1), doc.uri, range, SymbolEntry.KIND_CSS_CLASS));
         }
 
         m = CSS_ID_SELECTOR.matcher(text);
         while (m.find()) {
             LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + m.group(1).length()));
+            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + Objects.requireNonNull(m.group(1)).length()));
             results.add(new SymbolEntry("#" + m.group(1), doc.uri, range, SymbolEntry.KIND_CSS_ID));
         }
 
@@ -121,16 +123,15 @@ public final class SymbolExtractor {
         while (m.find()) {
             LspPosition pos = offsetToPosition(text, m.start(1));
             String id = m.group(1);
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + id.length()));
+            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + Objects.requireNonNull(id).length()));
             results.add(new SymbolEntry(id, doc.uri, range, SymbolEntry.KIND_HTML_ID));
         }
 
         m = HTML_CLASS.matcher(text);
         while (m.find()) {
             // A class attribute may have multiple space-separated class names
-            String[] classes = m.group(1).split("\\s+");
-            int base = m.start(1);
-            int offset = base;
+            String[] classes = Objects.requireNonNull(m.group(1)).split("\\s+");
+            int offset = m.start(1);
             for (String cls : classes) {
                 if (!cls.isEmpty()) {
                     LspPosition pos = offsetToPosition(text, offset);

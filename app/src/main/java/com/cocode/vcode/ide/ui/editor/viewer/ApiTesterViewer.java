@@ -16,9 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.core.editor.text.Content;
-import com.cocode.vcode.ide.core.editor.text.ContentPosition;
-import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
+import com.cocode.vcode.ide.core.language.json.JsonSyntaxHighlighter;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.databinding.ViewerApiTesterBinding;
@@ -26,7 +24,6 @@ import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.cocode.vcode.ide.core.syntax.JsonSyntaxHighlighter;
 import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.CodeEditText;
 
@@ -44,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 
 public class ApiTesterViewer implements IFileViewer {
 
@@ -59,9 +57,11 @@ public class ApiTesterViewer implements IFileViewer {
         @Override
         public void beforeTextChanged(CharSequence s, int start, int count, int after) {
         }
+
         @Override
         public void onTextChanged(CharSequence s, int start, int before, int count) {
         }
+
         @Override
         public void afterTextChanged(Editable s) {
             saveStateToVirtualFile();
@@ -101,7 +101,7 @@ public class ApiTesterViewer implements IFileViewer {
 
         // TextView handles its own selection and isn't editable
 
-        binding.tvMethod.setOnClickListener(this::showMethodSelector);
+        binding.tvMethod.setOnClickListener(v -> showMethodSelector());
         binding.btnSend.setOnClickListener(v -> executeRequest());
 
         binding.etUrl.addTextChangedListener(stateWatcher);
@@ -203,7 +203,8 @@ public class ApiTesterViewer implements IFileViewer {
             if (!k.isEmpty()) {
                 try {
                     obj.put(k, v);
-                } catch (JSONException ignored) {}
+                } catch (JSONException ignored) {
+                }
             }
         }
         return obj;
@@ -220,13 +221,14 @@ public class ApiTesterViewer implements IFileViewer {
             if (!k.isEmpty()) {
                 try {
                     obj.put(k, v);
-                } catch (JSONException ignored) {}
+                } catch (JSONException ignored) {
+                }
             }
         }
         return obj;
     }
 
-    private void showMethodSelector(View anchor) {
+    private void showMethodSelector() {
         List<String> methods = Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE");
         String currentSelection = binding.tvMethod.getText().toString();
 
@@ -297,11 +299,11 @@ public class ApiTesterViewer implements IFileViewer {
                 conn.disconnect();
 
                 long timeTaken = System.currentTimeMillis() - startTime;
-                
+
                 String rawResponse = response.toString();
                 int byteSize = rawResponse.getBytes(StandardCharsets.UTF_8).length;
                 String sizeStr = formatByteSize(byteSize);
-                
+
                 String formattedResponse = rawResponse;
                 try {
                     if (formattedResponse.trim().startsWith("{") || formattedResponse.trim().startsWith("[")) {
@@ -344,8 +346,8 @@ public class ApiTesterViewer implements IFileViewer {
 
     private String formatByteSize(int bytes) {
         if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024f);
-        return String.format("%.2f MB", bytes / (1024f * 1024f));
+        if (bytes < 1024 * 1024) return String.format(Locale.getDefault(), "%.1f KB", bytes / 1024f);
+        return String.format(Locale.getDefault(),"%.2f MB", bytes / (1024f * 1024f));
     }
 
     private void postResult(CharSequence result, int statusCode, String statusMessage, long timeTaken, String sizeStr, boolean success) {
@@ -386,7 +388,7 @@ public class ApiTesterViewer implements IFileViewer {
             JSONObject state = new JSONObject();
             state.put("method", currentMethod);
             state.put("url", binding.etUrl.getText().toString());
-            
+
             state.put("headers_obj", getHeadersJson());
             state.put("body_obj", getBodyJson());
 
@@ -406,9 +408,9 @@ public class ApiTesterViewer implements IFileViewer {
             currentMethod = state.optString("method", "GET");
             binding.tvMethod.setText(currentMethod);
             binding.etUrl.setText(state.optString("url", ""));
-            
+
             binding.containerHeadersList.removeAllViews();
-            
+
             if (state.has("headers_obj")) {
                 JSONObject hObj = state.getJSONObject("headers_obj");
                 Iterator<String> keys = hObj.keys();
@@ -425,15 +427,16 @@ public class ApiTesterViewer implements IFileViewer {
                         String k = keys.next();
                         addHeaderRow(k, hObj.getString(k));
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
-            
+
             if (binding.containerHeadersList.getChildCount() == 0) {
                 addHeaderRow("", "");
             }
-            
+
             binding.containerBodyList.removeAllViews();
-            
+
             if (state.has("body_obj")) {
                 JSONObject bObj = state.getJSONObject("body_obj");
                 Iterator<String> keys = bObj.keys();
@@ -450,13 +453,14 @@ public class ApiTesterViewer implements IFileViewer {
                         String k = keys.next();
                         addBodyRow(k, bObj.getString(k));
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
-            
+
             if (binding.containerBodyList.getChildCount() == 0) {
                 addBodyRow("", "");
             }
-            
+
         } catch (JSONException ignored) {
         } finally {
             isUpdating = false;
@@ -467,18 +471,18 @@ public class ApiTesterViewer implements IFileViewer {
     public void bindFile(EditorFile file, EditorViewModel viewModel) {
         this.currentFile = file;
         this.viewModel = viewModel;
-        
+
         binding.containerHeadersList.removeAllViews();
         binding.containerBodyList.removeAllViews();
         loadStateFromVirtualFile(file.getContent());
-        
+
         if (binding.containerHeadersList.getChildCount() == 0) {
             addHeaderRow("", "");
         }
         if (binding.containerBodyList.getChildCount() == 0) {
             addBodyRow("", "");
         }
-        
+
         selectTab(true);
     }
 

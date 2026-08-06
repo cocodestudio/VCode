@@ -2,17 +2,21 @@ package com.cocode.vcode.ide.core.lsp;
 
 /**
  * Immutable snapshot of a document at a specific version.
- *
+ * <p>
  * Passed to {@link LspServer} on every request. Being immutable ensures the server
  * can process the document on a background thread without racing with further edits
  * on the UI thread.
  */
 public final class LspDocument {
 
-    /** Absolute file path used as a stable identifier (e.g. {@code /storage/.../index.html}). */
+    /**
+     * Absolute file path used as a stable identifier (e.g. {@code /storage/.../index.html}).
+     */
     public final String uri;
 
-    /** Full text content of the document at this version. */
+    /**
+     * Full text content of the document at this version.
+     */
     public final String text;
 
     /**

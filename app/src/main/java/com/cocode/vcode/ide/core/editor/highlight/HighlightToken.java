@@ -8,21 +8,21 @@ package com.cocode.vcode.ide.core.editor.highlight;
 public final class HighlightToken {
 
     public final int line;
-    public int startCol;
-    public int endCol;
     public final int color;
     public final boolean underline;
     public final boolean hasPreviewColor;
     public final int previewColor;
+    public int startCol;
+    public int endCol;
 
     public HighlightToken(int line, int startCol, int endCol, int color, boolean underline, boolean hasPreviewColor, int previewColor) {
-        this.line            = line;
-        this.startCol        = startCol;
-        this.endCol          = endCol;
-        this.color           = color;
-        this.underline       = underline;
+        this.line = line;
+        this.startCol = startCol;
+        this.endCol = endCol;
+        this.color = color;
+        this.underline = underline;
         this.hasPreviewColor = hasPreviewColor;
-        this.previewColor    = previewColor;
+        this.previewColor = previewColor;
     }
 
     public HighlightToken(int line, int startCol, int endCol, int color, boolean underline) {

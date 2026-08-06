@@ -27,32 +27,32 @@ import androidx.core.view.GestureDetectorCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
-import com.cocode.vcode.ide.core.autocomplete.CompletionItem;
-import com.cocode.vcode.ide.core.autocomplete.CssAutoCompleteEngine;
-import com.cocode.vcode.ide.core.autocomplete.HtmlAutoCompleteEngine;
-import com.cocode.vcode.ide.core.autocomplete.JsAutoCompleteEngine;
-import com.cocode.vcode.ide.core.autocomplete.JsonAutoCompleteEngine;
-import com.cocode.vcode.ide.core.autocomplete.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
+import com.cocode.vcode.ide.core.editor.indent.BracketMatcher;
+import com.cocode.vcode.ide.core.editor.indent.IndentationEngine;
 import com.cocode.vcode.ide.core.editor.text.Content;
 import com.cocode.vcode.ide.core.editor.text.ContentChangeListener;
 import com.cocode.vcode.ide.core.editor.text.ContentPosition;
 import com.cocode.vcode.ide.core.editor.text.UndoStack;
+import com.cocode.vcode.ide.core.language.base.SyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.css.CssSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.html.HtmlAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.html.HtmlSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.html.HtmlTagParser;
+import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.json.JsonSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.markdown.MarkdownSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.ts.TsSyntaxHighlighter;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
-import com.cocode.vcode.ide.core.parser.BracketMatcher;
-import com.cocode.vcode.ide.core.parser.HtmlTagParser;
-import com.cocode.vcode.ide.core.parser.IndentationEngine;
-import com.cocode.vcode.ide.core.search.SearchResult;
-import com.cocode.vcode.ide.core.syntax.HtmlSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.JsSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.CssSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.TsSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.JsonSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.MarkdownSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.SvgSyntaxHighlighter;
-import com.cocode.vcode.ide.core.syntax.SyntaxHighlighter;
+import com.cocode.vcode.ide.core.model.Problem;
+import com.cocode.vcode.ide.core.model.SearchResult;
 import com.cocode.vcode.ide.data.model.AppSettings;
-import com.cocode.vcode.ide.data.model.Problem;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 
@@ -78,9 +78,6 @@ import java.util.List;
 public class CodeEditText extends View {
 
     // ── Constants ─────────────────────────────────────────────────────────────
-    private static final long HIGHLIGHT_DELAY_MS_SMALL = 150;
-    private static final long HIGHLIGHT_DELAY_MS_LARGE = 300;
-    private static final int LARGE_FILE_THRESHOLD = 20000;
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
 
@@ -92,6 +89,8 @@ public class CodeEditText extends View {
     private static final int HANDLE_DRAG_NONE = 0;
     private static final int HANDLE_DRAG_START = 1;
     private static final int HANDLE_DRAG_END = 2;
+    // Debounced visual layout rebuild (avoids scroll jumps during flings)
+    private static final long VISUAL_LAYOUT_DEBOUNCE_MS = 32; // ~2 frames
     // ── Phase-1 text model ────────────────────────────────────────────────────
     private final Content content = new Content();
     private final UndoStack undoStack = new UndoStack();
@@ -100,32 +99,29 @@ public class CodeEditText extends View {
     private final BracketMatcher bracketMatcher = new BracketMatcher();
     private final DirtyRangeTracker dirtyTracker = new DirtyRangeTracker();
     boolean autoCloseHtmlTags = true;
+    // ── IME composing region ──────────────────────────────────────────────────
+    int composingStart = -1;
+    int composingEnd = -1;
     private boolean autoCloseQuotes = true;
     private boolean wordWrap = false;
     private int[] visualRowStarts;
     private int totalVisualRows;
-    // Debounced visual layout rebuild (avoids scroll jumps during flings)
-    private static final long VISUAL_LAYOUT_DEBOUNCE_MS = 32; // ~2 frames
     private boolean visualLayoutPending = false;
+    private boolean isSettingSelectionFromIme = false;
+    // ── Rendering state ───────────────────────────────────────────────────────
+    private float charWidth;
     private final Runnable visualLayoutRunnable = () -> {
         visualLayoutPending = false;
         rebuildVisualLayout();
         requestLayout();
         invalidate();
     };
-    // ── IME composing region ──────────────────────────────────────────────────
-    int composingStart = -1;
-    int composingEnd = -1;
-    private boolean isSettingSelectionFromIme = false;
-    // ── Rendering state ───────────────────────────────────────────────────────
-    private float charWidth;
     private int lineHeightPx;
     private Paint textPaint;
     private Paint lineHighlightPaint;
     private Paint cursorPaint;
     private Paint selectionPaint;
     private Paint diagnosticPaint;
-    private android.graphics.Path diagnosticPath;
     private Paint searchMatchPaint;
     private Paint searchActivePaint;
     private Paint bracketHighlightPaint;
@@ -159,10 +155,9 @@ public class CodeEditText extends View {
     private boolean isApplyingHighlight = false;
     private boolean isUndoRedoActive = false;
     private boolean isSettingText = false;
-    private boolean isInsertingCompletion = false;
     private boolean isTypingText = false;
     // ── Content change listeners ──────────────────────────────────────────────
-    private List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
+    private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
     // ── Diagnostics ───────────────────────────────────────────────────────────
     private List<Problem> currentProblems = new ArrayList<>();
     private float lastSquiggleConfigHash = 0;
@@ -170,8 +165,10 @@ public class CodeEditText extends View {
     private boolean autoCloseBrackets = true;
     private boolean autoIndent = true;
     private IndentationEngine indentEngine;
-    private AutoCompletePopup autoCompletePopup;
-    /** When true, LSP is handling completions and the legacy engine is suppressed. */
+    private final AutoCompletePopup autoCompletePopup;
+    /**
+     * When true, LSP is handling completions and the legacy engine is suppressed.
+     */
     private boolean lspCompletionActive = false;
     // ── Highlight state ───────────────────────────────────────────────────────
     private final Runnable autoCompleteRunnable = this::triggerAutoComplete;
@@ -204,7 +201,12 @@ public class CodeEditText extends View {
         autoCompletePopup = new AutoCompletePopup(context);
         init(context);
     }    // ── Blink ─────────────────────────────────────────────────────────────────
-    private final Runnable blinkRunnable = () -> {
+
+    public CodeEditText(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        autoCompletePopup = new AutoCompletePopup(context);
+        init(context);
+    }    private final Runnable blinkRunnable = () -> {
         cursorVisible = !cursorVisible;
         invalidate();
         scheduleBlink();
@@ -213,12 +215,6 @@ public class CodeEditText extends View {
     // ─────────────────────────────────────────────────────────────────────────
     // Constructors
     // ─────────────────────────────────────────────────────────────────────────
-
-    public CodeEditText(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        autoCompletePopup = new AutoCompletePopup(context);
-        init(context);
-    }
 
     public CodeEditText(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
@@ -232,10 +228,6 @@ public class CodeEditText extends View {
     private static boolean isWordChar(char ch) {
         return Character.isLetterOrDigit(ch) || ch == '_' || ch == '$';
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Initialization
-    // ─────────────────────────────────────────────────────────────────────────
 
     @SuppressLint("ClickableViewAccessibility")
     private void init(Context context) {
@@ -270,7 +262,6 @@ public class CodeEditText extends View {
         diagnosticPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         diagnosticPaint.setStyle(Paint.Style.STROKE);
         diagnosticPaint.setStrokeWidth(3f);
-        diagnosticPath = new android.graphics.Path();
 
         cachedErrorColor = ContextCompat.getColor(context, R.color.vcode_accent_error);
         cachedWarningColor = ContextCompat.getColor(context, R.color.vcode_accent_warning);
@@ -348,8 +339,7 @@ public class CodeEditText extends View {
 
             @Override
             public boolean onSingleTapUp(@NonNull MotionEvent e) {
-                ContentPosition pos = touchToPosition(e.getX(), e.getY());
-                cursor = pos;
+                cursor = touchToPosition(e.getX(), e.getY());
                 selectionAnchor = null;
                 // Clear stale composing region so that spacebar-slide and
                 // backspace-slide start from the exact tapped position.
@@ -434,7 +424,7 @@ public class CodeEditText extends View {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Measure
+    // Initialization
     // ─────────────────────────────────────────────────────────────────────────
 
     @Override
@@ -460,11 +450,11 @@ public class CodeEditText extends View {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Draw
+    // Measure
     // ─────────────────────────────────────────────────────────────────────────
 
     @Override
-    protected void onDraw(Canvas canvas) {
+    protected void onDraw(@NonNull Canvas canvas) {
         int scrollY = getScrollY();
         int scrollX = getScrollX();
         int viewH = getHeight();
@@ -482,16 +472,16 @@ public class CodeEditText extends View {
         // 1. Line highlight for cursor line
         if (isFocused()) {
             int cursorVisualRow = absoluteVisualRow(cursor.line, cursor.column);
-            float lineTop = paddingTop + cursorVisualRow * lineHeightPx - scrollY + scrollY; // keeping the logic intact but scrollY cancels out in standard view since scrolling is hardware based, wait, actually canvas translates are not used here, the views do translate. Wait, no, scrollY is used directly or view translates? In Android, scrollX and scrollY are handled by canvas translation. So y should be absolute Y.
+            // keeping the logic intact but scrollY cancels out in standard view since scrolling is hardware based, wait, actually canvas translates are not used here, the views do translate. Wait, no, scrollY is used directly or view translates? In Android, scrollX and scrollY are handled by canvas translation. So y should be absolute Y.
             float rectTop = paddingTop + cursorVisualRow * lineHeightPx;
             canvas.drawRect(scrollX, rectTop, scrollX + viewW, rectTop + lineHeightPx, lineHighlightPaint);
         }
 
         // 2. Selection background
-        drawSelection(canvas, firstLine, lastLine, paddingLeft, paddingTop, scrollY, scrollX);
+        drawSelection(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
         // 3. Search decorations background (Phase 6)
-        drawSearchDecorations(canvas, firstLine, lastLine, paddingLeft, paddingTop, scrollY, scrollX);
+        drawSearchDecorations(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
         // 4. Text (token-coloured, char-array overload — no String allocation per line)
         textPaint.setStyle(Paint.Style.FILL);
@@ -499,13 +489,13 @@ public class CodeEditText extends View {
         Paint.FontMetricsInt fm = textPaint.getFontMetricsInt();
         int ascent = fm.ascent;
 
-        int charsPerRow = wordWrap ? Math.max(1, (int)((getWidth()-getPaddingLeft()-getPaddingRight())/charWidth)) : Integer.MAX_VALUE;
+        int charsPerRow = wordWrap ? Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth)) : Integer.MAX_VALUE;
 
         for (int line = firstLine; line <= lastLine; line++) {
             int lineLen = content.lineLength(line);
             if (lineLen == 0) continue;
 
-            int subRows = wordWrap ? Math.max(1, (int)Math.ceil((double)lineLen / charsPerRow)) : 1;
+            int subRows = wordWrap ? Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow)) : 1;
 
             com.cocode.vcode.ide.core.editor.text.ContentLine contentLine = content.getLine(line);
             if (contentLine.tokens == null && syntaxHighlighter != null) {
@@ -513,7 +503,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 contentLine.tokens = syntaxHighlighter.tokenizeLine(contentLine.toLineString(), line, internalState);
-                com.cocode.vcode.ide.core.parser.BracketMatcher.applyRainbowBrackets(contentLine.tokens, contentLine.toLineString(), rainbowColors, depth);
+                BracketMatcher.applyRainbowBrackets(contentLine.tokens, contentLine.toLineString(), rainbowColors, depth);
             }
             List<HighlightToken> lineTokens = contentLine.tokens;
 
@@ -549,84 +539,83 @@ public class CodeEditText extends View {
                 float x = paddingLeft + (wordWrap ? 0 : getCursorX(line, startVisCol));
                 float baseY = paddingTop + (visualRow * lineHeightPx) - ascent;
 
-            if (lineTokens == null || lineTokens.isEmpty()) {
-                textPaint.setColor(defaultTextColor);
-                canvas.drawText(lineBuffer, 0, renderLen, x, baseY, textPaint);
-            } else {
-                Arrays.fill(colorBuffer, 0, renderLen, defaultTextColor);
-                Arrays.fill(underlineBuffer, 0, renderLen, false);
-                for (int i = 0; i < renderLen; i++) previewBuffer[i] = false;
+                if (lineTokens == null || lineTokens.isEmpty()) {
+                    textPaint.setColor(defaultTextColor);
+                    canvas.drawText(lineBuffer, 0, renderLen, x, baseY, textPaint);
+                } else {
+                    Arrays.fill(colorBuffer, 0, renderLen, defaultTextColor);
+                    Arrays.fill(underlineBuffer, 0, renderLen, false);
+                    for (int i = 0; i < renderLen; i++) previewBuffer[i] = false;
 
-                // Apply tokens (later tokens overwrite earlier ones)
-                for (HighlightToken tok : lineTokens) {
-                    int s = Math.max(0, Math.min(renderLen, tok.startCol - startVisCol));
-                    int e = Math.max(0, Math.min(renderLen, tok.endCol - startVisCol));
-                    for (int i = s; i < e; i++) {
-                        if (tok.color != 0) {
-                            colorBuffer[i] = tok.color;
+                    // Apply tokens (later tokens overwrite earlier ones)
+                    for (HighlightToken tok : lineTokens) {
+                        int s = Math.max(0, Math.min(renderLen, tok.startCol - startVisCol));
+                        int e = Math.max(0, Math.min(renderLen, tok.endCol - startVisCol));
+                        for (int i = s; i < e; i++) {
+                            if (tok.color != 0) {
+                                colorBuffer[i] = tok.color;
+                            }
+                            if (tok.underline) {
+                                underlineBuffer[i] = true;
+                            }
                         }
-                        if (tok.underline) {
-                            underlineBuffer[i] = true;
+                        if (tok.hasPreviewColor && s < renderLen && (tok.startCol >= startVisCol)) {
+                            previewBuffer[s] = true;
+                            previewColorBuffer[s] = tok.previewColor;
                         }
                     }
-                    if (tok.hasPreviewColor && s < renderLen && (tok.startCol >= startVisCol)) {
-                        previewBuffer[s] = true;
-                        previewColorBuffer[s] = tok.previewColor;
+
+                    // Draw contiguous segments
+                    int start = 0;
+                    float accumulatedShift = 0;
+                    while (start < renderLen) {
+                        if (previewBuffer[start]) {
+                            float circleRadius = charWidth * 0.45f;
+                            float circleX = x + start * charWidth + accumulatedShift + circleRadius + charWidth * 0.05f;
+                            float circleY = baseY + (textPaint.ascent() + textPaint.descent()) / 2f;
+
+                            textPaint.setStyle(Paint.Style.FILL);
+                            textPaint.setColor(previewColorBuffer[start]);
+                            canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
+
+                            textPaint.setStyle(Paint.Style.STROKE);
+                            textPaint.setColor(android.graphics.Color.argb(50, 128, 128, 128));
+                            textPaint.setStrokeWidth(2f);
+                            canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
+                            textPaint.setStyle(Paint.Style.FILL);
+
+                            accumulatedShift += charWidth * 1.2f;
+                        }
+
+                        int c = colorBuffer[start];
+                        boolean u = underlineBuffer[start];
+                        int end = start + 1;
+                        while (end < renderLen && !previewBuffer[end] && colorBuffer[end] == c && underlineBuffer[end] == u) {
+                            end++;
+                        }
+
+                        float startX = x + start * charWidth + accumulatedShift;
+                        textPaint.setColor(c);
+                        canvas.drawText(lineBuffer, start, end - start, startX, baseY, textPaint);
+                        if (u) {
+                            float ux1 = x + end * charWidth + accumulatedShift;
+                            float uy = baseY + 2;
+                            textPaint.setStyle(Paint.Style.STROKE);
+                            textPaint.setStrokeWidth(1f);
+                            canvas.drawLine(startX, uy, ux1, uy, textPaint);
+                            textPaint.setStyle(Paint.Style.FILL);
+                        }
+                        start = end;
                     }
+                    // Restore paint state
+                    textPaint.setColor(defaultTextColor);
+                    textPaint.setStyle(Paint.Style.FILL);
                 }
-
-                // Draw contiguous segments
-                int start = 0;
-                float accumulatedShift = 0;
-                while (start < renderLen) {
-                    if (previewBuffer[start]) {
-                        float circleRadius = charWidth * 0.45f;
-                        float circleX = x + start * charWidth + accumulatedShift + circleRadius + charWidth * 0.05f;
-                        float circleY = baseY + (textPaint.ascent() + textPaint.descent()) / 2f;
-
-                        textPaint.setStyle(Paint.Style.FILL);
-                        textPaint.setColor(previewColorBuffer[start]);
-                        canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
-
-                        textPaint.setStyle(Paint.Style.STROKE);
-                        textPaint.setColor(android.graphics.Color.argb(50, 128, 128, 128));
-                        textPaint.setStrokeWidth(2f);
-                        canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
-                        textPaint.setStyle(Paint.Style.FILL);
-
-                        accumulatedShift += charWidth * 1.2f;
-                    }
-
-                    int c = colorBuffer[start];
-                    boolean u = underlineBuffer[start];
-                    int end = start + 1;
-                    while (end < renderLen && !previewBuffer[end] && colorBuffer[end] == c && underlineBuffer[end] == u) {
-                        end++;
-                    }
-
-                    float startX = x + start * charWidth + accumulatedShift;
-                    textPaint.setColor(c);
-                    canvas.drawText(lineBuffer, start, end - start, startX, baseY, textPaint);
-                    if (u) {
-                        float ux0 = startX;
-                        float ux1 = x + end * charWidth + accumulatedShift;
-                        float uy = baseY + 2;
-                        textPaint.setStyle(Paint.Style.STROKE);
-                        textPaint.setStrokeWidth(1f);
-                        canvas.drawLine(ux0, uy, ux1, uy, textPaint);
-                        textPaint.setStyle(Paint.Style.FILL);
-                    }
-                    start = end;
-                }
-                // Restore paint state
-                textPaint.setColor(defaultTextColor);
-                textPaint.setStyle(Paint.Style.FILL);
-            }
             }
         }
 
         // 5. Bracket match highlights
-        drawBracketHighlights(canvas, paddingLeft, paddingTop, scrollY, scrollX);
+        drawBracketHighlights(canvas, paddingLeft, paddingTop);
 
         // 6. Cursor
         if (isFocused() && cursorVisible && selectionAnchor == null) {
@@ -637,23 +626,23 @@ public class CodeEditText extends View {
         }
 
         // 7. Diagnostic squiggles
-        drawDiagnostics(canvas, firstLine, lastLine, paddingLeft, paddingTop, scrollY);
+        drawDiagnostics(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
         // 8. Selection handles (drawn at start and end of selection)
         if (selectionAnchor != null) {
             drawSelectionHandle(canvas, ContentPosition.min(cursor, selectionAnchor),
-                    paddingLeft, paddingTop, scrollY, scrollX, true);
+                    paddingLeft, paddingTop, true);
             drawSelectionHandle(canvas, ContentPosition.max(cursor, selectionAnchor),
-                    paddingLeft, paddingTop, scrollY, scrollX, false);
+                    paddingLeft, paddingTop, false);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Draw helpers
+    // Draw
     // ─────────────────────────────────────────────────────────────────────────
 
     private void drawSelection(Canvas canvas, int firstLine, int lastLine,
-                               float paddingLeft, float paddingTop, int scrollY, int scrollX) {
+                               float paddingLeft, float paddingTop) {
         if (selectionAnchor == null) return;
         ContentPosition selStart = ContentPosition.min(cursor, selectionAnchor);
         ContentPosition selEnd = ContentPosition.max(cursor, selectionAnchor);
@@ -669,8 +658,8 @@ public class CodeEditText extends View {
                 float y0 = paddingTop + line * lineHeightPx;
                 canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, selectionPaint);
             } else {
-                int charsPerRow = Math.max(1, (int)((getWidth()-getPaddingLeft()-getPaddingRight())/charWidth));
-                int subRows = Math.max(1, (int)Math.ceil((double)lineLen / charsPerRow));
+                int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
+                int subRows = Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow));
                 for (int sr = 0; sr < subRows; sr++) {
                     int srStart = sr * charsPerRow;
                     int srEndRow = Math.min(lineLen, srStart + charsPerRow);
@@ -686,8 +675,12 @@ public class CodeEditText extends View {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Draw helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
     private void drawSearchDecorations(Canvas canvas, int firstLine, int lastLine,
-                                       float paddingLeft, float paddingTop, int scrollY, int scrollX) {
+                                       float paddingLeft, float paddingTop) {
         if (searchDecorations == null || searchDecorations.isEmpty()) return;
 
         int total = content.totalLength();
@@ -714,8 +707,8 @@ public class CodeEditText extends View {
                     float y0 = paddingTop + line * lineHeightPx;
                     canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, paint);
                 } else {
-                    int charsPerRow = Math.max(1, (int)((getWidth()-getPaddingLeft()-getPaddingRight())/charWidth));
-                    int subRows = Math.max(1, (int)Math.ceil((double)lineLen / charsPerRow));
+                    int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
+                    int subRows = Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow));
                     for (int sr = 0; sr < subRows; sr++) {
                         int srStart = sr * charsPerRow;
                         int srEndRow = Math.min(lineLen, srStart + charsPerRow);
@@ -732,8 +725,7 @@ public class CodeEditText extends View {
         }
     }
 
-    private void drawBracketHighlights(Canvas canvas, float paddingLeft, float paddingTop,
-                                       int scrollY, int scrollX) {
+    private void drawBracketHighlights(Canvas canvas, float paddingLeft, float paddingTop) {
         // bracketHighlightPaint is allocated once in init() — no per-frame allocation
         bracketHighlightPaint.setColor(cachedBracketHighlightColor);
 
@@ -754,11 +746,10 @@ public class CodeEditText extends View {
      * Coordinates derived from charWidth / lineHeightPx (no Layout object needed).
      */
     private void drawDiagnostics(Canvas canvas, int firstLine, int lastLine,
-                                 float paddingLeft, float paddingTop, int scrollY) {
+                                 float paddingLeft, float paddingTop) {
         if (currentProblems == null || currentProblems.isEmpty()) return;
 
         int lineCount = content.lineCount();
-        int textLen = content.totalLength();
 
         float configHash = charWidth + lineHeightPx + paddingLeft + paddingTop;
         if (configHash != lastSquiggleConfigHash) {
@@ -772,9 +763,8 @@ public class CodeEditText extends View {
             if (lineIdx < 0 || lineIdx >= lineCount) continue;
             if (problem.getSeverity() == Problem.Severity.INFO) continue;
 
-            int colIdx = Math.max(0, problem.getColumn() - 1);
-            int colStart = colIdx;
-            int colEnd = colIdx + Math.max(1, problem.getLength());
+            int colStart = Math.max(0, problem.getColumn() - 1);
+            int colEnd = colStart + Math.max(1, problem.getLength());
             int lineLen = content.lineLength(lineIdx);
             colEnd = Math.min(colEnd, lineLen);
 
@@ -792,7 +782,7 @@ public class CodeEditText extends View {
             if (problem.getCachedPath() == null || wordWrap) {
                 float x0 = paddingLeft + getCursorX(lineIdx, colStart);
                 float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
-                if (wordWrap && colEnd > colStart && colInSubRow(lineIdx, colEnd) < colInSubRow(lineIdx, colStart)) {
+                if (wordWrap && colEnd > colStart && colInSubRow(colEnd) < colInSubRow(colStart)) {
                     // problem spans multiple subrows, just draw for the first subrow
                     x1 = paddingLeft + getWidth() - getPaddingRight();
                 }
@@ -819,7 +809,7 @@ public class CodeEditText extends View {
 
     private void drawSelectionHandle(Canvas canvas, ContentPosition pos,
                                      float paddingLeft, float paddingTop,
-                                     int scrollY, int scrollX, boolean isStart) {
+                                     boolean isStart) {
         float cx = paddingLeft + getCursorX(pos.line, pos.column);
         int vRow = absoluteVisualRow(pos.line, pos.column);
         float cy = paddingTop + vRow * lineHeightPx;
@@ -855,10 +845,6 @@ public class CodeEditText extends View {
         }
         return HANDLE_DRAG_NONE;
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Touch / Scroll
-    // ─────────────────────────────────────────────────────────────────────────
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -904,6 +890,10 @@ public class CodeEditText extends View {
         return true;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Touch / Scroll
+    // ─────────────────────────────────────────────────────────────────────────
+
     @Override
     public void computeScroll() {
         if (overScroller.computeScrollOffset()) {
@@ -941,10 +931,6 @@ public class CodeEditText extends View {
         scheduleHighlight();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Focus / Keyboard
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Override
     protected void onFocusChanged(boolean focused, int direction,
                                   android.graphics.Rect previouslyFocusedRect) {
@@ -958,6 +944,10 @@ public class CodeEditText extends View {
             if (autoCompletePopup != null) autoCompletePopup.dismiss();
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Focus / Keyboard
+    // ─────────────────────────────────────────────────────────────────────────
 
     private void scheduleBlink() {
         mainHandler.removeCallbacks(blinkRunnable);
@@ -1042,10 +1032,6 @@ public class CodeEditText extends View {
         invalidate();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Key events
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (isApplyingHighlight || isUndoRedoActive || isSettingText)
@@ -1083,7 +1069,7 @@ public class CodeEditText extends View {
 
         // ENTER key → newline with auto-indent
         if (keyCode == KeyEvent.KEYCODE_ENTER) {
-            performInsertText("\n");
+            performInsertText();
             return true;
         }
 
@@ -1121,6 +1107,10 @@ public class CodeEditText extends View {
         return super.onKeyDown(keyCode, event);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Key events
+    // ─────────────────────────────────────────────────────────────────────────
+
     @Override
     public boolean onKeyPreIme(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK
@@ -1132,10 +1122,6 @@ public class CodeEditText extends View {
         }
         return super.onKeyPreIme(keyCode, event);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Hardware-keyboard helpers (called from onKeyDown)
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Performs a Backspace operation from the hardware keyboard.
@@ -1189,14 +1175,16 @@ public class CodeEditText extends View {
         mainHandler.postDelayed(bracketMatchRunnable, 150);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Hardware-keyboard helpers (called from onKeyDown)
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
      * Inserts {@code text} at the current cursor position from the hardware keyboard.
      * Triggers auto-indent for {@code "\n"} and auto-close for single bracket characters.
      * Mirrors {@code CodeInputConnection.insertAtCursor()} but accessible from the outer class.
      */
-    void performInsertText(String text) {
-        if (text == null) return;
-        boolean isDeletingSelection = text.isEmpty();
+    void performInsertText() {
 
         ContentPosition selAnchorBefore = selectionAnchor;
         ContentPosition beforeCursor = cursor;
@@ -1222,50 +1210,31 @@ public class CodeEditText extends View {
             selectionAnchor = null;
         }
 
-        if (isDeletingSelection) {
-            if (!deletedSel.isEmpty()) {
-                undoStack.recordDelete(delStart.line, delStart.column, delEnd.line, delEnd.column,
-                        deletedSel, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(cursor, null));
-            }
-            invalidate();
-            scheduleHighlight();
-            return;
-        }
-
         int beforeFlat = content.flatOffset(cursor);
         ContentPosition insertStart = cursor;
-        content.insert(cursor.line, cursor.column, text);
+        content.insert(cursor.line, cursor.column, "\n");
         // Advance cursor past inserted text
         ContentPosition after = cursor;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                after = new ContentPosition(after.line + 1, 0);
-            } else {
-                after = new ContentPosition(after.line, after.column + 1);
-            }
+        for (int i = 0; i < "\n".length(); i++) {
+            after = new ContentPosition(after.line + 1, 0);
         }
         if (!deletedSel.isEmpty()) {
             undoStack.recordReplace(delStart.line, delStart.column, delEnd.line, delEnd.column,
-                    deletedSel, text, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(after, null));
+                    deletedSel, "\n", snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(after, null));
         } else {
-            undoStack.recordInsert(insertStart.line, insertStart.column, text,
+            undoStack.recordInsert(insertStart.line, insertStart.column, "\n",
                     snapshotAt(insertStart, null), snapshotAt(after, null));
         }
         cursor = after;
         selectionAnchor = null;
         // Side effects
-        if (text.length() == 1 && !isAutoClosing) {
-            char typed = text.charAt(0);
+        if (!isAutoClosing) {
+            char typed = '\n';
             if (autoCloseBrackets) {
                 handleAutoClose(new ContentCharSequence(content), beforeFlat + 1, typed);
             }
-            if (autoCloseHtmlTags && fileType == FileType.HTML && typed == '>') {
-                handleAutoCloseHtmlTag(beforeFlat + 1);
-            }
-            if (typed == '\n') {
-                int indentTextEnd = Math.min(content.totalLength(), beforeFlat + 2);
-                handleAutoIndent(content.getSubstring(0, indentTextEnd), beforeFlat);
-            }
+            int indentTextEnd = Math.min(content.totalLength(), beforeFlat + 2);
+            handleAutoIndent(content.getSubstring(0, indentTextEnd), beforeFlat);
         }
         invalidate();
         scheduleHighlight();
@@ -1274,10 +1243,6 @@ public class CodeEditText extends View {
         mainHandler.postDelayed(bracketMatchRunnable, 150);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-1 / AD-7: getText()
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
      * Returns a {@link CharSequence} view of the full document content.
      * {@code toString()} materialises the full text; {@code length()} is O(1) via Content.
@@ -1285,6 +1250,10 @@ public class CodeEditText extends View {
     public CharSequence getText() {
         return new ContentCharSequence(content);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — AD-1 / AD-7: getText()
+    // ─────────────────────────────────────────────────────────────────────────
 
     public void setText(CharSequence text) {
         setText(text, null);
@@ -1297,16 +1266,16 @@ public class CodeEditText extends View {
         return content.totalLength();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — selection
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
      * Materialises the full document text as a String.
      */
     public String getTextAsString() {
         return content.getText();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — selection
+    // ─────────────────────────────────────────────────────────────────────────
 
     public int getSelectionStart() {
         if (selectionAnchor == null) return content.flatOffset(cursor);
@@ -1359,10 +1328,6 @@ public class CodeEditText extends View {
         notifySelectionChanged();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — Phase 4: selection actions
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void setSelection(int start, int end) {
         if (start == end) {
             selectionAnchor = null;
@@ -1375,6 +1340,10 @@ public class CodeEditText extends View {
         invalidate();
         notifySelectionChanged();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — Phase 4: selection actions
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Selects all text in the document.
@@ -1536,10 +1505,6 @@ public class CodeEditText extends View {
         this.selectionChangeListener = listener;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — setText / setTextSize / getTypeface / getCurrentTextColor
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void setText(CharSequence text, Object bufferType) {
         if (autoCompletePopup != null) autoCompletePopup.dismiss();
         final String textStr = text != null ? text.toString() : "";
@@ -1567,6 +1532,10 @@ public class CodeEditText extends View {
         });
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — setText / setTextSize / getTypeface / getCurrentTextColor
+    // ─────────────────────────────────────────────────────────────────────────
+
     public void setTextSize(float sizeSp) {
         textPaint.setTextSize(spToPx(sizeSp, getContext()));
         Paint.FontMetricsInt fm = textPaint.getFontMetricsInt();
@@ -1593,16 +1562,16 @@ public class CodeEditText extends View {
         contentChangeListeners.remove(listener);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-5: ContentChangeListener shim (Replaced TextWatcher to prevent lag)
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void dispatchContentChanged() {
         if (isApplyingHighlight || isUndoRedoActive || isSettingText) return;
         for (OnContentChangeListener listener : contentChangeListeners) {
             listener.onContentChanged();
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — AD-5: ContentChangeListener shim (Replaced TextWatcher to prevent lag)
+    // ─────────────────────────────────────────────────────────────────────────
 
     public int getEditorLineHeight() {
         return lineHeightPx;
@@ -1612,13 +1581,13 @@ public class CodeEditText extends View {
         return visualRowToLogicalLine(getScrollY() / lineHeightPx);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-4: LineNumberView helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
     public int getLogicalLineCount() {
         return content.lineCount();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — AD-4: LineNumberView helpers
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Returns the top padding of the editor in pixels — used by LineNumberView to align baselines.
@@ -1632,7 +1601,7 @@ public class CodeEditText extends View {
         int[] loc = new int[2];
         getLocationInWindow(loc);
         int screenX = loc[0] + (int) (getPaddingLeft() + getCursorX(pos.line, pos.column)) - (wordWrap ? 0 : getScrollX());
-        int screenYTop = loc[1] + (int) (getPaddingTop() + absoluteVisualRow(pos.line, pos.column) * lineHeightPx) - getScrollY();
+        int screenYTop = loc[1] + getPaddingTop() + absoluteVisualRow(pos.line, pos.column) * lineHeightPx - getScrollY();
         int screenYBottom = screenYTop + lineHeightPx;
         return new int[]{screenX, screenYTop, screenYBottom};
     }
@@ -1646,10 +1615,6 @@ public class CodeEditText extends View {
         invalidate();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-2: getCursorScreenCoords
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void setSearchDecorations(List<SearchResult> results, int activeIndex) {
         this.searchDecorations = results != null ? results : new ArrayList<>();
         this.searchActiveIndex = activeIndex;
@@ -1657,7 +1622,7 @@ public class CodeEditText extends View {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-3: replaceRange / search decorations / scrollToOffset
+    // Public API — AD-2: getCursorScreenCoords
     // ─────────────────────────────────────────────────────────────────────────
 
     public void clearSearchDecorations() {
@@ -1665,6 +1630,10 @@ public class CodeEditText extends View {
         searchActiveIndex = -1;
         invalidate();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — AD-3: replaceRange / search decorations / scrollToOffset
+    // ─────────────────────────────────────────────────────────────────────────
 
     public void scrollToOffset(int flatOffset) {
         ContentPosition pos = content.positionAt(flatOffset);
@@ -1685,37 +1654,33 @@ public class CodeEditText extends View {
         return content.lineCount();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — goToLine
-    // ─────────────────────────────────────────────────────────────────────────
-
     public int getCurrentLine() {
         return cursor.line + 1;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Public API — line count / current line (CodeEditorLayout compat)
+    // Public API — goToLine
     // ─────────────────────────────────────────────────────────────────────────
 
     public void setOnScrollChangeListener(OnScrollChangeListener listener) {
         this.scrollChangeListener = listener;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — line count / current line (CodeEditorLayout compat)
+    // ─────────────────────────────────────────────────────────────────────────
+
     public void applyDiagnostics(List<Problem> problems) {
         this.currentProblems = problems != null ? problems : new ArrayList<>();
         invalidate();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — scroll listener
-    // ─────────────────────────────────────────────────────────────────────────
 
     public FileType getFileType() {
         return fileType;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Public API — diagnostics
+    // Public API — scroll listener
     // ─────────────────────────────────────────────────────────────────────────
 
     public void setFileType(FileType fileType) {
@@ -1772,7 +1737,7 @@ public class CodeEditText extends View {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Public API — settings
+    // Public API — diagnostics
     // ─────────────────────────────────────────────────────────────────────────
 
     public void setCurrentFile(File file) {
@@ -1787,6 +1752,10 @@ public class CodeEditText extends View {
             ((CssAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — settings
+    // ─────────────────────────────────────────────────────────────────────────
 
     public void setAutoCloseBrackets(boolean autoClose) {
         this.autoCloseBrackets = autoClose;
@@ -1867,20 +1836,20 @@ public class CodeEditText extends View {
         return visualRowStarts[logicalLine];
     }
 
-    private int visualSubRow(int logicalLine, int col) {
+    private int visualSubRow(int col) {
         if (!wordWrap || getWidth() <= 0) return 0;
         int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
         return col / charsPerRow;
     }
 
-    private int colInSubRow(int logicalLine, int col) {
+    private int colInSubRow(int col) {
         if (!wordWrap || getWidth() <= 0) return col;
         int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
         return col % charsPerRow;
     }
 
     private int absoluteVisualRow(int logicalLine, int col) {
-        return visualRowOf(logicalLine) + visualSubRow(logicalLine, col);
+        return visualRowOf(logicalLine) + visualSubRow(col);
     }
 
     private int visualRowToLogicalLine(int visualRow) {
@@ -1888,7 +1857,8 @@ public class CodeEditText extends View {
         int lo = 0, hi = content.lineCount() - 1;
         while (lo < hi) {
             int mid = (lo + hi + 1) / 2;
-            if (visualRowStarts[mid] <= visualRow) lo = mid; else hi = mid - 1;
+            if (visualRowStarts[mid] <= visualRow) lo = mid;
+            else hi = mid - 1;
         }
         return lo;
     }
@@ -1949,13 +1919,13 @@ public class CodeEditText extends View {
         return snippetTemplate.replace("\n", "\n" + baseIndent);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — snippet
-    // ─────────────────────────────────────────────────────────────────────────
-
     private UndoStack.EditorSnapshot snapshotAt(ContentPosition cur, ContentPosition sel) {
         return new UndoStack.EditorSnapshot(cur, sel, getScrollX(), getScrollY());
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — snippet
+    // ─────────────────────────────────────────────────────────────────────────
 
     public void undo() {
         undoStack.commitPending();
@@ -1976,10 +1946,6 @@ public class CodeEditText extends View {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — undo / redo
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void redo() {
         UndoStack.EditorSnapshot restored = undoStack.redo(content);
         if (restored == null) return;
@@ -1997,6 +1963,10 @@ public class CodeEditText extends View {
             ensureCursorVisible();
         });
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public API — undo / redo
+    // ─────────────────────────────────────────────────────────────────────────
 
     public boolean canUndo() {
         return undoStack.canUndo();
@@ -2051,7 +2021,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                int newDepth = com.cocode.vcode.ide.core.parser.BracketMatcher.computeBracketDepth(line.toLineString(), depth);
+                int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth);
                 int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
                 line.setTokenizerEndState(newState);
@@ -2079,7 +2049,7 @@ public class CodeEditText extends View {
                             int depth = (bgState >>> 16) & 0xFFFF;
 
                             int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                            int newDepth = com.cocode.vcode.ide.core.parser.BracketMatcher.computeBracketDepth(line.toLineString(), depth);
+                            int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth);
 
                             int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
@@ -2105,17 +2075,13 @@ public class CodeEditText extends View {
         invalidate();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void scheduleAutoComplete() {
         mainHandler.removeCallbacks(autoCompleteRunnable);
         mainHandler.postDelayed(autoCompleteRunnable, AUTOCOMPLETE_DELAY_MS);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Internal — highlight
+    // Lifecycle
     // ─────────────────────────────────────────────────────────────────────────
 
     private void triggerAutoComplete() {
@@ -2170,7 +2136,7 @@ public class CodeEditText extends View {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Internal — autocomplete
+    // Internal — highlight
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
@@ -2247,7 +2213,8 @@ public class CodeEditText extends View {
             if (deleteEnd > wordStart) {
                 deletedText = content.getSubstring(wordStart, deleteEnd);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         content.replace(wordStartPos.line, wordStartPos.column,
                 cursor.line, cursor.column, cleanInsert);
         int safeFinal = Math.min(finalCursorFlat, content.totalLength());
@@ -2265,6 +2232,10 @@ public class CodeEditText extends View {
         scheduleHighlight();
         invalidate();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Internal — autocomplete
+    // ─────────────────────────────────────────────────────────────────────────
 
     private void handleAutoClose(CharSequence text, int insertFlatPos, char typed) {
         String closing = getClosingPair(typed);
@@ -2311,10 +2282,6 @@ public class CodeEditText extends View {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Internal — auto-close brackets / indent
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void handleAutoCloseHtmlTag(int cursorAfterGt) {
         mainHandler.post(() -> {
             String currentText = content.getSubstring(0, Math.min(content.totalLength(), cursorAfterGt));
@@ -2331,6 +2298,10 @@ public class CodeEditText extends View {
             invalidate();
         });
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Internal — auto-close brackets / indent
+    // ─────────────────────────────────────────────────────────────────────────
 
     private void handleAutoIndent(String text, int newlineIndex) {
         if (!autoIndent || indentEngine == null) return;
@@ -2375,11 +2346,10 @@ public class CodeEditText extends View {
                 if (finalSplit) {
                     String injection = finalInnerIndent + "\n" + finalOuterIndent;
                     content.insert(insertPos.line, insertPos.column, injection);
-                    cursor = content.positionAt(insertFlat + finalInnerIndent.length());
                 } else {
                     content.insert(insertPos.line, insertPos.column, finalInnerIndent);
-                    cursor = content.positionAt(insertFlat + finalInnerIndent.length());
                 }
+                cursor = content.positionAt(insertFlat + finalInnerIndent.length());
                 selectionAnchor = null;
                 isApplyingHighlight = false;
                 invalidate();
@@ -2419,7 +2389,7 @@ public class CodeEditText extends View {
         for (int i = 0; i < lineUpToCursor.length() - 1; i++) {
             char c = lineUpToCursor.charAt(i);
             if (inStr) {
-                if (c == strCh && (i == 0 || lineUpToCursor.charAt(i - 1) != '\\')) inStr = false;
+                if (c == strCh && lineUpToCursor.charAt(i - 1) != '\\') inStr = false;
                 continue;
             }
             if (c == '"' || c == '\'' || c == '`') {
@@ -2438,16 +2408,12 @@ public class CodeEditText extends View {
         return false;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Internal — bracket match
-    // ─────────────────────────────────────────────────────────────────────────
-
     private float spToPx(float sp, Context ctx) {
         return sp * ctx.getResources().getDisplayMetrics().scaledDensity;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Internal — comment detection
+    // Internal — bracket match
     // ─────────────────────────────────────────────────────────────────────────
 
     private float dpToPx(float dp, Context ctx) {
@@ -2455,13 +2421,17 @@ public class CodeEditText extends View {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Internal — helpers
+    // Internal — comment detection
     // ─────────────────────────────────────────────────────────────────────────
 
     private void updateLongestLine(int changedLine) {
         int len = content.lineLength(changedLine);
         if (len > longestLineLength) longestLineLength = len;
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Internal — helpers
+    // ─────────────────────────────────────────────────────────────────────────
 
     private int getLongestLineLength() {
         if (longestLineDirty) {
@@ -2479,7 +2449,7 @@ public class CodeEditText extends View {
     }
 
     private float getCursorX(int line, int col) {
-        if (wordWrap) col = colInSubRow(line, col);
+        if (wordWrap) col = colInSubRow(col);
         float cx = col * charWidth;
         java.util.List<com.cocode.vcode.ide.core.editor.highlight.HighlightToken> tokens = content.getLine(line).tokens;
         if (tokens != null) {
@@ -2609,11 +2579,6 @@ public class CodeEditText extends View {
         void onScrollChanged(int scrollX, int scrollY);
     }
 
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Interfaces
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
      * CharSequence adapter over the Content model (AD-1 / AD-7).
      * toString() materialises the full text; length() is O(1) via Content.
@@ -2638,6 +2603,7 @@ public class CodeEditText extends View {
             return '\n';
         }
 
+        @NonNull
         @Override
         public CharSequence subSequence(int start, int end) {
             return content.getText().subSequence(start, end);
@@ -2650,19 +2616,10 @@ public class CodeEditText extends View {
         }
     }
 
+
     // ─────────────────────────────────────────────────────────────────────────
     // Inner classes
     // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Stub inner class kept so any lingering references to BracketMatchSpan compile.
-     * Phase 5 replaces it with the proper token-based rendering.
-     */
-    private static class BracketMatchSpan extends StrokeHighlightSpan {
-        BracketMatchSpan(int borderColor) {
-            super(borderColor);
-        }
-    }
 
     /**
      * Custom InputConnection that routes all IME mutations through the {@link Content} model.
@@ -2800,7 +2757,6 @@ public class CodeEditText extends View {
             if (deleteSelection()) return true;
 
             int beforeLineCount = editor.content.lineCount();
-            int shiftStartLine = editor.cursor.line;
 
             int cursorFlat = editor.content.flatOffset(editor.cursor);
             int totalLen = editor.content.totalLength();
@@ -2830,7 +2786,6 @@ public class CodeEditText extends View {
                 if (beforeStart < newCursorFlat) {
                     ContentPosition startPos = editor.content.positionAt(beforeStart);
                     ContentPosition endPos = editor.content.positionAt(newCursorFlat);
-                    shiftStartLine = Math.min(shiftStartLine, startPos.line);
                     String deleted;
                     try {
                         deleted = editor.content.getSubstring(beforeStart, newCursorFlat);
@@ -2934,13 +2889,6 @@ public class CodeEditText extends View {
                 default:
                     return super.sendKeyEvent(event);
             }
-        }
-
-        /**
-         * Inserts text at the current cursor position, updating cursor and triggering side effects.
-         */
-        private void insertAtCursor(String text) {
-            insertAtCursor(text, "", null, null, editor.cursor, null);
         }
 
         /**
@@ -3144,6 +3092,8 @@ public class CodeEditText extends View {
             editor.scheduleAutoComplete();
         }
     }
+
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // CodeInputConnection

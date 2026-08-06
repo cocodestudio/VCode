@@ -4,18 +4,24 @@ import java.util.List;
 
 /**
  * Signature help result returned when the user positions their caret inside a function call.
- *
+ * <p>
  * Mirrors the essential fields of the LSP specification's {@code SignatureHelp} type.
  */
 public final class LspSignatureHelp {
 
-    /** Available overload signatures for the function. */
+    /**
+     * Available overload signatures for the function.
+     */
     public final List<LspSignatureInformation> signatures;
 
-    /** Index of the active signature in {@link #signatures}. */
+    /**
+     * Index of the active signature in {@link #signatures}.
+     */
     public final int activeSignature;
 
-    /** Index of the active parameter within the active signature. */
+    /**
+     * Index of the active parameter within the active signature.
+     */
     public final int activeParameter;
 
     public LspSignatureHelp(List<LspSignatureInformation> signatures, int activeSignature, int activeParameter) {
@@ -31,13 +37,19 @@ public final class LspSignatureHelp {
      */
     public static final class LspSignatureInformation {
 
-        /** Full signature label shown in the tooltip (e.g. {@code "fetch(url: string): Promise<Response>"}). */
+        /**
+         * Full signature label shown in the tooltip (e.g. {@code "fetch(url: string): Promise<Response>"}).
+         */
         public final String label;
 
-        /** Optional documentation for this signature. */
+        /**
+         * Optional documentation for this signature.
+         */
         public final String documentation;
 
-        /** Individual parameter descriptions. */
+        /**
+         * Individual parameter descriptions.
+         */
         public final List<LspParameterInformation> parameters;
 
         public LspSignatureInformation(String label, String documentation, List<LspParameterInformation> parameters) {
@@ -52,10 +64,14 @@ public final class LspSignatureHelp {
      */
     public static final class LspParameterInformation {
 
-        /** Parameter label (e.g. {@code "url: string"}). */
+        /**
+         * Parameter label (e.g. {@code "url: string"}).
+         */
         public final String label;
 
-        /** Optional documentation for this parameter. */
+        /**
+         * Optional documentation for this parameter.
+         */
         public final String documentation;
 
         public LspParameterInformation(String label, String documentation) {

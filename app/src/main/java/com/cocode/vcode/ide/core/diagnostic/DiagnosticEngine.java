@@ -1,13 +1,12 @@
 package com.cocode.vcode.ide.core.diagnostic;
 
-import com.cocode.vcode.ide.core.diagnostic.linters.BracketLinter;
-import com.cocode.vcode.ide.core.diagnostic.linters.CssLinter;
-import com.cocode.vcode.ide.core.diagnostic.linters.HtmlLinter;
-import com.cocode.vcode.ide.core.diagnostic.linters.JsLinter;
-import com.cocode.vcode.ide.core.diagnostic.linters.JsonLinter;
-import com.cocode.vcode.ide.core.diagnostic.linters.TsLinter;
+import com.cocode.vcode.ide.core.language.css.CssLinter;
+import com.cocode.vcode.ide.core.language.html.HtmlLinter;
+import com.cocode.vcode.ide.core.language.js.JsLinter;
+import com.cocode.vcode.ide.core.language.json.JsonLinter;
+import com.cocode.vcode.ide.core.language.ts.TsLinter;
 import com.cocode.vcode.ide.core.model.FileType;
-import com.cocode.vcode.ide.data.model.Problem;
+import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
 import java.util.ArrayList;

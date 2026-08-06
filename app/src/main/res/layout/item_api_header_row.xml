@@ -44,5 +44,6 @@
         app:tint="?attr/colorError"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
+        android:importantForAccessibility="no"
         android:focusable="true" />
 </LinearLayout>

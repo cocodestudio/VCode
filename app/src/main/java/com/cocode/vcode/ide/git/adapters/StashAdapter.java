@@ -18,7 +18,7 @@ public class StashAdapter extends ListAdapter<StashItem, StashAdapter.ViewHolder
     private final StashListener listener;
 
     public StashAdapter(StashListener listener) {
-        super(new DiffUtil.ItemCallback<StashItem>() {
+        super(new DiffUtil.ItemCallback<>() {
             @Override
             public boolean areItemsTheSame(@NonNull StashItem oldItem, @NonNull StashItem newItem) {
                 return oldItem.getId() == newItem.getId();
@@ -48,6 +48,7 @@ public class StashAdapter extends ListAdapter<StashItem, StashAdapter.ViewHolder
 
     public interface StashListener {
         void onApply(StashItem item);
+
         void onDrop(StashItem item);
     }
 
@@ -64,7 +65,7 @@ public class StashAdapter extends ListAdapter<StashItem, StashAdapter.ViewHolder
             binding.tvStashName.setTypeface(FontManager.getInstance().getUiSemiBold(context));
             binding.tvStashMessage.setTypeface(FontManager.getInstance().getUiMedium(context));
 
-            binding.tvStashName.setText(item.getName() + ": " + item.getMessage());
+            binding.tvStashName.setText(String.format("%s: %s", item.getName(), item.getMessage()));
             binding.tvStashMessage.setText(item.getTimestamp());
 
             binding.btnApplyStash.setOnClickListener(v -> listener.onApply(item));

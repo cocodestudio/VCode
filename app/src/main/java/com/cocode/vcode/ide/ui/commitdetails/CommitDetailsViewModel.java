@@ -9,8 +9,8 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
+import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.model.GitFileItem;
-import com.cocode.vcode.ide.git.repository.GitRepository;
 
 import java.io.File;
 import java.util.List;

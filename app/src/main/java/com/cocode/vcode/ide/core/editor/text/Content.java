@@ -1,7 +1,6 @@
 package com.cocode.vcode.ide.core.editor.text;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -43,9 +42,23 @@ public final class Content {
 
     // ── Internal state ────────────────────────────────────────────────────────
 
-    /** The ordered line store. Element {@code i} is the {@code ContentLine} for line {@code i}. */
+    /**
+     * The ordered line store. Element {@code i} is the {@code ContentLine} for line {@code i}.
+     */
     private final ArrayList<ContentLine> lines = new ArrayList<>();
-
+    /**
+     * Incremented on every mutation. Background threads compare against this to detect staleness.
+     */
+    private final AtomicLong version = new AtomicLong(0L);
+    /**
+     * Guards all structural mutations and multi-line reads.
+     */
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    /**
+     * Registered change listeners. {@link CopyOnWriteArrayList} allows listeners to remove
+     * themselves inside a callback without a {@link java.util.ConcurrentModificationException}.
+     */
+    private final CopyOnWriteArrayList<ContentChangeListener> listeners = new CopyOnWriteArrayList<>();
     /**
      * Binary Indexed Tree (Fenwick Tree) storing line lengths including the newline character.
      * bit[i] represents a segment sum of line lengths.
@@ -54,18 +67,6 @@ public final class Content {
     private long[] bit;
     private int bitCapacity = 0;
 
-    /** Incremented on every mutation. Background threads compare against this to detect staleness. */
-    private final AtomicLong version = new AtomicLong(0L);
-
-    /** Guards all structural mutations and multi-line reads. */
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    /**
-     * Registered change listeners. {@link CopyOnWriteArrayList} allows listeners to remove
-     * themselves inside a callback without a {@link java.util.ConcurrentModificationException}.
-     */
-    private final CopyOnWriteArrayList<ContentChangeListener> listeners = new CopyOnWriteArrayList<>();
-
     // ── Construction ──────────────────────────────────────────────────────────
 
     public Content() {
@@ -73,12 +74,64 @@ public final class Content {
         rebuildBit();
     }
 
-    /** Creates a {@code Content} document pre-populated with the given text. */
+    /**
+     * Creates a {@code Content} document pre-populated with the given text.
+     */
     public Content(String text) {
         loadText(text);
     }
 
     // ── Listener management ───────────────────────────────────────────────────
+
+    /**
+     * Off-thread-safe: builds a complete replacement line/index structure without touching
+     * this instance's live state. Safe to call from a background thread.
+     */
+    public static LoadedLines prepareLoad(String text) {
+        ArrayList<ContentLine> newLines = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            newLines.add(new ContentLine());
+        } else {
+            int start = 0;
+            for (int i = 0; i < text.length(); i++) {
+                if (text.charAt(i) == '\n') {
+                    newLines.add(new ContentLine(text.substring(start, i)));
+                    start = i + 1;
+                }
+            }
+            newLines.add(new ContentLine(text.substring(start)));
+        }
+
+        int n = newLines.size();
+        int capacity = Math.max(n + 1, 64);
+        long[] newBit = new long[capacity];
+        int longest = 0;
+        for (int i = 0; i < n; i++) {
+            int len = newLines.get(i).length();
+            if (len > longest) longest = len;
+            newBit[i + 1] += len + 1;
+            int j = (i + 1) + ((i + 1) & -(i + 1));
+            if (j <= n) {
+                newBit[j] += newBit[i + 1];
+            }
+        }
+        return new LoadedLines(newLines, newBit, capacity, longest);
+    }
+
+    private static int indexOfNewline(CharSequence s, int fromIndex) {
+        for (int i = fromIndex; i < s.length(); i++) {
+            if (s.charAt(i) == '\n') return i;
+        }
+        return -1;
+    }
+
+    // ── Core mutations ────────────────────────────────────────────────────────
+
+    private static char[] toCharArray(CharSequence s) {
+        char[] arr = new char[s.length()];
+        for (int i = 0; i < arr.length; i++) arr[i] = s.charAt(i);
+        return arr;
+    }
 
     public void addChangeListener(ContentChangeListener listener) {
         if (listener != null) listeners.add(listener);
@@ -87,8 +140,6 @@ public final class Content {
     public void removeChangeListener(ContentChangeListener listener) {
         listeners.remove(listener);
     }
-
-    // ── Core mutations ────────────────────────────────────────────────────────
 
     /**
      * Inserts {@code text} at position {@code (line, column)}.
@@ -180,40 +231,7 @@ public final class Content {
         version.incrementAndGet();
     }
 
-    /**
-     * Off-thread-safe: builds a complete replacement line/index structure without touching
-     * this instance's live state. Safe to call from a background thread.
-     */
-    public static LoadedLines prepareLoad(String text) {
-        ArrayList<ContentLine> newLines = new ArrayList<>();
-        if (text == null || text.isEmpty()) {
-            newLines.add(new ContentLine());
-        } else {
-            int start = 0;
-            for (int i = 0; i < text.length(); i++) {
-                if (text.charAt(i) == '\n') {
-                    newLines.add(new ContentLine(text.substring(start, i)));
-                    start = i + 1;
-                }
-            }
-            newLines.add(new ContentLine(text.substring(start)));
-        }
-
-        int n = newLines.size();
-        int capacity = Math.max(n + 1, 64);
-        long[] newBit = new long[capacity];
-        int longest = 0;
-        for (int i = 0; i < n; i++) {
-            int len = newLines.get(i).length();
-            if (len > longest) longest = len;
-            newBit[i + 1] += len + 1;
-            int j = (i + 1) + ((i + 1) & -(i + 1));
-            if (j <= n) {
-                newBit[j] += newBit[i + 1];
-            }
-        }
-        return new LoadedLines(newLines, newBit, capacity, longest);
-    }
+    // ── Queries (main-thread safe without lock for single values) ─────────────
 
     /**
      * Applies a {@link LoadedLines} built via {@link #prepareLoad}, in place, preserving this
@@ -232,23 +250,9 @@ public final class Content {
         version.incrementAndGet();
     }
 
-    public static final class LoadedLines {
-        private final ArrayList<ContentLine> lines;
-        private final long[] bit;
-        private final int bitCapacity;
-        public final int longestLineLength;
-
-        private LoadedLines(ArrayList<ContentLine> lines, long[] bit, int bitCapacity, int longestLineLength) {
-            this.lines = lines;
-            this.bit = bit;
-            this.bitCapacity = bitCapacity;
-            this.longestLineLength = longestLineLength;
-        }
-    }
-
-    // ── Queries (main-thread safe without lock for single values) ─────────────
-
-    /** Returns the total number of lines (always at least 1). */
+    /**
+     * Returns the total number of lines (always at least 1).
+     */
     public int lineCount() {
         return lines.size();
     }
@@ -514,12 +518,14 @@ public final class Content {
         lock.readLock().lock();
     }
 
-    /** Releases a previously acquired read lock. */
+    // ── Internal mutation helpers (called under the write lock) ───────────────
+
+    /**
+     * Releases a previously acquired read lock.
+     */
     public void releaseReadLock() {
         lock.readLock().unlock();
     }
-
-    // ── Internal mutation helpers (called under the write lock) ───────────────
 
     private void insertInternal(int line, int column, CharSequence text) {
         // Find the first '\n' in the inserted text
@@ -575,7 +581,7 @@ public final class Content {
             // Merge startLine and endLine: keep [0, startColumn) from startLine and
             // [endColumn, ...) from endLine.
             ContentLine first = lines.get(startLine);
-            ContentLine last  = lines.get(endLine);
+            ContentLine last = lines.get(endLine);
 
             // Truncate first line
             first.delete(startColumn, first.length());
@@ -606,6 +612,8 @@ public final class Content {
         return sum;
     }
 
+    // ── Listener notification ─────────────────────────────────────────────────
+
     private void rebuildBit() {
         int n = lines.size();
         if (bit == null || bitCapacity < n + 1) {
@@ -623,28 +631,27 @@ public final class Content {
         }
     }
 
-    // ── Listener notification ─────────────────────────────────────────────────
-
     private void notifyInsert(int line, int col, CharSequence text) {
         for (ContentChangeListener l : listeners) l.onInsert(line, col, text);
     }
+
+    // ── Static helpers ────────────────────────────────────────────────────────
 
     private void notifyDelete(int startLine, int startCol, int endLine, int endCol) {
         for (ContentChangeListener l : listeners) l.onDelete(startLine, startCol, endLine, endCol);
     }
 
-    // ── Static helpers ────────────────────────────────────────────────────────
+    public static final class LoadedLines {
+        public final int longestLineLength;
+        private final ArrayList<ContentLine> lines;
+        private final long[] bit;
+        private final int bitCapacity;
 
-    private static int indexOfNewline(CharSequence s, int fromIndex) {
-        for (int i = fromIndex; i < s.length(); i++) {
-            if (s.charAt(i) == '\n') return i;
+        private LoadedLines(ArrayList<ContentLine> lines, long[] bit, int bitCapacity, int longestLineLength) {
+            this.lines = lines;
+            this.bit = bit;
+            this.bitCapacity = bitCapacity;
+            this.longestLineLength = longestLineLength;
         }
-        return -1;
-    }
-
-    private static char[] toCharArray(CharSequence s) {
-        char[] arr = new char[s.length()];
-        for (int i = 0; i < arr.length; i++) arr[i] = s.charAt(i);
-        return arr;
     }
 }
