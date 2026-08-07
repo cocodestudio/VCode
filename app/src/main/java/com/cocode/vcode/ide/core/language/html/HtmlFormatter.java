@@ -176,7 +176,7 @@ public class HtmlFormatter extends BaseFormatter {
         if (attrs.isEmpty()) return baseIndent + "<" + name + (selfClose ? " />" : ">");
 
         // Single short attribute: keep inline
-        String attrIndent = baseIndent + INDENT;
+        String attrIndent = baseIndent + indentUnit;
         String singleLine = baseIndent + "<" + name + " " + String.join(" ", attrs) + (selfClose ? " />" : ">");
         if (singleLine.length() <= 80) return singleLine;
 

@@ -14,8 +14,7 @@ import com.cocode.vcode.ide.git.model.GitFileItem;
 
 import java.io.File;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 /**
  * CommitDetailsViewModel manages the state and logic for inspecting a single commit.
@@ -27,10 +26,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
     private final GitRepository repository;
     private final GitCredentialStore credentialStore;
 
-    /**
-     * Sequential executor for thread-safe repository operations.
-     */
-    private final ExecutorService gitExecutor;
+
 
     // Observable metadata fields
     private final MutableLiveData<String> commitSha = new MutableLiveData<>();
@@ -48,7 +44,6 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         super(application);
         this.repository = new GitRepository();
         this.credentialStore = new GitCredentialStore();
-        this.gitExecutor = Executors.newSingleThreadExecutor();
     }
 
     /**
@@ -61,7 +56,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         commitTimestamp.setValue(time);
 
         if (projectPath != null) {
-            gitExecutor.execute(() -> {
+            ExecutorProvider.getInstance().runOnIo(() -> {
                 try {
                     repository.openRepository(new File(projectPath));
                     if (sha != null) {
@@ -94,7 +89,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         String sha = commitSha.getValue();
         if (sha == null) return;
 
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 Context ctx = getApplication();
                 String resolvedName;
@@ -122,7 +117,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
     }
 
     public void softReset(String commitRef) {
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.softReset(commitRef);
                 actionCompleted.postValue(true);
@@ -133,7 +128,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
     }
 
     public void mixedReset(String commitRef) {
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.mixedReset(commitRef);
                 actionCompleted.postValue(true);
@@ -144,7 +139,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
     }
 
     public void hardReset(String commitRef) {
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.hardReset(commitRef);
                 actionCompleted.postValue(true);
@@ -194,8 +189,5 @@ public class CommitDetailsViewModel extends AndroidViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        if (!gitExecutor.isShutdown()) {
-            gitExecutor.shutdownNow();
-        }
     }
 }

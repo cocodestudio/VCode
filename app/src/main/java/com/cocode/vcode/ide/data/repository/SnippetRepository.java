@@ -101,6 +101,7 @@ public class SnippetRepository {
                 }
 
                 // Analyze template data profiles to apply automated language sorting labels
+                // TODO: Review LanguageDetector.detect() for potential performance optimizations
                 item.setFileType(LanguageDetector.detect(item.getContent()));
 
                 List<SnippetItem> existing = readSnippetsFromDisk();
@@ -126,6 +127,7 @@ public class SnippetRepository {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 // Re-evaluate grammar rules to align context changes correctly
+                // TODO: Review LanguageDetector.detect() for potential performance optimizations
                 updated.setFileType(LanguageDetector.detect(updated.getContent()));
 
                 List<SnippetItem> existing = readSnippetsFromDisk();

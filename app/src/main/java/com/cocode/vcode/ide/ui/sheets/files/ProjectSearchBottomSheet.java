@@ -21,6 +21,7 @@ import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.span.SolidHighlightSpan;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
 import java.io.File;
@@ -120,7 +121,7 @@ public class ProjectSearchBottomSheet extends BottomSheetDialogFragment {
                 searchInDirectory(f, query, outResults);
             } else {
                 // File exclusions
-                if (name.equals("project_meta.json") || name.equals("session.json") || name.equals("snippets.json"))
+                if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE) || name.equals("snippets.json"))
                     continue;
 
                 // Binary and image exclusions

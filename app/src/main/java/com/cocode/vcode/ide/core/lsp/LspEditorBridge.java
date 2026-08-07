@@ -121,19 +121,14 @@ public final class LspEditorBridge {
         }
     }
 
-    /**
-     * Converts a flat character offset to a zero-based LSP Position.
-     */
-    static LspPosition offsetToLspPosition(String text, int offset) {
-        int line = 0;
-        int lastNl = -1;
-        for (int i = 0; i < offset && i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
-                lastNl = i;
-            }
+    private static File findProjectRoot(File file) {
+        if (file == null) return null;
+        File dir = file.isDirectory() ? file : file.getParentFile();
+        while (dir != null) {
+            if (new File(dir, "project_meta.json").exists()) return dir;
+            dir = dir.getParentFile();
         }
-        return new LspPosition(line, Math.max(0, offset - lastNl - 1));
+        return null;
     }
 
     /**
@@ -174,7 +169,8 @@ public final class LspEditorBridge {
         // This populates ProjectIndex so that Go to Definition / Find References work
         // across all files in the project, not just the currently open one.
         if (file != null && file.getParentFile() != null) {
-            File projectRoot = file.getParentFile();
+            File projectRoot = findProjectRoot(file);
+            if (projectRoot == null) projectRoot = file.getParentFile();
             ProjectIndex.getInstance().indexProject(projectRoot, null);
         }
         // Trigger an immediate diagnostic pass for the newly opened file
@@ -408,7 +404,7 @@ public final class LspEditorBridge {
             if (text == null) return new LspPosition(0, 0);
             // Use getCursorOffset if it's available (added in Phase 2 wiring);
             // otherwise fall back to a content scan.
-            return offsetToLspPosition(text.toString(), getCursorFlatOffset());
+            return SymbolExtractor.offsetToPosition(text.toString(), getCursorFlatOffset());
         } catch (Exception e) {
             return new LspPosition(0, 0);
         }

@@ -7,6 +7,8 @@ import com.cocode.vcode.ide.git.model.BranchItem;
 import com.cocode.vcode.ide.git.model.CommitItem;
 import com.cocode.vcode.ide.git.model.GitFileItem;
 import com.cocode.vcode.ide.utils.DateUtils;
+import com.cocode.vcode.ide.git.model.CommitInfo;
+import com.cocode.vcode.ide.git.model.FileStatus;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand;
@@ -125,7 +127,7 @@ public class GitRepository {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.e("VCode", "Error in ensureInternalFilesIgnored", e);
         }
     }
 
@@ -765,6 +767,213 @@ public class GitRepository {
      */
     public void discardAll() throws Exception {
         git.checkout().setAllPaths(true).call();
+    }
+
+    public void setRepoDir(File repoDir) {
+        this.repoDir = repoDir;
+    }
+
+    public boolean isGitRepo() {
+        return repoDir != null && new File(repoDir, ".git").exists();
+    }
+
+    public GitOperationResult init() {
+        return init("master");
+    }
+
+    public GitOperationResult init(String defaultBranch) {
+        try {
+            org.eclipse.jgit.api.InitCommand initCommand = Git.init().setDirectory(repoDir);
+            if (defaultBranch != null && !defaultBranch.trim().isEmpty()) {
+                initCommand.setInitialBranch(defaultBranch.trim());
+            }
+            git = initCommand.call();
+            File gitignore = new File(repoDir, ".gitignore");
+            if (!gitignore.exists()) {
+                try (java.io.FileWriter fw = new java.io.FileWriter(gitignore)) {
+                    fw.write(DEFAULT_GITIGNORE);
+                }
+            }
+            return GitOperationResult.success("Repository initialized");
+        } catch (Exception e) {
+            return GitOperationResult.error("Init failed: " + e.getMessage());
+        }
+    }
+
+    public GitOperationResult open() {
+        try {
+            git = Git.open(repoDir);
+            return GitOperationResult.success("Repository opened");
+        } catch (java.io.IOException e) {
+            return GitOperationResult.error("Not a git repository: " + e.getMessage());
+        }
+    }
+
+    public void close() {
+        if (git != null) {
+            git.close();
+            git = null;
+        }
+    }
+
+    public static GitOperationResult cloneRepo(android.content.Context context, String url, File targetDir,
+                                               String username, String token,
+                                               CloneProgressCallback callback) {
+        try {
+            org.eclipse.jgit.api.CloneCommand clone = Git.cloneRepository()
+                    .setURI(url)
+                    .setDirectory(targetDir);
+
+            if (url.startsWith("http")) {
+                clone.setCredentialsProvider(
+                        new org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(
+                                token != null ? token : "token",
+                                token != null ? token : ""));
+            } else {
+                clone.setTransportConfigCallback(SshKeyManager.getTransportConfigCallback(context));
+            }
+
+            clone.setProgressMonitor(new org.eclipse.jgit.lib.ProgressMonitor() {
+                private int totalWork;
+                private int completedWork;
+                private String currentTask;
+                private long lastUpdateTime;
+
+                @Override
+                public void start(int totalTasks) {
+                }
+
+                @Override
+                public void beginTask(String title, int total) {
+                    this.currentTask = title;
+                    this.totalWork = total;
+                    this.completedWork = 0;
+                    this.lastUpdateTime = System.currentTimeMillis();
+                    if (callback != null) callback.onProgress(title, 0, total);
+                }
+
+                @Override
+                public void update(int completed) {
+                    this.completedWork += completed;
+                    if (callback != null) {
+                        long now = System.currentTimeMillis();
+                        if (now - lastUpdateTime > 200 || completedWork == totalWork) {
+                            callback.onProgress(currentTask, completedWork, totalWork);
+                            callback.onUpdate(completedWork);
+                            lastUpdateTime = now;
+                        }
+                    }
+                }
+
+                @Override
+                public void endTask() {
+                    if (callback != null) callback.onTaskDone();
+                }
+
+                @Override
+                public boolean isCancelled() {
+                    return false;
+                }
+
+                @Override
+                public void showDuration(boolean enabled) {
+                }
+            });
+            Git result = clone.call();
+            result.close();
+            return GitOperationResult.success("Repository cloned successfully");
+        } catch (org.eclipse.jgit.api.errors.GitAPIException e) {
+            return GitOperationResult.error("Clone failed: " + e.getMessage());
+        }
+    }
+
+    public interface CloneProgressCallback {
+        void onProgress(String task, int done, int total);
+        void onUpdate(int completed);
+        void onTaskDone();
+    }
+
+    public List<CommitInfo> getCommitLog(int maxCount, int skip) {
+        if (git == null) return new ArrayList<>();
+        List<CommitInfo> logs = new ArrayList<>();
+        try {
+            Iterable<RevCommit> commits = git.log().setMaxCount(maxCount).setSkip(skip).call();
+
+            try (org.eclipse.jgit.revwalk.RevWalk rw = new org.eclipse.jgit.revwalk.RevWalk(git.getRepository())) {
+                for (RevCommit commit : commits) {
+                    String[] parents = new String[commit.getParentCount()];
+                    for (int i = 0; i < commit.getParentCount(); i++) {
+                        parents[i] = commit.getParent(i).getName();
+                    }
+
+                    CommitInfo info = new CommitInfo(
+                            commit.getName(),
+                            commit.getName().substring(0, 7),
+                            commit.getFullMessage(),
+                            commit.getShortMessage(),
+                            commit.getAuthorIdent().getName(),
+                            commit.getAuthorIdent().getEmailAddress(),
+                            commit.getAuthorIdent().getWhen(),
+                            parents
+                    );
+
+                    info.setChangedFiles(getChangedFilesInCommit(commit, rw));
+                    logs.add(info);
+                }
+            }
+        } catch (Exception e) {
+            android.util.Log.e("VCode", "Error getting commit log", e);
+        }
+        return logs;
+    }
+
+    private List<FileStatus> getChangedFilesInCommit(RevCommit commit, org.eclipse.jgit.revwalk.RevWalk rw) {
+        List<FileStatus> changedFiles = new ArrayList<>();
+        try {
+            Repository repo = git.getRepository();
+
+            if (commit.getParentCount() == 0) {
+                try (org.eclipse.jgit.treewalk.TreeWalk tw = new org.eclipse.jgit.treewalk.TreeWalk(repo)) {
+                    tw.addTree(commit.getTree());
+                    tw.setRecursive(true);
+                    while (tw.next()) {
+                        changedFiles.add(new FileStatus(tw.getPathString(), FileStatus.Type.STAGED_ADDED));
+                    }
+                }
+            } else {
+                RevCommit parent = rw.parseCommit(commit.getParent(0).getId());
+
+                try (DiffFormatter df = new DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE)) {
+                    df.setRepository(repo);
+                    df.setDiffComparator(org.eclipse.jgit.diff.RawTextComparator.DEFAULT);
+                    df.setDetectRenames(true);
+
+                    List<DiffEntry> diffs = df.scan(parent.getTree(), commit.getTree());
+                    for (DiffEntry diff : diffs) {
+                        FileStatus.Type type = FileStatus.Type.STAGED_MODIFIED;
+                        String path = diff.getNewPath();
+
+                        switch (diff.getChangeType()) {
+                            case ADD:
+                                type = FileStatus.Type.STAGED_ADDED;
+                                break;
+                            case DELETE:
+                                type = FileStatus.Type.STAGED_DELETED;
+                                path = diff.getOldPath();
+                                break;
+                            case RENAME:
+                            case COPY:
+                            case MODIFY:
+                                break;
+                        }
+                        changedFiles.add(new FileStatus(path, type));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            android.util.Log.e("VCode", "Error getting changed files", e);
+        }
+        return changedFiles;
     }
 
     /**

@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.prefs.PreferenceKeys;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -101,7 +102,7 @@ public class SettingsRepository {
         AppSettings global = loadSettings();
         if (projectDir == null) return global;
 
-        java.io.File metaFile = new java.io.File(projectDir, "project_meta.json");
+        java.io.File metaFile = new java.io.File(projectDir, ProjectRepository.META_FILE);
         if (!metaFile.exists()) return global;
 
         try {
@@ -205,7 +206,7 @@ public class SettingsRepository {
 
     public void saveProjectSettings(java.io.File projectDir, AppSettings s) {
         if (projectDir == null || s == null) return;
-        java.io.File metaFile = new java.io.File(projectDir, "project_meta.json");
+        java.io.File metaFile = new java.io.File(projectDir, ProjectRepository.META_FILE);
         if (!metaFile.exists()) return;
 
         try {

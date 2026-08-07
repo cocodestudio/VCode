@@ -8,7 +8,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.cocode.vcode.ide.data.model.Project;
 import com.cocode.vcode.ide.data.model.Result;
-import com.cocode.vcode.ide.git.core.GitManager;
+import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 
@@ -34,7 +34,20 @@ import java.util.UUID;
  */
 public class ProjectRepository {
 
-    private static final String META_FILE = "project_meta.json";
+    public static final String META_FILE = "project_meta.json";
+    public static final String SESSION_FILE = "session.json";
+
+    public static File findProjectRoot(File file) {
+        File current = file;
+        while (current != null) {
+            if (new File(current, META_FILE).exists()) {
+                return current;
+            }
+            current = current.getParentFile();
+        }
+        return null;
+    }
+
     // JSON configuration mapping fields for project description schemas
     private static final String KEY_ID = "id";
     private static final String KEY_NAME = "name";
@@ -153,8 +166,9 @@ public class ProjectRepository {
 
                 // If version control configurations are requested, run full environment initializations next
                 if (initGit) {
-                    GitManager git = new GitManager(projectDir);
-                    git.init(defaultBranch);
+                    GitRepository git = new GitRepository();
+                    git.setConfiguredDefaultBranch(defaultBranch);
+                    git.openRepository(projectDir);
                 }
 
                 project.setFileCount(FileUtils.countFilesInDir(projectDir));

@@ -1,11 +1,9 @@
 package com.cocode.vcode.ide.core.lsp;
 
 import com.cocode.vcode.ide.utils.ExecutorProvider;
+import com.cocode.vcode.ide.utils.FileUtils;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -93,16 +91,8 @@ public final class ProjectIndex {
     // -------------------------------------------------------------------------
 
     private static String readFile(File file) throws Exception {
-        // Limit indexing to files <= 1 MB to avoid OOM on large minified assets
-        if (file.length() > 1024 * 1024) return "";
-        FileInputStream fis = new FileInputStream(file);
-        InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8);
-        char[] buffer = new char[8192];
-        StringBuilder sb = new StringBuilder((int) file.length());
-        int n;
-        while ((n = reader.read(buffer)) != -1) sb.append(buffer, 0, n);
-        reader.close();
-        return sb.toString();
+        if (file.length() > 1024 * 1024) return ""; // 1 MB limit
+        return com.cocode.vcode.ide.utils.FileUtils.readFile(file);
     }
 
     // -------------------------------------------------------------------------

@@ -42,7 +42,7 @@ public class EditorGitHelper {
 
                 ExecutorProvider.getInstance().runOnMain(() -> gitStatusesLiveData.setValue(freshMap));
             } catch (Exception e) {
-                e.printStackTrace();
+                android.util.Log.e("VCode", "Error in refreshGitStatuses", e);
             }
         });
     }

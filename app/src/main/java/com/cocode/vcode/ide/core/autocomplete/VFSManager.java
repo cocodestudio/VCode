@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 /**
  * Virtual File System (VFS) cache to allow O(1) directory listing for path suggestions.
@@ -15,7 +15,6 @@ import java.util.concurrent.Executors;
 public class VFSManager {
 
     private static VFSManager instance;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     // Maps absolute directory path -> list of child files/folders
     private final Map<String, List<File>> directoryCache = new HashMap<>();
@@ -38,7 +37,7 @@ public class VFSManager {
         if (rootPath == null || rootPath.equals(projectRoot)) return;
 
         projectRoot = rootPath;
-        executor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             directoryCache.clear();
             File root = new File(rootPath);
             if (root.exists() && root.isDirectory()) {
@@ -54,7 +53,7 @@ public class VFSManager {
         List<File> cachedList = new ArrayList<>();
         for (File child : children) {
             String name = child.getName();
-            if (name.startsWith(".") || name.equals("session.json") || name.equals("project_meta.json"))
+            if (name.startsWith(".") || name.equals(ProjectRepository.SESSION_FILE) || name.equals(ProjectRepository.META_FILE))
                 continue; // Skip hidden/git and meta files
             cachedList.add(child);
 
@@ -79,7 +78,7 @@ public class VFSManager {
                 List<File> list = new ArrayList<>();
                 for (File f : diskFiles) {
                     String name = f.getName();
-                    if (!name.startsWith(".") && !name.equals("session.json") && !name.equals("project_meta.json")) {
+                    if (!name.startsWith(".") && !name.equals(ProjectRepository.SESSION_FILE) && !name.equals(ProjectRepository.META_FILE)) {
                         list.add(f);
                     }
                 }

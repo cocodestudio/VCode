@@ -13,7 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.git.core.GitManager;
+import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.ui.projects.ProjectsActivity;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
@@ -185,7 +185,7 @@ public class GitCloneService extends Service {
 
     private void performClone(String repoUrl, String projectName, File targetProjectDirectory, String gitUser, String gitToken, String projectId) {
         ExecutorProvider.getInstance().runOnIo(() -> {
-            var result = GitManager.cloneRepo(this, repoUrl, targetProjectDirectory, gitUser, gitToken, new GitManager.CloneProgressCallback() {
+            var result = GitRepository.cloneRepo(this, repoUrl, targetProjectDirectory, gitUser, gitToken, new GitRepository.CloneProgressCallback() {
                 @Override
                 public void onProgress(String task, int done, int total) {
                     int percentage = total > 0 ? (int) (((float) done / total) * 100) : 0;
@@ -241,7 +241,7 @@ public class GitCloneService extends Service {
                     if (listener != null) listener.onSuccess();
                     showCompletionNotification(true, projectName + " cloned successfully.");
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    android.util.Log.e("VCode", "Error during clone post-processing", e);
                     String traceMessage = parseGitError(e);
                     FileUtils.deleteRecursive(targetProjectDirectory);
                     CloneListener listener = getListener();

@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.utils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -32,12 +33,12 @@ public class ProjectFileRecovery {
             return;
         }
 
-        File metaFile = new File(projectRoot, "project_meta.json");
+        File metaFile = new File(projectRoot, ProjectRepository.META_FILE);
         if (!metaFile.exists()) {
             createDefaultProjectMeta(metaFile);
         }
 
-        File sessionFile = new File(projectRoot, "session.json");
+        File sessionFile = new File(projectRoot, ProjectRepository.SESSION_FILE);
         if (!sessionFile.exists()) {
             createDefaultSession(sessionFile);
         }
@@ -55,7 +56,7 @@ public class ProjectFileRecovery {
 
             writeJsonToFile(metaFile, meta);
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.e("VCode", "Failed to create default project meta", e);
         }
     }
 
@@ -71,7 +72,7 @@ public class ProjectFileRecovery {
 
             writeJsonToFile(sessionFile, session);
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.e("VCode", "Failed to create default session", e);
         }
     }
 

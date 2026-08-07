@@ -15,8 +15,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,7 +50,6 @@ public class ProjectSymbolIndex {
     private final Map<String, List<CompletionItem>> classMembers = new HashMap<>();
     // Also maps absolute file path → class members for cross-file class resolution
     private final Map<String, Map<String, List<CompletionItem>>> fileClassMembers = new HashMap<>();
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<CompletionItem> cssClassItems = new ArrayList<>();
     private final List<CompletionItem> cssIdItems = new ArrayList<>();
     private final List<CompletionItem> htmlIdItems = new ArrayList<>();
@@ -69,13 +68,7 @@ public class ProjectSymbolIndex {
     }
 
     public static File getProjectRoot(File file) {
-        if (file == null) return null;
-        File dir = file.isDirectory() ? file : file.getParentFile();
-        while (dir != null) {
-            if (new File(dir, "project_meta.json").exists()) return dir;
-            dir = dir.getParentFile();
-        }
-        return null;
+        return ProjectRepository.findProjectRoot(file);
     }
 
     public void buildIndex(File rootDir) {
@@ -84,7 +77,7 @@ public class ProjectSymbolIndex {
         if (rootPath.equals(projectRoot)) return;
 
         projectRoot = rootPath;
-        executor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             Set<String> classNames = new HashSet<>();
             Set<String> cssIds = new HashSet<>();
             Set<String> htmlIds = new HashSet<>();

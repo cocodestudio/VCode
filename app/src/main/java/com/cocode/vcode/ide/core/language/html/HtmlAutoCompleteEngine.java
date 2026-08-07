@@ -10,6 +10,7 @@ import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -460,13 +461,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     // ─── Path helpers ───────────────────────────────────────────────────────────
 
     private File getProjectRoot(File file) {
-        if (file == null) return null;
-        File dir = file.isDirectory() ? file : file.getParentFile();
-        while (dir != null) {
-            if (new File(dir, "project_meta.json").exists()) return dir;
-            dir = dir.getParentFile();
-        }
-        return null;
+        return ProjectRepository.findProjectRoot(file);
     }
 
     private String getRelativeHtmlPath(File baseDir, File target) {

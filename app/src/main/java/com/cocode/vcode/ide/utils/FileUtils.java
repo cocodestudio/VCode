@@ -3,8 +3,8 @@ package com.cocode.vcode.ide.utils;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Environment;
-
 import com.cocode.vcode.ide.data.model.FileNode;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -272,7 +272,7 @@ public class FileUtils {
             }
 
             // Hide internal IDE state files from the UI
-            if (name.equals("project_meta.json") || name.equals("session.json")) {
+            if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) {
                 continue;
             }
 
@@ -311,7 +311,7 @@ public class FileUtils {
                 continue;
             }
 
-            if (name.equals("project_meta.json") || name.equals("session.json")) {
+            if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) {
                 continue;
             }
 

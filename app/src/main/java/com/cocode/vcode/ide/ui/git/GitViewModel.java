@@ -46,11 +46,7 @@ public class GitViewModel extends AndroidViewModel {
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isNotRepository = new MutableLiveData<>(false);
 
-    /**
-     * Dedicated single-thread executor to ensure Git operations are performed sequentially.
-     */
-    private final java.util.concurrent.ExecutorService gitExecutor =
-            java.util.concurrent.Executors.newSingleThreadExecutor();
+
 
     public GitViewModel(@NonNull Application application) {
         super(application);
@@ -78,7 +74,7 @@ public class GitViewModel extends AndroidViewModel {
                 ? explicitDefaultBranch : resolveDefaultBranchFromPreferences();
         repository.setConfiguredDefaultBranch(fallbackBranch);
 
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 File gitFolder = new File(projectDir, ".git");
                 if (!gitFolder.exists()) {
@@ -104,7 +100,7 @@ public class GitViewModel extends AndroidViewModel {
         isLoading.setValue(true);
         repository.setConfiguredDefaultBranch(resolveDefaultBranchFromPreferences());
 
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.openRepository(projectDir);
                 isNotRepository.postValue(false);
@@ -124,10 +120,6 @@ public class GitViewModel extends AndroidViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        // Shutdown the background thread when the ViewModel is destroyed
-        if (gitExecutor != null && !gitExecutor.isShutdown()) {
-            gitExecutor.shutdownNow();
-        }
     }
 
     /**
@@ -392,7 +384,7 @@ public class GitViewModel extends AndroidViewModel {
      * Updates the remote 'origin' URL for the repository.
      */
     public void updateRemoteUrl(String url) {
-        gitExecutor.execute(() -> {
+        ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.setRemoteUrl(url);
             } catch (Exception e) {

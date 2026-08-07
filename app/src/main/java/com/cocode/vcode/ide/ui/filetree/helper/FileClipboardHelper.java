@@ -57,7 +57,7 @@ public class FileClipboardHelper {
                     success = false;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                android.util.Log.e("VCode", "Paste failed", e);
                 success = false;
             } finally {
                 final boolean finalSuccess = success;

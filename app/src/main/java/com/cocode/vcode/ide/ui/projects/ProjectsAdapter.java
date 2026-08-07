@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.data.model.Project;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.databinding.ItemProjectCardBinding;
 import com.cocode.vcode.ide.utils.DateUtils;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
@@ -465,7 +466,7 @@ public class ProjectsAdapter extends RecyclerView.Adapter<ProjectsAdapter.Projec
                 } else {
                     String name = f.getName();
                     // Skip internal metadata files
-                    if (name.equals("project_meta.json") || name.equals("session.json")) continue;
+                    if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) continue;
 
                     int dot = name.lastIndexOf('.');
                     if (dot > 0 && dot < name.length() - 1) {

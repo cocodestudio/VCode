@@ -51,7 +51,7 @@ public class CodeFormatter {
             }
             return code; // Return unmodified string if language does not have a dedicated formatter class
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.e("VCode", "Formatting failed", e);
             return code; // Structural fallback to protect data integrity on invalid syntax states
         }
     }

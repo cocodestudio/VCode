@@ -1,6 +1,5 @@
 package com.cocode.vcode.ide.core.language.base;
 
-import com.cocode.vcode.ide.data.model.AppSettings;
 
 /**
  * Shared architectural foundation for source code formatters.
@@ -9,15 +8,23 @@ import com.cocode.vcode.ide.data.model.AppSettings;
  */
 public abstract class BaseFormatter {
 
-    // Pulls the current active indentation preference (e.g., space or tab count) from app configurations
-    protected static final String INDENT = new AppSettings().getIndent(); // 2 tabs
-    private static final String[] INDENT_CACHE = new String[50];
+    protected String indentUnit = "  "; // 2 tabs
+    private String[] indentCache = new String[50];
 
-    static {
-        INDENT_CACHE[0] = "";
-        for (int i = 1; i < INDENT_CACHE.length; i++) {
-            INDENT_CACHE[i] = INDENT_CACHE[i - 1] + INDENT;
+    protected BaseFormatter() {
+        buildIndentCache();
+    }
+
+    private void buildIndentCache() {
+        indentCache[0] = "";
+        for (int i = 1; i < 50; i++) {
+            indentCache[i] = indentCache[i - 1] + indentUnit;
         }
+    }
+
+    public void setIndentUnit(String indent) {
+        this.indentUnit = (indent != null && !indent.isEmpty()) ? indent : "  ";
+        buildIndentCache();
     }
 
     /**
@@ -36,11 +43,11 @@ public abstract class BaseFormatter {
      */
     protected String getIndentString(int level) {
         if (level <= 0) return "";
-        if (level < INDENT_CACHE.length) return INDENT_CACHE[level];
+        if (level < indentCache.length) return indentCache[level];
 
-        StringBuilder sb = new StringBuilder(INDENT_CACHE[INDENT_CACHE.length - 1]);
-        for (int i = INDENT_CACHE.length; i < level; i++) {
-            sb.append(INDENT);
+        StringBuilder sb = new StringBuilder(indentCache[indentCache.length - 1]);
+        for (int i = indentCache.length; i < level; i++) {
+            sb.append(indentUnit);
         }
         return sb.toString();
     }

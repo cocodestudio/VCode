@@ -8,6 +8,7 @@ import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -413,7 +414,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     items.add(new CompletionItem(name + "/", name + "/",
                             "Directory", CompletionItem.Type.FOLDER, 0));
                 } else if (isJsLike(name) || typedPath.isEmpty()) {
-                    if (name.equals("project_meta.json") || name.equals("session.json")) continue;
+                    if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) continue;
                     if (currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath()))
                         continue;
 

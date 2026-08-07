@@ -31,7 +31,7 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.Project;
 import com.cocode.vcode.ide.databinding.ActivityProjectsBinding;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
-import com.cocode.vcode.ide.git.core.GitManager;
+import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.github.GitHubApiClient;
 import com.cocode.vcode.ide.git.model.CommitInfo;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
@@ -441,7 +441,8 @@ public class ProjectsActivity extends BaseActivity {
             for (Project p : projects) {
                 try {
                     File projectDir = new File(FileUtils.getProjectsDir(this), p.getId());
-                    GitManager git = new GitManager(projectDir);
+                    GitRepository git = new GitRepository();
+                    git.setRepoDir(projectDir);
 
                     if (git.isGitRepo()) {
                         git.open();

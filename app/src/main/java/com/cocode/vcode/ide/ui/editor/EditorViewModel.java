@@ -238,7 +238,7 @@ public class EditorViewModel extends ViewModel {
             if (!skipDefaultFileOpen) {
                 ExecutorProvider.getInstance().runOnIo(() -> {
                     try {
-                        File metaFile = new File(projectRoot, "project_meta.json");
+                        File metaFile = new File(projectRoot, ProjectRepository.META_FILE);
                         if (metaFile.exists()) {
                             String metaContent = FileUtils.readFile(metaFile);
                             org.json.JSONObject metaJson = new org.json.JSONObject(metaContent);

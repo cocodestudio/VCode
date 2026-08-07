@@ -45,7 +45,7 @@ public class FileImportHelper {
                     copyStreamToFile(context, uri, destFile, opManager.getCancelToken());
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                android.util.Log.e("VCode", "Import files failed", e);
                 success = false;
             } finally {
                 final boolean finalSuccess = success;
@@ -76,7 +76,7 @@ public class FileImportHelper {
                     copyDocumentFileTree(context, documentFile, destDir, opManager.getCancelToken(), opManager, fileCount);
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                android.util.Log.e("VCode", "Folder import failed", e);
                 success[0] = false;
             } finally {
                 if (opManager.getCancelToken().get()) success[0] = false;
@@ -122,7 +122,7 @@ public class FileImportHelper {
                 out.write(buffer, 0, length);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.e("VCode", "Stream copy failed", e);
         }
     }
 
@@ -137,7 +137,7 @@ public class FileImportHelper {
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                android.util.Log.e("VCode", "URI parse failed", e);
             }
         }
         if (result == null) {
