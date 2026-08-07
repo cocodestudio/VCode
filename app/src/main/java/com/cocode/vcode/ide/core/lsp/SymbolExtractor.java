@@ -32,9 +32,9 @@ public final class SymbolExtractor {
 
     // CSS patterns
     private static final Pattern CSS_CLASS_SELECTOR = Pattern.compile(
-            "\\.([-\\w]+)\\s*\\{", Pattern.MULTILINE);
+            "\\.([-\\w]+)\\s*(?:\\{|,)", Pattern.MULTILINE);
     private static final Pattern CSS_ID_SELECTOR = Pattern.compile(
-            "#([-\\w]+)\\s*\\{", Pattern.MULTILINE);
+            "#([-\\w]+)\\s*(?:\\{|,)", Pattern.MULTILINE);
 
     // HTML id / class attribute patterns
     private static final Pattern HTML_ID = Pattern.compile(

@@ -84,7 +84,11 @@ public final class LspEditorBridge {
         mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
         // Reschedule debounced completion
         mainHandler.removeCallbacks(completionRunnable);
-        mainHandler.postDelayed(completionRunnable, COMPLETION_DEBOUNCE_MS);
+        if (!editor.isInsertingCompletion()) {
+            mainHandler.postDelayed(completionRunnable, COMPLETION_DEBOUNCE_MS);
+        } else {
+            editor.dismissAutoCompletePopup();
+        }
         // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
         updateProjectIndex();
     };
@@ -229,7 +233,28 @@ public final class LspEditorBridge {
             if (callback != null) callback.onError("No document");
             return;
         }
-        LspClientManager.getInstance().requestReferences(doc, cursorPosition(), callback);
+        LspClientManager.getInstance().requestReferences(doc, cursorPosition(), new LspCallback<List<LspLocation>>() {
+            @Override
+            public void onResult(List<LspLocation> result) {
+                if (callback == null) return;
+                if (result != null) {
+                    List<LspLocation> filtered = new ArrayList<>();
+                    for (LspLocation loc : result) {
+                        if (!loc.uri.equals(doc.uri)) {
+                            filtered.add(loc);
+                        }
+                    }
+                    callback.onResult(filtered);
+                } else {
+                    callback.onResult(Collections.emptyList());
+                }
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                if (callback != null) callback.onError(errorMessage);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -374,6 +399,7 @@ public final class LspEditorBridge {
             }
             CompletionItem ci = new CompletionItem(
                     li.label, insert, li.detail, mapKindToLegacy(li.kind), cursorOffset);
+            ci.setReplaceLength(li.replaceLength);
             out.add(ci);
         }
         return out;

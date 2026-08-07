@@ -109,12 +109,8 @@ public class ProblemsBottomSheet extends BottomSheetDialogFragment {
             holder.binding.tvMessage.setText(item.getMessage());
             holder.binding.tvMessage.setTypeface(FontManager.getInstance().getUiMedium(holder.itemView.getContext()));
 
-            String relPath = item.getFile().getAbsolutePath().replace(projectRoot + java.io.File.separator, "");
-            holder.binding.tvFilePath.setText(relPath);
+            holder.binding.tvFilePath.setText(item.getFile().getName() + ":" + item.getLine());
             holder.binding.tvFilePath.setTypeface(FontManager.getInstance().getUiMedium(holder.itemView.getContext()));
-
-            holder.binding.tvLineNumber.setText(String.valueOf(item.getLine()));
-            holder.binding.tvLineNumber.setTypeface(FontManager.getInstance().getUiMedium(holder.itemView.getContext()));
 
             // Severity icon and color
             android.content.Context ctx = holder.itemView.getContext();

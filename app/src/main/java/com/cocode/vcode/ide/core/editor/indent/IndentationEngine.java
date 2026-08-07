@@ -65,8 +65,8 @@ public class IndentationEngine {
 
                     if (endIdx > openAngle + 1) {
                         String tag = trimmedLine.substring(openAngle + 1, endIdx);
-                        // Confirm if the structural tag behaves as a block container requiring a sub-indent layout
-                        return HtmlTagCache.isBlockElement(tag);
+                        // Any non-void HTML tag implies a nested block follows next
+                        return !HtmlTagCache.isVoidElement(tag);
                     }
                 }
             }

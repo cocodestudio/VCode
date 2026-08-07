@@ -156,6 +156,7 @@ public class CodeEditText extends View {
     private boolean isUndoRedoActive = false;
     private boolean isSettingText = false;
     private boolean isTypingText = false;
+    private boolean isInsertingCompletion = false;
     // ── Content change listeners ──────────────────────────────────────────────
     private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -2140,6 +2141,13 @@ public class CodeEditText extends View {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
+     * Returns true if the editor is currently inserting a completion item.
+     */
+    public boolean isInsertingCompletion() {
+        return isInsertingCompletion;
+    }
+
+    /**
      * Injects selected autocomplete text, properly computing replace range.
      */
     private void insertCompletion(CompletionItem item) {
@@ -2147,8 +2155,10 @@ public class CodeEditText extends View {
         String insertText = item.getEffectiveInsertText();
         if (insertText == null) return;
 
-        int flatCursor = content.flatOffset(cursor);
-        String text = content.getText();
+        isInsertingCompletion = true;
+        try {
+            int flatCursor = content.flatOffset(cursor);
+            String text = content.getText();
 
         // Compute wordStart
         int wordStart;
@@ -2231,6 +2241,9 @@ public class CodeEditText extends View {
         autoCompletePopup.dismiss();
         scheduleHighlight();
         invalidate();
+        } finally {
+            isInsertingCompletion = false;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

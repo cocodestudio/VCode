@@ -66,8 +66,17 @@ public final class LspCompletionItem {
      * Whether inserting this item should trigger a re-request for completions (e.g. after a dot).
      */
     public final boolean commitTriggerReRequest;
+    
+    /**
+     * Length of text to replace before cursor. Defaults to -1 if unspecified.
+     */
+    public final int replaceLength;
 
     public LspCompletionItem(String label, String insertText, int kind, String detail, String documentation) {
+        this(label, insertText, kind, detail, documentation, -1);
+    }
+
+    public LspCompletionItem(String label, String insertText, int kind, String detail, String documentation, int replaceLength) {
         this.label = label;
         this.insertText = insertText != null ? insertText : label;
         this.kind = kind;
@@ -75,14 +84,15 @@ public final class LspCompletionItem {
         this.documentation = documentation;
         this.sortText = label;
         this.commitTriggerReRequest = false;
+        this.replaceLength = replaceLength;
     }
 
     public LspCompletionItem(String label, int kind) {
-        this(label, null, kind, null, null);
+        this(label, null, kind, null, null, -1);
     }
 
     public LspCompletionItem(String label, String insertText, int kind) {
-        this(label, insertText, kind, null, null);
+        this(label, insertText, kind, null, null, -1);
     }
 
     /**

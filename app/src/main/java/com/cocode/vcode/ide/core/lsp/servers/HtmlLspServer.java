@@ -56,10 +56,6 @@ public final class HtmlLspServer implements LspServer {
     private static final Pattern CLASS_ATTR = Pattern.compile("\\bclass\\s*=\\s*[\"']([^\"']+)[\"']");
     private static final Pattern SRC_ATTR = Pattern.compile("\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']");
     private static final Pattern HREF_ATTR = Pattern.compile("\\bhref\\s*=\\s*[\"']([^\"']+)[\"']");
-    private static final Pattern CSS_CLASS_PATTERN =
-            Pattern.compile("\\.([\\w-]+)\\s*[{,]");
-    private static final Pattern HTML_ID_PATTERN =
-            Pattern.compile("\\bid\\s*=\\s*[\"']([^\"']+)[\"']");
     private final HtmlAutoCompleteEngine completeEngine;
     private volatile boolean ready = false;
     private ProjectIndex projectIndex;
@@ -97,7 +93,8 @@ public final class HtmlLspServer implements LspServer {
                     insert,
                     kind,
                     ci.getDetail(),
-                    null
+                    null,
+                    ci.getReplaceLength()
             ));
         }
         return result;
@@ -251,7 +248,16 @@ public final class HtmlLspServer implements LspServer {
             }
         }
 
-        return lspItems;
+        // Deduplicate completions
+        List<LspCompletionItem> uniqueItems = new ArrayList<>();
+        Set<String> seenLabels = new HashSet<>();
+        for (LspCompletionItem item : lspItems) {
+            if (seenLabels.add(item.label)) {
+                uniqueItems.add(item);
+            }
+        }
+
+        return uniqueItems;
     }
 
     // -------------------------------------------------------------------------
@@ -412,16 +418,15 @@ public final class HtmlLspServer implements LspServer {
         Set<String> seen = new HashSet<>();
         for (String uri : projectIndex.getAllUris()) {
             if (!uri.endsWith(".css") && !uri.endsWith(".scss")) continue;
-            LspDocument cssDoc = projectIndex.getDocument(uri);
-            if (cssDoc == null || cssDoc.text == null) continue;
-            Matcher m = CSS_CLASS_PATTERN.matcher(cssDoc.text);
-            while (m.find()) {
-                String cls = m.group(1);
-                if (seen.contains(cls)) continue;
-                if (prefix.isEmpty() || cls.startsWith(prefix)) {
-                    seen.add(cls);
-                    result.add(new LspCompletionItem(
-                            cls, cls, LspCompletionItem.KIND_VALUE, "CSS class", null));
+            for (SymbolEntry sym : projectIndex.getFileSymbols(uri)) {
+                if (sym.kind == SymbolEntry.KIND_CSS_CLASS) {
+                    String cls = sym.name.substring(1);
+                    if (seen.contains(cls)) continue;
+                    if (prefix.isEmpty() || cls.startsWith(prefix)) {
+                        seen.add(cls);
+                        result.add(new LspCompletionItem(
+                                cls, cls, LspCompletionItem.KIND_VALUE, "CSS class", null));
+                    }
                 }
             }
         }
@@ -437,16 +442,15 @@ public final class HtmlLspServer implements LspServer {
         Set<String> seen = new HashSet<>();
         for (String uri : projectIndex.getAllUris()) {
             if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
-            LspDocument htmlDoc = projectIndex.getDocument(uri);
-            if (htmlDoc == null || htmlDoc.text == null) continue;
-            Matcher m = HTML_ID_PATTERN.matcher(htmlDoc.text);
-            while (m.find()) {
-                String id = m.group(1);
-                if (seen.contains(id)) continue;
-                if (prefix.isEmpty() || id.startsWith(prefix)) {
-                    seen.add(id);
-                    result.add(new LspCompletionItem(
-                            id, id, LspCompletionItem.KIND_VALUE, "HTML id", null));
+            for (SymbolEntry sym : projectIndex.getFileSymbols(uri)) {
+                if (sym.kind == SymbolEntry.KIND_HTML_ID) {
+                    String id = sym.name;
+                    if (seen.contains(id)) continue;
+                    if (prefix.isEmpty() || id.startsWith(prefix)) {
+                        seen.add(id);
+                        result.add(new LspCompletionItem(
+                                id, id, LspCompletionItem.KIND_VALUE, "HTML id", null));
+                    }
                 }
             }
         }

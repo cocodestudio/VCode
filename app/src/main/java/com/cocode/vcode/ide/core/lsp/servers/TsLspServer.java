@@ -181,7 +181,8 @@ public final class TsLspServer implements LspServer {
                     insert,
                     mapKind(item.getType()),
                     item.getDetail(),
-                    null
+                    null,
+                    item.getReplaceLength()
             ));
         }
         return result;

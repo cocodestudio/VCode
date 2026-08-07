@@ -172,10 +172,16 @@ public class SelectionToolbar {
 
     private void setupListeners() {
         binding.btnCut.setOnClickListener(v -> {
-            if (editor != null) editor.cutSelection();
+            if (editor != null) {
+                editor.cutSelection();
+                hide();
+            }
         });
         binding.btnCopy.setOnClickListener(v -> {
-            if (editor != null) editor.copySelection();
+            if (editor != null) {
+                editor.copySelection();
+                hide();
+            }
         });
         binding.btnPaste.setOnClickListener(v -> {
             if (editor != null) {
@@ -184,7 +190,10 @@ public class SelectionToolbar {
             }
         });
         binding.btnSelectAll.setOnClickListener(v -> {
-            if (editor != null) editor.selectAll();
+            if (editor != null) {
+                editor.selectAll();
+                hide();
+            }
         });
     }
 }

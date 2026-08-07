@@ -76,7 +76,8 @@ public final class JsonLspServer implements LspServer {
                     insert,
                     kind,
                     ci.getDetail(),
-                    null
+                    null,
+                    ci.getReplaceLength()
             ));
         }
         return result;
