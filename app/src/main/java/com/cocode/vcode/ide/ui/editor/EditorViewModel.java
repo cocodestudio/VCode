@@ -184,6 +184,11 @@ public class EditorViewModel extends ViewModel {
         return isEditorLoadingLiveData;
     }
 
+    public void setEditorLoading(boolean loading) {
+        if (Boolean.TRUE.equals(isEditorLoadingLiveData.getValue()) == loading) return;
+        isEditorLoadingLiveData.setValue(loading);
+    }
+
     /**
      * Loads the latest application settings from the repository and updates the LiveData.
      */

@@ -157,6 +157,7 @@ public class CodeEditText extends View {
     private boolean isSettingText = false;
     private boolean isTypingText = false;
     private boolean isInsertingCompletion = false;
+    private OnTextLoadListener textLoadListener;
     // ── Content change listeners ──────────────────────────────────────────────
     private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
     // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -1518,6 +1519,11 @@ public class CodeEditText extends View {
         final String textStr = text != null ? text.toString() : "";
         final long myToken = ++textLoadToken;
         isSettingText = true;
+        if (textLoadListener != null) {
+            mainHandler.post(() -> {
+                if (textLoadListener != null) textLoadListener.onTextLoadStateChanged(true);
+            });
+        }
         ExecutorProvider.getInstance().runOnCpu(() -> {
             Content.LoadedLines loaded = Content.prepareLoad(textStr);
             mainHandler.post(() -> {
@@ -1529,6 +1535,7 @@ public class CodeEditText extends View {
                 longestLineLength = loaded.longestLineLength;
                 longestLineDirty = false;
                 isSettingText = false;
+                if (textLoadListener != null) textLoadListener.onTextLoadStateChanged(false);
                 dirtyTracker.reset();
                 dirtyTracker.addEdit(0, 0, content.totalLength());
                 rebuildVisualLayout();
@@ -1562,8 +1569,13 @@ public class CodeEditText extends View {
     }
 
     public void addContentChangeListener(OnContentChangeListener listener) {
-        if (listener != null && !contentChangeListeners.contains(listener))
+        if (listener != null && !contentChangeListeners.contains(listener)) {
             contentChangeListeners.add(listener);
+        }
+    }
+
+    public void setOnTextLoadListener(OnTextLoadListener listener) {
+        this.textLoadListener = listener;
     }
 
     public void removeContentChangeListener(OnContentChangeListener listener) {
@@ -1580,6 +1592,8 @@ public class CodeEditText extends View {
     // ─────────────────────────────────────────────────────────────────────────
     // Public API — AD-5: ContentChangeListener shim (Replaced TextWatcher to prevent lag)
     // ─────────────────────────────────────────────────────────────────────────
+
+
 
     public int getEditorLineHeight() {
         return lineHeightPx;
@@ -2584,6 +2598,10 @@ public class CodeEditText extends View {
 
     public interface OnContentChangeListener {
         void onContentChanged();
+    }
+
+    public interface OnTextLoadListener {
+        void onTextLoadStateChanged(boolean isLoading);
     }
 
     /**

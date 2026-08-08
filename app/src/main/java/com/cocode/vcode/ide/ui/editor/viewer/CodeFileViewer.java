@@ -63,6 +63,11 @@ public class CodeFileViewer implements IFileViewer {
                     validateCodeIfRequired();
                 }
             });
+            codeEditText.setOnTextLoadListener(isLoading -> {
+                if (viewModel != null) {
+                    viewModel.setEditorLoading(isLoading);
+                }
+            });
 
             // Attach LSP bridge now that the editor view exists.
             // setFile() will be called in bindFile() once a file is known.
