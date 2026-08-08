@@ -783,6 +783,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             String formattedCode = CodeFormatter.format(rawCode, lang);
             ExecutorProvider.getInstance().runOnMain(() -> {
                 if (!rawCode.equals(formattedCode)) {
+                    activeFile.setContent(formattedCode);
+                    if (!activeFile.isDirty()) {
+                        activeFile.setDirty(true);
+                        viewModel.notifyFileDirtyStatusChanged();
+                    }
+                    
                     codeEditText.setText(formattedCode);
                     // Restore cursor to its pre-format position so Android's cursor-visibility
                     // logic scrolls back to the right place instead of jumping to the top.
