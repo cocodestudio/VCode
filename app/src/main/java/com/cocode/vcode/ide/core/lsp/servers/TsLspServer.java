@@ -241,7 +241,41 @@ public final class TsLspServer implements LspServer {
         String word = extractWord(doc.text, Math.max(offset, 0));
         if (word.isEmpty()) return Collections.emptyList();
 
-        return ProjectIndex.getInstance().findDefinitions(word);
+        return findUsagesInProject(word);
+    }
+
+    private List<LspLocation> findUsagesInProject(String word) {
+        List<LspLocation> result = new ArrayList<>();
+        ProjectIndex projectIndex = ProjectIndex.getInstance();
+        List<LspLocation> defs = projectIndex.findDefinitions(word);
+        
+        for (String uri : projectIndex.getAllUris()) {
+            LspDocument d = projectIndex.getDocument(uri);
+            if (d == null || d.text == null) continue;
+
+            if (uri.endsWith(".js") || uri.endsWith(".ts") || uri.endsWith(".jsx") || uri.endsWith(".tsx")) {
+                Pattern p = Pattern.compile("\\b" + Pattern.quote(word) + "\\b");
+                Matcher m = p.matcher(d.text);
+                while (m.find()) {
+                    LspPosition start = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, m.start());
+                    LspPosition end = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, m.end());
+                    LspRange range = new LspRange(start, end);
+                    LspLocation loc = new LspLocation(uri, range);
+                    
+                    boolean isDef = false;
+                    for (LspLocation def : defs) {
+                        if (def.uri.equals(uri) && def.range.start.line == range.start.line && def.range.start.character == range.start.character) {
+                            isDef = true;
+                            break;
+                        }
+                    }
+                    if (!isDef) {
+                        result.add(loc);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     @Override
