@@ -928,7 +928,6 @@ public class CodeEditText extends View {
     protected void onScrollChanged(int horiz, int vert, int oldHoriz, int oldVert) {
         super.onScrollChanged(horiz, vert, oldHoriz, oldVert);
         if (scrollChangeListener != null) scrollChangeListener.onScrollChanged(horiz, vert);
-        mainHandler.removeCallbacksAndMessages(null);
         scheduleHighlight();
     }
 
@@ -1149,6 +1148,8 @@ public class CodeEditText extends View {
                         deleted, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(startPos, null));
                 cursor = startPos;
                 selectionAnchor = null;
+                cursorVisible = true;
+                scheduleBlink();
                 invalidate();
                 scheduleHighlight();
                 return;
@@ -1170,6 +1171,8 @@ public class CodeEditText extends View {
                 deleted, snapshotAt(oldCursor, null), snapshotAt(newPos, null));
         cursor = newPos;
         selectionAnchor = null;
+        cursorVisible = true;
+        scheduleBlink();
         invalidate();
         scheduleHighlight();
         mainHandler.removeCallbacks(bracketMatchRunnable);
@@ -1238,6 +1241,8 @@ public class CodeEditText extends View {
             handleAutoIndent(content.getSubstring(0, indentTextEnd), beforeFlat);
         }
         invalidate();
+        cursorVisible = true;
+        scheduleBlink();
         scheduleHighlight();
         scheduleAutoComplete();
         mainHandler.removeCallbacks(bracketMatchRunnable);
@@ -1486,6 +1491,8 @@ public class CodeEditText extends View {
      * Called whenever the selection state changes.
      */
     private void notifySelectionChanged() {
+        cursorVisible = true;
+        scheduleBlink();
         // Only show/hide the selection toolbar for genuine user-initiated selections
         // (long-press, double-tap, drag handles, selectAll).
         // IME-driven selections (backspace-slide, spacebar-slide) set
@@ -2362,10 +2369,8 @@ public class CodeEditText extends View {
                 } else {
                     content.insert(insertPos.line, insertPos.column, finalInnerIndent);
                 }
-                cursor = content.positionAt(insertFlat + finalInnerIndent.length());
-                selectionAnchor = null;
+                setSelection(insertFlat + finalInnerIndent.length());
                 isApplyingHighlight = false;
-                invalidate();
             });
         }
     }
@@ -2702,6 +2707,8 @@ public class CodeEditText extends View {
                 editor.composingStart = -1;
                 editor.composingEnd = -1;
                 editor.post(editor::ensureCursorVisible);
+                editor.cursorVisible = true;
+                editor.scheduleBlink();
                 editor.invalidate();
                 editor.scheduleHighlight();
                 editor.scheduleAutoComplete();
@@ -2819,6 +2826,8 @@ public class CodeEditText extends View {
             }
 
             editor.post(editor::ensureCursorVisible);
+            editor.cursorVisible = true;
+            editor.scheduleBlink();
             editor.invalidate();
             editor.scheduleHighlight();
             editor.scheduleAutoComplete();
@@ -2968,6 +2977,8 @@ public class CodeEditText extends View {
             }
 
             editor.post(editor::ensureCursorVisible);
+            editor.cursorVisible = true;
+            editor.scheduleBlink();
             editor.invalidate();
             editor.scheduleHighlight();
             editor.scheduleAutoComplete();
@@ -2998,6 +3009,8 @@ public class CodeEditText extends View {
             editor.cursor = editor.content.positionAt(newFlat);
             editor.selectionAnchor = null;
             editor.post(editor::ensureCursorVisible);
+            editor.cursorVisible = true;
+            editor.scheduleBlink();
             editor.invalidate();
             editor.scheduleHighlight();
             editor.scheduleAutoComplete();
@@ -3065,6 +3078,8 @@ public class CodeEditText extends View {
             editor.cursor = newCursorPos;
             editor.selectionAnchor = null;
             editor.post(editor::ensureCursorVisible);
+            editor.cursorVisible = true;
+            editor.scheduleBlink();
             editor.invalidate();
             editor.scheduleHighlight();
             editor.scheduleAutoComplete();

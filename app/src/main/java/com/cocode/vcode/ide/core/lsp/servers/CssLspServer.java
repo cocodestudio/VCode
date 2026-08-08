@@ -230,10 +230,13 @@ public final class CssLspServer implements LspServer {
             }
         }
 
-        // .class or #id selector → find HTML file that uses it
+        // .class or #id selector → find its definition
         String selector = extractSelectorAtCursor(lineText, pos.character);
         if (selector != null && projectIndex != null) {
-            return findSelectorUsageInHtml(selector);
+            List<LspLocation> defs = projectIndex.findDefinitions(selector);
+            if (!defs.isEmpty()) {
+                return defs.get(0);
+            }
         }
 
         return null;
@@ -250,23 +253,29 @@ public final class CssLspServer implements LspServer {
         // Strip leading . or # for plain name lookup
         String plainName = selector.startsWith(".") || selector.startsWith("#")
                 ? selector.substring(1) : selector;
+        boolean isId = selector.startsWith("#");
 
         List<LspLocation> result = new ArrayList<>();
         for (String uri : projectIndex.getAllUris()) {
-            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
             LspDocument htmlDoc = projectIndex.getDocument(uri);
             if (htmlDoc == null || htmlDoc.text == null) continue;
 
-            // Look for class="...plainName..." or id="plainName"
-            String searchTerm = selector.startsWith("#")
-                    ? "id=\"" + plainName + "\""
-                    : plainName; // class may appear in class="... name ..."
-            int idx = htmlDoc.text.indexOf(searchTerm);
-            if (idx >= 0) {
-                LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor
-                        .offsetToPosition(htmlDoc.text, idx);
-                result.add(new LspLocation(uri, new LspRange(
-                        refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
+            if (uri.endsWith(".html") || uri.endsWith(".htm")) {
+                String searchTerm = isId ? "id=\"" + plainName + "\"" : plainName;
+                int idx = htmlDoc.text.indexOf(searchTerm);
+                while (idx >= 0) {
+                    LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(htmlDoc.text, idx);
+                    result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
+                    idx = htmlDoc.text.indexOf(searchTerm, idx + searchTerm.length());
+                }
+            } else if (uri.endsWith(".js") || uri.endsWith(".ts")) {
+                String searchTerm = isId ? plainName : "." + plainName;
+                int idx = htmlDoc.text.indexOf(searchTerm);
+                while (idx >= 0) {
+                    LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(htmlDoc.text, idx);
+                    result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
+                    idx = htmlDoc.text.indexOf(searchTerm, idx + searchTerm.length());
+                }
             }
         }
         return result;
@@ -277,29 +286,6 @@ public final class CssLspServer implements LspServer {
         return null;
     }
 
-    private LspLocation findSelectorUsageInHtml(String selector) {
-        if (projectIndex == null) return null;
-        String plainName = selector.startsWith(".") || selector.startsWith("#")
-                ? selector.substring(1) : selector;
-        boolean isId = selector.startsWith("#");
 
-        for (String uri : projectIndex.getAllUris()) {
-            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
-            LspDocument htmlDoc = projectIndex.getDocument(uri);
-            if (htmlDoc == null || htmlDoc.text == null) continue;
-
-            String searchTerm = isId
-                    ? "id=\"" + plainName + "\""
-                    : "class=\"" + plainName;
-            int idx = htmlDoc.text.indexOf(searchTerm);
-            if (idx >= 0) {
-                LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor
-                        .offsetToPosition(htmlDoc.text, idx);
-                return new LspLocation(uri, new LspRange(refPos,
-                        new LspPosition(refPos.line, refPos.character + searchTerm.length())));
-            }
-        }
-        return null;
-    }
 }
 

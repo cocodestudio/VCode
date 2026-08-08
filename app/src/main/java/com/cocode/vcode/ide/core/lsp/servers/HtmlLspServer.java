@@ -311,16 +311,16 @@ public final class HtmlLspServer implements LspServer {
         String lineText = doc.getLine(pos.line);
         List<LspLocation> refs = new ArrayList<>();
 
-        // If cursor is on an id value, find all JS getElementById / querySelector usages
+        // If cursor is on an id value, find all JS/HTML usages
         String idValue = extractAttrValue(lineText, "id", pos.character);
         if (idValue != null && projectIndex != null) {
-            refs.addAll(findReferencesInProject(idValue, "getElementById|querySelector.*#" + idValue));
+            refs.addAll(findUsagesInProject(idValue, true));
         }
 
-        // If cursor is on a class value, find all CSS and JS usages
+        // If cursor is on a class value, find all HTML/JS usages
         String classValue = extractFirstClass(lineText, pos.character);
         if (classValue != null && projectIndex != null) {
-            refs.addAll(findReferencesInProject("." + classValue, null));
+            refs.addAll(findUsagesInProject(classValue, false));
         }
 
         return refs;
@@ -360,8 +360,14 @@ public final class HtmlLspServer implements LspServer {
         String pattern = "getElementById(\"" + idValue + "\")";
         for (String uri : projectIndex.getAllUris()) {
             if (!uri.endsWith(".js") && !uri.endsWith(".ts")) continue;
-            LspLocation loc = findPatternInDocument(uri, pattern);
-            if (loc != null) return loc;
+            
+            com.cocode.vcode.ide.core.lsp.LspDocument doc = projectIndex.getDocument(uri);
+            if (doc == null || doc.text == null) continue;
+            int idx = doc.text.indexOf(pattern);
+            if (idx >= 0) {
+                LspPosition pos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, idx);
+                return new LspLocation(uri, new LspRange(pos, new LspPosition(pos.line, pos.character + pattern.length())));
+            }
         }
         return null;
     }
@@ -384,29 +390,32 @@ public final class HtmlLspServer implements LspServer {
     // Cross-file completion helpers (Phase 2 IntelliSense)
     // -------------------------------------------------------------------------
 
-    /**
-     * Scans all indexed files for occurrences of the given literal string pattern.
-     */
-    private List<LspLocation> findReferencesInProject(String searchTerm, String regexOverride) {
+    private List<LspLocation> findUsagesInProject(String name, boolean isId) {
         List<LspLocation> result = new ArrayList<>();
-        if (projectIndex == null || searchTerm == null) return result;
+        if (projectIndex == null || name == null) return result;
         for (String uri : projectIndex.getAllUris()) {
-            LspLocation loc = findPatternInDocument(uri, searchTerm);
-            if (loc != null) result.add(loc);
+            com.cocode.vcode.ide.core.lsp.LspDocument d = projectIndex.getDocument(uri);
+            if (d == null || d.text == null) continue;
+
+            if (uri.endsWith(".html") || uri.endsWith(".htm")) {
+                String searchTerm = isId ? "id=\"" + name + "\"" : name;
+                int idx = d.text.indexOf(searchTerm);
+                while (idx >= 0) {
+                    LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, idx);
+                    result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
+                    idx = d.text.indexOf(searchTerm, idx + searchTerm.length());
+                }
+            } else if (uri.endsWith(".js") || uri.endsWith(".ts")) {
+                String searchTerm = isId ? name : "." + name;
+                int idx = d.text.indexOf(searchTerm);
+                while (idx >= 0) {
+                    LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, idx);
+                    result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
+                    idx = d.text.indexOf(searchTerm, idx + searchTerm.length());
+                }
+            }
         }
         return result;
-    }
-
-    /**
-     * Finds the first occurrence of a literal string in an indexed document.
-     */
-    private LspLocation findPatternInDocument(String uri, String literal) {
-        com.cocode.vcode.ide.core.lsp.LspDocument doc = projectIndex.getDocument(uri);
-        if (doc == null || doc.text == null) return null;
-        int idx = doc.text.indexOf(literal);
-        if (idx < 0) return null;
-        LspPosition pos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, idx);
-        return new LspLocation(uri, new LspRange(pos, new LspPosition(pos.line, pos.character + literal.length())));
     }
 
     /**
