@@ -788,6 +788,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                         activeFile.setDirty(true);
                         viewModel.notifyFileDirtyStatusChanged();
                     }
+                    viewModel.triggerAutoSave();
                     
                     codeEditText.setText(formattedCode);
                     // Restore cursor to its pre-format position so Android's cursor-visibility
