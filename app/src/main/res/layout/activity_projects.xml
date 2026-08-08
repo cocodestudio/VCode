@@ -311,6 +311,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:srcCompat="@drawable/ic_plus"
+        app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.ExtraExtraLarge"
         app:tint="?attr/colorOnPrimary" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
