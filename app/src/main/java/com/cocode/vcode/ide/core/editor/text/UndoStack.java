@@ -16,6 +16,10 @@ public final class UndoStack {
     private EditorSnapshot lastAfter = null;
     private boolean lastCharWasWordChar = false;
     private boolean lastWasBackspace = false;
+    // When > 0, all recordInsert/recordDelete calls are funnelled into the same
+    // pending group regardless of character class or timeout. Used to atomically
+    // bundle auto-indent and auto-close side-effects with the triggering keystroke.
+    private int atomicDepth = 0;
 
     private static boolean isWordChar(char c) {
         return Character.isLetterOrDigit(c) || c == '_';
@@ -44,6 +48,27 @@ public final class UndoStack {
         long now = System.currentTimeMillis();
         boolean isSingleChar = insertedText.length() == 1 && insertedText.charAt(0) != '\n';
         boolean isWordChar = isSingleChar && isWordChar(insertedText.charAt(0));
+
+        if (atomicDepth > 0) {
+            // Inside an atomic group — always append to the current pending batch.
+            // If there is no pending batch yet, just start one without committing.
+            if (pendingType != null && pendingType != RecordType.INSERT) {
+                commitPending();
+            }
+            ContentPosition insertEnd = advancePosition(startLine, startColumn, insertedText);
+            UndoRecord record = new UndoRecord(
+                    RecordType.INSERT,
+                    startLine, startColumn,
+                    insertEnd.line, insertEnd.column,
+                    insertedText, before, after);
+            pendingGroup.add(record);
+            pendingType = RecordType.INSERT;
+            lastEditTimeMs = now;
+            lastAfter = after;
+            lastCharWasWordChar = isWordChar;
+            redoStack.clear();
+            return;
+        }
 
         boolean sameGroupType = pendingType == RecordType.INSERT && !pendingGroup.isEmpty();
         boolean adjacent = sameGroupType && lastAfter != null
@@ -156,7 +181,30 @@ public final class UndoStack {
         pendingGroup.clear();
         pendingType = null;
         lastAfter = null;
+        atomicDepth = 0;
         pushUndo(new UndoUnit(records));
+    }
+
+    /**
+     * Begins an atomic group: all subsequent {@link #recordInsert} / {@link #recordDelete}
+     * calls will be bundled into the current pending group (or a new one) regardless of
+     * character class, timeout, or whether the text is multi-character.
+     * Must be balanced with {@link #endAtomicGroup()}.
+     * <p>
+     * Use this to atomically bundle auto-indent, auto-close-bracket, and auto-close-tag
+     * side-effects with the keystroke that triggered them.
+     */
+    public void beginAtomicGroup() {
+        atomicDepth++;
+    }
+
+    /**
+     * Ends an atomic group started by {@link #beginAtomicGroup()}.
+     * When the depth reaches zero the group is left open (it will be committed on the
+     * next unrelated edit or timeout), so it still merges with further typing.
+     */
+    public void endAtomicGroup() {
+        if (atomicDepth > 0) atomicDepth--;
     }
 
     public EditorSnapshot undo(Content content) {

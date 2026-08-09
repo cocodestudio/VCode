@@ -1918,7 +1918,10 @@ public class CodeEditText extends View {
             cursor = content.positionAt(flatCursor + formattedSnippet.length());
         }
         UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
+        // Commit any pending group first so the snippet is always its own undo step.
+        undoStack.commitPending();
         undoStack.recordInsert(insertStart.line, insertStart.column, formattedSnippet, before, after);
+        undoStack.commitPending();
         selectionAnchor = null;
         isApplyingHighlight = false;
         scheduleHighlight();
@@ -2251,12 +2254,15 @@ public class CodeEditText extends View {
         int safeFinal = Math.min(finalCursorFlat, content.totalLength());
         cursor = content.positionAt(safeFinal);
         UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
+        // Commit any pending group first, then seal the completion as its own atomic undo step.
+        undoStack.commitPending();
         if (!deletedText.isEmpty()) {
             undoStack.recordReplace(wordStartPos.line, wordStartPos.column,
                     beforeCursor.line, beforeCursor.column, deletedText, cleanInsert, before, after);
         } else {
             undoStack.recordInsert(wordStartPos.line, wordStartPos.column, cleanInsert, before, after);
         }
+        undoStack.commitPending();
         selectionAnchor = null;
 
         autoCompletePopup.dismiss();
@@ -2284,13 +2290,20 @@ public class CodeEditText extends View {
             return;
 
         final String toInsert = closing;
+        // Begin atomic group BEFORE posting so the closing char is bundled
+        // with the triggering keystroke in one undo step.
+        undoStack.beginAtomicGroup();
         mainHandler.post(() -> {
             isAutoClosing = true;
             // Insert closing char at cursor position (cursor was already advanced past typed char)
             int safeFlat = Math.min(content.flatOffset(cursor), content.totalLength());
             ContentPosition pos = content.positionAt(safeFlat);
+            UndoStack.EditorSnapshot snapBefore = snapshotAt(cursor, null);
             content.insert(pos.line, pos.column, toInsert);
             // cursor stays before the inserted closing char — don't advance
+            UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
+            undoStack.recordInsert(pos.line, pos.column, toInsert, snapBefore, snapAfter);
+            undoStack.endAtomicGroup();
             isAutoClosing = false;
             scheduleHighlight();
             invalidate();
@@ -2317,16 +2330,24 @@ public class CodeEditText extends View {
     }
 
     private void handleAutoCloseHtmlTag(int cursorAfterGt) {
+        // Begin atomic group so the closing tag is bundled with the '>' keystroke.
+        undoStack.beginAtomicGroup();
         mainHandler.post(() -> {
             String currentText = content.getSubstring(0, Math.min(content.totalLength(), cursorAfterGt));
             String tagName = htmlTagParser.getCurrentOpenTagName(currentText, cursorAfterGt - 1);
-            if (tagName == null || tagName.isEmpty() || HtmlTagParser.isVoidElement(tagName))
+            if (tagName == null || tagName.isEmpty() || HtmlTagParser.isVoidElement(tagName)) {
+                undoStack.endAtomicGroup();
                 return;
+            }
 
             String closing = "</" + tagName + ">";
             isAutoClosing = true;
             ContentPosition insertPos = content.positionAt(cursorAfterGt);
+            UndoStack.EditorSnapshot snapBefore = snapshotAt(cursor, null);
             content.insert(insertPos.line, insertPos.column, closing);
+            UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
+            undoStack.recordInsert(insertPos.line, insertPos.column, closing, snapBefore, snapAfter);
+            undoStack.endAtomicGroup();
             isAutoClosing = false;
             scheduleHighlight();
             invalidate();
@@ -2374,16 +2395,31 @@ public class CodeEditText extends View {
         final int insertFlat = newlineIndex + 1;
 
         if (!finalInnerIndent.isEmpty() || finalSplit) {
+            // Begin atomic group so the auto-indent text is bundled with the \n keystroke.
+            undoStack.beginAtomicGroup();
             mainHandler.post(() -> {
                 isApplyingHighlight = true;
                 ContentPosition insertPos = content.positionAt(insertFlat);
                 if (finalSplit) {
                     String injection = finalInnerIndent + "\n" + finalOuterIndent;
+                    UndoStack.EditorSnapshot snapBefore = snapshotAt(cursor, null);
                     content.insert(insertPos.line, insertPos.column, injection);
+                    // cursor is placed at end of inner-indent line
+                    ContentPosition newCursor = content.positionAt(insertFlat + finalInnerIndent.length());
+                    cursor = newCursor;
+                    UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
+                    undoStack.recordInsert(insertPos.line, insertPos.column, injection, snapBefore, snapAfter);
                 } else {
+                    UndoStack.EditorSnapshot snapBefore = snapshotAt(cursor, null);
                     content.insert(insertPos.line, insertPos.column, finalInnerIndent);
+                    ContentPosition newCursor = content.positionAt(insertFlat + finalInnerIndent.length());
+                    cursor = newCursor;
+                    UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
+                    undoStack.recordInsert(insertPos.line, insertPos.column, finalInnerIndent, snapBefore, snapAfter);
                 }
-                setSelection(insertFlat + finalInnerIndent.length());
+                undoStack.endAtomicGroup();
+                // Use setSelection only for scroll-sync, cursor already set above.
+                setSelection(content.flatOffset(cursor));
                 isApplyingHighlight = false;
             });
         }
