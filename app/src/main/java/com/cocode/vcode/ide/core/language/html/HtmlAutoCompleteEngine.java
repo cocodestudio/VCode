@@ -268,17 +268,22 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                         || emmetAbbr.contains(">") || emmetAbbr.contains("*")
                         || emmetAbbr.contains("+") || emmetAbbr.contains("^")
                         || emmetAbbr.contains("(") || emmetAbbr.contains("{")
+                        || emmetAbbr.contains("[") || emmetAbbr.contains("]")
+                        || emmetAbbr.contains(":")
                         || emmetAbbr.equals("!");
-                CompletionItem emmetItem = new CompletionItem(emmetAbbr, expanded,
-                        "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
-                emmetItem.setReplaceLength(emmetAbbr.length());
+                
                 if (isComplex) {
+                    CompletionItem emmetItem = new CompletionItem(emmetAbbr, expanded,
+                            "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
+                    emmetItem.setReplaceLength(emmetAbbr.length());
+                    
                     // Complex Emmet abbreviation → only show this one item
                     List<CompletionItem> res = new ArrayList<>();
                     res.add(emmetItem);
                     return res;
                 }
-                emmetResults.add(emmetItem);
+                // Do NOT add simple words to emmetResults to avoid hijacking single-char tag completions
+                // and to prevent Emmet from suggesting completions for every typed word (like 'jhui').
             }
         }
 

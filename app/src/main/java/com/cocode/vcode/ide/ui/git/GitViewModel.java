@@ -269,16 +269,6 @@ public class GitViewModel extends AndroidViewModel {
         runAction(() -> repository.fetch(remoteUrl, pat));
     }
 
-    public void cherryPick(String commitSha) {
-        runAction(() -> {
-            try {
-                repository.cherryPick(commitSha);
-            } catch (GitRepository.GitConflictException e) {
-                conflictEvent.postValue(e);
-            }
-        });
-    }
-
     public void revertCommit(String commitSha) {
         runAction(() -> {
             android.content.Context ctx = getApplication();
@@ -298,6 +288,8 @@ public class GitViewModel extends AndroidViewModel {
 
             try {
                 repository.revertCommit(commitSha, resolvedName, resolvedEmail);
+                ExecutorProvider.getInstance().runOnMain(() -> 
+                    android.widget.Toast.makeText(getApplication(), "Revert successful", android.widget.Toast.LENGTH_SHORT).show());
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             }
@@ -308,10 +300,16 @@ public class GitViewModel extends AndroidViewModel {
         runAction(() -> {
             try {
                 repository.revertCommit(commitSha, authorName, authorEmail);
+                ExecutorProvider.getInstance().runOnMain(() -> 
+                    android.widget.Toast.makeText(getApplication(), "Revert successful", android.widget.Toast.LENGTH_SHORT).show());
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             }
         });
+    }
+
+    public void clearConflictEvent() {
+        conflictEvent.setValue(null);
     }
 
     public void createBranch(String name, String from) {

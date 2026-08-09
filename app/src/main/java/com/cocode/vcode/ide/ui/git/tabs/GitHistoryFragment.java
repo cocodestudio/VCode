@@ -94,6 +94,7 @@ public class GitHistoryFragment extends Fragment implements CommitHistoryAdapter
                         viewModel.getRepository(),
                         conflict.getConflictingFiles(),
                         () -> viewModel.refreshAll());
+                viewModel.clearConflictEvent();
             }
         });
 
@@ -158,7 +159,6 @@ public class GitHistoryFragment extends Fragment implements CommitHistoryAdapter
     public void onOverflowClick(CommitItem item, View anchor) {
         // Build and display a context menu for the selected commit
         GitOptionsBottomSheet.newInstance("Commit " + item.getSha())
-                .addOption("Cherry Pick", R.drawable.ic_scissors, () -> viewModel.cherryPick(item.getSha()))
                 .addOption("Revert", R.drawable.ic_rotate_left, () -> viewModel.revertCommit(item.getSha()))
                 .addOption("Reset to here", R.drawable.ic_rotate_left, () ->
                         ResetConfirmBottomSheet.newInstance(item).show(getChildFragmentManager(), "reset"))

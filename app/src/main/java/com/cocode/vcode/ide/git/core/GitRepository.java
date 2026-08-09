@@ -462,22 +462,6 @@ public class GitRepository {
     }
 
     /**
-     * Synthetically replicates alterations introduced by an external target commit, re-applying them onto the current tip row.
-     */
-    public void cherryPick(String commitSha) throws Exception {
-        ObjectId commitId = git.getRepository().resolve(commitSha);
-        if (commitId == null) throw new IllegalArgumentException("Commit SHA not found");
-        org.eclipse.jgit.api.CherryPickResult result = git.cherryPick().include(commitId).call();
-        if (result.getStatus() == org.eclipse.jgit.api.CherryPickResult.CherryPickStatus.CONFLICTING) {
-            java.util.List<String> conflicts = new java.util.ArrayList<>(git.status().call().getConflicting());
-            throw new GitConflictException("Cherry-pick conflicts detected", conflicts);
-        }
-        if (result.getStatus() == org.eclipse.jgit.api.CherryPickResult.CherryPickStatus.FAILED) {
-            throw new Exception("Cherry-pick failed: " + result.getFailingPaths());
-        }
-    }
-
-    /**
      * Generates a structural rollback inversion commit designed to cleanly undo previous commit modifications changes vectors.
      */
     public void revertCommit(String commitSha, String authorName, String authorEmail) throws Exception {

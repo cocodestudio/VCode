@@ -784,10 +784,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             ExecutorProvider.getInstance().runOnMain(() -> {
                 if (!rawCode.equals(formattedCode)) {
                     activeFile.setContent(formattedCode);
-                    if (!activeFile.isDirty()) {
-                        activeFile.setDirty(true);
-                        viewModel.notifyFileDirtyStatusChanged();
-                    }
+                    activeFile.setDirty(true);
+                    viewModel.notifyFileDirtyStatusChanged();
                     viewModel.triggerAutoSave();
                     
                     codeEditText.setText(formattedCode);
