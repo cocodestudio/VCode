@@ -645,6 +645,31 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             }
 
             @Override
+            public void onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type type) {
+                com.cocode.vcode.ide.ui.sheets.editor.ExtractTagsBottomSheet.show(getSupportFragmentManager(), type, (filename, extractType) -> {
+                    CodeEditText editor = getActiveCodeEditor();
+                    if (editor != null) {
+                        String text = editor.getText().toString();
+                        com.cocode.vcode.ide.utils.TagExtractor.Result result = com.cocode.vcode.ide.utils.TagExtractor.extract(text, extractType, filename);
+                        if (result.success) {
+                            java.io.File currentFile = viewModel.getOpenFiles().getValue().get(viewModel.getActiveTabIndex().getValue()).getFile();
+                            java.io.File newFile = new java.io.File(currentFile.getParentFile(), filename);
+                            try {
+                                com.cocode.vcode.ide.utils.FileUtils.writeFile(newFile, result.extractedContent);
+                                editor.setText(result.modifiedHtml);
+                                viewModel.saveAll();
+                                android.widget.Toast.makeText(EditorActivity.this, "Extracted to " + filename, android.widget.Toast.LENGTH_SHORT).show();
+                            } catch (java.io.IOException e) {
+                                android.widget.Toast.makeText(EditorActivity.this, "Failed to write file: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                        } else {
+                            android.widget.Toast.makeText(EditorActivity.this, result.errorMessage, android.widget.Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+
+            @Override
             public void onNavigateWithUnsavedCheck(Runnable action) {
                 navigateWithUnsavedCheck(action);
             }

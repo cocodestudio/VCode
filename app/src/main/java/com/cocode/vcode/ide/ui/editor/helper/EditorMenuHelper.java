@@ -58,6 +58,11 @@ public class EditorMenuHelper {
             if (!isVirtual) {
                 options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_arrow_right, activity.getString(R.string.vcode_go_to_line), callbacks::onGoToLine));
 
+                if (activeFile.getFileType() == FileType.HTML) {
+                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, "Extract CSS", () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE)));
+                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, "Extract JS", () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.SCRIPT)));
+                }
+
                 // LSP navigation — only for supported text languages (not binary/virtual)
                 LspEditorBridge bridge = callbacks.getActiveLspBridge();
                 if (bridge != null) {
@@ -169,6 +174,8 @@ public class EditorMenuHelper {
         void onGoToLine();
 
         void onShowSnippetManager();
+
+        void onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type type);
 
         void onNavigateWithUnsavedCheck(Runnable action);
 
