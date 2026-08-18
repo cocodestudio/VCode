@@ -39,6 +39,12 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetProjectSearchBinding binding;
 
     private Runnable pendingSearch;
+    private boolean isRegex = false;
+    private boolean isCaseSensitive = false;
+    private boolean isWholeWord = false;
+    
+    // Store latest results for replace all
+    private List<FileGroup> currentResults = new ArrayList<>();
 
     public void setProjectRoot(File root) {
         this.projectRoot = root;
@@ -61,13 +67,18 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
         searchEngine = new SearchEngine();
 
         UiUtils.setViewRounded(binding.etSearchQuery, UiUtils.dpToPx(requireContext(), 10), androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_bg_elevated));
+        UiUtils.setViewRounded(binding.etReplaceQuery, UiUtils.dpToPx(requireContext(), 10), androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_bg_elevated));
         binding.etSearchQuery.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
+        binding.etReplaceQuery.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
 
         binding.tvTitle.setTypeface(FontManager.getInstance().getUiSemiBold(requireContext()));
 
         binding.rvSearchResults.setLayoutManager(new LinearLayoutManager(requireContext()));
         adapter = new SearchAdapter();
         binding.rvSearchResults.setAdapter(adapter);
+
+        setupToggles();
+        setupReplaceAll();
 
         binding.etSearchQuery.addTextChangedListener(new TextWatcher() {
             @Override
@@ -89,8 +100,90 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
         });
     }
 
+    private void setupToggles() {
+        binding.btnToggleReplace.setOnClickListener(v -> {
+            boolean isVisible = binding.llReplaceContainer.getVisibility() == View.VISIBLE;
+            binding.llReplaceContainer.setVisibility(isVisible ? View.GONE : View.VISIBLE);
+            binding.btnToggleReplace.setRotation(isVisible ? 0 : 90);
+        });
+
+        View.OnClickListener toggleListener = v -> {
+            if (v == binding.btnToggleCase) isCaseSensitive = !isCaseSensitive;
+            else if (v == binding.btnToggleWord) isWholeWord = !isWholeWord;
+            else if (v == binding.btnToggleRegex) isRegex = !isRegex;
+
+            updateToggleUi(binding.btnToggleCase, isCaseSensitive);
+            updateToggleUi(binding.btnToggleWord, isWholeWord);
+            updateToggleUi(binding.btnToggleRegex, isRegex);
+
+            if (binding.etSearchQuery.getText() != null) {
+                performSearch(binding.etSearchQuery.getText().toString());
+            }
+        };
+
+        binding.btnToggleCase.setOnClickListener(toggleListener);
+        binding.btnToggleWord.setOnClickListener(toggleListener);
+        binding.btnToggleRegex.setOnClickListener(toggleListener);
+    }
+
+    private void updateToggleUi(com.google.android.material.button.MaterialButton btn, boolean isActive) {
+        if (isActive) {
+            btn.setBackgroundColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_branch_chip_bg));
+            btn.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_accent_primary));
+        } else {
+            btn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            btn.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_text_secondary));
+        }
+    }
+
+    private void setupReplaceAll() {
+        binding.btnReplaceAll.setOnClickListener(v -> {
+            if (currentResults == null || currentResults.isEmpty()) return;
+            
+            String query = binding.etSearchQuery.getText() != null ? binding.etSearchQuery.getText().toString() : "";
+            if (query.trim().isEmpty()) return;
+            
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Replace All")
+                    .setMessage("Are you sure you want to replace all occurrences across " + currentResults.size() + " files? This action cannot be undone.")
+                    .setPositiveButton("Replace All", (dialog, which) -> performReplaceAll())
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        });
+    }
+
+    private void performReplaceAll() {
+        if (currentResults == null || currentResults.isEmpty()) return;
+        
+        String query = binding.etSearchQuery.getText() != null ? binding.etSearchQuery.getText().toString() : "";
+        String replaceText = binding.etReplaceQuery.getText() != null ? binding.etReplaceQuery.getText().toString() : "";
+        if (query.isEmpty()) return;
+
+        binding.progressSearch.setVisibility(View.VISIBLE);
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            for (FileGroup group : currentResults) {
+                try {
+                    String content = new String(java.nio.file.Files.readAllBytes(group.file.toPath()), StandardCharsets.UTF_8);
+                    String newContent = searchEngine.replaceAll(query, content, replaceText, isCaseSensitive, isRegex, isWholeWord);
+                    if (!content.equals(newContent)) {
+                        java.nio.file.Files.write(group.file.toPath(), newContent.getBytes(StandardCharsets.UTF_8));
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            ExecutorProvider.getInstance().runOnMain(() -> {
+                binding.progressSearch.setVisibility(View.INVISIBLE);
+                android.widget.Toast.makeText(requireContext(), "Replaced in " + currentResults.size() + " files", android.widget.Toast.LENGTH_SHORT).show();
+                performSearch(query);
+            });
+        });
+    }
+
     private void performSearch(String query) {
         if (query == null || query.trim().isEmpty() || projectRoot == null) {
+            currentResults.clear();
             adapter.setResults(new ArrayList<>());
             return;
         }
@@ -102,6 +195,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
             ExecutorProvider.getInstance().runOnMain(() -> {
                 binding.progressSearch.setVisibility(View.INVISIBLE);
+                currentResults = allResults;
                 adapter.setResults(allResults);
             });
         });
@@ -148,7 +242,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
                         while ((read = br.read(buf)) != -1) sb.append(buf, 0, read);
                     }
                     String content = sb.toString();
-                    List<SearchResult> results = searchEngine.find(query, content, false, false, false);
+                    List<SearchResult> results = searchEngine.find(query, content, isCaseSensitive, isRegex, isWholeWord);
                     if (!results.isEmpty()) {
                         FileGroup group = new FileGroup();
                         group.file = f;

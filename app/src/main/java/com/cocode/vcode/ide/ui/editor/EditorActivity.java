@@ -738,6 +738,17 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         viewModel.openFile(fileNode.getFile());
     }
 
+    @Override
+    public void onFindInFile(FileNode fileNode) {
+        binding.drawerLayout.closeDrawer(GravityCompat.START);
+        saveCurrentEditorState();
+        viewModel.openFile(fileNode.getFile());
+        
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            showFindReplaceBar();
+        }, 300);
+    }
+
     private void showGoToLineDialog() {
         CodeEditText codeEditText = getActiveCodeEditor();
         if (codeEditText == null || codeEditText.getText() == null) return;

@@ -1743,7 +1743,15 @@ public class CodeEditText extends View {
                     break;
                 case MARKDOWN:
                     this.syntaxHighlighter = new MarkdownSyntaxHighlighter(ctx);
-                    this.autoCompleteEngine = null;
+                    com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine mdEngine = new com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine(ctx);
+                    if (currentFile != null) mdEngine.setCurrentFile(currentFile);
+                    this.autoCompleteEngine = mdEngine;
+                    break;
+                case GITIGNORE:
+                    this.syntaxHighlighter = null; // Assuming no syntax highlighter for gitignore
+                    com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine gitignoreEngine = new com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine(ctx);
+                    if (currentFile != null) gitignoreEngine.setCurrentFile(currentFile);
+                    this.autoCompleteEngine = gitignoreEngine;
                     break;
                 case SVG:
                     this.syntaxHighlighter = new SvgSyntaxHighlighter(ctx);

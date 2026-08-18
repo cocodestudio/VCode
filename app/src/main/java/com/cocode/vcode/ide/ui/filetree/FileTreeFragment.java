@@ -281,6 +281,67 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
             addDivider(popupBinding.popupContainer);
 
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_magnifying_glass, "Find in Files", () -> {
+                if (file.isDirectory()) {
+                    com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet searchSheet = new com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet();
+                    searchSheet.setProjectRoot(file);
+                    searchSheet.show(getChildFragmentManager(), "ProjectSearch");
+                } else if (selectionListener != null) {
+                    selectionListener.onFindInFile(node);
+                }
+            });
+
+            if (!file.isDirectory()) {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_magnifying_glass, "Find Usages", () -> {
+                    List<com.cocode.vcode.ide.core.lsp.LspLocation> usages = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().findFileUsages(file.getName());
+                    if (usages == null || usages.isEmpty()) {
+                        Toast.makeText(getContext(), "No usages found", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (usages.size() == 1) {
+                        com.cocode.vcode.ide.core.lsp.LspLocation loc = usages.get(0);
+                        int line = loc.range != null ? loc.range.start.line + 1 : 1;
+                        if (selectionListener != null) {
+                            selectionListener.onFileSelected(new FileNode(new File(loc.uri), 0));
+                            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
+                                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
+                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                    editorActivity.jumpToLine(line);
+                                }, 500);
+                            }
+                        }
+                    } else {
+                        List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> options = new java.util.ArrayList<>();
+                        for (com.cocode.vcode.ide.core.lsp.LspLocation loc : usages) {
+                            File f = new File(loc.uri);
+                            int line = loc.range != null ? loc.range.start.line + 1 : 1;
+                            String label = f.getName() + ":" + line;
+                            String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
+                            int iconResId = com.cocode.vcode.ide.core.model.FileType.fromExtension(ext).getIconResId();
+                            options.add(new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option(
+                                    iconResId, label,
+                                    () -> {
+                                        if (selectionListener != null) {
+                                            selectionListener.onFileSelected(new FileNode(f, 0));
+                                            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
+                                                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
+                                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                                    editorActivity.jumpToLine(line);
+                                                }, 500);
+                                            }
+                                        }
+                                    }
+                            ));
+                        }
+                        com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet refsSheet = new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet();
+                        refsSheet.setOptions(options);
+                        refsSheet.show(getChildFragmentManager(), "Find Usages");
+                    }
+                });
+            }
+
+            addDivider(popupBinding.popupContainer);
+
             View deleteItem = addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_trash, "Delete", () -> showDeleteDialog(file));
             TextView tvTitle = deleteItem.findViewById(R.id.tv_title);
             ImageView ivIcon = deleteItem.findViewById(R.id.iv_icon);
@@ -449,5 +510,6 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
      */
     public interface FileSelectionListener {
         void onFileSelected(FileNode fileNode);
+        void onFindInFile(FileNode fileNode);
     }
 }

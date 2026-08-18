@@ -39,6 +39,8 @@ public class DiagnosticEngine {
             problems.addAll(JsLinter.analyze(file, text));
         } else if (type == FileType.TYPESCRIPT) {
             problems.addAll(TsLinter.analyze(file, text));
+        } else if (type == FileType.MARKDOWN) {
+            problems.addAll(com.cocode.vcode.ide.core.language.md.MarkdownLinter.analyze(file, text));
         }
 
         problems = deduplicate(problems);

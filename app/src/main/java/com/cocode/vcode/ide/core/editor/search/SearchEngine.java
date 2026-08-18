@@ -56,6 +56,21 @@ public class SearchEngine {
         return results;
     }
 
+    public String replaceAll(String query, String text, String replaceText,
+                             boolean caseSensitive, boolean regex, boolean wholeWord) {
+        if (query == null || query.isEmpty() || text == null || text.isEmpty()) return text;
+
+        Pattern pattern = buildPattern(query, caseSensitive, regex, wholeWord);
+        if (pattern == null) return text;
+
+        Matcher m = pattern.matcher(text);
+        if (regex) {
+            return m.replaceAll(replaceText);
+        } else {
+            return m.replaceAll(Matcher.quoteReplacement(replaceText));
+        }
+    }
+
     /**
      * Compiles the search query into an actionable RegEx pattern based on user criteria.
      */

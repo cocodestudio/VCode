@@ -2,6 +2,8 @@ package com.cocode.vcode.ide.core.lsp;
 
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
+import com.cocode.vcode.ide.core.editor.search.SearchEngine;
+import com.cocode.vcode.ide.core.model.SearchResult;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -186,6 +188,34 @@ public final class ProjectIndex {
             for (SymbolEntry s : symbols) {
                 if (s.name.equals(name)) {
                     locations.add(new LspLocation(s.uri, s.range));
+                }
+            }
+        }
+        return locations;
+    }
+
+    /**
+     * Scans the in-memory document cache to find all usages/references of a specific filename.
+     * Uses the SearchEngine to find exact locations within the file text.
+     *
+     * @param filename the name of the file to search for
+     * @return list of locations where the filename is referenced
+     */
+    public List<LspLocation> findFileUsages(String filename) {
+        List<LspLocation> locations = new ArrayList<>();
+        if (filename == null || filename.isEmpty()) return locations;
+
+        SearchEngine searchEngine = new SearchEngine();
+        for (LspDocument doc : documents.values()) {
+            if (doc.text != null && doc.text.contains(filename)) {
+                List<SearchResult> results = searchEngine.find(filename, doc.text, false, false, false);
+                for (SearchResult r : results) {
+                    // SearchResult is 1-indexed for line/column. LspRange is 0-indexed.
+                    LspRange range = new LspRange(
+                            new LspPosition(r.lineNumber - 1, r.columnStart - 1),
+                            new LspPosition(r.lineNumber - 1, r.columnStart - 1 + filename.length())
+                    );
+                    locations.add(new LspLocation(doc.uri, range));
                 }
             }
         }
