@@ -60,11 +60,56 @@ public class EmmetParser {
 
         if (!PAT_ABBR.matcher(abbr).matches()) return null;
 
+        if (abbr.startsWith("lorem")) {
+            if (abbr.equals("lorem")) {
+                return generateLorem(30);
+            }
+            try {
+                int count = Integer.parseInt(abbr.substring(5));
+                return generateLorem(count);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
         try {
             return parseEmmet(abbr);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static final String[] LOREM_WORDS = {
+            "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do",
+            "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore", "magna", "aliqua", "enim",
+            "ad", "minim", "veniam", "quis", "nostrud", "exercitation", "ullamco", "laboris", "nisi", "ut",
+            "aliquip", "ex", "ea", "commodo", "consequat", "duis", "aute", "irure", "dolor", "in",
+            "reprehenderit", "in", "voluptate", "velit", "esse", "cillum", "dolore", "eu", "fugiat", "nulla",
+            "pariatur", "excepteur", "sint", "occaecat", "cupidatat", "non", "proident", "sunt", "in", "culpa",
+            "qui", "officia", "deserunt", "mollit", "anim", "id", "est", "laborum"
+    };
+
+    private static String generateLorem(int count) {
+        if (count <= 0) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            String word = LOREM_WORDS[i % LOREM_WORDS.length];
+            if (i == 0) {
+                sb.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+            } else {
+                sb.append(word);
+            }
+            if (i < count - 1) {
+                // Add periods to make it look like sentences occasionally
+                if (i > 0 && i % 8 == 0) {
+                    sb.append(". ");
+                } else {
+                    sb.append(" ");
+                }
+            } else {
+                sb.append(".");
+            }
+        }
+        return sb.toString();
     }
 
     /**

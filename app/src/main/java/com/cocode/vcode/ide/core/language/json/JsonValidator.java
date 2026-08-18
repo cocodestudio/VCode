@@ -79,7 +79,17 @@ public class JsonValidator {
         private final String input;
         private final int length;
         private final List<JsonError> errors = new ArrayList<>();
-        private final List<ContainerType> stack = new ArrayList<>(); // Track array/object parent nest layers
+        private final List<ContainerNode> stack = new ArrayList<>(); // Track array/object parent nest layers
+
+        private static class ContainerNode {
+            ContainerType type;
+            java.util.Set<String> keys = new java.util.HashSet<>();
+            ContainerNode(ContainerType t) { this.type = t; }
+        }
+
+        private ContainerType peek() {
+            return stack.get(stack.size() - 1).type;
+        }
 
         // Current cursor state
         private int pos = 0;
@@ -193,12 +203,12 @@ public class JsonValidator {
         // State: EXPECT_VALUE  (root, after '[', after ':', after ',' in array)
         private void handleExpectValue(char c) {
             if (c == '{') {
-                stack.add(ContainerType.OBJECT);
+                stack.add(new ContainerNode(ContainerType.OBJECT));
                 state = State.EXPECT_KEY;
                 justAfterComma = false;
                 advance();
             } else if (c == '[') {
-                stack.add(ContainerType.ARRAY);
+                stack.add(new ContainerNode(ContainerType.ARRAY));
                 state = State.EXPECT_VALUE;
                 justAfterComma = false;
                 advance();
@@ -242,7 +252,16 @@ public class JsonValidator {
         // State: EXPECT_KEY  (inside object, need property key or '}')
         private void handleExpectKey(char c) {
             if (c == '"') {
+                int keyStart = pos;
+                int keyLine = line;
+                int keyCol = column;
                 scanString(); // key
+                String rawKey = input.substring(keyStart, pos);
+                if (!stack.isEmpty() && peek() == ContainerType.OBJECT) {
+                    if (!stack.get(stack.size() - 1).keys.add(rawKey)) {
+                        reportError("Duplicate key " + rawKey + " detected.", keyStart, keyLine, keyCol);
+                    }
+                }
                 state = State.EXPECT_COLON;
                 justAfterComma = false;
             } else if (c == '}') {
@@ -330,9 +349,7 @@ public class JsonValidator {
             state = stack.isEmpty() ? State.END : State.EXPECT_COMMA_OR_END;
         }
 
-        private ContainerType peek() {
-            return stack.get(stack.size() - 1);
-        }
+
 
         private void pop() {
             stack.remove(stack.size() - 1);

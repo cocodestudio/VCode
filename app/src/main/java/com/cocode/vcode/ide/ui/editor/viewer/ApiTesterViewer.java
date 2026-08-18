@@ -9,7 +9,9 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.ListPopupWindow;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -27,6 +29,7 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.CodeEditText;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -52,6 +55,7 @@ public class ApiTesterViewer implements IFileViewer {
 
     private String currentMethod = "GET";
     private boolean isUpdating = false;
+    private JSONObject apiHeadersDict;
 
     private final TextWatcher stateWatcher = new TextWatcher() {
         @Override
@@ -73,9 +77,22 @@ public class ApiTesterViewer implements IFileViewer {
         if (binding == null) {
             this.context = context;
             binding = ViewerApiTesterBinding.inflate(LayoutInflater.from(context), parent, false);
+            loadApiHeadersDict();
             setupUI();
         }
         return binding.getRoot();
+    }
+
+    private void loadApiHeadersDict() {
+        try {
+            InputStream is = context.getAssets().open("api_headers.json");
+            byte[] buffer = new byte[is.available()];
+            is.read(buffer);
+            is.close();
+            apiHeadersDict = new JSONObject(new String(buffer, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            apiHeadersDict = new JSONObject();
+        }
     }
 
     private void setupUI() {
@@ -161,6 +178,72 @@ public class ApiTesterViewer implements IFileViewer {
         });
 
         binding.containerHeadersList.addView(rowView);
+
+        setupAutocomplete(etKey, etValue, true);
+        setupAutocomplete(etValue, etKey, false);
+    }
+
+    private void setupAutocomplete(EditText target, EditText related, boolean isKey) {
+        ListPopupWindow popup = new ListPopupWindow(context);
+        popup.setAnchorView(target);
+        int height = UiUtils.dpToPx(context, 200);
+        popup.setHeight(height);
+        
+        target.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s.length() < 1) {
+                    popup.dismiss();
+                    return;
+                }
+                String text = s.toString().toLowerCase(Locale.ROOT);
+                List<String> suggestions = new java.util.ArrayList<>();
+                
+                if (isKey) {
+                    Iterator<String> keys = apiHeadersDict.keys();
+                    while (keys.hasNext()) {
+                        String k = keys.next();
+                        if (k.toLowerCase(Locale.ROOT).contains(text) || k.toLowerCase(Locale.ROOT).startsWith(text)) {
+                            suggestions.add(k);
+                        }
+                    }
+                } else {
+                    String currentKey = related.getText().toString();
+                    if (apiHeadersDict.has(currentKey)) {
+                        try {
+                            JSONArray arr = apiHeadersDict.getJSONArray(currentKey);
+                            for (int i = 0; i < arr.length(); i++) {
+                                String val = arr.getString(i);
+                                if (val.toLowerCase(Locale.ROOT).contains(text) || val.toLowerCase(Locale.ROOT).startsWith(text)) {
+                                    suggestions.add(val);
+                                }
+                            }
+                        } catch (JSONException ignored) {}
+                    }
+                }
+                
+                if (suggestions.isEmpty()) {
+                    popup.dismiss();
+                } else {
+                    ArrayAdapter<String> adapter = new ArrayAdapter<>(context, android.R.layout.simple_list_item_1, android.R.id.text1, suggestions);
+                    popup.setAdapter(adapter);
+                    if (!popup.isShowing()) {
+                        popup.show();
+                    }
+                }
+            }
+        });
+        
+        popup.setOnItemClickListener((parent, view, position, id) -> {
+            String selected = (String) parent.getItemAtPosition(position);
+            target.setText(selected);
+            target.setSelection(selected.length());
+            popup.dismiss();
+        });
     }
 
     private void addBodyRow(String key, String value) {

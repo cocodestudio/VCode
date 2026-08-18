@@ -357,7 +357,22 @@ public class HtmlLinter {
                                     Problem.Severity.WARNING));
                         }
                         break;
+                    case "button":
+                        if (!attrs.containsKey("type")) {
+                            problems.add(new Problem(file, tagLine, tagCol, tagLen,
+                                    "'<button>' is missing 'type' attribute (defaults to 'submit', which can cause bugs)",
+                                    Problem.Severity.WARNING));
+                        }
+                        break;
                     case "a":
+                        if ("_blank".equalsIgnoreCase(attrs.get("target"))) {
+                            String rel = attrs.get("rel");
+                            if (rel == null || (!rel.toLowerCase().contains("noopener") && !rel.toLowerCase().contains("noreferrer"))) {
+                                problems.add(new Problem(file, tagLine, tagCol, tagLen,
+                                        "Using target=\"_blank\" without rel=\"noopener\" or rel=\"noreferrer\" is a security risk",
+                                        Problem.Severity.WARNING));
+                            }
+                        }
                         String href = attrs.get("href");
                         String target = attrs.get("target");
                         if ("#".equals(href)) {

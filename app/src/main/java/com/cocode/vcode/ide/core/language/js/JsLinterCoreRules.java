@@ -23,6 +23,8 @@ public class JsLinterCoreRules {
     public static final Pattern PAT_SWITCH = Pattern.compile("\\bswitch\\s*\\(");
     public static final Pattern PAT_THEN = Pattern.compile("\\.then\\s*\\(");
     public static final Pattern PAT_ASYNC_FN = Pattern.compile("\\basync\\s+function\\s*(\\w*)|\\basync\\s*\\(|\\basync\\s+([a-zA-Z_$][\\w$]*)\\s*=>");
+    public static final Pattern PAT_SET_TIMEOUT_EVAL = Pattern.compile("\\b(setTimeout|setInterval)\\s*\\(\\s*['\"`]");
+    public static final Pattern PAT_NEW_OBJ_ARR = Pattern.compile("\\bnew\\s+(Object|Array)\\s*\\(");
 
     public static void checkVarUsage(File file, String text, TokenMask mask, List<Problem> out) {
         Matcher m = PAT_VAR.matcher(text);
@@ -90,7 +92,34 @@ public class JsLinterCoreRules {
             int line = LinterUtils.getLine(text, m.start());
             int col = LinterUtils.getColumn(text, m.start());
             out.add(new Problem(file, line, col, 4,
-                    "'eval()' is a security risk and performance bottleneck: avoid in production",
+                    "'eval' is harmful: it creates performance and security risks",
+                    Problem.Severity.ERROR));
+        }
+    }
+
+    public static void checkSetTimeoutString(File file, String text, TokenMask mask, List<Problem> out) {
+        Matcher m = PAT_SET_TIMEOUT_EVAL.matcher(text);
+        while (m.find()) {
+            if (mask.isMasked(m.start())) continue;
+            int line = LinterUtils.getLine(text, m.start());
+            int col = LinterUtils.getColumn(text, m.start());
+            String func = m.group(1);
+            out.add(new Problem(file, line, col, func.length(),
+                    "Passing strings to '" + func + "' is similar to 'eval' and poses security risks. Pass a function instead.",
+                    Problem.Severity.WARNING));
+        }
+    }
+
+    public static void checkNewObjectArray(File file, String text, TokenMask mask, List<Problem> out) {
+        Matcher m = PAT_NEW_OBJ_ARR.matcher(text);
+        while (m.find()) {
+            if (mask.isMasked(m.start())) continue;
+            int line = LinterUtils.getLine(text, m.start());
+            int col = LinterUtils.getColumn(text, m.start());
+            String type = m.group(1);
+            String fix = type.equals("Object") ? "{}" : "[]";
+            out.add(new Problem(file, line, col, m.group().length(),
+                    "Avoid 'new " + type + "()'. Use literal '" + fix + "' instead.",
                     Problem.Severity.WARNING));
         }
     }

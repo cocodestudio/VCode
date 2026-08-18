@@ -24,6 +24,8 @@ public class JsLinter {
         JsLinterCoreRules.checkDebugger(file, text, mask, problems);
         JsLinterCoreRules.checkLooseEquality(file, text, mask, problems);
         JsLinterCoreRules.checkEval(file, text, mask, problems);
+        JsLinterCoreRules.checkSetTimeoutString(file, text, mask, problems);
+        JsLinterCoreRules.checkNewObjectArray(file, text, mask, problems);
         JsLinterCoreRules.checkWith(file, text, mask, problems);
         JsLinterCoreRules.checkNaNComparison(file, text, mask, problems);
         JsLinterCoreRules.checkEmptyCatch(file, text, mask, problems);

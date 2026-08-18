@@ -97,6 +97,12 @@ public class CssLinter {
                             Problem.Severity.WARNING));
                 }
 
+                if (selector.contains("#")) {
+                    problems.add(new Problem(file, selectorLine, selectorCol, selector.length(),
+                            "Avoid using ID selectors ('#id') for styling: prefer class selectors",
+                            Problem.Severity.INFO));
+                }
+
                 // CSS-W011: overly specific selector
                 if (selectorSpecificityTooHigh(selector)) {
                     problems.add(new Problem(file, selectorLine, selectorCol, selector.length(),
@@ -362,6 +368,12 @@ public class CssLinter {
             int valCol = declCol + colonIdx + 1;
             problems.add(new Problem(file, declLine, valCol, 3,
                     "'0px' — units are unnecessary on zero values, use '0'",
+                    Problem.Severity.WARNING));
+        }
+
+        if (value.contains("pt")) {
+            problems.add(new Problem(file, declLine, declCol, prop.length(),
+                    "Avoid using 'pt' units for screen layouts: prefer 'px', 'em', or 'rem'",
                     Problem.Severity.WARNING));
         }
 
