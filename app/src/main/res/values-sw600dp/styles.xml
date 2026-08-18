@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="VCode.TextAppearance.Headline" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:textSize">@dimen/vcode_text_size_headline</item>
+    </style>
+
+    <style name="VCode.TextAppearance.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textSize">@dimen/vcode_text_size_title_large</item>
+    </style>
+
+    <style name="VCode.TextAppearance.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">@dimen/vcode_text_size_title</item>
+    </style>
+
+    <style name="VCode.TextAppearance.Subtitle" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:textSize">@dimen/vcode_text_size_subtitle</item>
+    </style>
+
+    <style name="VCode.TextAppearance.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textSize">@dimen/vcode_text_size_body</item>
+    </style>
+
+    <style name="VCode.TextAppearance.BodySmall" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">@dimen/vcode_text_size_body_small</item>
+    </style>
+
+    <style name="VCode.TextAppearance.Caption" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">@dimen/vcode_text_size_caption</item>
+    </style>
+
+    <style name="VCode.TextAppearance.Micro" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">@dimen/vcode_text_size_micro</item>
+    </style>
+</resources>

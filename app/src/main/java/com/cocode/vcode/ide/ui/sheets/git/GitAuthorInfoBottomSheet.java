@@ -15,13 +15,13 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetGitAuthorInfoBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * GitAuthorInfoBottomSheet provides an interface for configuring Git user metadata (Name and Email).
  * This information is required for creating valid Git commits and attribution in history.
  */
-public class GitAuthorInfoBottomSheet extends BottomSheetDialogFragment {
+public class GitAuthorInfoBottomSheet extends BaseBottomSheetDialogFragment {
 
     private static final String ARG_NAME = "arg_initial_name";
     private static final String ARG_EMAIL = "arg_initial_email";

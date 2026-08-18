@@ -19,9 +19,9 @@ import com.cocode.vcode.ide.databinding.BottomSheetCreateNewFileBinding;
 import com.cocode.vcode.ide.databinding.LayoutChooseTemplateBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.card.MaterialCardView;
 
 import java.io.BufferedReader;
@@ -34,7 +34,7 @@ import java.nio.charset.StandardCharsets;
  * It features a template selector (HTML, CSS, JS, etc.) that pre-fills the file
  * extension and initial content based on the selected language.
  */
-public class NewFileBottomSheet extends BottomSheetDialogFragment {
+public class NewFileBottomSheet extends BaseBottomSheetDialogFragment {
 
     private final String[] extensions = {".html", ".css", ".js", ".json", ".md", ".txt"};
 

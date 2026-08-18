@@ -27,6 +27,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.VCode"
+        android:resizeableActivity="true"
         android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="31">
         <activity
@@ -59,6 +60,7 @@
             android:name=".ui.settings.SettingsActivity"
             android:exported="false" />
 
+
         <activity
             android:name=".ui.debug.DebugActivity"
             android:exported="false"
@@ -84,7 +86,8 @@
             android:exported="true"
             android:theme="@style/Theme.VCode.Transparent"
             android:noHistory="true"
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            tools:ignore="AppLinkUrlError">
 
             <!-- MIME-type based filters (covers content:// and file:// from modern file managers) -->
 

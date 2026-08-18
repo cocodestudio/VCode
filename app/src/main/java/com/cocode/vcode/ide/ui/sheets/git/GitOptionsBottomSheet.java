@@ -15,7 +15,7 @@ import androidx.annotation.Nullable;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +25,7 @@ import java.util.List;
  * It is extensively used across Git tabs to provide options for commits, branches,
  * and remotes in a clean, Material Design bottom sheet.
  */
-public class GitOptionsBottomSheet extends BottomSheetDialogFragment {
+public class GitOptionsBottomSheet extends BaseBottomSheetDialogFragment {
 
     private final List<MenuOption> optionsList = new ArrayList<>();
     private String headerTitle = null;

@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.DialogCustomListBinding;
 import com.cocode.vcode.ide.databinding.ItemCustomListOptionBinding;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -24,10 +25,6 @@ public class CustomListDialog {
         AlertDialog dialog = new AlertDialog.Builder(context)
                 .setView(binding.getRoot())
                 .create();
-
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
 
         binding.tvDialogTitle.setText(title);
         binding.tvDialogTitle.setTypeface(FontManager.getInstance().getUiSemiBold(context));
@@ -45,6 +42,14 @@ public class CustomListDialog {
         binding.rvOptions.setAdapter(adapter);
 
         dialog.show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+            int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+            int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+            dialog.getWindow().setLayout(targetWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     public interface OnOptionSelectedListener {

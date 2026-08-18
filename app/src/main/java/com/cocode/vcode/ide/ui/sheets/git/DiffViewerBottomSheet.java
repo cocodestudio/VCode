@@ -23,7 +23,7 @@ import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.io.File;
 
@@ -32,7 +32,7 @@ import java.io.File;
  * it supports both workspace diffs (staged/unstaged) and historical commit diffs.
  * The UI highlights additions in green and removals in red, mimicking standard Git diff output.
  */
-public class DiffViewerBottomSheet extends BottomSheetDialogFragment {
+public class DiffViewerBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetDiffViewerBinding binding;
     private GitFileItem fileItem;

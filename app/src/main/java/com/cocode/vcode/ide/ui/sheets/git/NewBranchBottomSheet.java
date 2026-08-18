@@ -12,7 +12,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.cocode.vcode.ide.databinding.BottomSheetNewBranchBinding;
 import com.cocode.vcode.ide.git.model.BranchItem;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +22,7 @@ import java.util.Objects;
  * NewBranchBottomSheet provides an interface for creating a new Git branch.
  * It allows users to specify the branch name and select a base branch to branch off from.
  */
-public class NewBranchBottomSheet extends BottomSheetDialogFragment {
+public class NewBranchBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetNewBranchBinding binding;
     private GitViewModel viewModel;
 

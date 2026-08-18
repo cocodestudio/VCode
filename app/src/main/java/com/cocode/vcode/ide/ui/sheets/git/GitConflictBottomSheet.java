@@ -19,11 +19,11 @@ import com.cocode.vcode.ide.databinding.BottomSheetConflictResolutionBinding;
 import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.List;
 
-public class GitConflictBottomSheet extends BottomSheetDialogFragment {
+public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
 
     private static final String TAG = "GitConflictBottomSheet";
     private static final String KEY_FILES = "conflict_files";

@@ -29,4 +29,89 @@
     <dimen name="vcode_file_tree_item_height">40dp</dimen>
     <dimen name="vcode_file_tree_indent_per_level">16dp</dimen>
     <dimen name="vcode_empty_state_icon_size">80dp</dimen>
+
+    <dimen name="dialog_max_width">400dp</dimen>
+    <dimen name="vcode_dialog_max_width">400dp</dimen>
+    <dimen name="bottom_sheet_max_width">0dp</dimen>
+    <dimen name="vcode_bottom_sheet_max_width">0dp</dimen>
+
+    <dimen name="spacing_micro">2dp</dimen>
+    <dimen name="spacing_tiny">4dp</dimen>
+    <dimen name="spacing_small">8dp</dimen>
+    <dimen name="spacing_medium">16dp</dimen>
+    <dimen name="spacing_large">24dp</dimen>
+    <dimen name="spacing_xlarge">32dp</dimen>
+    <dimen name="spacing_xxlarge">48dp</dimen>
+
+    <dimen name="vcode_spacing_micro">2dp</dimen>
+    <dimen name="vcode_spacing_tiny">4dp</dimen>
+    <dimen name="vcode_spacing_small">8dp</dimen>
+    <dimen name="vcode_spacing_medium">16dp</dimen>
+    <dimen name="vcode_spacing_large">24dp</dimen>
+    <dimen name="vcode_spacing_xlarge">32dp</dimen>
+    <dimen name="vcode_spacing_xxlarge">48dp</dimen>
+
+    <dimen name="padding_micro">2dp</dimen>
+    <dimen name="padding_tiny">4dp</dimen>
+    <dimen name="padding_small">8dp</dimen>
+    <dimen name="padding_medium">16dp</dimen>
+    <dimen name="padding_large">24dp</dimen>
+    <dimen name="padding_xlarge">32dp</dimen>
+
+    <dimen name="vcode_padding_micro">2dp</dimen>
+    <dimen name="vcode_padding_tiny">4dp</dimen>
+    <dimen name="vcode_padding_small">8dp</dimen>
+    <dimen name="vcode_padding_medium">16dp</dimen>
+    <dimen name="vcode_padding_large">24dp</dimen>
+    <dimen name="vcode_padding_xlarge">32dp</dimen>
+
+    <dimen name="margin_micro">2dp</dimen>
+    <dimen name="margin_tiny">4dp</dimen>
+    <dimen name="margin_small">8dp</dimen>
+    <dimen name="margin_medium">16dp</dimen>
+    <dimen name="margin_large">24dp</dimen>
+    <dimen name="margin_xlarge">32dp</dimen>
+
+    <dimen name="vcode_margin_micro">2dp</dimen>
+    <dimen name="vcode_margin_tiny">4dp</dimen>
+    <dimen name="vcode_margin_small">8dp</dimen>
+    <dimen name="vcode_margin_medium">16dp</dimen>
+    <dimen name="vcode_margin_large">24dp</dimen>
+    <dimen name="vcode_margin_xlarge">32dp</dimen>
+
+    <dimen name="screen_edge_margin">16dp</dimen>
+    <dimen name="vcode_screen_edge_margin">16dp</dimen>
+    <dimen name="content_padding">16dp</dimen>
+    <dimen name="vcode_content_padding">16dp</dimen>
+    <dimen name="card_padding">16dp</dimen>
+    <dimen name="vcode_card_padding">16dp</dimen>
+    <dimen name="dialog_padding">24dp</dimen>
+    <dimen name="vcode_dialog_padding">24dp</dimen>
+    <dimen name="bottom_sheet_padding">24dp</dimen>
+    <dimen name="vcode_bottom_sheet_padding">24dp</dimen>
+    <dimen name="list_item_padding_horizontal">16dp</dimen>
+    <dimen name="vcode_list_item_padding_horizontal">16dp</dimen>
+    <dimen name="list_item_padding_vertical">12dp</dimen>
+    <dimen name="vcode_list_item_padding_vertical">12dp</dimen>
+    <dimen name="grid_item_spacing">12dp</dimen>
+    <dimen name="vcode_grid_item_spacing">12dp</dimen>
+
+    <dimen name="text_size_micro">10sp</dimen>
+    <dimen name="vcode_text_size_micro">10sp</dimen>
+    <dimen name="text_size_caption">12sp</dimen>
+    <dimen name="vcode_text_size_caption">12sp</dimen>
+    <dimen name="text_size_body_small">13sp</dimen>
+    <dimen name="vcode_text_size_body_small">13sp</dimen>
+    <dimen name="text_size_body">14sp</dimen>
+    <dimen name="vcode_text_size_body">14sp</dimen>
+    <dimen name="text_size_body_large">15sp</dimen>
+    <dimen name="vcode_text_size_body_large">15sp</dimen>
+    <dimen name="text_size_subtitle">16sp</dimen>
+    <dimen name="vcode_text_size_subtitle">16sp</dimen>
+    <dimen name="text_size_title">18sp</dimen>
+    <dimen name="vcode_text_size_title">18sp</dimen>
+    <dimen name="text_size_title_large">20sp</dimen>
+    <dimen name="vcode_text_size_title_large">20sp</dimen>
+    <dimen name="text_size_headline">24sp</dimen>
+    <dimen name="vcode_text_size_headline">24sp</dimen>
 </resources>

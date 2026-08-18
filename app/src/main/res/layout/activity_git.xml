@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -11,7 +11,10 @@
         android:layout_width="match_parent"
         android:layout_height="@dimen/vcode_app_toolbar_height"
         android:gravity="center_vertical"
-        android:paddingHorizontal="@dimen/vcode_app_gap_horizontal">
+        android:paddingHorizontal="@dimen/vcode_app_gap_horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <TextView
             android:id="@+id/tv_git_workspace_title"
@@ -29,15 +32,17 @@
         android:indeterminate="true"
         android:visibility="gone"
         app:indicatorColor="?attr/colorPrimary"
+        app:layout_constraintTop_toBottomOf="@id/layout_header_container"
         app:trackColor="@android:color/transparent" />
 
     <LinearLayout
         android:id="@+id/layout_git_content"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/layout_header_container"
+        android:layout_height="0dp"
         android:orientation="vertical"
-        android:visibility="visible">
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layout_header_container">
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabLayout"
@@ -60,13 +65,14 @@
     <LinearLayout
         android:id="@+id/layout_uninitialized_empty_state"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/layout_header_container"
+        android:layout_height="0dp"
         android:background="?attr/colorSurface"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="32dp"
-        android:visibility="visible">
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layout_header_container">
 
         <ImageView
             android:id="@+id/iv_empty_state_git_icon"
@@ -106,4 +112,4 @@
             app:backgroundTint="?attr/colorPrimary" />
 
     </LinearLayout>
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

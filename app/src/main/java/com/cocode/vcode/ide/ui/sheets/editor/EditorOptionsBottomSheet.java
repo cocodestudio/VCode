@@ -15,12 +15,12 @@ import com.cocode.vcode.ide.databinding.BottomSheetEditorOptionsBinding;
 import com.cocode.vcode.ide.databinding.ItemEditorSheetOptionBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class EditorOptionsBottomSheet extends BottomSheetDialogFragment {
+public class EditorOptionsBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetEditorOptionsBinding binding;
     private List<Option> options = new ArrayList<>();

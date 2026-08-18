@@ -10,7 +10,7 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="@dimen/vcode_app_toolbar_height"
         android:background="@color/vcode_bg_card"
         android:gravity="center_vertical"
         android:orientation="horizontal"

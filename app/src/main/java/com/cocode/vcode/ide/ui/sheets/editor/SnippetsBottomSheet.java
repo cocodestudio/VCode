@@ -26,9 +26,9 @@ import com.cocode.vcode.ide.ui.snippets.SnippetsAdapter;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.MarginItemDecorator;
 import com.cocode.vcode.ide.utils.UiUtils;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +38,7 @@ import java.util.List;
  * It allows users to browse, search, create, edit, and delete snippets.
  * Tapping a snippet notifies the listener to insert the code into the active editor.
  */
-public class SnippetsBottomSheet extends BottomSheetDialogFragment {
+public class SnippetsBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetSnippetManagerBinding binding;
     private SnippetsAdapter adapter;

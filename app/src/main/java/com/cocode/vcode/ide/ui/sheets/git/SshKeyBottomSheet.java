@@ -17,10 +17,10 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.git.core.SshKeyManager;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 
-public class SshKeyBottomSheet extends BottomSheetDialogFragment {
+public class SshKeyBottomSheet extends BaseBottomSheetDialogFragment {
 
     private TextView tvPublicKey;
 

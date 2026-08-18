@@ -22,14 +22,14 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.span.SolidHighlightSpan;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ProjectSearchBottomSheet extends BottomSheetDialogFragment {
+public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
     private File projectRoot;
     private SearchEngine searchEngine;

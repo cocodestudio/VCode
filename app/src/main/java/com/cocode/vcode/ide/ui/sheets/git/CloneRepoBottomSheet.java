@@ -23,13 +23,13 @@ import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.io.File;
 import java.util.Locale;
 import java.util.UUID;
 
-public class CloneRepoBottomSheet extends BottomSheetDialogFragment {
+public class CloneRepoBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetCloneRepoBinding binding;
     private Runnable onCloneSuccess;

@@ -67,6 +67,10 @@ public class MergeConfirmDialog {
         // Standard transparency injection for custom rounded window support
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+            int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+            int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+            dialog.getWindow().setLayout(targetWidth, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
         }
     }
 

@@ -18,12 +18,12 @@ import com.cocode.vcode.ide.databinding.BottomSheetProblemsBinding;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.ui.editor.EditorViewModelFactory;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class ProblemsBottomSheet extends BottomSheetDialogFragment {
+public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
 
     private ProblemsAdapter adapter;
     private ProblemListener listener;

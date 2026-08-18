@@ -17,14 +17,14 @@ import com.cocode.vcode.ide.data.model.SnippetItem;
 import com.cocode.vcode.ide.databinding.BottomSheetCreateSnippetBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * CreateSnippetBottomSheet provides a form for creating or editing reusable code snippets.
  * It handles title and content input, validates required fields, and notifies
  * the listener upon successful submission.
  */
-public class CreateSnippetBottomSheet extends BottomSheetDialogFragment {
+public class CreateSnippetBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetCreateSnippetBinding binding;
     private SnippetSaveListener listener;

@@ -15,9 +15,9 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetCreateGithubRepoBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
-public class CreateGitHubRepoBottomSheet extends BottomSheetDialogFragment {
+public class CreateGitHubRepoBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetCreateGithubRepoBinding binding;
     private CreateRepoListener listener;
     private String projectName;

@@ -15,11 +15,11 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetStashMessageBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.Objects;
 
-public class StashMessageBottomSheet extends BottomSheetDialogFragment {
+public class StashMessageBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetStashMessageBinding binding;
     private StashMessageListener listener;
 

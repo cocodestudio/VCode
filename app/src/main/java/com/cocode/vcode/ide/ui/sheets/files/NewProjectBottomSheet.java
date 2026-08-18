@@ -17,16 +17,16 @@ import com.cocode.vcode.ide.databinding.BottomSheetNewProjectBinding;
 import com.cocode.vcode.ide.databinding.LayoutChooseTemplateBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
 /**
  * NewProjectBottomSheet provides a wizard-like interface for creating new projects.
  * It allows users to name their project, select a starter template (Blank, HTML, or Full Stack),
  * and optionally initialize a local Git repository.
  */
-public class NewProjectBottomSheet extends BottomSheetDialogFragment {
+public class NewProjectBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetNewProjectBinding binding;
     private NewProjectListener listener;

@@ -20,14 +20,14 @@ import com.cocode.vcode.ide.ui.commitdetails.CommitDetailsViewModel;
 import com.cocode.vcode.ide.ui.dialogs.HardResetConfirmDialog;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * ResetConfirmBottomSheet allows users to perform Git resets to a specific commit.
  * It supports Soft, Mixed, and Hard reset modes, and includes a mandatory safety
  * confirmation dialog for destructive Hard resets.
  */
-public class ResetConfirmBottomSheet extends BottomSheetDialogFragment {
+public class ResetConfirmBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetResetConfirmBinding binding;
 
     /**

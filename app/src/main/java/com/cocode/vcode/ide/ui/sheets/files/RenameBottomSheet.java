@@ -15,14 +15,14 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetRenameBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * RenameBottomSheet provides a specialized input form for renaming various project entities.
  * It intelligently selects text to exclude extensions when renaming files and
  * adapts its labels based on the {@link RenameType} (Project, File, Folder, or Branch).
  */
-public class RenameBottomSheet extends BottomSheetDialogFragment {
+public class RenameBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetRenameBinding binding;
     private RenameListener listener;

@@ -17,7 +17,7 @@ import com.cocode.vcode.ide.databinding.BottomSheetCreateFolderBinding;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.io.File;
 
@@ -25,7 +25,7 @@ import java.io.File;
  * NewFolderBottomSheet provides an interface for creating a new directory in the workspace.
  * It displays the creation context via a breadcrumb and ensures the keyboard is focused for input.
  */
-public class NewFolderBottomSheet extends BottomSheetDialogFragment {
+public class NewFolderBottomSheet extends BaseBottomSheetDialogFragment {
 
     private static final String ARG_PARENT_DIR = "arg_parent_dir";
 

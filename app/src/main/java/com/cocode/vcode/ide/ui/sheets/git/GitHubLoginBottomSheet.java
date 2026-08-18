@@ -24,11 +24,11 @@ import com.cocode.vcode.ide.git.github.GitHubDeviceFlowClient;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class GitHubLoginBottomSheet extends BottomSheetDialogFragment {
+public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
 
     private final AtomicBoolean isPollingCancelled = new AtomicBoolean(false);
     private BottomSheetGithubLoginBinding binding;

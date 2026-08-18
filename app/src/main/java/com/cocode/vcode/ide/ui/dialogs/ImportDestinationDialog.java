@@ -11,6 +11,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.FileNode;
 import com.cocode.vcode.ide.databinding.DialogImportDestinationBinding;
 import com.cocode.vcode.ide.ui.filetree.DestinationAdapter;
@@ -76,6 +77,18 @@ public class ImportDestinationDialog extends DialogFragment {
         });
 
         return dialog;
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Dialog dialog = getDialog();
+        if (dialog != null && dialog.getWindow() != null) {
+            int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
+            int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+            int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+            dialog.getWindow().setLayout(targetWidth, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     public interface OnDestinationSelectedListener {

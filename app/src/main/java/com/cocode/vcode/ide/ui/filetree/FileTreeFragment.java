@@ -244,7 +244,10 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         }
 
         LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(getLayoutInflater());
-        int width = UiUtils.dpToPx(requireContext(), 220);
+        int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
+        int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+        int preferredWidth = UiUtils.dpToPx(requireContext(), 220);
+        int width = Math.min(preferredWidth, Math.min((int) (screenWidth * 0.92f), maxWidth));
 
         PopupWindow popupWindow = new PopupWindow(
                 popupBinding.getRoot(),
@@ -305,7 +308,10 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
     private void showCopyPathPopup(View anchor, File file) {
         LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(getLayoutInflater());
-        int width = UiUtils.dpToPx(requireContext(), 220);
+        int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
+        int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+        int preferredWidth = UiUtils.dpToPx(requireContext(), 220);
+        int width = Math.min(preferredWidth, Math.min((int) (screenWidth * 0.92f), maxWidth));
 
         PopupWindow popupWindow = new PopupWindow(
                 popupBinding.getRoot(),

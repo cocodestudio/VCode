@@ -13,13 +13,13 @@ import androidx.fragment.app.FragmentManager;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetDeleteConfirmationBinding;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * DeleteBottomSheet provides a generic confirmation interface for deleting various project assets.
  * It dynamically adjusts its messaging based on the {@link DeleteType} (Project, File, Folder, Snippet, or Branch).
  */
-public class DeleteBottomSheet extends BottomSheetDialogFragment {
+public class DeleteBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetDeleteConfirmationBinding binding;
     private ConfirmDeleteListener listener;

@@ -10,6 +10,7 @@ import android.content.IntentFilter;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
@@ -148,11 +149,7 @@ public class FileOperationManager {
             }
         };
         IntentFilter filter = new IntentFilter(ACTION_CANCEL_OPERATION);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(cancelReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            context.registerReceiver(cancelReceiver, filter);
-        }
+        ContextCompat.registerReceiver(context, cancelReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     private void unregisterCancelReceiver() {

@@ -83,7 +83,9 @@ public class AutoCompletePopup {
         adapter.setSelectedIndex(selectedIndex);
 
         int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
-        int popupWidth = Math.min(UiUtils.dpToPx(context, WIDTH_DP), screenWidth - UiUtils.dpToPx(context, 32));
+        int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+        int targetMaxWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+        int popupWidth = Math.min(UiUtils.dpToPx(context, WIDTH_DP), targetMaxWidth);
         popupWindow.setWidth(popupWidth);
 
         int itemCount = Math.min(items.size(), MAX_VISIBLE_ITEMS);

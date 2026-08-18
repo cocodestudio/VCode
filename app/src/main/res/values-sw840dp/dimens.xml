@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="vcode_editor_toolbar_height">64dp</dimen>
+    <dimen name="vcode_app_toolbar_height">80dp</dimen>
+    <dimen name="vcode_app_gap_horizontal">40dp</dimen>
+    <dimen name="vcode_editor_tab_bar_height">52dp</dimen>
+    <dimen name="vcode_editor_tab_min_width">140dp</dimen>
+    <dimen name="vcode_editor_tab_max_width">260dp</dimen>
+    <dimen name="vcode_file_drawer_width">400dp</dimen>
+    <dimen name="vcode_git_panel_peek_height">72dp</dimen>
+    <dimen name="vcode_autocomplete_popup_max_height">400dp</dimen>
+    <dimen name="vcode_autocomplete_popup_width">400dp</dimen>
+    <dimen name="vcode_autocomplete_item_height">56dp</dimen>
+    <dimen name="vcode_card_corner_radius">20dp</dimen>
+    <dimen name="vcode_button_corner_radius">12dp</dimen>
+    <dimen name="vcode_dialog_corner_radius">24dp</dimen>
+    <dimen name="vcode_project_card_height">220dp</dimen>
+    <dimen name="vcode_diff_line_number_width">56dp</dimen>
+    <dimen name="vcode_commit_avatar_size">48dp</dimen>
+    <dimen name="vcode_branch_chip_height">36dp</dimen>
+    <dimen name="vcode_git_status_icon_size">12dp</dimen>
+    <dimen name="vcode_tab_close_button_size">24dp</dimen>
+    <dimen name="vcode_tab_dirty_dot_size">10dp</dimen>
+    <dimen name="vcode_line_number_padding">16dp</dimen>
+    <dimen name="vcode_breadcrumb_height">40dp</dimen>
+    <dimen name="vcode_json_status_bar_height">40dp</dimen>
+    <dimen name="vcode_git_status_bar_height">44dp</dimen>
+    <dimen name="vcode_drawer_header_height">104dp</dimen>
+    <dimen name="vcode_file_tree_item_height">48dp</dimen>
+    <dimen name="vcode_file_tree_indent_per_level">24dp</dimen>
+    <dimen name="vcode_empty_state_icon_size">128dp</dimen>
+
+    <dimen name="dialog_max_width">640dp</dimen>
+    <dimen name="vcode_dialog_max_width">640dp</dimen>
+    <dimen name="bottom_sheet_max_width">720dp</dimen>
+    <dimen name="vcode_bottom_sheet_max_width">720dp</dimen>
+
+    <dimen name="spacing_micro">4dp</dimen>
+    <dimen name="spacing_tiny">8dp</dimen>
+    <dimen name="spacing_small">16dp</dimen>
+    <dimen name="spacing_medium">32dp</dimen>
+    <dimen name="spacing_large">48dp</dimen>
+    <dimen name="spacing_xlarge">64dp</dimen>
+    <dimen name="spacing_xxlarge">80dp</dimen>
+
+    <dimen name="vcode_spacing_micro">4dp</dimen>
+    <dimen name="vcode_spacing_tiny">8dp</dimen>
+    <dimen name="vcode_spacing_small">16dp</dimen>
+    <dimen name="vcode_spacing_medium">32dp</dimen>
+    <dimen name="vcode_spacing_large">48dp</dimen>
+    <dimen name="vcode_spacing_xlarge">64dp</dimen>
+    <dimen name="vcode_spacing_xxlarge">80dp</dimen>
+
+    <dimen name="padding_micro">4dp</dimen>
+    <dimen name="padding_tiny">8dp</dimen>
+    <dimen name="padding_small">16dp</dimen>
+    <dimen name="padding_medium">32dp</dimen>
+    <dimen name="padding_large">48dp</dimen>
+    <dimen name="padding_xlarge">64dp</dimen>
+
+    <dimen name="vcode_padding_micro">4dp</dimen>
+    <dimen name="vcode_padding_tiny">8dp</dimen>
+    <dimen name="vcode_padding_small">16dp</dimen>
+    <dimen name="vcode_padding_medium">32dp</dimen>
+    <dimen name="vcode_padding_large">48dp</dimen>
+    <dimen name="vcode_padding_xlarge">64dp</dimen>
+
+    <dimen name="margin_micro">4dp</dimen>
+    <dimen name="margin_tiny">8dp</dimen>
+    <dimen name="margin_small">16dp</dimen>
+    <dimen name="margin_medium">32dp</dimen>
+    <dimen name="margin_large">48dp</dimen>
+    <dimen name="margin_xlarge">64dp</dimen>
+
+    <dimen name="vcode_margin_micro">4dp</dimen>
+    <dimen name="vcode_margin_tiny">8dp</dimen>
+    <dimen name="vcode_margin_small">16dp</dimen>
+    <dimen name="vcode_margin_medium">32dp</dimen>
+    <dimen name="vcode_margin_large">48dp</dimen>
+    <dimen name="vcode_margin_xlarge">64dp</dimen>
+
+    <dimen name="screen_edge_margin">32dp</dimen>
+    <dimen name="vcode_screen_edge_margin">32dp</dimen>
+    <dimen name="content_padding">32dp</dimen>
+    <dimen name="vcode_content_padding">32dp</dimen>
+    <dimen name="card_padding">24dp</dimen>
+    <dimen name="vcode_card_padding">24dp</dimen>
+    <dimen name="dialog_padding">40dp</dimen>
+    <dimen name="vcode_dialog_padding">40dp</dimen>
+    <dimen name="bottom_sheet_padding">40dp</dimen>
+    <dimen name="vcode_bottom_sheet_padding">40dp</dimen>
+    <dimen name="list_item_padding_horizontal">32dp</dimen>
+    <dimen name="vcode_list_item_padding_horizontal">32dp</dimen>
+    <dimen name="list_item_padding_vertical">20dp</dimen>
+    <dimen name="vcode_list_item_padding_vertical">20dp</dimen>
+    <dimen name="grid_item_spacing">24dp</dimen>
+    <dimen name="vcode_grid_item_spacing">24dp</dimen>
+
+    <dimen name="text_size_micro">12sp</dimen>
+    <dimen name="vcode_text_size_micro">12sp</dimen>
+    <dimen name="text_size_caption">14sp</dimen>
+    <dimen name="vcode_text_size_caption">14sp</dimen>
+    <dimen name="text_size_body_small">15sp</dimen>
+    <dimen name="vcode_text_size_body_small">15sp</dimen>
+    <dimen name="text_size_body">16sp</dimen>
+    <dimen name="vcode_text_size_body">16sp</dimen>
+    <dimen name="text_size_body_large">17sp</dimen>
+    <dimen name="vcode_text_size_body_large">17sp</dimen>
+    <dimen name="text_size_subtitle">20sp</dimen>
+    <dimen name="vcode_text_size_subtitle">20sp</dimen>
+    <dimen name="text_size_title">22sp</dimen>
+    <dimen name="vcode_text_size_title">22sp</dimen>
+    <dimen name="text_size_title_large">24sp</dimen>
+    <dimen name="vcode_text_size_title_large">24sp</dimen>
+    <dimen name="text_size_headline">32sp</dimen>
+    <dimen name="vcode_text_size_headline">32sp</dimen>
+</resources>

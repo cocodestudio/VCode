@@ -348,7 +348,7 @@ public class PreviewActivity extends BaseActivity {
         androidx.transition.Transition transition = new androidx.transition.Slide(android.view.Gravity.BOTTOM);
         transition.setDuration(250);
         transition.setInterpolator(new androidx.interpolator.view.animation.FastOutSlowInInterpolator());
-        androidx.transition.TransitionManager.beginDelayedTransition(binding.getRoot(), transition);
+        androidx.transition.TransitionManager.beginDelayedTransition((android.view.ViewGroup) binding.getRoot(), transition);
 
         if (binding.layoutConsole.getVisibility() == View.VISIBLE) {
             binding.layoutConsole.setVisibility(View.GONE);

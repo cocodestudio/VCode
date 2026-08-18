@@ -123,6 +123,11 @@ public class SelectionToolbar {
         float density = context.getResources().getDisplayMetrics().density;
         int screenW = context.getResources().getDisplayMetrics().widthPixels;
         int screenH = context.getResources().getDisplayMetrics().heightPixels;
+        int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+        int maxAllowedWidth = Math.min((int) (screenW * 0.92f), maxWidth);
+        if (popupWidth > maxAllowedWidth) {
+            popupWidth = maxAllowedWidth;
+        }
         int margin = (int) (8 * density);  // gap between toolbar and selection anchor
         int graceH = (int) (24 * density); // minimum distance from left/right screen edge
         int graceV = (int) (16 * density); // minimum distance from top/bottom screen edge

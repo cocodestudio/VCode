@@ -17,13 +17,13 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetGoToLineBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * GoToLineBottomSheet provides a numeric input interface for navigating to a specific line in the editor.
  * It includes input validation against the total line count and provides dynamic error feedback.
  */
-public class GoToLineBottomSheet extends BottomSheetDialogFragment {
+public class GoToLineBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetGoToLineBinding binding;
 
