@@ -23,7 +23,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/vcode_global_search"
+            android:text="@string/vcode_find_in_files"
             android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
             android:textColor="?attr/colorOnSurface" />
     </LinearLayout>
@@ -31,11 +31,8 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="20dp"
         android:layout_marginBottom="8dp"
-        android:background="?attr/colorSurfaceContainerHigh"
-        android:orientation="vertical"
-        android:padding="4dp">
+        android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -47,10 +44,11 @@
                 android:id="@+id/btn_toggle_replace"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:layout_marginStart="4dp"
+                android:layout_marginHorizontal="4dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
+                android:importantForAccessibility="no"
                 android:padding="6dp"
                 android:src="@drawable/ic_chevron_right"
                 app:tint="?attr/colorOnSurfaceVariant" />
@@ -59,14 +57,15 @@
                 android:id="@+id/et_search_query"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/vcode_app_gap_horizontal"
                 android:layout_weight="1"
-                android:background="@null"
+                android:background="?attr/colorSurfaceContainerHigh"
                 android:hint="@string/vcode_search_across_project"
                 android:imeOptions="actionSearch"
                 android:importantForAutofill="no"
                 android:inputType="text"
                 android:maxLines="1"
-                android:padding="10dp"
+                android:padding="14dp"
                 android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                 android:textColor="?attr/colorOnSurface"
                 android:textColorHint="?attr/colorOnSurfaceVariant" />
@@ -76,6 +75,7 @@
             android:id="@+id/ll_replace_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:visibility="gone">
@@ -86,13 +86,13 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="40dp"
                 android:layout_weight="1"
-                android:background="@null"
+                android:background="?attr/colorSurfaceContainerHigh"
                 android:hint="@string/vcode_replace_with_hint"
                 android:imeOptions="actionDone"
                 android:importantForAutofill="no"
                 android:inputType="text"
                 android:maxLines="1"
-                android:padding="10dp"
+                android:padding="14dp"
                 android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                 android:textColor="?attr/colorOnSurface"
                 android:textColorHint="?attr/colorOnSurfaceVariant" />
@@ -102,13 +102,10 @@
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="4dp"
+                android:layout_marginEnd="8dp"
                 android:text="@string/vcode_replace_all_btn"
-                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
-                android:textColor="@color/vcode_accent_primary" />
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorPrimary" />
         </LinearLayout>
 
         <LinearLayout
@@ -116,8 +113,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="40dp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="@dimen/vcode_app_gap_horizontal"
+            android:layout_marginBottom="12dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton

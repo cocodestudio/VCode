@@ -123,28 +123,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         binding.btnImportFiles.setOnClickListener(v -> showImportDestinationDialog(() -> importFilesLauncher.launch("*/*")));
         binding.btnImportFolder.setOnClickListener(v -> showImportDestinationDialog(() -> importFolderLauncher.launch(null)));
 
-        binding.btnSearch.setOnClickListener(v -> {
-            if (viewModel.getProjectRoot() != null) {
-                ProjectSearchBottomSheet bottomSheet = new ProjectSearchBottomSheet();
-                bottomSheet.setProjectRoot(viewModel.getProjectRoot());
-                bottomSheet.setListener((file, lineNumber) -> {
-                    if (selectionListener != null) {
-                        selectionListener.onFileSelected(new FileNode(file, 0));
-                        // Jump to line logic
-                        if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
-                            com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
-                            // Delay slightly to allow the file to load and viewer to resume
-                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                                editorActivity.jumpToLine(lineNumber);
-                            }, 500);
-                        }
-                    }
-                });
-                bottomSheet.show(getChildFragmentManager(), "ProjectSearch");
-            } else {
-                Toast.makeText(getContext(), R.string.vcode_project_root_not_loaded, Toast.LENGTH_SHORT).show();
-            }
-        });
+
 
 
     }
@@ -285,6 +264,17 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
                 if (file.isDirectory()) {
                     com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet searchSheet = new com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet();
                     searchSheet.setProjectRoot(file);
+                    searchSheet.setListener((searchedFile, lineNumber) -> {
+                        if (selectionListener != null) {
+                            selectionListener.onFileSelected(new FileNode(searchedFile, 0));
+                            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
+                                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
+                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                    editorActivity.jumpToLine(lineNumber);
+                                }, 500);
+                            }
+                        }
+                    });
                     searchSheet.show(getChildFragmentManager(), "ProjectSearch");
                 } else if (selectionListener != null) {
                     selectionListener.onFindInFile(node);

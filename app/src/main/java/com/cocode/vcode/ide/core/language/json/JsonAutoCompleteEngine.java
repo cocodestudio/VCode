@@ -283,6 +283,9 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
             if (trimmed.endsWith("{") || trimmed.endsWith("}")) {
                 return new ArrayList<>();
             }
+            if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '(') {
+                return new ArrayList<>();
+            }
         }
 
         // ── After ':' — value completions ────────────────────────────────────

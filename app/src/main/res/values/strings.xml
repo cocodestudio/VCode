@@ -192,6 +192,8 @@
 <!--    Dialog: Hard Reset Confirmed-->
     <string name="vcode_confirm_hard_reset">Confirm Hard Reset</string>
     <string name="vcode_confirm_hard_reset_desc">This operation will permanently discard all local uncommitted changes, staged files, and modifications back to this snapshot. This action cannot be undone.</string>
+    <string name="vcode_confirm_replace_all">Replace All</string>
+    <string name="vcode_confirm_replace_all_desc">Are you sure you want to replace all occurrences across %1$d files? This action cannot be undone.</string>
     <string name="vcode_reset_anyway_btn">Reset Anyway</string>
 
 <!--    Dialog: Import Destination-->
@@ -391,6 +393,8 @@
     <string name="vcode_crash_log_copied">Crash log copied.</string>
     <string name="vcode_code_is_already_formatted">Code is already formatted</string>
     <string name="vcode_formatted_successfully">Formatted successfully</string>
+    <string name="vcode_cannot_format_unbalanced_brackets">Cannot format: Unbalanced brackets detected</string>
+    <string name="vcode_find_in_files">Find in Files</string>
     <string name="vcode_formatting">Formatting...</string>
     <string name="vcode_cannot_format_a_media_asset">Cannot format a media asset.</string>
     <string name="vcode_no_file_open_to_format">No file open to format</string>

@@ -174,6 +174,11 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             if (trimmed.endsWith("{") || trimmed.endsWith("}")) {
                 return new ArrayList<>();
             }
+            if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '(') {
+                // Return empty instead of showing global suggestions inside functions
+                // E.g. calc(|
+                return new ArrayList<>();
+            }
         }
 
         // ── 1. @media/@supports/@container CONDITION completions ───────────────

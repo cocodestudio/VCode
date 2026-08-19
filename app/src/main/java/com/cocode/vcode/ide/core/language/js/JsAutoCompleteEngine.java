@@ -183,6 +183,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         List<CompletionItem> objKeys = getObjectLiteralSuggestions(fullText, cursorPos, word);
         if (objKeys != null) return objKeys;
 
+        if (word.isEmpty()) {
+            if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '(') {
+                return new ArrayList<>();
+            }
+        }
+
         // ── 3. General: keywords + user symbols ──────────────────────────────
         ensureDocumentIndexed(fullText);
         List<CompletionItem> all = new ArrayList<>(builtinItems);

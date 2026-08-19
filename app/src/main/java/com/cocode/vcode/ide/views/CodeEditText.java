@@ -84,7 +84,7 @@ public class CodeEditText extends View {
     /**
      * Characters that trigger a new completion context.
      */
-    private static final String TRIGGER_CHARS = ".</:'\"@#!";
+    private static final String TRIGGER_CHARS = ".</:'\"@#!(";
     // ── Selection handle drag state (Phase 4) ─────────────────────────────────
     private static final int HANDLE_DRAG_NONE = 0;
     private static final int HANDLE_DRAG_START = 1;
@@ -1743,9 +1743,7 @@ public class CodeEditText extends View {
                     break;
                 case MARKDOWN:
                     this.syntaxHighlighter = new MarkdownSyntaxHighlighter(ctx);
-                    com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine mdEngine = new com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine(ctx);
-                    if (currentFile != null) mdEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = mdEngine;
+                    this.autoCompleteEngine = null;
                     break;
                 case GITIGNORE:
                     this.syntaxHighlighter = null; // Assuming no syntax highlighter for gitignore
@@ -1780,6 +1778,8 @@ public class CodeEditText extends View {
             ((JsonAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
         } else if (autoCompleteEngine instanceof CssAutoCompleteEngine) {
             ((CssAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
+        } else if (autoCompleteEngine instanceof com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine) {
+            ((com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
         }
     }
 
@@ -3182,12 +3182,4 @@ public class CodeEditText extends View {
             editor.scheduleAutoComplete();
         }
     }
-
-
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // CodeInputConnection
-    // ─────────────────────────────────────────────────────────────────────────
-
-
 }

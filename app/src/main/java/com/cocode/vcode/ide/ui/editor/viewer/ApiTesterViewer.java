@@ -229,8 +229,22 @@ public class ApiTesterViewer implements IFileViewer {
                 if (suggestions.isEmpty()) {
                     popup.dismiss();
                 } else {
-                    ArrayAdapter<String> adapter = new ArrayAdapter<>(context, android.R.layout.simple_list_item_1, android.R.id.text1, suggestions);
+                    ArrayAdapter<String> adapter = new ArrayAdapter<String>(context, android.R.layout.simple_list_item_1, android.R.id.text1, suggestions) {
+                        @androidx.annotation.NonNull
+                        @Override
+                        public android.view.View getView(int position, @androidx.annotation.Nullable android.view.View convertView, @androidx.annotation.NonNull android.view.ViewGroup parent) {
+                            View view = super.getView(position, convertView, parent);
+                            android.widget.TextView tv = view.findViewById(android.R.id.text1);
+                            if (tv != null) {
+                                tv.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiMedium(context));
+                                tv.setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.vcode_text_primary));
+                                tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14);
+                            }
+                            return view;
+                        }
+                    };
                     popup.setAdapter(adapter);
+                    popup.setBackgroundDrawable(androidx.core.content.ContextCompat.getDrawable(context, R.drawable.vcode_bg_autocomplete_popup));
                     if (!popup.isShowing()) {
                         popup.show();
                     }

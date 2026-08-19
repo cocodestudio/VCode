@@ -274,7 +274,7 @@ public final class LspClientManager {
             case "json":
                 return new com.cocode.vcode.ide.core.lsp.servers.JsonLspServer();
             case "markdown":
-                return new com.cocode.vcode.ide.core.lsp.servers.MarkdownLspServer();
+                return new com.cocode.vcode.ide.core.lsp.servers.MarkdownLspServer(appContext);
             default:
                 return null;
         }

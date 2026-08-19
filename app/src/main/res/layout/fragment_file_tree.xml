@@ -24,18 +24,7 @@
             android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
             android:textColor="?attr/colorOnSurface" />
 
-        <ImageView
-            android:id="@+id/btn_search"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginEnd="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:focusable="true"
-            android:importantForAccessibility="no"
-            android:padding="6dp"
-            android:src="@drawable/ic_magnifying_glass"
-            app:tint="?attr/colorOnSurfaceVariant" />
+
 
 
         <ImageView

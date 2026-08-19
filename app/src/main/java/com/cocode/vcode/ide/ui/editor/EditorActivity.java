@@ -539,6 +539,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             case JAVASCRIPT:
             case TYPESCRIPT:
             case JSON:
+            case MARKDOWN:
                 return true;
             default:
                 return false;
@@ -655,9 +656,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             java.io.File currentFile = viewModel.getOpenFiles().getValue().get(viewModel.getActiveTabIndex().getValue()).getFile();
                             java.io.File newFile = new java.io.File(currentFile.getParentFile(), filename);
                             try {
-                                com.cocode.vcode.ide.utils.FileUtils.writeFile(newFile, result.extractedContent);
-                                editor.setText(result.modifiedHtml);
+                                com.cocode.vcode.ide.core.model.FileType targetLang = (extractType == com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE) ? com.cocode.vcode.ide.core.model.FileType.CSS : com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT;
+                                String formatted = com.cocode.vcode.ide.utils.CodeFormatter.format(result.extractedContent, targetLang);
+                                com.cocode.vcode.ide.utils.FileUtils.writeFile(newFile, formatted);
+                                editor.replaceRange(0, editor.length(), result.modifiedHtml);
                                 viewModel.saveAll();
+                                viewModel.refreshFileTree();
                                 android.widget.Toast.makeText(EditorActivity.this, "Extracted to " + filename, android.widget.Toast.LENGTH_SHORT).show();
                             } catch (java.io.IOException e) {
                                 android.widget.Toast.makeText(EditorActivity.this, "Failed to write file: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
@@ -813,6 +817,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         String rawCode = java.util.Objects.requireNonNull(codeEditText.getText()).toString();
         FileType lang = activeFile.getFileType();
         int originalCursor = codeEditText.getSelectionStart();
+
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> bracketProblems = com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(activeFile.getFile(), rawCode);
+        if (bracketProblems != null && !bracketProblems.isEmpty()) {
+            Toast.makeText(this, R.string.vcode_cannot_format_unbalanced_brackets, Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         Toast.makeText(this, R.string.vcode_formatting, Toast.LENGTH_SHORT).show();
         ExecutorProvider.getInstance().runOnIo(() -> {

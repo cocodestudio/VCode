@@ -27,7 +27,17 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
 
         // Extract typed path prefix like "src/app/" or "./"
         String prefix = getPathBeforeCursor(fullText, cursorPos);
-        if (prefix.isEmpty()) return new ArrayList<>();
+        if (prefix.isEmpty()) {
+            // Check if preceded by a path trigger char
+            if (cursorPos > 0) {
+                char prev = fullText.charAt(cursorPos - 1);
+                if (prev != '(' && prev != '"' && prev != '\'' && prev != '/' && prev != '=') {
+                    return new ArrayList<>();
+                }
+            } else {
+                return new ArrayList<>();
+            }
+        }
 
         List<CompletionItem> suggestions = new ArrayList<>();
         File baseDir = currentFile.getParentFile();
@@ -81,7 +91,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
     
     private String getPathBeforeCursor(String text, int pos) {
         if (text == null || pos <= 0 || pos > text.length()) return "";
-        int start = pos - 1;
+        int start = pos;
         while (start > 0) {
             char c = text.charAt(start - 1);
             if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/') {

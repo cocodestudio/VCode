@@ -143,12 +143,38 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
             String query = binding.etSearchQuery.getText() != null ? binding.etSearchQuery.getText().toString() : "";
             if (query.trim().isEmpty()) return;
             
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Replace All")
-                    .setMessage("Are you sure you want to replace all occurrences across " + currentResults.size() + " files? This action cannot be undone.")
-                    .setPositiveButton("Replace All", (dialog, which) -> performReplaceAll())
-                    .setNegativeButton("Cancel", null)
-                    .show();
+            android.view.View dialogView = android.view.LayoutInflater.from(requireContext()).inflate(R.layout.dialog_replace_all_confirm, null);
+            androidx.appcompat.app.AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                    .setView(dialogView)
+                    .setCancelable(true)
+                    .create();
+            
+            android.widget.TextView tvTitle = dialogView.findViewById(R.id.tv_replace_title);
+            android.widget.TextView tvDesc = dialogView.findViewById(R.id.tv_replace_desc);
+            com.google.android.material.button.MaterialButton btnCancel = dialogView.findViewById(R.id.btn_cancel_replace);
+            com.google.android.material.button.MaterialButton btnConfirm = dialogView.findViewById(R.id.btn_confirm_replace);
+            
+            tvTitle.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiSemiBold(requireContext()));
+            tvDesc.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiMedium(requireContext()));
+            btnCancel.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiSemiBold(requireContext()));
+            btnConfirm.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiSemiBold(requireContext()));
+            
+            tvDesc.setText(requireContext().getString(R.string.vcode_confirm_replace_all_desc, currentResults.size()));
+            
+            btnCancel.setOnClickListener(v2 -> dialog.dismiss());
+            btnConfirm.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                performReplaceAll();
+            });
+            dialog.show();
+            
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+                int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
+                int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+                int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+                dialog.getWindow().setLayout(targetWidth, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
         });
     }
 
