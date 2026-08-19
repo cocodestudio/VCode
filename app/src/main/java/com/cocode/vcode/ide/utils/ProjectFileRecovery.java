@@ -33,13 +33,15 @@ public class ProjectFileRecovery {
             return;
         }
 
-        File metaFile = new File(projectRoot, ProjectRepository.META_FILE);
+        File metaFile = new File(new File(new File(projectRoot, ProjectRepository.VCODE_DIR), ProjectRepository.META_DIR), ProjectRepository.PROJECT_FILE);
         if (!metaFile.exists()) {
+            metaFile.getParentFile().mkdirs();
             createDefaultProjectMeta(metaFile);
         }
 
-        File sessionFile = new File(projectRoot, ProjectRepository.SESSION_FILE);
+        File sessionFile = new File(new File(new File(projectRoot, ProjectRepository.VCODE_DIR), ProjectRepository.STATE_DIR), "session.json");
         if (!sessionFile.exists()) {
+            sessionFile.getParentFile().mkdirs();
             createDefaultSession(sessionFile);
         }
     }

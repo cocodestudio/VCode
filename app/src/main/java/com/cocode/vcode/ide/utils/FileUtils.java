@@ -266,13 +266,8 @@ public class FileUtils {
         for (File entry : entries) {
             String name = entry.getName();
 
-            // Explicitly exclude .git, and .nomedia. Allow all other dotfiles (like .env)
-            if (name.equals(".git") || name.equals(".nomedia")) {
-                continue;
-            }
-
-            // Hide internal IDE state files from the UI
-            if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) {
+            // Explicitly exclude .git, .vcode, and .nomedia. Allow all other dotfiles (like .env)
+            if (name.equals(".git") || name.equals(".nomedia") || name.equals(".vcode")) {
                 continue;
             }
 
@@ -307,11 +302,7 @@ public class FileUtils {
         for (File f : files) {
             String name = f.getName();
 
-            if (name.equals(".git") || name.equals(".gitignore") || name.equals(".nomedia")) {
-                continue;
-            }
-
-            if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) {
+            if (name.equals(".git") || name.equals(".gitignore") || name.equals(".nomedia") || name.equals(".vcode")) {
                 continue;
             }
 

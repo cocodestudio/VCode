@@ -460,13 +460,12 @@ public class ProjectsAdapter extends RecyclerView.Adapter<ProjectsAdapter.Projec
                 if (f.isDirectory()) {
                     String name = f.getName();
                     // Skip hidden or massive system folders to preserve performance
-                    if (name.equals(".git") || name.equals("node_modules") || name.equals(".idea"))
+                    if (name.equals(".git") || name.equals("node_modules") || name.equals(".idea") || name.equals(".vcode"))
                         continue;
                     scanUniqueExtensions(f, exts, depth + 1);
                 } else {
                     String name = f.getName();
-                    // Skip internal metadata files
-                    if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) continue;
+
 
                     int dot = name.lastIndexOf('.');
                     if (dot > 0 && dot < name.length() - 1) {

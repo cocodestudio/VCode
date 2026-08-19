@@ -208,14 +208,14 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
         for (File f : files) {
             String name = f.getName().toLowerCase();
             // Directory exclusions
-            if (name.equals(".git") || name.equals("node_modules") || name.equals(".idea") || name.equals("build"))
+            if (name.equals(".git") || name.equals("node_modules") || name.equals(".idea") || name.equals("build") || name.equals(".vcode"))
                 continue;
 
             if (f.isDirectory()) {
                 searchInDirectory(f, query, outResults);
             } else {
                 // File exclusions
-                if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE) || name.equals("snippets.json"))
+                if (name.equals("snippets.json"))
                     continue;
 
                 // Binary and image exclusions

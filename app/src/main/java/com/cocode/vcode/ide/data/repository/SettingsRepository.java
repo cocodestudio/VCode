@@ -102,7 +102,7 @@ public class SettingsRepository {
         AppSettings global = loadSettings();
         if (projectDir == null) return global;
 
-        java.io.File metaFile = new java.io.File(projectDir, ProjectRepository.META_FILE);
+        java.io.File metaFile = new java.io.File(new java.io.File(new java.io.File(projectDir, ProjectRepository.VCODE_DIR), ProjectRepository.META_DIR), ProjectRepository.PROJECT_FILE);
         if (!metaFile.exists()) return global;
 
         try {
@@ -206,7 +206,7 @@ public class SettingsRepository {
 
     public void saveProjectSettings(java.io.File projectDir, AppSettings s) {
         if (projectDir == null || s == null) return;
-        java.io.File metaFile = new java.io.File(projectDir, ProjectRepository.META_FILE);
+        java.io.File metaFile = new java.io.File(new java.io.File(new java.io.File(projectDir, ProjectRepository.VCODE_DIR), ProjectRepository.META_DIR), ProjectRepository.PROJECT_FILE);
         if (!metaFile.exists()) return;
 
         try {

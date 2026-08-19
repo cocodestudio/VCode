@@ -34,13 +34,17 @@ import java.util.UUID;
  */
 public class ProjectRepository {
 
-    public static final String META_FILE = "project_meta.json";
-    public static final String SESSION_FILE = "session.json";
+    public static final String VCODE_DIR = ".vcode";
+    public static final String META_DIR = "meta";
+    public static final String STATE_DIR = "state";
+    public static final String PROJECT_FILE = "project.json";
+    public static final String LEGACY_META_FILE = "project_meta.json";
 
     public static File findProjectRoot(File file) {
         File current = file;
         while (current != null) {
-            if (new File(current, META_FILE).exists()) {
+            File vcodeMeta = new File(new File(new File(current, VCODE_DIR), META_DIR), PROJECT_FILE);
+            if (vcodeMeta.exists() || new File(current, LEGACY_META_FILE).exists()) {
                 return current;
             }
             current = current.getParentFile();
@@ -76,7 +80,34 @@ public class ProjectRepository {
                 if (entries != null) {
                     for (File dir : entries) {
                         if (dir.isDirectory()) {
-                            File meta = new File(dir, META_FILE);
+                            File vcodeDir = new File(dir, VCODE_DIR);
+                            File metaDir = new File(vcodeDir, META_DIR);
+                            File stateDir = new File(vcodeDir, STATE_DIR);
+                            File meta = new File(metaDir, PROJECT_FILE);
+                            File legacyMeta = new File(dir, LEGACY_META_FILE);
+
+                            // Silent Migration Heuristic
+                            if (!meta.exists() && legacyMeta.exists()) {
+                                try {
+                                    String jsonString = FileUtils.readFile(legacyMeta);
+                                    org.json.JSONObject json = new org.json.JSONObject(jsonString);
+                                    if (dir.getName().equals(json.optString(KEY_ID))) {
+                                        metaDir.mkdirs();
+                                        stateDir.mkdirs();
+                                        FileUtils.writeFile(meta, jsonString);
+                                        legacyMeta.delete();
+
+                                        File legacySession = new File(dir, "session.json");
+                                        if (legacySession.exists()) {
+                                            File newSession = new File(stateDir, "session.json");
+                                            FileUtils.writeFile(newSession, FileUtils.readFile(legacySession));
+                                            legacySession.delete();
+                                        }
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                            }
+
                             if (meta.exists()) {
                                 try {
                                     // Parse individual internal description structures
@@ -282,7 +313,7 @@ public class ProjectRepository {
                 File projectDir = new File(FileUtils.getProjectsDir(appContext), projectId);
                 if (!projectDir.exists()) return;
 
-                File meta = new File(projectDir, META_FILE);
+                File meta = new File(new File(new File(projectDir, VCODE_DIR), META_DIR), PROJECT_FILE);
                 if (!meta.exists()) return;
 
                 Project project = readProjectMeta(meta, projectDir);
@@ -307,11 +338,9 @@ public class ProjectRepository {
         obj.put(KEY_MAIN_FILE, project.getMainFile() != null ? project.getMainFile() : "index.html");
         obj.put(KEY_FILE_COUNT, project.getFileCount());
 
-        File metaFile = new File(projectDir, META_FILE);
-        try (BufferedWriter writer = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(metaFile), StandardCharsets.UTF_8))) {
-            writer.write(obj.toString(2));
-        }
+        File metaFile = new File(new File(new File(projectDir, VCODE_DIR), META_DIR), PROJECT_FILE);
+        metaFile.getParentFile().mkdirs();
+        FileUtils.writeFile(metaFile, obj.toString(4));
     }
 
     /**

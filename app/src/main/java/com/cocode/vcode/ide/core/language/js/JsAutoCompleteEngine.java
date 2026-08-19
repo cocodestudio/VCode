@@ -414,7 +414,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     items.add(new CompletionItem(name + "/", name + "/",
                             "Directory", CompletionItem.Type.FOLDER, 0));
                 } else if (isJsLike(name) || typedPath.isEmpty()) {
-                    if (name.equals(ProjectRepository.META_FILE) || name.equals(ProjectRepository.SESSION_FILE)) continue;
+
                     if (currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath()))
                         continue;
 

@@ -53,7 +53,7 @@ public class VFSManager {
         List<File> cachedList = new ArrayList<>();
         for (File child : children) {
             String name = child.getName();
-            if (name.startsWith(".") || name.equals(ProjectRepository.SESSION_FILE) || name.equals(ProjectRepository.META_FILE))
+            if (name.startsWith("."))
                 continue; // Skip hidden/git and meta files
             cachedList.add(child);
 
@@ -78,7 +78,7 @@ public class VFSManager {
                 List<File> list = new ArrayList<>();
                 for (File f : diskFiles) {
                     String name = f.getName();
-                    if (!name.startsWith(".") && !name.equals(ProjectRepository.SESSION_FILE) && !name.equals(ProjectRepository.META_FILE)) {
+                    if (!name.startsWith(".")) {
                         list.add(f);
                     }
                 }

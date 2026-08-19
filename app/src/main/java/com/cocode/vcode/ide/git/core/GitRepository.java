@@ -48,7 +48,7 @@ public class GitRepository {
      */
     // Default exclusion patterns written to .gitignore on fresh repository initialization
     private static final String DEFAULT_GITIGNORE =
-            "node_modules/\n.DS_Store\n*.log\ndist/\nbuild/\n.env\n.env.local\n*.class\n*.jar\nsession.json\nproject_meta.json";
+            "node_modules/\n.DS_Store\n*.log\ndist/\nbuild/\n.env\n.env.local\n*.class\n*.jar\n.vcode/";
     private Git git;
     private String configuredDefaultBranch = "main";
     private File repoDir;
@@ -112,7 +112,7 @@ public class GitRepository {
             }
 
             boolean modified = false;
-            String[] internalFiles = {"session.json", "project_meta.json"};
+            String[] internalFiles = {".vcode/"};
             for (String file : internalFiles) {
                 if (!content.toString().contains(file)) {
                     content.append(file).append("\n");
@@ -162,7 +162,7 @@ public class GitRepository {
     private void addFiles(List<GitFileItem> list, Set<String> paths, String status, boolean staged) {
         for (String path : paths) {
             String fileName = new File(path).getName();
-            if (fileName.equals("session.json") || fileName.equals("project_meta.json")) {
+            if (path.startsWith(".vcode/")) {
                 continue;
             }
             list.add(new GitFileItem(path, fileName, status, staged));

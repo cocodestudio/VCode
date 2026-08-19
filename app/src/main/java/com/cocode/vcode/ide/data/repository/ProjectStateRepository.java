@@ -55,7 +55,11 @@ public class ProjectStateRepository {
 
         // Check if this directory is inside VCodeProjects (the only directories VCode owns)
         if (absPath.contains("/VCodeProjects/") || absPath.contains("/VCodeProjects")) {
-            return projectDir;
+            File stateDir = new File(new File(projectDir, ".vcode"), "state");
+            if (!stateDir.exists()) {
+                stateDir.mkdirs();
+            }
+            return stateDir;
         }
 
         // External directory — redirect to app-private internal storage
