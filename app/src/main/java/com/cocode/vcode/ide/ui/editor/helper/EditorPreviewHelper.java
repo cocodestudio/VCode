@@ -37,10 +37,21 @@ public class EditorPreviewHelper {
         if (localWebServer == null) {
             localWebServer = new LocalWebServer(viewModel.getProjectRoot());
         }
-        localWebServer.start();
-        startServerUI.run();
-        callbacks.executeActiveFilePreviewIntent();
-        callbacks.updateToolbarVisibility();
+        
+        LocalWebServer finalLocalWebServer = localWebServer;
+        Runnable startAction = () -> {
+            finalLocalWebServer.start();
+            startServerUI.run();
+            callbacks.executeActiveFilePreviewIntent();
+            callbacks.updateToolbarVisibility();
+        };
+
+        if (viewModel.hasUnsavedFiles()) {
+            viewModel.saveAll(startAction);
+        } else {
+            startAction.run();
+        }
+
         return localWebServer;
     }
 

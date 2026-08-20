@@ -258,7 +258,7 @@ public class AutoCompletePopup {
             } else {
                 holder.binding.ivTypeIcon.setVisibility(View.GONE);
                 holder.binding.tvTypeBadge.setVisibility(View.VISIBLE);
-                GradientDrawable badgeBg = (GradientDrawable) holder.binding.tvTypeBadge.getBackground();
+                GradientDrawable badgeBg = (GradientDrawable) holder.binding.tvTypeBadge.getBackground().mutate();
                 if (badgeBg != null) {
                     badgeBg.setColor(getBadgeColor(item.getType()));
                 }
