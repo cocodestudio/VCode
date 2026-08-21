@@ -6,9 +6,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Defines the core set of programming languages and binary assets supported by the vcode workspace.
- * Each file type is bound to its canonical file extensions, user-facing display name,
- * and specific UI branding/syntax highlighting color resources.
+ * Supported file types and languages, mapping file extensions, display names, icons, and color resources.
  */
 public enum FileType {
     // Standard Languages
@@ -61,10 +59,7 @@ public enum FileType {
     }
 
     /**
-     * Inspects a raw file extension suffix string to identify its file type profile.
-     *
-     * @param ext The raw extension string pulled from the file name.
-     * @return The matching FileType configuration enum, defaulting to TEXT if unmatched or empty.
+     * Resolves a {@link FileType} from a file extension string. Defaults to {@link #TEXT} if unknown.
      */
     public static FileType fromExtension(String ext) {
         if (ext == null || ext.isEmpty()) return TEXT;
@@ -76,7 +71,7 @@ public enum FileType {
             }
         }
 
-        return TEXT; // Default catch-all for unknown formats
+        return TEXT;
     }
 
     public int getIconResId() {

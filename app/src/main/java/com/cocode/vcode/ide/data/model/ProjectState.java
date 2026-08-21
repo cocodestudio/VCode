@@ -6,23 +6,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Persistent cache state descriptor capturing a developer's UI layout structure.
- * Records opened documents, highlighted tabs, scroll coordinates, and cursor vectors
- * so the workspace resumes exactly where it was left upon reload.
+ * Model representing the persisted state of a project session (open files, active tab,
+ * cursor and scroll positions, preview states, and virtual file contents).
  */
 public class ProjectState {
 
     private String projectId;
     private List<String> openFilePaths;
     private int activeTabIndex;
-    private Map<String, Integer> cursorPositions; // Maps file paths to their last caret offset index
-    private Map<String, Integer> scrollPositions; // Maps file paths to their vertical scroll viewport pixel positions
-    private Map<String, Boolean> previewStates; // Maps file paths to their toggle preview state (true = preview, false = text)
-    private final Map<String, String> virtualFiles; // Maps virtual file paths to their persisted content
+    private Map<String, Integer> cursorPositions; // relative path -> cursor offset
+    private Map<String, Integer> scrollPositions; // relative path -> scrollY px
+    private Map<String, Boolean> previewStates;   // relative path -> preview active
+    private final Map<String, String> virtualFiles; // relative path -> content
 
-    /**
-     * Initializes blank tracking parameters for view tracking containers.
-     */
     public ProjectState() {
         this.openFilePaths = new ArrayList<>();
         this.cursorPositions = new HashMap<>();
@@ -37,49 +33,30 @@ public class ProjectState {
         this.projectId = projectId;
     }
 
-    /**
-     * Records caret placement vectors linked against a relative file path location.
-     */
     public void setCursorFor(String relativePath, int cursor) {
         if (relativePath != null) cursorPositions.put(relativePath, cursor);
     }
 
-    /**
-     * Resolves the historical caret placement baseline index linked against a relative path target.
-     */
     public int getCursorFor(String relativePath) {
         if (relativePath == null) return 0;
         Integer val = cursorPositions.get(relativePath);
         return val != null ? val : 0;
     }
 
-    /**
-     * Records the active vertical viewport location offset linked against a relative file path.
-     */
     public void setScrollFor(String relativePath, int scrollY) {
         if (relativePath != null) scrollPositions.put(relativePath, scrollY);
     }
 
-    /**
-     * Resolves the historical scroll point line pixel height linked against a relative target file.
-     */
     public int getScrollFor(String relativePath) {
         if (relativePath == null) return 0;
         Integer val = scrollPositions.get(relativePath);
         return val != null ? val : 0;
     }
 
-    /**
-     * Records the toggle preview state linked against a relative file path.
-     */
     public void setPreviewStateFor(String relativePath, boolean isPreview) {
         if (relativePath != null) previewStates.put(relativePath, isPreview);
     }
 
-    /**
-     * Resolves the toggle preview state linked against a relative target file.
-     * Defaults to true so previewable files open in preview mode initially.
-     */
     public boolean getPreviewStateFor(String relativePath) {
         if (relativePath == null) return false;
         Boolean val = previewStates.get(relativePath);

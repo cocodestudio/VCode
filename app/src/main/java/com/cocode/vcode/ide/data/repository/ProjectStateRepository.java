@@ -25,9 +25,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Editor UI persistence controller tracking working user states.
- * Serializes and restores layout configurations, vertical viewport points,
- * active tab references, and file caret coordinates into local workspace session data.
+ * Repository for saving and loading project session states (open tabs, cursor offsets, scroll positions, preview modes).
+ * Stores session data in .vcode/state/session.json for VCode projects or in app-private storage for external directories.
  */
 public class ProjectStateRepository {
 
@@ -36,24 +35,18 @@ public class ProjectStateRepository {
     public ProjectStateRepository() {
     }
 
-    // --- Section: Save ---
-
     /**
      * Determines where session data should be persisted.
      * <p>
-     * For VCode-owned projects (inside the VCodeProjects/ directory) the session file is stored
-     * alongside the project files — same behaviour as before.
+     * For VCode-owned projects (inside VCodeProjects/) the session file is stored in .vcode/state/.
      * <p>
-     * For ANY external directory (Downloads, Documents, WhatsApp, etc.) the session is stored
-     * entirely inside the app's private internal storage so VCode never creates stray files in
-     * folders it doesn't own.  The sub-folder name is a stable hex hash of the absolute path,
-     * guaranteeing the same project always maps to the same session bucket.
+     * For external directories (Downloads, Documents, etc.) the session is stored in app-private
+     * internal storage keyed by a hash of the directory path.
      */
     private static File getSessionStorageDir(File projectDir) {
         android.content.Context ctx = VCodeApplication.getInstance();
         String absPath = projectDir.getAbsolutePath();
 
-        // Check if this directory is inside VCodeProjects (the only directories VCode owns)
         if (absPath.contains("/VCodeProjects/") || absPath.contains("/VCodeProjects")) {
             File stateDir = new File(new File(projectDir, ".vcode"), "state");
             if (!stateDir.exists()) {
@@ -62,7 +55,6 @@ public class ProjectStateRepository {
             return stateDir;
         }
 
-        // External directory — redirect to app-private internal storage
         String safeKey = Integer.toHexString(absPath.hashCode());
         File bucket = new File(ctx.getFilesDir(), "external_sessions/" + safeKey);
         if (!bucket.exists()) {
@@ -72,7 +64,7 @@ public class ProjectStateRepository {
     }
 
     /**
-     * Saves layout configuration mappings asynchronously to prevent visual freezing on UI layers.
+     * Asynchronously saves the project session state to disk.
      */
     public void saveState(File projectDir, ProjectState state) {
         MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
@@ -91,27 +83,20 @@ public class ProjectStateRepository {
         });
     }
 
-    // --- Section: Load ---
-
     /**
-     * Synchronous save — call only from a background thread (e.g., inside onStop lifecycle closures).
-     * Bypasses message queues to guarantee disk writes happen immediately before system component destructions.
+     * Synchronously saves the project session state (intended for background threads or activity lifecycle hooks).
      */
     public void saveStateSync(File projectDir, ProjectState state) {
         if (projectDir == null || state == null)
             return;
         try {
             writeStateToDisk(projectDir, state);
-        } catch (Exception e) {
-            // Ambient failure exception trap logs anomalies without stopping lifecycle execution threads
+        } catch (Exception ignored) {
         }
     }
 
-    // --- Section: Disk I/O ---
-
     /**
-     * Synchronous load — call only from a background thread. Returns empty state on any failure.
-     * Guarantees context initialization stability by feeding back a default state vector if reads encounter problems.
+     * Synchronously loads the project session state from disk. Returns a new empty state on failure.
      */
     public ProjectState loadStateSync(File projectDir, String projectId) {
         if (projectDir == null)
@@ -138,7 +123,7 @@ public class ProjectStateRepository {
         root.put("projectId", state.getProjectId() != null ? state.getProjectId() : "");
         root.put("activeTabIndex", state.getActiveTabIndex());
 
-        // Open file paths array tracking multi-tab setups
+        // Open file paths
         JSONArray pathsArray = new JSONArray();
         List<String> paths = state.getOpenFilePaths();
         if (paths != null) {
@@ -149,7 +134,7 @@ public class ProjectStateRepository {
         }
         root.put("openFilePaths", pathsArray);
 
-        // Map collection layout recording editor text carets
+        // Cursor positions
         JSONObject cursors = new JSONObject();
         Map<String, Integer> cursorMap = state.getCursorPositions();
         if (cursorMap != null) {
@@ -161,7 +146,7 @@ public class ProjectStateRepository {
         }
         root.put("cursorPositions", cursors);
 
-        // Map collection layout recording active viewport rows
+        // Scroll positions
         JSONObject scrolls = new JSONObject();
         Map<String, Integer> scrollMap = state.getScrollPositions();
         if (scrollMap != null) {
@@ -173,7 +158,7 @@ public class ProjectStateRepository {
         }
         root.put("scrollPositions", scrolls);
 
-        // Map collection layout recording toggle preview states
+        // Preview toggle states
         JSONObject previews = new JSONObject();
         Map<String, Boolean> previewMap = state.getPreviewStates();
         if (previewMap != null) {
@@ -185,7 +170,7 @@ public class ProjectStateRepository {
         }
         root.put("previewStates", previews);
 
-        // Map collection layout recording virtual files
+        // Virtual files
         JSONObject virtuals = new JSONObject();
         Map<String, String> virtualMap = state.getVirtualFiles();
         if (virtualMap != null) {
@@ -204,13 +189,9 @@ public class ProjectStateRepository {
         }
     }
 
-    /**
-     * Unpacks saved configurations from local session text data.
-     */
     private ProjectState readStateFromDisk(File projectDir, String projectId) throws Exception {
         File sessionFile = getSessionFile(projectDir);
         if (!sessionFile.exists()) {
-            // First run baseline fallback: initialize an empty layout template if no tracking sheet exists
             return new ProjectState(projectId);
         }
 

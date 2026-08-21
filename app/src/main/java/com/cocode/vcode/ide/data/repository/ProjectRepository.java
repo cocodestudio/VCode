@@ -28,9 +28,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Higher-level structural repository managing project lifecycles.
- * Handles project creation from templates, renaming, cloning, asset unpacking, metadata parsing,
- * and controls underlying version control setup flags.
+ * Repository for managing projects (creation, discovery, metadata, renaming, duplication, deletion).
  */
 public class ProjectRepository {
 
@@ -52,7 +50,6 @@ public class ProjectRepository {
         return null;
     }
 
-    // JSON configuration mapping fields for project description schemas
     private static final String KEY_ID = "id";
     private static final String KEY_NAME = "name";
     private static final String KEY_CREATED_AT = "createdAt";
@@ -66,8 +63,7 @@ public class ProjectRepository {
     }
 
     /**
-     * Collects and monitors all registered workspace directories found within local storage limits.
-     * Orders matching outcomes chronologically by their last modification timestamp values.
+     * Loads all projects from the application projects directory, sorted by last modified date descending.
      */
     public LiveData<Result<List<Project>>> getAllProjects() {
         MutableLiveData<Result<List<Project>>> liveData = new MutableLiveData<>();
@@ -86,7 +82,7 @@ public class ProjectRepository {
                             File meta = new File(metaDir, PROJECT_FILE);
                             File legacyMeta = new File(dir, LEGACY_META_FILE);
 
-                            // Silent Migration Heuristic
+                            // Migrate legacy metadata if present
                             if (!meta.exists() && legacyMeta.exists()) {
                                 try {
                                     String jsonString = FileUtils.readFile(legacyMeta);
@@ -110,19 +106,16 @@ public class ProjectRepository {
 
                             if (meta.exists()) {
                                 try {
-                                    // Parse individual internal description structures
                                     Project p = readProjectMeta(meta, dir);
                                     p.setFileCount(FileUtils.countFilesInDir(dir));
                                     projects.add(p);
                                 } catch (Exception ignored) {
-                                    // Soft failure processing skip preserves list load stability
                                 }
                             }
                         }
                     }
                 }
 
-                // Sort files from newest down to oldest modifications if platform layers support it
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     projects.sort((a, b) -> Long.compare(b.getLastModifiedAt(), a.getLastModifiedAt()));
                 }
@@ -157,7 +150,7 @@ public class ProjectRepository {
     }
 
     /**
-     * Creates workspace layout instances executing targeted initial default branch criteria configurations.
+     * Creates a new project with the given template, optionally initializing a Git repository.
      */
     public LiveData<Result<Project>> createProject(String name, String mainFile, String templateChoice, boolean initGit, String defaultBranch) {
         MutableLiveData<Result<Project>> liveData = new MutableLiveData<>();
@@ -179,7 +172,6 @@ public class ProjectRepository {
 
                 Project project = new Project(id, name.trim(), now, now, resolvedMainFile, 0);
 
-                // Option Variant A: Provision complete web layouts with interlocking styling sheets and actions
                 if ("HTML+CSS+JS".equals(templateChoice)) {
                     String htmlContent = readTemplateFromAssets("template_html_css_js.html");
                     String cssContent = readTemplateFromAssets("template_blank.css");
@@ -188,14 +180,11 @@ public class ProjectRepository {
                     FileUtils.writeFile(new File(projectDir, resolvedMainFile), htmlContent);
                     FileUtils.writeFile(new File(projectDir, "style.css"), cssContent);
                     FileUtils.writeFile(new File(projectDir, "app.js"), jsContent);
-
-                    // Option Variant B: Provision standalone standard text markup pages
                 } else if ("HTML".equals(templateChoice)) {
                     String htmlContent = readTemplateFromAssets("template_blank.html");
                     FileUtils.writeFile(new File(projectDir, resolvedMainFile), htmlContent);
                 }
 
-                // If version control configurations are requested, run full environment initializations next
                 if (initGit) {
                     GitRepository git = new GitRepository();
                     git.setConfiguredDefaultBranch(defaultBranch);
@@ -215,7 +204,7 @@ public class ProjectRepository {
     }
 
     /**
-     * Renames user targets inside the project collection metadata records.
+     * Renames a project and updates its metadata.
      */
     public LiveData<Result<Project>> renameProject(Project project, String newName) {
         MutableLiveData<Result<Project>> liveData = new MutableLiveData<>();
@@ -243,7 +232,7 @@ public class ProjectRepository {
     }
 
     /**
-     * Destroys directory footprints for specified projects inside local partitions.
+     * Deletes a project and its directory recursively.
      */
     public LiveData<Result<Boolean>> deleteProject(Project project) {
         MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
@@ -265,7 +254,7 @@ public class ProjectRepository {
     }
 
     /**
-     * Clones workspace environments into separate distinct resource layouts.
+     * Duplicates an existing project into a new directory with a generated UUID.
      */
     public LiveData<Result<Project>> duplicateProject(Project source) {
         MutableLiveData<Result<Project>> liveData = new MutableLiveData<>();
@@ -304,7 +293,7 @@ public class ProjectRepository {
     }
 
     /**
-     * Bumps modification tracking records on targeted directories, updating aggregate totals.
+     * Updates the last modified timestamp and file count for a project by ID.
      */
     public void touchProjectById(String projectId) {
         if (projectId == null || projectId.isEmpty()) return;
@@ -321,14 +310,10 @@ public class ProjectRepository {
                 project.setFileCount(FileUtils.countFilesInDir(projectDir));
                 writeProjectMeta(projectDir, project);
             } catch (Exception ignored) {
-                // Silently bypass validation discrepancies to preserve background execution stability
             }
         });
     }
 
-    /**
-     * Commits active structural configuration parameters to disk using JSON structures.
-     */
     private void writeProjectMeta(File projectDir, Project project) throws Exception {
         JSONObject obj = new JSONObject();
         obj.put(KEY_ID, project.getId() != null ? project.getId() : "");
@@ -343,9 +328,6 @@ public class ProjectRepository {
         FileUtils.writeFile(metaFile, obj.toString(4));
     }
 
-    /**
-     * Resolves metadata values from storage descriptors during directory scanning loops.
-     */
     private Project readProjectMeta(File metaFile, File projectDir) throws Exception {
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(

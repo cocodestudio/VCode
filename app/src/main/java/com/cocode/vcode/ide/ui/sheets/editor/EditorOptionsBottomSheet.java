@@ -20,6 +20,9 @@ import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Bottom sheet dialog for toggling editor settings and display options.
+ */
 public class EditorOptionsBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetEditorOptionsBinding binding;

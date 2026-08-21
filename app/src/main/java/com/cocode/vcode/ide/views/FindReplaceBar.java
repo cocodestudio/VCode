@@ -25,9 +25,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Embedded search and text substitution dashboard component.
- * Coordinates user query updates through regex/token filters on thread pools,
- * rendering color highlights above matching entries with look-ahead viewport centering.
+ * In-editor find and replace bar component.
+ * Supports case-sensitive matching, whole-word matching, regular expressions,
+ * debounced background searches, and batch text replacement.
  */
 public class FindReplaceBar extends LinearLayout {
 
@@ -122,7 +122,7 @@ public class FindReplaceBar extends LinearLayout {
     }
 
     /**
-     * Swaps out the currently selected text match snippet with the replacement configuration data.
+     * Replaces the currently highlighted search match with the replacement text.
      */
     public void replace() {
         if (editor == null || results.isEmpty() || currentIndex < 0) return;
@@ -134,14 +134,13 @@ public class FindReplaceBar extends LinearLayout {
     }
 
     /**
-     * Replaces every single identified match down the document text buffer.
-     * Evaluates files working backwards to keep modifications from invalidating upcoming indices.
+     * Replaces all matches in the editor with the replacement text.
+     * Iterates backwards so earlier offsets remain valid during replacements.
      */
     public void replaceAll() {
         if (editor == null || results.isEmpty()) return;
         String replacement = binding.etReplace.getText().toString();
 
-        // Note: Looping backwards prevents shifting index parameters from invalidating text boundaries downstream
         for (int i = results.size() - 1; i >= 0; i--) {
             SearchResult r = results.get(i);
             editor.replaceRange(r.absoluteStart, r.absoluteEnd, replacement);
@@ -183,7 +182,7 @@ public class FindReplaceBar extends LinearLayout {
     }
 
     /**
-     * Executes queries parsing systems on async workers to preserve smooth ui presentation flows.
+     * Executes the search asynchronously on a CPU thread and updates decorations on the main thread.
      */
     private void runSearch() {
         if (editor == null) return;
@@ -204,7 +203,6 @@ public class FindReplaceBar extends LinearLayout {
             List<SearchResult> found = searchEngine.find(query, text, caseSensitive, useRegex, wholeWord);
 
             ExecutorProvider.getInstance().runOnMain(() -> {
-                // Safeguard against background thread racing anomalies
                 if (searchId != activeSearchId) return;
 
                 results = found;
@@ -218,8 +216,7 @@ public class FindReplaceBar extends LinearLayout {
 
     private void applyHighlights() {
         if (editor == null) return;
-        // Phase 6: delegate to the new setSearchDecorations() API on CodeEditText.
-        // The editor's onDraw() paints search result backgrounds from this list.
+        // Delegate to setSearchDecorations() on CodeEditText for custom painting in onDraw().
         editor.setSearchDecorations(results, currentIndex);
     }
 
@@ -229,7 +226,7 @@ public class FindReplaceBar extends LinearLayout {
     }
 
     /**
-     * Shifts editor focus coordinates to position current search items cleanly on screen.
+     * Scrolls the editor viewport to bring the current search match into view and selects it.
      */
     private void scrollToCurrentResult() {
         if (editor == null || currentIndex < 0 || currentIndex >= results.size()) return;

@@ -16,9 +16,7 @@ import com.cocode.vcode.ide.R;
 import com.google.android.material.snackbar.Snackbar;
 
 /**
- * Platform interface layout helper.
- * Manages soft keyboard flags, visual text notifications banners, display density unit metric conversions,
- * edge-to-edge window inset tracking alignments, and rounds components programmatically.
+ * UI utility methods for density conversions, soft keyboard management, Snackbars, window insets, and view styling.
  */
 public class UiUtils {
 
@@ -26,7 +24,7 @@ public class UiUtils {
     }
 
     /**
-     * Translates horizontal scale raw dp points values into exact machine execution pixel units.
+     * Converts density-independent pixels (dp) to device pixels (px).
      */
     public static int dpToPx(Context ctx, float dp) {
         return Math.round(TypedValue.applyDimension(
@@ -35,7 +33,7 @@ public class UiUtils {
     }
 
     /**
-     * Safely retracts keyboard layouts off active workspace inputs.
+     * Hides the soft input keyboard for the given activity.
      */
     public static void hideKeyboard(Activity activity) {
         if (activity == null) return;
@@ -49,7 +47,7 @@ public class UiUtils {
     }
 
     /**
-     * Focuses input elements and requests window manager parameters to launch presentation keyboards.
+     * Shows the soft input keyboard for the given focused view.
      */
     public static void showKeyboard(View view) {
         if (view == null) return;
@@ -62,7 +60,7 @@ public class UiUtils {
     }
 
     /**
-     * Displays a text action message confirmation message box along base editor sheets layers.
+     * Displays a standard Snackbar message.
      */
     public static void showSnackbar(View anchor, String message, int duration) {
         if (anchor == null || message == null) return;
@@ -70,18 +68,18 @@ public class UiUtils {
     }
 
     /**
-     * Launches stylized notification banners colored explicitly to represent process failure logs feedback.
+     * Displays an error Snackbar with the error accent color.
      */
     public static void showErrorSnackbar(View anchor, String message) {
         if (anchor == null || message == null) return;
         Snackbar snackbar = Snackbar.make(anchor, message, Snackbar.LENGTH_LONG);
         snackbar.getView().setBackgroundColor(
-                ContextCompat.getColor(anchor.getContext(), R.color.vcode_accent_error));
+            ContextCompat.getColor(anchor.getContext(), R.color.vcode_accent_error));
         snackbar.show();
     }
 
     /**
-     * Configures component properties padding layers to account for status bar space limitations.
+     * Applies system bar insets (status bar and navigation bar) as padding to the given view.
      */
     public static void applySystemBarInsets(View view) {
         if (view == null) return;
@@ -93,8 +91,7 @@ public class UiUtils {
     }
 
     /**
-     * Calculates composite layout space properties for complex edge-to-edge screens,
-     * distributing safe boundaries across drawers components and active container panels.
+     * Applies system and IME bar insets as padding to main content and drawer views.
      */
     public static void applySystemBarInsets(View drawerLayout, View mainContent, View drawerContainer) {
         ViewCompat.setOnApplyWindowInsetsListener(drawerLayout, (v, insets) -> {
@@ -119,11 +116,11 @@ public class UiUtils {
     }
 
     /**
-     * Applies precise outline corner clipping geometries along with solid background coloring rules.
+     * Applies a rounded rectangle background shape with the specified corner radius and color to a view.
      *
-     * @param view   The target presentation layer item to morph.
-     * @param radius The exact boundary corner rounding width specified in scale pixels.
-     * @param color  The absolute color resource hex definition value.
+     * @param view   the target view
+     * @param radius corner radius in pixels
+     * @param color  fill color
      */
     public static void setViewRounded(View view, float radius, int color) {
         GradientDrawable shape = new GradientDrawable();

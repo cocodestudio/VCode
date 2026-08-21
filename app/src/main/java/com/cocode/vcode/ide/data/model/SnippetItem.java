@@ -3,8 +3,7 @@ package com.cocode.vcode.ide.data.model;
 import com.cocode.vcode.ide.core.model.FileType;
 
 /**
- * Data object container mapping user-defined boilerplate code pieces.
- * Maps code snippet strings to localized categorization labels and language configurations.
+ * Model representing a user-defined or built-in code snippet.
  */
 public class SnippetItem {
     private String id;
@@ -12,18 +11,12 @@ public class SnippetItem {
     private String content;
     private FileType fileType;
 
-    /**
-     * Three-argument constructor initializing newly authored snippet templates before disk persistence allocation.
-     */
     public SnippetItem(String title, String content, FileType fileType) {
         this.title = title;
         this.content = content;
         this.fileType = fileType;
     }
 
-    /**
-     * Four-argument constructor handling direct indexing from localized repository storage channels.
-     */
     public SnippetItem(String id, String title, String content, FileType fileType) {
         this.id = id;
         this.title = title;

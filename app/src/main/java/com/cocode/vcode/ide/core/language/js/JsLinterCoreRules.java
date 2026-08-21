@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Core validation rules for JavaScript linting (syntax, globals, reserved words).
+ */
 public class JsLinterCoreRules {
     public static final Pattern PAT_VAR = Pattern.compile("\\bvar\\s+([a-zA-Z_$][\\w$]*)");
     public static final Pattern PAT_CONSOLE = Pattern.compile("\\bconsole\\.(\\w+)");
@@ -218,7 +221,6 @@ public class JsLinterCoreRules {
             }
         }
     }
-
 
     public static void checkPromiseChain(File file, String text, TokenMask mask, List<Problem> out) {
         Matcher m = PAT_THEN.matcher(text);

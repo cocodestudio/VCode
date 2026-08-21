@@ -11,6 +11,9 @@ import com.cocode.vcode.ide.utils.ColorParser;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Syntax highlighter for CSS and SCSS stylesheets.
+ */
 public class CssSyntaxHighlighter extends SyntaxHighlighter {
 
     protected final int colorSelector;

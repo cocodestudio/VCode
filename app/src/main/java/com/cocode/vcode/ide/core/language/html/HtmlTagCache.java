@@ -120,7 +120,6 @@ public class HtmlTagCache {
             }
             isLoaded = true;
         } catch (Exception e) {
-            // Log issues safely; structural fallbacks ensure basic layout features continue running
             android.util.Log.e("VCode", "Failed to load html_tags.json", e);
         }
     }

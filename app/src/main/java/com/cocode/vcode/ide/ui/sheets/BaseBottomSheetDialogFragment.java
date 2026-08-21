@@ -13,6 +13,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
+/**
+ * Base class for bottom sheet dialogs providing consistent styling and lifecycle handling.
+ */
 public class BaseBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
     @Override

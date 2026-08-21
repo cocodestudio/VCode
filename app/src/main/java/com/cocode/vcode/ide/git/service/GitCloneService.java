@@ -26,6 +26,9 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Foreground service for running background Git clone operations with notification progress updates.
+ */
 public class GitCloneService extends Service {
 
     public static final String ACTION_START_CLONE = "com.cocode.vcode.ide.action.START_CLONE";

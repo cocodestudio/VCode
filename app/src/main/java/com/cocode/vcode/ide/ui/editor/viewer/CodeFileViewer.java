@@ -17,6 +17,9 @@ import com.cocode.vcode.ide.views.CodeEditText;
 import com.cocode.vcode.ide.views.CodeEditorLayout;
 
 
+/**
+ * Primary code file viewer tab component wrapping the CodeEditText editor.
+ */
 public class CodeFileViewer implements IFileViewer {
 
     private final Handler jsonValidationHandler = new Handler(Looper.getMainLooper());

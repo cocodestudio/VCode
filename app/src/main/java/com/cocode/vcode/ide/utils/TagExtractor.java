@@ -3,6 +3,10 @@ package com.cocode.vcode.ide.utils;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Utility for extracting inline {@code <style>} or {@code <script>} tags from HTML documents
+ * into separate external files and replacing them with {@code <link>} or external {@code <script>} references.
+ */
 public class TagExtractor {
 
     public static class Result {

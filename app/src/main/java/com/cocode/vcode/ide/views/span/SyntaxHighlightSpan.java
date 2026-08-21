@@ -5,9 +5,7 @@ import android.text.style.ForegroundColorSpan;
 import androidx.annotation.NonNull;
 
 /**
- * Custom character text markup formatting style span.
- * Inherits from standard platform ForegroundColorSpan types to tag and paint parsed
- * programming tokens within editable code views safely.
+ * Character formatting span that applies syntax highlighting colors and optional underline styles to tokens.
  */
 public class SyntaxHighlightSpan extends ForegroundColorSpan {
 

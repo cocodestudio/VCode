@@ -10,17 +10,14 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 /**
- * Integrity preservation coordinator guarding project setup states.
- * Scans directories to confirm standard tracking logs remain present, auto-generating
- * default metadata records if files are missing or broken.
+ * Ensures required project metadata files (such as .vcode/meta/project.json and .vcode/state/session.json)
+ * exist for VCode projects, auto-generating default configuration records if missing.
  */
 public class ProjectFileRecovery {
 
     /**
-     * Reviews state settings layout integrity, re-instantiating metadata sheets if they have been dropped.
-     * Only runs for directories that VCode actually owns (inside VCodeProjects/).
-     * External directories (Downloads, Documents, etc.) are skipped intentionally to avoid
-     * creating stray metadata files in folders VCode doesn't own.
+     * Verifies that project metadata and session files exist in the specified project root, creating defaults if missing.
+     * Only runs for directories inside VCodeProjects/ to avoid writing metadata in external folders.
      */
     public static void ensureProjectFilesExist(File projectRoot) {
         if (projectRoot == null || !projectRoot.exists() || !projectRoot.isDirectory()) {
@@ -47,7 +44,7 @@ public class ProjectFileRecovery {
     }
 
     /**
-     * Restores default configuration metrics descriptors for project metadata fields.
+     * Creates a default project metadata JSON file.
      */
     private static void createDefaultProjectMeta(File metaFile) {
         try {
@@ -63,7 +60,7 @@ public class ProjectFileRecovery {
     }
 
     /**
-     * Instantiates blank workspace track configurations maps for newly restored environment nodes.
+     * Creates a default session state JSON file.
      */
     private static void createDefaultSession(File sessionFile) {
         try {
@@ -79,7 +76,7 @@ public class ProjectFileRecovery {
     }
 
     /**
-     * Serializes parameters configurations directly onto disk storage tracks using a clean 4-space layout.
+     * Writes a JSON object to a file with 4-space indentation.
      */
     private static void writeJsonToFile(File file, JSONObject json) throws IOException, JSONException {
         try (FileWriter writer = new FileWriter(file)) {

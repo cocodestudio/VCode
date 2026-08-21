@@ -10,6 +10,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Client for interacting with the GitHub REST API (user info, repository creation).
+ */
 public class GitHubApiClient {
     public static final String BASE_URL = "https://api.github.com";
     private static final int CONNECT_TIMEOUT = 15000;

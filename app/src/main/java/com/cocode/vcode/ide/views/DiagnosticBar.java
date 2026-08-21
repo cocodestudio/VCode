@@ -13,6 +13,10 @@ import com.cocode.vcode.ide.databinding.ViewDiagnosticBarBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
+/**
+ * Status bar widget displaying real-time diagnostic counts (errors, warnings, infos)
+ * or an analyzing spinner during background lint passes.
+ */
 public class DiagnosticBar extends LinearLayout {
 
     private ViewDiagnosticBarBinding binding;

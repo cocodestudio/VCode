@@ -10,6 +10,9 @@ import com.cocode.vcode.ide.core.language.base.SyntaxHighlighter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Syntax highlighter for JSON files.
+ */
 public class JsonSyntaxHighlighter extends SyntaxHighlighter {
 
     private final int colorKey;

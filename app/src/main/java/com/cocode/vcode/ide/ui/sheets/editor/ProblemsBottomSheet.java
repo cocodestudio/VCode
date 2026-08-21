@@ -23,6 +23,9 @@ import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Bottom sheet dialog listing real-time syntax errors and warnings found in the open file.
+ */
 public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
 
     private ProblemsAdapter adapter;

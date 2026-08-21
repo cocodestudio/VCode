@@ -18,6 +18,10 @@ import com.cocode.vcode.ide.R;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Manages background file operations (such as copying or moving large files/directories),
+ * publishing live progress to {@link LiveData} and system notifications with cancellation support.
+ */
 public class FileOperationManager {
 
     public static final String ACTION_CANCEL_OPERATION = "com.cocode.vcode.ide.ACTION_CANCEL_FILE_OP";

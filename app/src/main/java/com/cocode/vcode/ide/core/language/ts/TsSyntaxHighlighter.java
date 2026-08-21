@@ -8,6 +8,9 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Syntax highlighter for TypeScript source files.
+ */
 public class TsSyntaxHighlighter extends JsSyntaxHighlighter {
 
     private static final Set<String> TS_KEYWORDS = new HashSet<>(Arrays.asList(

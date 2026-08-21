@@ -17,6 +17,9 @@ import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.views.CodeEditText;
 
+/**
+ * In-editor web preview viewer tab component wrapping an embedded WebView.
+ */
 public class WebPreviewViewer implements IFileViewer {
 
     private WebView webView;

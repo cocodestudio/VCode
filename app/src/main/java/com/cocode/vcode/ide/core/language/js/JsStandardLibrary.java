@@ -6,6 +6,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Standard library definitions and built-in objects for JavaScript autocompletion and linting.
+ */
 public class JsStandardLibrary {
 
     public static final String[][] DOT_METHODS = {

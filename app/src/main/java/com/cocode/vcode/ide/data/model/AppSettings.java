@@ -1,13 +1,11 @@
 package com.cocode.vcode.ide.data.model;
 
 /**
- * Global configuration model managing user settings across the entire IDE workspace.
- * Organizes preferences for editor behavior, code validation engines, Git version
- * control parameters, theme appearance styles, and automated file-saving actions.
+ * Data model for global and project-level settings (editor preferences, Git defaults, appearance, preview, and auto-save).
  */
 public class AppSettings {
 
-    // --- Editor Configurations ---
+    // Editor Configurations
     public int fontSize = 14;
     public int tabSize = 2;
     public boolean showLineNumbers = true;
@@ -19,11 +17,11 @@ public class AppSettings {
     public boolean autoIndent = true;
     public boolean matchBrackets = true;
 
-    // --- JSON Validation & Formatting ---
+    // JSON Validation & Formatting
     public int jsonIndentSize = 2;
     public boolean jsonFormatOnSave = false;
 
-    // --- Git Integration Settings ---
+    // Git Integration Settings
     public String gitAuthorName = "";
     public String gitAuthorEmail = "";
     public String gitDefaultBranch = "main";
@@ -33,24 +31,21 @@ public class AppSettings {
     public boolean gitShowFileTreeStatus = true;
     public String gitDefaultRemote = "origin";
 
-    // --- Appearance Settings ---
+    // Appearance Settings
     public Theme theme = Theme.SYSTEM;
 
-    // --- Live Preview Preferences ---
+    // Live Preview Preferences
     public boolean openPreviewInApp = true;
     public boolean autoRefreshPreview = false;
 
-    // --- Auto-Save Routines ---
+    // Auto-Save Settings
     public boolean autoSave = false;
-    public int autoSaveDelay = 2; // Expressed in seconds
+    public int autoSaveDelay = 2; // seconds
 
-    // --- Safety and Operational Prompts ---
+    // Safety and Confirmation Dialogs
     public boolean confirmOnTabClose = true;
     public boolean confirmOnProjectDelete = true;
 
-    /**
-     * Default constructor for instantiation and serialization engines.
-     */
     public AppSettings() {
     }
 

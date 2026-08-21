@@ -10,17 +10,12 @@ import com.cocode.vcode.ide.utils.FileUtils;
 import java.io.File;
 
 /**
- * Low-level data repository coordinating disk I/O file operations.
- * Handles reading, writing, and deleting local workspace documents asynchronously
- * off the main application thread using managed LiveData wrappers.
+ * Repository coordinating file I/O operations (asynchronous and synchronous file writes, recursive deletion).
  */
 public class FileRepository {
 
     private static final MutableLiveData<File> fileSavedEvent = new MutableLiveData<>();
 
-    /**
-     * Instantiates the file repository component.
-     */
     public FileRepository() {
     }
 
@@ -28,15 +23,12 @@ public class FileRepository {
         return fileSavedEvent;
     }
 
-    // --- Section: Write ---
-
     /**
-     * Asynchronously writes content to a target file on the disk storage system.
-     * Shifts execution to an I/O thread pool and returns feedback to the active subscriber loop.
+     * Asynchronously writes content to a file on the I/O thread, posting the result to {@link LiveData}.
      *
-     * @param file    The local target file descriptor block to modify.
-     * @param content The string character sequence data payload to push to disk.
-     * @return A LiveData notification channel containing operation result states.
+     * @param file    the destination file
+     * @param content the content string to write
+     * @return a {@link LiveData} containing the {@link Result} of the operation
      */
     public LiveData<Result<Boolean>> writeFile(File file, String content) {
         MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
@@ -45,17 +37,14 @@ public class FileRepository {
             return liveData;
         }
 
-        // Dispatch disk writing operation to a dedicated background I/O worker thread
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 FileUtils.writeFile(file, content != null ? content : "");
-                // Safely post a successful status state back onto the user interface thread
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     liveData.setValue(Result.success(true));
                     fileSavedEvent.setValue(file);
                 });
             } catch (Exception e) {
-                // Route failures gracefully back to active UI components
                 ExecutorProvider.getInstance()
                         .runOnMain(() -> liveData.setValue(Result.error("Failed to write file: " + e.getMessage())));
             }
@@ -64,8 +53,7 @@ public class FileRepository {
     }
 
     /**
-     * Synchronous write — call only from a background thread. Returns success flag.
-     * Leverages raw synchronous calls for quick saving routines within thread limits.
+     * Synchronously writes content to a file (intended for background threads).
      */
     public void writeFileSync(File file, String content) {
         if (file == null)
@@ -74,17 +62,11 @@ public class FileRepository {
             FileUtils.writeFile(file, content != null ? content : "");
             ExecutorProvider.getInstance().runOnMain(() -> fileSavedEvent.setValue(file));
         } catch (Exception ignored) {
-            // Fails silently; optimized for fast-paced ambient background sync calls
         }
     }
 
-    // --- Section: Delete ---
-
     /**
-     * Recursively targets and destroys a specified file or workspace directory branch.
-     *
-     * @param file The file or folder node targeted for removal.
-     * @return A LiveData channel delivering the final destruction outcome status.
+     * Asynchronously deletes a file or directory recursively on the I/O thread.
      */
     public LiveData<Result<Boolean>> delete(File file) {
         MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();

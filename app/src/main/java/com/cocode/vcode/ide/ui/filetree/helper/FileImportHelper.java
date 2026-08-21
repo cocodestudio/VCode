@@ -17,6 +17,9 @@ import java.io.OutputStream;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Helper for importing external files and ZIP archives into the active workspace.
+ */
 public class FileImportHelper {
 
     public static void copyUrisToProject(Context context, List<Uri> uris, File root, Runnable onComplete) {

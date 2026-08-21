@@ -18,6 +18,9 @@ import com.cocode.vcode.ide.ui.projects.ProjectsActivity;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
+/**
+ * Crash log inspection activity that displays uncaught exception stack traces.
+ */
 public class DebugActivity extends AppCompatActivity {
 
     public static final String EXTRA_CRASH_LOG = "extra_crash_log";

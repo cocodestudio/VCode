@@ -15,6 +15,9 @@ import com.cocode.vcode.ide.utils.LocalWebServer;
 
 import java.util.List;
 
+/**
+ * Helper for managing live web preview server initialization, navigation, and file synchronization.
+ */
 public class EditorPreviewHelper {
 
     public static LocalWebServer handleRunAction(EditorActivity activity, EditorViewModel viewModel, LocalWebServer localWebServer, PreviewCallbacks callbacks, Runnable stopServerUI, Runnable startServerUI) {

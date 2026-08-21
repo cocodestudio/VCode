@@ -4,8 +4,8 @@ import com.cocode.vcode.ide.core.language.html.HtmlTagCache;
 import com.cocode.vcode.ide.core.model.FileType;
 
 /**
- * Computing manager coordinating intelligent newline auto-indentation layouts.
- * Matches structural syntax cues like brackets, block elements, or open states to adjust tab indentation.
+ * Engine calculating auto-indentation whitespace when a new line is inserted,
+ * handling braces, brackets, and open HTML tags.
  */
 public class IndentationEngine {
     private final String tabString;
@@ -18,45 +18,37 @@ public class IndentationEngine {
     }
 
     /**
-     * Determines the exact workspace indentation whitespace block necessary when a carriage return is pressed.
+     * Calculates the leading indentation string for a new line inserted at the cursor position.
      */
     public String getIndentForNewLine(String text, int cursorPos, FileType lang) {
         if (text == null || cursorPos <= 0) return "";
 
-        // Scan backwards to extract the current line up to the cursor safely without redundant allocations
         int minPos = Math.min(cursorPos, text.length());
         int lineStart = text.lastIndexOf('\n', minPos - 1);
         String currentLine = text.substring(lineStart + 1, minPos);
 
-        String baseIndent = getLeadingWhitespace(currentLine); // Read ancestral indentation level
+        String baseIndent = getLeadingWhitespace(currentLine);
         String trimmedLine = currentLine.trim();
 
-        // Increment spacing offset if structural keywords or block markers are met
         if (shouldIncreaseIndent(trimmedLine, lang)) {
             return baseIndent + getTabString();
         }
 
-        return baseIndent; // Maintain original layout balance level
+        return baseIndent;
     }
 
     public String getTabString() {
         return this.tabString;
     }
 
-    /**
-     * Decides whether the current code statement implies a nested structural block follows next.
-     */
     private boolean shouldIncreaseIndent(String trimmedLine, FileType lang) {
         if (trimmedLine.isEmpty()) return false;
         char last = trimmedLine.charAt(trimmedLine.length() - 1);
 
-        // Core Trigger: Line terminates with typical programming block delimiters
         if (last == '{' || last == '(' || last == '[') return true;
 
-        // Custom XML/Markup evaluation blocks
         if (lang == FileType.HTML || lang == FileType.TEXT) {
             if (trimmedLine.endsWith(">") && !trimmedLine.contains("</")) {
-                // Highly efficient tag extraction without regex
                 int openAngle = trimmedLine.lastIndexOf('<');
                 if (openAngle >= 0) {
                     int spaceIdx = trimmedLine.indexOf(' ', openAngle);
@@ -65,7 +57,6 @@ public class IndentationEngine {
 
                     if (endIdx > openAngle + 1) {
                         String tag = trimmedLine.substring(openAngle + 1, endIdx);
-                        // Any non-void HTML tag implies a nested block follows next
                         return !HtmlTagCache.isVoidElement(tag);
                     }
                 }
@@ -75,9 +66,6 @@ public class IndentationEngine {
         return false;
     }
 
-    /**
-     * Captures leading tabs or space patterns running down the front edge of a code statement line.
-     */
     private String getLeadingWhitespace(String line) {
         if (line == null) return "";
         int i = 0;

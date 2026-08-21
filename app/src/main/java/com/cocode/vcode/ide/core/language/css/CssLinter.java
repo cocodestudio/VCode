@@ -17,6 +17,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Real-time linter for CSS, checking for syntax errors, unknown properties, missing semicolons, and invalid values.
+ */
 public class CssLinter {
 
     // Patterns compiled once

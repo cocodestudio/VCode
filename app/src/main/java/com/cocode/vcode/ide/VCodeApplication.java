@@ -15,6 +15,9 @@ import com.cocode.vcode.ide.ui.debug.DebugActivity;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
+/**
+ * Application entry point for VCode IDE. Initializes static caches, crash handling, and user theme.
+ */
 public class VCodeApplication extends Application {
     private static VCodeApplication instance;
 

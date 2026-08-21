@@ -39,7 +39,7 @@ import java.util.regex.Pattern;
  */
 public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
-    // ─── Regex patterns ────────────────────────────────────────────────────────
+    // Regex patterns
     private static final Pattern PAT_USER_DECL = Pattern.compile(
             "function\\s+([a-zA-Z_$][\\w$]*)\\s*\\("           // named function
                     + "|class\\s+([a-zA-Z_$][\\w$]*)"                   // class
@@ -65,7 +65,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             "\\bimport\\s+\\{[^{}]*\\bas\\s+\\w*$");
     private static final Pattern PAT_IMPORT_STAR = Pattern.compile("import\\s+\\*\\s+as\\s+([a-zA-Z_$][\\w$]*)\\s+from\\s+['\"]([^'\"]+)['\"]");
 
-    // ─── Instance state ─────────────────────────────────────────────────────────
+    // Instance state
     private final List<CompletionItem> builtinItems = new ArrayList<>();
     private final List<JsSymbol> cachedUserSymbols = new ArrayList<>();
     private final Map<String, String> varTypeMap = new HashMap<>();
@@ -91,8 +91,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Keyword loading ───────────────────────────────────────────────────────
-
+    // Keyword loading
     private void loadKeywords() {
         try {
             String json = loadAssetJson("completions/js_keywords.json");
@@ -124,8 +123,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Main entry point ──────────────────────────────────────────────────────
-
+    // Main entry point
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
         if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
@@ -133,15 +131,15 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         String word = getWordBeforeCursor(fullText, cursorPos);
 
-        // ── 1. Import / require path completion ──────────────────────────────
+    // 1. Import / require path completion
         List<CompletionItem> importItems = getImportPathSuggestions(fullText, cursorPos);
         if (importItems != null) return importItems;
 
-        // ── 1c. Import block completion ──────────────────────────────────────
+    // 1c. Import block completion
         List<CompletionItem> importExport = getImportExportSuggestions(fullText, cursorPos, word);
         if (importExport != null) return importExport;
 
-        // ── 1b. Event name string completions (addEventListener/removeEventListener) ──
+    // 1b. Event name string completions (addEventListener/removeEventListener)
         String lineBefore = getLineBeforeCursor(fullText, cursorPos);
         Matcher eventMatcher = PAT_EVENT_STRING.matcher(lineBefore);
         if (eventMatcher.find()) {
@@ -171,14 +169,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             return new ArrayList<>();
         }
 
-        // ── 2. Dot-member completion ─────────────────────────────────────────
+    // 2. Dot-member completion
         int dotCheckPos = cursorPos - word.length() - 1;
         if (dotCheckPos >= 0 && fullText.charAt(dotCheckPos) == '.') {
             List<CompletionItem> memberItems = getMemberCompletions(fullText, dotCheckPos, word);
             if (!memberItems.isEmpty()) return memberItems;
         }
 
-        // ── 2b. Object literal key completion ────────────────────────────────
+    // 2b. Object literal key completion
         // If we're inside an object literal (after { or ,) suggest known keys
         List<CompletionItem> objKeys = getObjectLiteralSuggestions(fullText, cursorPos, word);
         if (objKeys != null) return objKeys;
@@ -189,7 +187,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── 3. General: keywords + user symbols ──────────────────────────────
+    // 3. General: keywords + user symbols
         ensureDocumentIndexed(fullText);
         List<CompletionItem> all = new ArrayList<>(builtinItems);
         Set<String> added = new HashSet<>();
@@ -222,8 +220,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return prefixed;
     }
 
-    // ─── Object literal key suggestions ────────────────────────────────────────
-
+    // Object literal key suggestions
     /**
      * Detects if cursor is in an object literal key position and suggests known keys.
      * Returns null if not in object literal context, empty list if in context but no suggestions.
@@ -314,8 +311,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return -1;
     }
 
-    // ─── Import / require path completion ─────────────────────────────────────
-
+    // Import / require path completion
     private List<CompletionItem> getImportExportSuggestions(String fullText, int cursorPos, String word) {
         String before = fullText.substring(0, cursorPos);
 
@@ -444,8 +440,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 || lower.endsWith(".tsx") || lower.endsWith(".json") || lower.endsWith(".mjs");
     }
 
-    // ─── Dot-member completion ─────────────────────────────────────────────────
-
+    // Dot-member completion
     /**
      * Computes member completions for the object/expression before the dot.
      *
@@ -456,25 +451,25 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         String objectToken = extractObjectBeforeDot(text, dotPos);
         if (objectToken.isEmpty()) return new ArrayList<>();
 
-        // ── this. → current class member completions ─────────────────────────
+    // this. → current class member completions
         if (objectToken.equals("this")) {
             List<CompletionItem> thisMembers = getCurrentClassMembers(text, dotPos);
             if (!thisMembers.isEmpty()) return fuzzyFilter(thisMembers, word);
         }
 
-        // ── a. Check known static namespaces ─────────────────────────────────
+    // a. Check known static namespaces
         for (String[] pair : JsStandardLibrary.DOT_METHODS) {
             if (pair[0].equalsIgnoreCase(objectToken) || objectToken.endsWith(pair[0])) {
                 return buildMemberList(pair[0], pair[1].split(","), word, CompletionItem.Type.BUILTIN);
             }
         }
 
-        // ── b. Functions that always return Promise (e.g. fetch) ──────────────
+    // b. Functions that always return Promise (e.g. fetch)
         if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(objectToken)) {
             return buildMemberList("Promise", JsStandardLibrary.PROTOTYPE_METHODS.get("promise"), word, CompletionItem.Type.FUNCTION);
         }
 
-        // ── c. Chain return type — e.g. "arr.filter(...)" → array methods ────
+    // c. Chain return type — e.g. "arr.filter(...)" → array methods
         String chainType = JsStandardLibrary.CHAIN_RETURN_TYPES.get(objectToken);
         if (chainType != null) {
             String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(chainType);
@@ -483,7 +478,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── d. User-variable type inference ───────────────────────────────────
+    // d. User-variable type inference
         String inferredType = varTypeMap.get(objectToken);
         if (inferredType != null) {
             if (inferredType.startsWith("module:")) {
@@ -509,7 +504,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             if (!classMembers.isEmpty()) return fuzzyFilter(classMembers, word);
         }
 
-        // ── d2. Check if objectToken is a class instance (new ClassName = varName) ─
+    // d2. Check if objectToken is a class instance (new ClassName = varName)
         // Scan document for `const objectToken = new ClassName(`
         Matcher mNew = PAT_NEW_INSTANCE.matcher(text);
         while (mNew.find()) {
@@ -523,7 +518,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── e. Heuristic name-based guess ─────────────────────────────────────
+    // e. Heuristic name-based guess
         String lower = objectToken.toLowerCase();
         for (Map.Entry<String, String[]> entry : JsStandardLibrary.PROTOTYPE_METHODS.entrySet()) {
             String key = entry.getKey();
@@ -615,8 +610,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return text.substring(i, end);
     }
 
-    // ─── Class member helpers ─────────────────────────────────────────────────
-
+    // Class member helpers
     /**
      * Returns class members for `this.` by finding which class body the cursor is inside.
      */
@@ -679,8 +673,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return members;
     }
 
-    // ─── Document symbol indexing ──────────────────────────────────────────────
-
+    // Document symbol indexing
     private void ensureDocumentIndexed(String text) {
         int hash = text.hashCode();
         if (hash == lastTextHash) return;

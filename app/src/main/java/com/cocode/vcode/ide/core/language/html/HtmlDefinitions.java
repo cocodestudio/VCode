@@ -7,6 +7,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Static definitions of HTML tags, attributes, event handlers, and entities.
+ */
 public class HtmlDefinitions {
     public static final List<CompletionItem> GLOBAL_ATTRS = new ArrayList<>();
     public static final List<CompletionItem> EVENT_ATTRS = new ArrayList<>();

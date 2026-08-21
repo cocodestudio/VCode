@@ -1,5 +1,8 @@
 package com.cocode.vcode.ide.core.diagnostic.util;
 
+/**
+ * Utility functions for linters (offset-to-line/column conversion, token length calculation, line slicing).
+ */
 public class LinterUtils {
 
     /**

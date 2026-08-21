@@ -3,10 +3,13 @@ package com.cocode.vcode.ide.core.language.css;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Lookup table of Emmet CSS abbreviations and their expansions.
+ */
 public class EmmetCssDefinitions {
-    // ─── CSS Named Abbreviations ────────────────────────────────────────────────
+    // CSS Named Abbreviations
     public static final Map<String, String> CSS_ABBREVS = new HashMap<>();
-    // ─── CSS numeric property map ───────────────────────────────────────────────
+    // CSS numeric property map
     public static final Map<String, String> CSS_PROP_MAP = new HashMap<>();
 
     static {
@@ -259,6 +262,5 @@ public class EmmetCssDefinitions {
         CSS_PROP_MAP.put("z", "z-index");
         CSS_PROP_MAP.put("fw", "font-weight");
     }
-
 
 }

@@ -28,9 +28,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Code boilerplate repository manager.
- * Collects, writes, updates, and deletes custom snippets, executing a merge
- * strategy to prioritize user adaptations above stock application defaults.
+ * Repository for managing user-defined and default code snippets, persisted in snippets.json.
  */
 public class SnippetRepository {
 
@@ -42,25 +40,16 @@ public class SnippetRepository {
     }
 
     /**
-     * Pulls down a combined view of available boilerplates, sorting modified variants above defaults.
-     * Prevents entry duplication by matching and excluding overlapping structural unique IDs.
-     *
-     * @return A LiveData collection containing the consolidated boilerplate results array.
+     * Returns all available snippets (user-defined merged with built-in defaults), prioritized by user overrides.
      */
     public LiveData<Result<List<SnippetItem>>> getSnippets() {
         MutableLiveData<Result<List<SnippetItem>>> liveData = new MutableLiveData<>();
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
-                // Step 1: Extract developer-defined workspace components from local storage partitions
                 List<SnippetItem> userSnippets = readSnippetsFromDisk();
-
-                // Step 2: Assemble hardcoded system baseline shortcuts
                 List<SnippetItem> defaults = getDefaultSnippets();
-
-                // Step 3: Populate user-defined models first to prioritize custom items in selection lists
                 List<SnippetItem> merged = new ArrayList<>(userSnippets);
 
-                // Step 4: Evaluate and weave default templates into selection matrices if un-overridden
                 for (SnippetItem defaultItem : defaults) {
                     boolean isOverridden = false;
                     for (SnippetItem userItem : userSnippets) {
@@ -85,8 +74,7 @@ public class SnippetRepository {
     }
 
     /**
-     * Commits newly authored shortcut macros into configuration storage blocks.
-     * Automatically reviews content blocks to determine corresponding code formatting classes.
+     * Saves a new snippet to disk, automatically inferring its file type if not set.
      */
     public LiveData<Result<SnippetItem>> saveSnippet(SnippetItem item) {
         MutableLiveData<Result<SnippetItem>> liveData = new MutableLiveData<>();
@@ -100,8 +88,6 @@ public class SnippetRepository {
                     item.setId(UUID.randomUUID().toString());
                 }
 
-                // Analyze template data profiles to apply automated language sorting labels
-                // TODO: Review LanguageDetector.detect() for potential performance optimizations
                 item.setFileType(LanguageDetector.detect(item.getContent()));
 
                 List<SnippetItem> existing = readSnippetsFromDisk();
@@ -126,8 +112,6 @@ public class SnippetRepository {
         }
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
-                // Re-evaluate grammar rules to align context changes correctly
-                // TODO: Review LanguageDetector.detect() for potential performance optimizations
                 updated.setFileType(LanguageDetector.detect(updated.getContent()));
 
                 List<SnippetItem> existing = readSnippetsFromDisk();
@@ -141,7 +125,6 @@ public class SnippetRepository {
                 }
 
                 if (!found) {
-                    // If an entry is edited but missing from local records, persist it as a new customization layer
                     existing.add(updated);
                 }
 
@@ -155,7 +138,7 @@ public class SnippetRepository {
     }
 
     /**
-     * Purges custom configurations from workspace directory paths.
+     * Deletes a user-defined snippet by ID.
      */
     public LiveData<Result<Boolean>> deleteSnippet(String snippetId) {
         MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
@@ -186,12 +169,12 @@ public class SnippetRepository {
     }
 
     /**
-     * Generates standard built-in baseline shortcuts for supported text environments.
+     * Returns built-in default snippets for HTML, CSS, and JavaScript.
      */
     private List<SnippetItem> getDefaultSnippets() {
         List<SnippetItem> defaults = new ArrayList<>();
 
-        // --- HTML Environment Snippets ---
+        // HTML Snippets
         defaults.add(new SnippetItem("def_html5", "html5 (Boilerplate)",
                 "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>|</title>\n</head>\n<body>\n\n</body>\n</html>",
                 FileType.HTML));
@@ -208,7 +191,7 @@ public class SnippetRepository {
                 "<img src=\"|\" alt=\"\">",
                 FileType.HTML));
 
-        // --- CSS Environment Snippets ---
+        // CSS Snippets
         defaults.add(new SnippetItem("def_css_reset", "reset (CSS Reset)",
                 "* {\n  margin: 0;\n  padding: 0;\n  box-sizing: border-box;\n}\n|",
                 FileType.CSS));
@@ -225,7 +208,7 @@ public class SnippetRepository {
                 ":root {\n  --primary-color: #|;\n  --secondary-color: #;\n}",
                 FileType.CSS));
 
-        // --- JavaScript Environment Snippets ---
+        // JavaScript Snippets
         defaults.add(new SnippetItem("def_clg", "clg (Console Log)",
                 "console.log(|);",
                 FileType.JAVASCRIPT));
@@ -249,14 +232,10 @@ public class SnippetRepository {
         return defaults;
     }
 
-    // --- Disk I/O Methods ---
     private File getSnippetsFile() {
         return new File(appContext.getFilesDir(), SNIPPETS_FILE_NAME);
     }
 
-    /**
-     * Unpacks user configuration logs stored on disk partitions.
-     */
     private List<SnippetItem> readSnippetsFromDisk() throws Exception {
         List<SnippetItem> list = new ArrayList<>();
         File file = getSnippetsFile();
@@ -273,9 +252,6 @@ public class SnippetRepository {
         return list;
     }
 
-    /**
-     * Persists customized snippet listings back into space-optimized data files.
-     */
     private void writeSnippetsToDisk(List<SnippetItem> snippets) throws Exception {
         JSONArray array = new JSONArray();
         for (SnippetItem s : snippets) array.put(toJson(s));

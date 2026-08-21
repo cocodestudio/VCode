@@ -9,6 +9,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Autocomplete provider for relative file and directory path suggestions in quotes/parentheses.
+ */
 public class PathAutoCompleteEngine extends AutoCompleteEngine {
 
     private File currentFile;

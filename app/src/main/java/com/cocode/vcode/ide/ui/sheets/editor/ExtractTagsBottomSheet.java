@@ -18,6 +18,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.TagExtractor;
 import com.cocode.vcode.ide.utils.UiUtils;
 
+/**
+ * Bottom sheet dialog for viewing HTML tag statistics and structure extracted from the active document.
+ */
 public class ExtractTagsBottomSheet extends BaseBottomSheetDialogFragment {
 
     public interface ExtractListener {

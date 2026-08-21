@@ -9,6 +9,9 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Helper for managing Git operations and status indicators within the editor activity.
+ */
 public class EditorGitHelper {
 
     public static void refreshGitStatuses(File projectRoot, MutableLiveData<Map<String, FileStatus.Type>> gitStatusesLiveData) {

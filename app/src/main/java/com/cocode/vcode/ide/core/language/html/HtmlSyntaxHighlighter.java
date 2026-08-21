@@ -12,6 +12,9 @@ import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Syntax highlighter for HTML documents, including embedded CSS and JavaScript.
+ */
 public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
 
     private static final int STATE_NORMAL = 0;

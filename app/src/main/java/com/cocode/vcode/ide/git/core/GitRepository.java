@@ -37,15 +37,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Main local repository controller interacting directly with the JGit engine layer.
- * Implements comprehensive version control mechanics, managing work tree staging matrices,
- * commit building, revision log histories, diff generation, reset workflows, and branch orchestration.
+ * Wrapper for JGit operations, providing staging, commit, branch management,
+ * diff generation, remote push/pull/fetch, stash, and conflict resolution.
  */
 public class GitRepository {
-    /**
-     * Attaches to an existing repository on disk or sets up a brand new one
-     * using the configured fallback branch configurations
-     */
     // Default exclusion patterns written to .gitignore on fresh repository initialization
     private static final String DEFAULT_GITIGNORE =
             "node_modules/\n.DS_Store\n*.log\ndist/\nbuild/\n.env\n.env.local\n*.class\n*.jar\n.vcode/";

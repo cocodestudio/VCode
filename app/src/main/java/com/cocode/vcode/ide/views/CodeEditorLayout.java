@@ -8,9 +8,9 @@ import android.view.View;
 import android.widget.LinearLayout;
 
 /**
- * Composite container linking the editor workspace elements.
- * Coordinates sizing constraints and horizontal alignments between the vertical line number gutter
- * and the primary editable source code canvas sheet.
+ * Composite container linking the editor workspace components.
+ * Manages layout, scrolling synchronization, and selection toolbar binding
+ * between the line number gutter ({@link LineNumberView}) and the main code view ({@link CodeEditText}).
  */
 public class CodeEditorLayout extends LinearLayout {
 
@@ -46,7 +46,6 @@ public class CodeEditorLayout extends LinearLayout {
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
         lineNumberView.setLayoutParams(lineParams);
 
-        // Grant expanding weight structures across the primary text field sheet component
         LayoutParams editorParams = new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f);
         codeEditText.setLayoutParams(editorParams);
 
@@ -58,12 +57,10 @@ public class CodeEditorLayout extends LinearLayout {
 
         lineNumberView.bindEditor(codeEditText);
 
-        // Set up SelectionToolbar (Phase 4)
         selectionToolbar = new SelectionToolbar(context);
         selectionToolbar.bindEditor(codeEditText);
         selectionToolbar.hide();
 
-        // Wire selection changes to show/hide the toolbar
         codeEditText.setOnSelectionChangeListener(hasSelection -> {
             if (hasSelection) {
                 selectionToolbar.show();
@@ -72,8 +69,7 @@ public class CodeEditorLayout extends LinearLayout {
             }
         });
 
-        // Synchronize scroll shifts from the editor to the line numbers gutter.
-        // Only update scrollY — NOT cursorOffset — during scroll to avoid O(n) scan mid-fling.
+        // Synchronize scroll offsets between the editor and line number gutter.
         codeEditText.setOnScrollChangeListener((scrollX, scrollY) -> {
             lineNumberView.setScrollY(scrollY);
             if (selectionToolbar.isVisible()) {
@@ -86,7 +82,6 @@ public class CodeEditorLayout extends LinearLayout {
 
         codeEditText.setOnClickListener(v -> syncLineNumberView());
 
-        // Update gutter measurements in response to typing additions (debounced)
         codeEditText.addContentChangeListener(this::scheduleSyncLineNumberView);
     }
 
@@ -96,7 +91,7 @@ public class CodeEditorLayout extends LinearLayout {
     }
 
     /**
-     * Pumps positioning coordinates and line metrics state values from the editor canvas into the side gutter view.
+     * Synchronizes cursor position, scroll offset, and line count metrics with the line number gutter.
      */
     private void syncLineNumberView() {
         int lineCount = codeEditText.getLogicalLineCount();
@@ -109,7 +104,7 @@ public class CodeEditorLayout extends LinearLayout {
     }
 
     /**
-     * Controls the visibility state configuration mapping for the gutter panel view layer.
+     * Toggles the visibility of the line number gutter.
      */
     public void setShowLineNumbers(boolean show) {
         if (lineNumberView != null) {
@@ -127,8 +122,6 @@ public class CodeEditorLayout extends LinearLayout {
 
     /**
      * Returns the {@link SelectionToolbar} bound to this editor layout.
-     * Callers may add {@code getSelectionToolbar().getView()} to their own layout
-     * (e.g. at the bottom of the activity's container) to display it.
      */
     public SelectionToolbar getSelectionToolbar() {
         return selectionToolbar;
@@ -137,7 +130,6 @@ public class CodeEditorLayout extends LinearLayout {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        // Defer synchronization logic until view hierarchy cycles have resolved calculations fully
         post(this::syncLineNumberView);
     }
 }

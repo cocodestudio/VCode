@@ -2,6 +2,9 @@ package com.cocode.vcode.ide.core.language.json;
 
 import com.cocode.vcode.ide.core.language.base.BaseFormatter;
 
+/**
+ * Formatter for JSON documents, supporting configurable indentation.
+ */
 public class JsonFormatter extends BaseFormatter {
 
     @Override

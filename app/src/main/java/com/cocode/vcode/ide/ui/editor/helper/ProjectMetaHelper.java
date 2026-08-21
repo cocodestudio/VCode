@@ -4,6 +4,9 @@ import com.cocode.vcode.ide.utils.FileUtils;
 
 import java.io.File;
 
+/**
+ * Helper for loading and updating project metadata and state.
+ */
 public class ProjectMetaHelper {
 
     public static String getMainFileFromMeta(File projectRoot) {

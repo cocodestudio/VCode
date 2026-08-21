@@ -17,9 +17,11 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Client implementing the GitHub OAuth 2.0 Device Authorization Flow (RFC 8628).
+ */
 public class GitHubDeviceFlowClient {
 
-    // Human action required: Replace with actual Client ID from GitHub OAuth App
     public static final String CLIENT_ID = "Ov23li6GbHl3HBgK3EEG";
 
     private static final String BASE_URL = "https://github.com/login/device/code";

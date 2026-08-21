@@ -20,6 +20,9 @@ import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.StashMessageBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 
+/**
+ * Fragment displaying the list of stashed changes and stash management actions.
+ */
 public class GitStashFragment extends Fragment implements StashAdapter.StashListener {
     private FragmentGitStashBinding binding;
     private GitViewModel viewModel;

@@ -6,8 +6,8 @@ import com.cocode.vcode.ide.core.model.Problem;
 import java.util.List;
 
 /**
- * Utility class responsible for pair-matching bracket tokens under the cursor.
- * Supports structural highlighting and scope navigation for parentheses (), brackets [], and braces {}.
+ * Utility for matching paired brackets, parentheses, and braces.
+ * Supports rainbow brackets, nesting depth calculation, mismatch detection, and scope matching.
  */
 public class BracketMatcher {
 
@@ -200,15 +200,9 @@ public class BracketMatcher {
     }
 
     /**
-     * Inspects the character directly under the cursor and tracks its matching sibling balance
-     * by scanning either forward or backward through the document text.
-     *
-     * @param text      The complete text buffer of the document.
-     * @param cursorPos The current 0-based index position of the cursor caret.
-     * @return A MatchResult object detailing the pair coordinates and discovery status.
+     * Finds the matching bracket pair for the bracket at cursorPos.
      */
     public MatchResult findMatch(CharSequence text, int cursorPos) {
-        // Guard check against empty inputs or indices targeting outer space bounds
         if (text == null || cursorPos < 0 || cursorPos >= text.length()) {
             return null;
         }
@@ -228,8 +222,6 @@ public class BracketMatcher {
     }
 
     private MatchResult findMatchInternal(CharSequence text, int cursorPos) {
-
-
         char c = text.charAt(cursorPos);
         if (isInStringOrComment(text, cursorPos)) {
             return null;
@@ -239,49 +231,39 @@ public class BracketMatcher {
         int closeIdx = CLOSE_BRACKETS.indexOf(c);
 
         if (openIdx >= 0) {
-            // Case 1: Cursor is resting on an open bracket token -> Scan forward to locate closure
             char closeChar = CLOSE_BRACKETS.charAt(openIdx);
-            int depth = 1; // Track nesting level changes
+            int depth = 1;
 
             int limit = Math.min(text.length(), cursorPos + MAX_SCAN_DISTANCE);
             for (int i = cursorPos + 1; i < limit; i++) {
                 char ch = text.charAt(i);
                 if (ch == c)
-                    depth++;          // Found another identical open token; increment depth level
+                    depth++;
                 if (ch == closeChar)
-                    depth--;  // Found matching target closer; decrement depth level
+                    depth--;
 
-                // Nesting balanced out to zero; we found the exact sibling token match!
                 if (depth == 0) return new MatchResult(cursorPos, i, true);
             }
         } else if (closeIdx >= 0) {
-            // Case 2: Cursor is resting on a close bracket token -> Scan backward to locate opening
             char openChar = OPEN_BRACKETS.charAt(closeIdx);
-            int depth = 1; // Track nesting level changes backwards
+            int depth = 1;
 
             int limit = Math.max(0, cursorPos - MAX_SCAN_DISTANCE);
             for (int i = cursorPos - 1; i >= limit; i--) {
                 char ch = text.charAt(i);
                 if (ch == c)
-                    depth++;         // Found another identical close token; increment depth level
-                if (ch == openChar) depth--;  // Found matching target opener; decrement depth level
+                    depth++;
+                if (ch == openChar) depth--;
 
-                // Nesting balanced out to zero; pair tracking successfully satisfied
                 if (depth == 0) return new MatchResult(i, cursorPos, true);
             }
         }
 
-        // No matching partner token was discovered within document limits
         return null;
     }
 
     /**
-     * Finds the innermost bracket pair that ENCLOSES the cursor position.
-     * Used when the cursor is not sitting on a bracket itself.
-     *
-     * @param text      Full document text.
-     * @param cursorPos Current cursor offset (0-based).
-     * @return MatchResult with openPos/closePos, or found=false if not inside any bracket.
+     * Finds the innermost bracket pair that encloses the cursor position.
      */
     public MatchResult findEnclosing(CharSequence text, int cursorPos) {
         if (text == null || cursorPos <= 0) return null;
@@ -300,6 +282,8 @@ public class BracketMatcher {
     }
 
     private MatchResult findEnclosingInternal(CharSequence text, int cursorPos) {
+        if (text == null || cursorPos <= 0 || cursorPos > text.length()) return null;
+
         int depth_paren = 0;
         int depth_square = 0;
         int depth_brace = 0;
@@ -329,12 +313,12 @@ public class BracketMatcher {
     }
 
     /**
-     * Immutable container capturing the absolute coordinates of matched structural pairs.
+     * Result of a bracket match operation.
      */
     public static class MatchResult {
-        public final int openPos;   // Index coordinate of the opening element
-        public final int closePos;  // Index coordinate of the closing element
-        public final boolean found; // True if the partner token was successfully located
+        public final int openPos;
+        public final int closePos;
+        public final boolean found;
 
         public MatchResult(int openPos, int closePos, boolean found) {
             this.openPos = openPos;

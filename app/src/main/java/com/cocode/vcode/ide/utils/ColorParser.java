@@ -7,6 +7,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Utility class for parsing CSS color strings (named colors, hex, rgb/rgba, and hsl/hsla)
+ * into Android {@link Color} integer values.
+ */
 public class ColorParser {
 
     private static final Map<String, Integer> NAMED_COLORS = new HashMap<>();

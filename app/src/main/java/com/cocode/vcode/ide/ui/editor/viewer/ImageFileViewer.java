@@ -14,6 +14,9 @@ import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.views.CodeEditText;
 import com.cocode.vcode.ide.views.ZoomImageView;
 
+/**
+ * File viewer tab component for displaying raster and vector images.
+ */
 public class ImageFileViewer implements IFileViewer {
 
     private ZoomImageView imageView;

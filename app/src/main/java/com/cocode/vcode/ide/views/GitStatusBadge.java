@@ -13,9 +13,8 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.git.model.FileStatus;
 
 /**
- * Lightweight geometric notification dot rendering status colors for repository tracking files.
- * Transforms raw source version codes into corresponding color profiles, indicating modified,
- * unstaged, uncommitted, or conflicted files within the explorer tree.
+ * Small circular status dot indicating the Git state of a file in the file tree or tab bar.
+ * Renders distinct colors for modified, untracked, staged, deleted, and conflicted states.
  */
 public class GitStatusBadge extends View {
 
@@ -50,7 +49,7 @@ public class GitStatusBadge extends View {
     }
 
     /**
-     * Resolves localized visual accent properties matching standard version engine criteria configurations.
+     * Updates the badge color and visibility based on the provided Git status state.
      */
     public void setState(State state) {
         this.state = state;
@@ -84,7 +83,7 @@ public class GitStatusBadge extends View {
     }
 
     /**
-     * Maps higher level complex index file profiles down into foundational UI visual primitives categories.
+     * Maps a FileStatus.Type to the corresponding badge state.
      */
     public void setFromFileStatusType(FileStatus.Type type) {
         if (type == null) {

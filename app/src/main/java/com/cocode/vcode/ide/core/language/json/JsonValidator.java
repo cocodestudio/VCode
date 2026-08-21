@@ -350,7 +350,6 @@ public class JsonValidator {
         }
 
 
-
         private void pop() {
             stack.remove(stack.size() - 1);
         }
@@ -656,7 +655,7 @@ public class JsonValidator {
             ));
         }
 
-        // ---- State machine -------------------------------------------------
+    // State machine
         private enum State {
             EXPECT_VALUE,       // Root, after '[', after ':', after ',' in array
             EXPECT_KEY,         // Inside object, need key or '}'

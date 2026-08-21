@@ -4,33 +4,25 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * Broad metadata descriptor tracking details for a target repository revision history entry.
- * Captures comprehensive properties for authoring attributes, cryptographic branch hashes, tags,
- * parent lines tracking sequences, and comprehensive list collections tracking modifications.
+ * Detailed metadata model for a Git commit, including hashes, message, author, date, parents, tags, and changed files.
  */
 public class CommitInfo {
 
-    private String fullHash;               // Full 40-character unique SHA-1 commit identifier string
-    private String shortHash;              // Abbreviated 7-character visual signature string for display panels
-    private String fullMessage;            // Complete multi-line raw description text typed by the committer
-    private String shortMessage;           // Streamlined single row summary block matching the first line definition
-    private String authorName;             // Personal name declaration metadata linked to the contributor profile
-    private String authorEmail;            // Electronic communication path linked to the contributor profile
-    private Date date;                     // Calendar timestamp marking transaction completion
-    private String[] parentHashes;         // Collection indexing preceding ancestor node identifier handles
-    private List<FileStatus> changedFiles; // Tracking matrices cataloging targeted files adjustments actions
-    private List<String> tags;             // Reference labels pinned across this localized historical line node
-    private List<String> branchNames;      // Active collection listing pointers pointing directly to this revision node
+    private String fullHash;
+    private String shortHash;
+    private String fullMessage;
+    private String shortMessage;
+    private String authorName;
+    private String authorEmail;
+    private Date date;
+    private String[] parentHashes;
+    private List<FileStatus> changedFiles;
+    private List<String> tags;
+    private List<String> branchNames;
 
-    /**
-     * Default empty constructor used for serialization routines and data factories.
-     */
     public CommitInfo() {
     }
 
-    /**
-     * Multi-argument constructor mapping fundamental structural commit attributes on generation.
-     */
     public CommitInfo(String fullHash, String shortHash, String fullMessage,
                       String shortMessage, String authorName, String authorEmail,
                       Date date, String[] parentHashes) {
@@ -44,29 +36,21 @@ public class CommitInfo {
         this.parentHashes = parentHashes;
     }
 
-    /**
-     * Evaluates parent node index sizes to verify if this node represents a historical branch merge junction.
-     *
-     * @return True if the commit stems from multiple independent ancestral paths.
-     */
     public boolean isMergeCommit() {
         return parentHashes != null && parentHashes.length > 1;
     }
 
     /**
-     * Generates compressed 2-letter uppercase initials matching full author names definitions.
-     * Helpful to populate visual fallback graphic text badges inside layout timeline avatars items rows.
+     * Generates 2-letter uppercase initials from the author name for avatar badges.
      */
     public String getInitials() {
         if (authorName == null || authorName.isEmpty()) return "?";
         String[] parts = authorName.trim().split("\\s+");
 
-        // Single name processing profile: extract the first two characters safely
         if (parts.length == 1) {
             return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
         }
 
-        // Multi-part processing profile: compile individual character bounds elements markers
         return (String.valueOf(parts[0].charAt(0))
                 + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
@@ -159,16 +143,10 @@ public class CommitInfo {
         this.branchNames = branches;
     }
 
-    /**
-     * Resolves appropriate available text segments to construct display message indicators layouts labels.
-     */
     public String getMessage() {
         return shortMessage != null ? shortMessage : fullMessage;
     }
 
-    /**
-     * Translates standard Date objects metrics down into simplified raw Unix epoch second integers numbers formats.
-     */
     public long getTimestamp() {
         return date != null ? date.getTime() / 1000L : 0;
     }

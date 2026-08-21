@@ -13,9 +13,12 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Real-time linter for TypeScript, enforcing type annotations, interface syntax, and TS-specific constructs.
+ */
 public class TsLinter {
 
-    // ── Patterns ─────────────────────────────────────────────────────────────
+    // Patterns
     private static final Pattern PAT_TYPE_MISMATCH = Pattern.compile(
             "\\b(?:const|let|var)\\s+(\\w+)\\s*:\\s*(string|number|boolean)\\s*=\\s*([^;\\n]+)");
     private static final Pattern PAT_RETURN_ANY = Pattern.compile(
@@ -37,7 +40,7 @@ public class TsLinter {
     private static final Pattern PAT_INLINE_OBJ_TYPE = Pattern.compile(
             ":\\s*\\{([^}]+)\\}");
 
-    // ── Entry point ───────────────────────────────────────────────────────────
+    // Entry point
     public static List<Problem> analyze(File file, String text) {
         if (text == null || text.trim().isEmpty()) return Collections.emptyList();
 
@@ -65,8 +68,7 @@ public class TsLinter {
         return problems;
     }
 
-    // ── TS-specific rules ─────────────────────────────────────────────────────
-
+    // TS-specific rules
     private static void checkTypeMismatch(File file, String text, TokenMask mask, List<Problem> out) {
         Matcher m = PAT_TYPE_MISMATCH.matcher(text);
         while (m.find()) {

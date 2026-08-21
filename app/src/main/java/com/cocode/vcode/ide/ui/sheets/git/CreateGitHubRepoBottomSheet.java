@@ -17,6 +17,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
+/**
+ * Bottom sheet dialog for creating a new repository on GitHub and pushing the local project.
+ */
 public class CreateGitHubRepoBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetCreateGithubRepoBinding binding;
     private CreateRepoListener listener;

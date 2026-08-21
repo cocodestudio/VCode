@@ -15,9 +15,8 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * Horizontal navigation path trail representing folder nesting paths for an open file.
- * Automatically tokenizes slash delimiters into clean chevron nodes and controls
- * alignment updates to ensure trailing leaf text parameters remain visible.
+ * Horizontal navigation path displaying folder nesting for the currently active file.
+ * Renders breadcrumb segments separated by chevrons and automatically scrolls to the rightmost leaf.
  */
 public class BreadcrumbView extends HorizontalScrollView {
 
@@ -42,7 +41,6 @@ public class BreadcrumbView extends HorizontalScrollView {
         setHorizontalScrollBarEnabled(false);
         setOverScrollMode(OVER_SCROLL_NEVER);
 
-        // Fallback layout baseline setting: use application default surfaces colors if missing from styles
         if (getBackground() == null) {
             setBackgroundColor(ContextCompat.getColor(getContext(), R.color.vcode_bg_surface));
         }
@@ -58,15 +56,14 @@ public class BreadcrumbView extends HorizontalScrollView {
     }
 
     /**
-     * Parses absolute path records, splitting text into structured graphical segment nodes.
+     * Updates the breadcrumb trail with the project name and the active file's relative path.
      *
-     * @param projectName  The user-facing active project workspace label name.
-     * @param relativePath The path coordinates mapped between the project root and the open document.
+     * @param projectName  The display name of the project root.
+     * @param relativePath The relative path of the open file within the project.
      */
     public void setPath(String projectName, String relativePath) {
         container.removeAllViews();
 
-        // Project root segment remains anchored as the leading baseline element path identifier
         addSegment(projectName != null ? projectName : "Project", true);
 
         if (relativePath != null && !relativePath.isEmpty()) {
@@ -82,7 +79,6 @@ public class BreadcrumbView extends HorizontalScrollView {
             }
         }
 
-        // Auto-scroll layout tracking logic: automatically shift frames rightward to present leaf file changes
         post(() -> fullScroll(FOCUS_RIGHT));
     }
 

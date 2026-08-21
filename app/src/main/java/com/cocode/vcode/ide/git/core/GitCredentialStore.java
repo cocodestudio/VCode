@@ -15,9 +15,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /**
- * Secure authorization container interface interacting with the hardware-backed Android KeyStore system.
- * Encrypts GitHub personal access tokens using AES-GCM cryptography transformations, while maintaining
- * separate unencrypted records tracking unauthenticated fallback developer profiles.
+ * Manages encrypted Git credentials using Android KeyStore and AES-GCM encryption.
+ * Also stores local author names and emails for unauthenticated commits.
  */
 public class GitCredentialStore {
 
@@ -27,7 +26,6 @@ public class GitCredentialStore {
     private static final String KEY_ENC_TOKEN = "vcode_enc_token";
     private static final String KEY_USERNAME = "vcode_git_username";
 
-    // Fallback Local Identity Keys tracking unauthenticated workspace commits authorizations profiles
     private static final String KEY_LOCAL_NAME = "vcode_local_author_name";
     private static final String KEY_LOCAL_EMAIL = "vcode_local_author_email";
 
@@ -35,12 +33,8 @@ public class GitCredentialStore {
     private static final int GCM_TAG_LENGTH = 128;
     private static final String SEPARATOR = "::";
 
-    // --- Key Management ---
+    // Key Management
 
-    /**
-     * Resolves an isolated key entry structure out of system storage slots,
-     * generating a secure hardware-locked security envelope on first boot if missing.
-     */
     private SecretKey getOrCreateKey() throws Exception {
         KeyStore ks = KeyStore.getInstance(KEYSTORE_PROVIDER);
         ks.load(null);
@@ -62,11 +56,10 @@ public class GitCredentialStore {
         return entry.getSecretKey();
     }
 
-    // --- Public API ---
+    // Public API
 
     /**
-     * Encrypts authorization parameters keys and commits the transformed string data to preferences map files.
-     * Bundles Initialization Vector indicators to guarantee secure structural decryptions later.
+     * Encrypts and saves the given personal access token to SharedPreferences.
      */
     public void saveToken(Context ctx, String token) throws Exception {
         if (token == null || token.isEmpty()) throw new Exception("Token is empty");
@@ -84,8 +77,7 @@ public class GitCredentialStore {
     }
 
     /**
-     * Unpacks Base64 encrypted records from local storage partitions, applying matching
-     * Initialization Vector offsets to retrieve the original plain text token keys.
+     * Decrypts and returns the stored personal access token, or null if none exists.
      */
     public String getToken(Context ctx) throws Exception {
         String combined = getPrefs(ctx).getString(KEY_ENC_TOKEN, null);
@@ -112,7 +104,7 @@ public class GitCredentialStore {
         return getPrefs(ctx).getString(KEY_USERNAME, null);
     }
 
-    // --- Local Fallback Identification Data Management ---
+    // Local Author Info
 
     public void saveLocalAuthor(Context ctx, String name, String email) {
         if (name == null || email == null) return;
@@ -135,7 +127,7 @@ public class GitCredentialStore {
     }
 
     /**
-     * Clears authenticated GitHub configurations exclusively, ensuring local author profiles remain untouched.
+     * Clears stored GitHub credentials. Local author info is preserved.
      */
     public void clearCredentials(Context ctx) {
         getPrefs(ctx).edit()
@@ -147,7 +139,7 @@ public class GitCredentialStore {
             ks.load(null);
             if (ks.containsAlias(KEYSTORE_ALIAS)) ks.deleteEntry(KEYSTORE_ALIAS);
         } catch (Exception e) {
-            // Key deletion failure is non-fatal; proceed smoothly
+            // Key deletion failure is non-fatal
         }
     }
 

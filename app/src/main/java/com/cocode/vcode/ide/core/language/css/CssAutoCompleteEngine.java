@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
  */
 public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
-    // ─── Instance state ─────────────────────────────────────────────────────────
+    // Instance state
     private final List<CompletionItem> propertyItems = new ArrayList<>();
     private final Map<String, List<String>> valueMap = new HashMap<>();
     private final List<CompletionItem> htmlTagItems = new ArrayList<>();
@@ -59,8 +59,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Asset loading ─────────────────────────────────────────────────────────
-
+    // Asset loading
     private void loadColors() {
         try {
             String json = loadAssetJson("completions/css_colors.json");
@@ -127,8 +126,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         } catch (Exception e) { /* Non-critical */ }
     }
 
-    // ─── Custom property scanning ──────────────────────────────────────────────
-
+    // Custom property scanning
     private void ensureCustomPropsIndexed(String text) {
         int hash = text.hashCode();
         if (hash == lastTextHash) return;
@@ -147,8 +145,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Main entry points ─────────────────────────────────────────────────────
-
+    // Main entry points
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
         return getSuggestions(fullText, cursorPos, false);
@@ -181,20 +178,20 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── 1. @media/@supports/@container CONDITION completions ───────────────
+    // 1. @media/@supports/@container CONDITION completions
         // Only triggers when writing the condition BEFORE the opening brace.
         if (isInsideAtRuleCondition(fullText, cursorPos)) {
             return getMediaSuggestions(fullText, cursorPos, word);
         }
 
-        // ── 2. At-rule completions — triggered when line starts with "@" ───────
+    // 2. At-rule completions — triggered when line starts with "@"
         // Only at top-level (depth 0) or inside an at-rule body (depth 1 from @media etc.)
         if (trimmed.startsWith("@")) {
             String atWord = "@" + word;
             return fuzzyFilter(CssDefinitions.AT_RULE_ITEMS, atWord);
         }
 
-        // ── 3. Pseudo-class / pseudo-element completions ─────────────────────
+    // 3. Pseudo-class / pseudo-element completions
         int wordStartPos = cursorPos - word.length();
         boolean directlyAfterColon = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == ':';
         boolean cursorRightAfterColon = word.isEmpty() && cursorPos > 0
@@ -204,7 +201,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, word);
         }
 
-        // ── 4. Intelligent context detection with nesting awareness ────────────
+    // 4. Intelligent context detection with nesting awareness
         CssContext ctx = detectContext(fullText, cursorPos, isInlineStyle);
 
         switch (ctx.zone) {
@@ -221,8 +218,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Context detection ─────────────────────────────────────────────────────
-
+    // Context detection
     /**
      * Detects context with full nesting depth awareness.
      *
@@ -438,8 +434,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Zone-specific suggestion builders ────────────────────────────────────
-
+    // Zone-specific suggestion builders
     /**
      * Suggestions for nested selector context (inside a rule block with CSS nesting support).
      * Shows selectors (HTML tags, & prefix, class/id), properties, and Emmet at once —
@@ -572,8 +567,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         return inParens;
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────────
-
+    // Helpers
     /**
      * Determines if the cursor is inside an at-rule CONDITION (before the opening brace).
      * e.g. "@media screen and (|)" or "@supports (display: grid|)"

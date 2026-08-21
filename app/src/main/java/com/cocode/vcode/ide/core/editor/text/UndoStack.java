@@ -4,6 +4,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 
+/**
+ * Manages the undo/redo history for editor operations, supporting action grouping and atomic edits.
+ */
 public final class UndoStack {
 
     private static final int MAX_HISTORY = 200;

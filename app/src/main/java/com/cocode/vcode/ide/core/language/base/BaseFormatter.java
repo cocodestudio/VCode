@@ -1,6 +1,5 @@
 package com.cocode.vcode.ide.core.language.base;
 
-
 /**
  * Shared architectural foundation for source code formatters.
  * Provides central access to core configuration states like user indentation preferences

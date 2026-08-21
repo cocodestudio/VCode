@@ -45,6 +45,9 @@ import com.cocode.vcode.ide.views.CodeEditText;
 import java.io.File;
 import java.util.List;
 
+/**
+ * Main IDE editor activity hosting the code editor, file tabs, drawer, and action bars.
+ */
 public class EditorActivity extends BaseActivity implements FileTreeFragment.FileSelectionListener, IEditorCallback {
 
     public static final String EXTRA_PROJECT_PATH = "extra_project_path";

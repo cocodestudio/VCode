@@ -13,6 +13,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Syntax highlighter for JavaScript source code.
+ */
 public class JsSyntaxHighlighter extends SyntaxHighlighter {
 
     private static final Set<String> JS_KEYWORDS = new HashSet<>(Arrays.asList(

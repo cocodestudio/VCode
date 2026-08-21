@@ -428,8 +428,6 @@ public final class LspEditorBridge {
             // getText() returns the full content; find newlines to determine line/char
             CharSequence text = editor.getText();
             if (text == null) return new LspPosition(0, 0);
-            // Use getCursorOffset if it's available (added in Phase 2 wiring);
-            // otherwise fall back to a content scan.
             return SymbolExtractor.offsetToPosition(text.toString(), getCursorFlatOffset());
         } catch (Exception e) {
             return new LspPosition(0, 0);

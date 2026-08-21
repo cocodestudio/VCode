@@ -1,5 +1,8 @@
 package com.cocode.vcode.ide.git.model;
 
+/**
+ * Model representing an entry in the Git stash list.
+ */
 public class StashItem {
     private final int id;
     private final String name;

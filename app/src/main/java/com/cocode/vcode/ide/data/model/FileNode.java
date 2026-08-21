@@ -8,28 +8,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Hierarchical data node representing an item inside the sidebar project file tree view.
- * Handles directory branch expansions and maps file types to structural properties.
+ * Model representing a node in the project file tree, holding a {@link File} reference,
+ * its depth in the hierarchy, expanded state, and child nodes.
  */
 public class FileNode {
 
-    private final int depth; // Nested indentation layout layer index in the sidebar list layout
+    private final int depth;
     private File file;
     private List<FileNode> children;
     private boolean isExpanded;
 
-    /**
-     * Instantiates a tree index item bound to a specified nesting depth level.
-     */
     public FileNode(File file, int depth) {
         this.file = file;
         this.depth = depth;
         this.isExpanded = false;
-        // Allocate interior array tracks if this node acts as a file directory container
         if (file != null && file.isDirectory()) {
             this.children = new ArrayList<>();
         } else {
-            this.children = null; // Leaf node element mapping flat system files
+            this.children = null;
         }
     }
 
@@ -41,9 +37,6 @@ public class FileNode {
         return file != null ? file.getName() : "";
     }
 
-    /**
-     * Resolves the target programming rules map linked to this node instance.
-     */
     public FileType getFileType() {
         if (isDirectory()) return FileType.TEXT;
         return FileType.fromExtension(FileUtils.getExtension(getName()));

@@ -18,6 +18,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 
 import java.util.List;
 
+/**
+ * Custom popup dialog for selecting from a list of items with custom typography.
+ */
 public class CustomListDialog {
 
     public static void show(Context context, String title, List<String> options, String selectedOption, OnOptionSelectedListener listener) {

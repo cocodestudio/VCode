@@ -44,9 +44,7 @@ public final class JsLspServer implements LspServer {
     private static final Pattern IMPORT_FROM =
             Pattern.compile("import\\s+.*?from\\s+['\"]([^'\"]+)['\"]");
 
-    // -------------------------------------------------------------------------
-    // Member access completion table (Phase 4 IntelliSense)
-    // -------------------------------------------------------------------------
+    // Member access completion table
 
     private static final Map<String, List<LspCompletionItem>> MEMBER_MAP;
 
@@ -403,8 +401,7 @@ public final class JsLspServer implements LspServer {
         int offset = doc.toOffset(pos);
         if (offset < 0) offset = doc.text.length();
 
-        // --- Member access completions (Phase 4 IntelliSense) ---
-        // Detect patterns like 'document.', 'console.', 'arr.' before the cursor.
+        // Member access completions (detect patterns like 'document.', 'console.', 'arr.')
         String lineBeforeCursor = getLineBeforeCursor(doc.text, offset);
         int dotIdx = lineBeforeCursor.lastIndexOf('.');
         if (dotIdx > 0) {

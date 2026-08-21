@@ -33,17 +33,17 @@ import java.util.regex.Pattern;
  */
 public class EmmetParser {
 
-    // ─── HTML Patterns ──────────────────────────────────────────────────────────
+    // HTML Patterns
     private static final Pattern PAT_ABBR = Pattern.compile("^[a-zA-Z0-9_.#*()+>^\\[\\]=\"{} $!:\\-]+$");
     private static final Pattern PAT_EMMET_PARSE = Pattern.compile(
             "^([a-zA-Z0-9_-]*)(#[a-zA-Z0-9_$\\-]+)?((?:\\.[a-zA-Z0-9_$\\-]+)*)(?:\\[([^]]+)])?(?:\\{([^}]*)\\})?(?:\\*([0-9]+))?$");
 
-    // ─── CSS Patterns ───────────────────────────────────────────────────────────
+    // CSS Patterns
     private static final Pattern PAT_CSS_NUMERIC = Pattern.compile(
             "^([a-z]+)(-?[0-9]+(?:-[0-9]+)*)([a-z%]*)$");
 
 
-    // ─── Public API ─────────────────────────────────────────────────────────────
+
 
     /**
      * Expands an HTML Emmet abbreviation. Returns null if the abbreviation is invalid.
@@ -201,7 +201,7 @@ public class EmmetParser {
         return value;
     }
 
-    // ─── HTML Parser ────────────────────────────────────────────────────────────
+    // HTML Parser implementation
 
     private static String parseEmmet(String abbr) {
         List<Node> roots = new ArrayList<>();

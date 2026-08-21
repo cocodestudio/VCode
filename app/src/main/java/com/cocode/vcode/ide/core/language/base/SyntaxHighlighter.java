@@ -13,6 +13,9 @@ import com.cocode.vcode.ide.views.span.SyntaxHighlightSpan;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Base interface for language-specific syntax highlighters.
+ */
 public class SyntaxHighlighter {
 
     protected final Context context;

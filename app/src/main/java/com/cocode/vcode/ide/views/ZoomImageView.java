@@ -16,32 +16,26 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.widget.AppCompatImageView;
 
 /**
- * Custom ImageView implementation supporting high-performance pinch-to-zoom,
- * panning, and double-tap interactions for graphic resources.
- * Manages viewport boundary alignment offsets via matrix transformations to keep
- * images bound securely inside display frames during manipulation sequences.
+ * ImageView supporting pinch-to-zoom, panning, and double-tap zoom gestures.
+ * Handles matrix transformations, viewport boundary clamping, and aspect-ratio preservation.
  */
 public class ZoomImageView extends AppCompatImageView {
 
-    // --- Interaction State Vector Identifiers ---
     private static final int NONE = 0;
     private static final int DRAG = 1;
     private static final int ZOOM = 2;
-    // Tracking points for gesture tracking offsets calculations
+
     private final PointF last = new PointF();
     private final PointF start = new PointF();
-    // Scale constraints definition parameters
     private final float maxScale = 5f;
     private Matrix matrix;
     private int mode = NONE;
     private float[] m;
 
-    // Viewport layout sizing parameters
     private int viewWidth, viewHeight;
     private float saveScale = 1f;
     private float origWidth, origHeight;
 
-    // Specialized platform inputs gesture intercept coordinators
     private ScaleGestureDetector mScaleDetector;
     private GestureDetector mGestureDetector;
 
@@ -55,10 +49,6 @@ public class ZoomImageView extends AppCompatImageView {
         sharedConstructing(context);
     }
 
-    /**
-     * Initializes shared interaction detectors, default matrix allocations,
-     * and maps touch event handling pathways.
-     */
     @SuppressLint("ClickableViewAccessibility")
     private void sharedConstructing(Context context) {
         super.setClickable(true);
@@ -70,7 +60,6 @@ public class ZoomImageView extends AppCompatImageView {
         setScaleType(ScaleType.MATRIX);
 
         setOnTouchListener((v, event) -> {
-            // Forward raw interaction events to appropriate gesture mapping systems
             mScaleDetector.onTouchEvent(event);
             mGestureDetector.onTouchEvent(event);
 
@@ -88,12 +77,11 @@ public class ZoomImageView extends AppCompatImageView {
                         float deltaX = curr.x - last.x;
                         float deltaY = curr.y - last.y;
 
-                        // Calculate valid drag movements to prevent pulling images away from viewport limits
                         float fixTransX = getFixDragTrans(deltaX, viewWidth, origWidth * saveScale);
                         float fixTransY = getFixDragTrans(deltaY, viewHeight, origHeight * saveScale);
 
                         matrix.postTranslate(fixTransX, fixTransY);
-                        fixTrans(); // Apply edge padding boundary locks
+                        fixTrans();
                         last.set(curr.x, curr.y);
                     }
                     break;
@@ -105,12 +93,10 @@ public class ZoomImageView extends AppCompatImageView {
             }
 
             setImageMatrix(matrix);
-            invalidate(); // Request redraw cycle to render updated viewport dimensions
+            invalidate();
             return true;
         });
     }
-
-    // --- Reset logic to clear zoom state when a new image is loaded ---
 
     @Override
     public void setImageURI(Uri uri) {
@@ -130,26 +116,15 @@ public class ZoomImageView extends AppCompatImageView {
         resetZoomState();
     }
 
-    /**
-     * Reverts scale properties back to standard 1f dimensions and clears tracking
-     * matrix modifications to properly accommodate incoming source media assets.
-     */
     private void resetZoomState() {
         saveScale = 1f;
         if (matrix != null) {
             matrix.reset();
             setImageMatrix(matrix);
         }
-        // Force onMeasure pass to recompute centering math values for the new asset footprint
         requestLayout();
     }
 
-    // ----------------------------------------------------------------------
-
-    /**
-     * Resolves layout coordinates from tracking matrix values to keep graphic components
-     * bound firmly inside valid coordinate zones, correcting translation alignment drift.
-     */
     private void fixTrans() {
         matrix.getValues(m);
         float transX = m[Matrix.MTRANS_X];
@@ -163,14 +138,9 @@ public class ZoomImageView extends AppCompatImageView {
         }
     }
 
-    /**
-     * Calculates structural compensation offsets required to lock image borders securely
-     * inside the canvas borders when viewport scrolling limits are exceeded.
-     */
     private float getFixTrans(float trans, float viewSize, float contentSize) {
         float minTrans, maxTrans;
 
-        // Define translation ranges depending on whether the graphic fills the view width or height completely
         if (contentSize <= viewSize) {
             minTrans = 0;
             maxTrans = viewSize - contentSize;
@@ -184,9 +154,6 @@ public class ZoomImageView extends AppCompatImageView {
         return 0;
     }
 
-    /**
-     * Prevents drag mechanics execution if an asset sits entirely within viewport margins.
-     */
     private float getFixDragTrans(float delta, float viewSize, float contentSize) {
         if (contentSize <= viewSize) return 0;
         return delta;
@@ -198,7 +165,6 @@ public class ZoomImageView extends AppCompatImageView {
         viewWidth = MeasureSpec.getSize(widthMeasureSpec);
         viewHeight = MeasureSpec.getSize(heightMeasureSpec);
 
-        // Core Centering Logic: Formats source dimensions uniformly matching target canvas constraints on launch
         if (saveScale == 1f && viewWidth > 0 && viewHeight > 0) {
             Drawable drawable = getDrawable();
             if (drawable == null || drawable.getIntrinsicWidth() == 0 || drawable.getIntrinsicHeight() == 0)
@@ -209,11 +175,10 @@ public class ZoomImageView extends AppCompatImageView {
 
             float scaleX = (float) viewWidth / (float) bmWidth;
             float scaleY = (float) viewHeight / (float) bmHeight;
-            float scale = Math.min(scaleX, scaleY); // Select proportional dimension to preserve graphic aspect ratios
+            float scale = Math.min(scaleX, scaleY);
 
             matrix.setScale(scale, scale);
 
-            // Deduce remaining blank spatial margins to center components inside layout fields
             float redundantYSpace = (float) viewHeight - (scale * (float) bmHeight);
             float redundantXSpace = (float) viewWidth - (scale * (float) bmWidth);
 
@@ -222,7 +187,6 @@ public class ZoomImageView extends AppCompatImageView {
 
             matrix.postTranslate(redundantXSpace, redundantYSpace);
 
-            // Establish primary dimension metrics representing active bounding sizes definitions
             origWidth = viewWidth - 2 * redundantXSpace;
             origHeight = viewHeight - 2 * redundantYSpace;
             setImageMatrix(matrix);
@@ -230,10 +194,6 @@ public class ZoomImageView extends AppCompatImageView {
         fixTrans();
     }
 
-    /**
-     * Double tap listener class handling quick toggle shortcuts.
-     * Transitions between base scale parameters and upper limits values.
-     */
     private class GestureListener extends GestureDetector.SimpleOnGestureListener {
         @Override
         public boolean onDoubleTap(MotionEvent e) {
@@ -249,10 +209,6 @@ public class ZoomImageView extends AppCompatImageView {
         }
     }
 
-    /**
-     * Pinch gesture tracking state manager.
-     * Processes changes in multi-touch tracking vectors to update scale variables.
-     */
     private class ScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
         @Override
         public boolean onScaleBegin(@NonNull ScaleGestureDetector detector) {
@@ -267,7 +223,6 @@ public class ZoomImageView extends AppCompatImageView {
             saveScale *= mScaleFactor;
             float minScale = 1f;
 
-            // Restrict calculated scale configurations inside min vs max threshold intervals
             if (saveScale > maxScale) {
                 saveScale = maxScale;
                 mScaleFactor = maxScale / origScale;
@@ -276,14 +231,13 @@ public class ZoomImageView extends AppCompatImageView {
                 mScaleFactor = minScale / origScale;
             }
 
-            // Adjust translation anchoring points based on focal selection indicators coordinates
             if (origWidth * saveScale <= viewWidth || origHeight * saveScale <= viewHeight) {
                 matrix.postScale(mScaleFactor, mScaleFactor, viewWidth / 2f, viewHeight / 2f);
             } else {
                 matrix.postScale(mScaleFactor, mScaleFactor, detector.getFocusX(), detector.getFocusY());
             }
 
-            fixTrans(); // Maintain viewport boundaries clamping updates
+            fixTrans();
             return true;
         }
     }

@@ -8,6 +8,9 @@ import com.cocode.vcode.ide.utils.FileUtils;
 
 import java.io.File;
 
+/**
+ * Helper for cut, copy, and paste clipboard operations on files and folders.
+ */
 public class FileClipboardHelper {
 
     public static void performPaste(Context context, File source, boolean isCut, File destinationDir, PasteCallback callback) {

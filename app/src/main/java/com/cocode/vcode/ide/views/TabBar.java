@@ -20,9 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Horizontal tab container view bar tracking active files sessions.
- * Manages item layout additions, unsaved modification tracking nodes,
- * extension language asset badge colorizations, and middle path truncation logic.
+ * Horizontal tab bar displaying open editor files.
+ * Manages tab switching, closing, unsaved change indicators, and middle-truncation of long file names.
  */
 public class TabBar extends HorizontalScrollView {
 
@@ -56,7 +55,10 @@ public class TabBar extends HorizontalScrollView {
     }
 
     /**
-     * populates full selection tabs arrays profiles, focusing viewport metrics on current selections.
+     * Sets the list of open files and updates the active tab index.
+     *
+     * @param files     The list of open editor files.
+     * @param activeIdx The index of the active file tab.
      */
     public void setTabs(List<EditorFile> files, int activeIdx) {
         this.tabs = files != null ? new ArrayList<>(files) : new ArrayList<>();
@@ -67,7 +69,7 @@ public class TabBar extends HorizontalScrollView {
     }
 
     /**
-     * Shifts active styling configurations indices across tabs without forcing complete array reconstructions.
+     * Updates the active tab selection and scrolls it into view.
      */
     public void setActiveTab(int index) {
         if (index == activeIndex) return;
@@ -91,7 +93,7 @@ public class TabBar extends HorizontalScrollView {
     }
 
     /**
-     * Alternates visibility parameters on circular unsaved changes flags labels indicator rings.
+     * Updates the unsaved changes dot indicator for the tab at the specified index.
      */
     public void updateTabDirtyState(int index, boolean dirty) {
         View tabView = tabContainer.getChildAt(index);
@@ -136,9 +138,6 @@ public class TabBar extends HorizontalScrollView {
         }
     }
 
-    /**
-     * Translates asset types and code language mappings into visual resource design properties tokens.
-     */
     private View inflateTabView(int index, EditorFile file) {
         ItemEditorTabBinding binding = ItemEditorTabBinding.inflate(
                 LayoutInflater.from(getContext()), tabContainer, false);
@@ -150,9 +149,7 @@ public class TabBar extends HorizontalScrollView {
         binding.ivFileIcon.setImageTintList(android.content.res.ColorStateList.valueOf(
                 ContextCompat.getColor(getContext(), fileType.getColorResId())));
 
-        // Apply string truncations to protect tab layout row size constraints
         String displayFileName = getFileName(file);
-
         binding.tvFileName.setText(displayFileName);
         binding.tvFileName.setTypeface(FontManager.getInstance().getUiMedium(getContext()));
 
@@ -178,15 +175,12 @@ public class TabBar extends HorizontalScrollView {
             }
         });
 
-        // Cache view binding objects inside layout tags to expedite simple runtime parameter changes later
         binding.getRoot().setTag(binding);
-
         return binding.getRoot();
     }
 
     /**
-     * Performs middle truncation formatting scripts across filename loops strings to optimize screen layout space.
-     * Preserves extension codes view readability while shrinking oversized base strings structures.
+     * Truncates long file names with an ellipsis in the middle while preserving the file extension.
      */
     @Nullable
     private String getFileName(EditorFile file) {
@@ -197,7 +191,7 @@ public class TabBar extends HorizontalScrollView {
         if (displayFileName != null && displayFileName.length() > 12) {
             int dotIndex = displayFileName.lastIndexOf('.');
             if (dotIndex > 0) {
-                String extension = displayFileName.substring(dotIndex); // Extracts extension segment inclusive of dot marker
+                String extension = displayFileName.substring(dotIndex);
                 int prefixLength = 12 - 3 - extension.length();
 
                 if (prefixLength > 0) {
@@ -227,7 +221,7 @@ public class TabBar extends HorizontalScrollView {
     }
 
     /**
-     * Performs smooth horizontal scroll calculations to transition target chosen cards precisely centered on viewport.
+     * Smoothly scrolls the tab bar to center the active tab in the viewport.
      */
     private void scrollToActiveTab() {
         if (activeIndex < 0 || activeIndex >= tabContainer.getChildCount()) return;

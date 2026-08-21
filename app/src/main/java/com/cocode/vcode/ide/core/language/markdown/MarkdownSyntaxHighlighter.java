@@ -11,6 +11,9 @@ import com.cocode.vcode.ide.core.language.html.HtmlSyntaxHighlighter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Syntax highlighter for Markdown documents.
+ */
 public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
 
     // States for multi-line code blocks (``` fences)
@@ -44,7 +47,7 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
         List<HighlightToken> tokens = new ArrayList<>();
         int len = lineStr.length();
 
-        // ── Fenced code block ────────────────────────────────────────────────
+    // Fenced code block
         if (startState == STATE_FENCE) {
             int i = 0;
             while (i < len && lineStr.charAt(i) == '`') i++;
@@ -53,14 +56,14 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
             return tokens;
         }
 
-        // ── Opening fence ────────────────────────────────────────────────────
+    // Opening fence
         if (len >= 3 && lineStr.charAt(0) == '`' && lineStr.charAt(1) == '`' && lineStr.charAt(2) == '`') {
             tokens.add(new HighlightToken(lineIndex, 0, len, colorCode, false));
             lastLineState = STATE_FENCE;
             return tokens;
         }
 
-        // ── Blank line ───────────────────────────────────────────────────────
+    // Blank line
         if (len == 0) {
             lastLineState = STATE_NORMAL;
             return tokens;
@@ -68,21 +71,21 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
 
         int i = 0;
 
-        // ── ATX Header: # ## ### ─────────────────────────────────────────────
+    // ATX Header: # ## ###
         if (lineStr.charAt(0) == '#') {
             tokens.add(new HighlightToken(lineIndex, 0, len, colorHeader, false));
             lastLineState = STATE_NORMAL;
             return tokens;
         }
 
-        // ── Block quote: > ────────────────────────────────────────────────────
+    // Block quote: >
         if (lineStr.charAt(0) == '>') {
             tokens.add(new HighlightToken(lineIndex, 0, len, colorQuote, false));
             lastLineState = STATE_NORMAL;
             return tokens;
         }
 
-        // ── HTML block: line starts with < (an HTML tag) ─────────────────────
+    // HTML block: line starts with < (an HTML tag)
         // Delegate the entire line to the HTML highlighter.
         if (lineStr.charAt(0) == '<') {
             List<HighlightToken> htmlTokens = htmlHighlighter.tokenizeLine(lineStr, lineIndex, 0);
@@ -91,14 +94,14 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
             return tokens;
         }
 
-        // ── Unordered list: - * + ─────────────────────────────────────────────
+    // Unordered list: - * +
         if ((lineStr.charAt(0) == '-' || lineStr.charAt(0) == '*' || lineStr.charAt(0) == '+')
                 && len > 1 && lineStr.charAt(1) == ' ') {
             tokens.add(new HighlightToken(lineIndex, 0, 1, colorList, false));
             i = 1;
         }
 
-        // ── Ordered list: 1. 2. ───────────────────────────────────────────────
+    // Ordered list: 1. 2.
         if (i == 0 && Character.isDigit(lineStr.charAt(0))) {
             int j = 0;
             while (j < len && Character.isDigit(lineStr.charAt(j))) j++;
@@ -108,7 +111,7 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
             }
         }
 
-        // ── Inline scanning ───────────────────────────────────────────────────
+    // Inline scanning
         while (i < len) {
             char delim = lineStr.charAt(i);
 

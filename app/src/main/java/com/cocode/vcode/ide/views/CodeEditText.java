@@ -62,36 +62,28 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Sora-editor-grade code editor View for the VCode Android IDE.
+ * High-performance code editor View for the VCode Android IDE.
  *
- * <p>This class is a complete rewrite from {@code AppCompatEditText} to a plain
- * {@link android.view.View}. Text storage is delegated to the Phase-1 {@link Content}
- * line-based model; undo/redo uses the Phase-1 {@link UndoStack}. All rendering is
- * performed by custom {@link #onDraw(Canvas)} code that paints only the visible viewport
- * for performance on large files.
- *
- * <p>For compatibility with existing call-sites (Phase 6 will clean these up), the class
- * re-exposes the Android {@link TextWatcher} API as a shim delegating to
- * {@link ContentChangeListener} internally (AD-5). It also exposes the new coordinate
- * methods required by AD-2 and AD-4.
+ * <p>Built directly on {@link android.view.View} for optimal rendering efficiency and memory utilization.
+ * Text storage is backed by the line-indexed {@link Content} model with undo/redo handled by {@link UndoStack}.
+ * Rendering in {@link #onDraw(Canvas)} uses viewport culling to draw only the visible lines for smooth 60fps
+ * scrolling on large files.
  */
 public class CodeEditText extends View {
 
-    // ── Constants ─────────────────────────────────────────────────────────────
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
-
-    /**
-     * Characters that trigger a new completion context.
-     */
     private static final String TRIGGER_CHARS = ".</:'\"@#!(";
-    // ── Selection handle drag state (Phase 4) ─────────────────────────────────
+
+    // Selection handle drag states
     private static final int HANDLE_DRAG_NONE = 0;
     private static final int HANDLE_DRAG_START = 1;
     private static final int HANDLE_DRAG_END = 2;
+
     // Debounced visual layout rebuild (avoids scroll jumps during flings)
     private static final long VISUAL_LAYOUT_DEBOUNCE_MS = 32; // ~2 frames
-    // ── Phase-1 text model ────────────────────────────────────────────────────
+
+    // Text model and state
     private final Content content = new Content();
     private final UndoStack undoStack = new UndoStack();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -99,7 +91,8 @@ public class CodeEditText extends View {
     private final BracketMatcher bracketMatcher = new BracketMatcher();
     private final DirtyRangeTracker dirtyTracker = new DirtyRangeTracker();
     boolean autoCloseHtmlTags = true;
-    // ── IME composing region ──────────────────────────────────────────────────
+
+    // IME composing region
     int composingStart = -1;
     int composingEnd = -1;
     private boolean autoCloseQuotes = true;
@@ -108,7 +101,8 @@ public class CodeEditText extends View {
     private int totalVisualRows;
     private boolean visualLayoutPending = false;
     private boolean isSettingSelectionFromIme = false;
-    // ── Rendering state ───────────────────────────────────────────────────────
+
+    // Rendering and paint state
     private float charWidth;
     private final Runnable visualLayoutRunnable = () -> {
         visualLayoutPending = false;
@@ -127,30 +121,33 @@ public class CodeEditText extends View {
     private Paint bracketHighlightPaint;
     private int longestLineLength;
     private boolean longestLineDirty = false;
-    // ── Cached colors ─────────────────────────────────────────────────────────
+
+    // Cached theme colors
     private int cachedErrorColor;
     private int cachedWarningColor;
     private int cachedInfoColor;
     private int cachedBracketHighlightColor;
-    // ── Scrolling ─────────────────────────────────────────────────────────────
+
+    // Scrolling and gestures
     private OverScroller overScroller;
     private GestureDetectorCompat gestureDetector;
     private OnScrollChangeListener scrollChangeListener;
-    // ── Cursor / selection ────────────────────────────────────────────────────
+
+    // Cursor and selection
     private ContentPosition cursor = ContentPosition.ZERO;
     private ContentPosition selectionAnchor = null; // null == no selection
     private boolean cursorVisible = true;
-    // ── Selection change listener (Phase 4) ───────────────────────────────────
     private OnSelectionChangeListener selectionChangeListener;
     private int activeDragHandle = HANDLE_DRAG_NONE;
-    // ── Handle paint (Phase 4, allocated once in init) ────────────────────────
     private Paint handlePaint;
-    // ── File / syntax ─────────────────────────────────────────────────────────
+
+    // File and syntax
     private FileType fileType = FileType.TEXT;
     private File currentFile;
     private SyntaxHighlighter syntaxHighlighter;
     private AutoCompleteEngine autoCompleteEngine;
-    // ── State flags ───────────────────────────────────────────────────────────
+
+    // State flags
     private boolean isAutoClosing = false;
     private boolean isApplyingHighlight = false;
     private boolean isUndoRedoActive = false;
@@ -158,34 +155,30 @@ public class CodeEditText extends View {
     private boolean isTypingText = false;
     private boolean isInsertingCompletion = false;
     private OnTextLoadListener textLoadListener;
-    // ── Content change listeners ──────────────────────────────────────────────
+
+    // Listeners and diagnostics
     private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
-    // ── Diagnostics ───────────────────────────────────────────────────────────
     private List<Problem> currentProblems = new ArrayList<>();
     private float lastSquiggleConfigHash = 0;
-    // ── Settings ──────────────────────────────────────────────────────────────
+
+    // Editor settings
     private boolean autoCloseBrackets = true;
     private boolean autoIndent = true;
     private IndentationEngine indentEngine;
     private final AutoCompletePopup autoCompletePopup;
-    /**
-     * When true, LSP is handling completions and the legacy engine is suppressed.
-     */
     private boolean lspCompletionActive = false;
-    // ── Highlight state ───────────────────────────────────────────────────────
+
+    // Highlighting buffers
     private final Runnable autoCompleteRunnable = this::triggerAutoComplete;
-    /**
-     * Default text colour, captured in {@code init()} for use in onDraw.
-     */
     private int defaultTextColor;
     private int[] rainbowColors;
-    // Line rendering buffers
     private int[] colorBuffer = new int[1024];
     private boolean[] underlineBuffer = new boolean[1024];
     private boolean[] previewBuffer = new boolean[1024];
     private int[] previewColorBuffer = new int[1024];
     private char[] lineBuffer = new char[1024];
-    // ── Bracket match positions ───────────────────────────────────────────────
+
+    // Bracket match positions
     private ContentPosition bracketMatchOpen = null;
     private ContentPosition bracketMatchClose = null;
     final Runnable bracketMatchRunnable = () -> {
@@ -193,30 +186,30 @@ public class CodeEditText extends View {
         int flatCursor = content.flatOffset(cursor);
         updateBracketMatch(text, flatCursor);
     };
-    // ── Search decorations (Phase 6) ──────────────────────────────────────────
+
+    // Search decorations
     private List<SearchResult> searchDecorations = new ArrayList<>();
     private int searchActiveIndex = -1;
     private volatile long textLoadToken = 0;
 
-    public CodeEditText(Context context) {
-        super(context);
-        autoCompletePopup = new AutoCompletePopup(context);
-        init(context);
-    }    // ── Blink ─────────────────────────────────────────────────────────────────
-
-    public CodeEditText(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        autoCompletePopup = new AutoCompletePopup(context);
-        init(context);
-    }    private final Runnable blinkRunnable = () -> {
+    // Cursor blink runnable
+    private final Runnable blinkRunnable = () -> {
         cursorVisible = !cursorVisible;
         invalidate();
         scheduleBlink();
     };
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Constructors
-    // ─────────────────────────────────────────────────────────────────────────
+    public CodeEditText(Context context) {
+        super(context);
+        autoCompletePopup = new AutoCompletePopup(context);
+        init(context);
+    }
+
+    public CodeEditText(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        autoCompletePopup = new AutoCompletePopup(context);
+        init(context);
+    }
 
     public CodeEditText(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
@@ -425,10 +418,6 @@ public class CodeEditText extends View {
         scheduleBlink();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Initialization
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         if (wordWrap) {
@@ -451,10 +440,6 @@ public class CodeEditText extends View {
         setMeasuredDimension(w, h);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Measure
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         int scrollY = getScrollY();
@@ -474,7 +459,6 @@ public class CodeEditText extends View {
         // 1. Line highlight for cursor line
         if (isFocused()) {
             int cursorVisualRow = absoluteVisualRow(cursor.line, cursor.column);
-            // keeping the logic intact but scrollY cancels out in standard view since scrolling is hardware based, wait, actually canvas translates are not used here, the views do translate. Wait, no, scrollY is used directly or view translates? In Android, scrollX and scrollY are handled by canvas translation. So y should be absolute Y.
             float rectTop = paddingTop + cursorVisualRow * lineHeightPx;
             canvas.drawRect(scrollX, rectTop, scrollX + viewW, rectTop + lineHeightPx, lineHighlightPaint);
         }
@@ -482,10 +466,10 @@ public class CodeEditText extends View {
         // 2. Selection background
         drawSelection(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
-        // 3. Search decorations background (Phase 6)
+        // 3. Search decorations background
         drawSearchDecorations(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
-        // 4. Text (token-coloured, char-array overload — no String allocation per line)
+        // 4. Text (token-colored using char array buffer to avoid allocations per line)
         textPaint.setStyle(Paint.Style.FILL);
 
         Paint.FontMetricsInt fm = textPaint.getFontMetricsInt();
@@ -639,10 +623,6 @@ public class CodeEditText extends View {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Draw
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void drawSelection(Canvas canvas, int firstLine, int lastLine,
                                float paddingLeft, float paddingTop) {
         if (selectionAnchor == null) return;
@@ -676,10 +656,6 @@ public class CodeEditText extends View {
             }
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Draw helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void drawSearchDecorations(Canvas canvas, int firstLine, int lastLine,
                                        float paddingLeft, float paddingTop) {
@@ -892,10 +868,6 @@ public class CodeEditText extends View {
         return true;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Touch / Scroll
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Override
     public void computeScroll() {
         if (overScroller.computeScrollOffset()) {
@@ -945,10 +917,6 @@ public class CodeEditText extends View {
             if (autoCompletePopup != null) autoCompletePopup.dismiss();
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Focus / Keyboard
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void scheduleBlink() {
         mainHandler.removeCallbacks(blinkRunnable);
@@ -1108,9 +1076,7 @@ public class CodeEditText extends View {
         return super.onKeyDown(keyCode, event);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Key events
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Override
     public boolean onKeyPreIme(int keyCode, KeyEvent event) {
@@ -1180,9 +1146,7 @@ public class CodeEditText extends View {
         mainHandler.postDelayed(bracketMatchRunnable, 150);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Hardware-keyboard helpers (called from onKeyDown)
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Inserts {@code text} at the current cursor position from the hardware keyboard.
@@ -1258,10 +1222,6 @@ public class CodeEditText extends View {
         return new ContentCharSequence(content);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-1 / AD-7: getText()
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void setText(CharSequence text) {
         setText(text, null);
     }
@@ -1279,10 +1239,6 @@ public class CodeEditText extends View {
     public String getTextAsString() {
         return content.getText();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — selection
-    // ─────────────────────────────────────────────────────────────────────────
 
     public int getSelectionStart() {
         if (selectionAnchor == null) return content.flatOffset(cursor);
@@ -1347,10 +1303,6 @@ public class CodeEditText extends View {
         invalidate();
         notifySelectionChanged();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — Phase 4: selection actions
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Selects all text in the document.
@@ -1547,10 +1499,6 @@ public class CodeEditText extends View {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — setText / setTextSize / getTypeface / getCurrentTextColor
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void setTextSize(float sizeSp) {
         textPaint.setTextSize(spToPx(sizeSp, getContext()));
         Paint.FontMetricsInt fm = textPaint.getFontMetricsInt();
@@ -1589,12 +1537,6 @@ public class CodeEditText extends View {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-5: ContentChangeListener shim (Replaced TextWatcher to prevent lag)
-    // ─────────────────────────────────────────────────────────────────────────
-
-
-
     public int getEditorLineHeight() {
         return lineHeightPx;
     }
@@ -1606,10 +1548,6 @@ public class CodeEditText extends View {
     public int getLogicalLineCount() {
         return content.lineCount();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-4: LineNumberView helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Returns the top padding of the editor in pixels — used by LineNumberView to align baselines.
@@ -1643,19 +1581,11 @@ public class CodeEditText extends View {
         invalidate();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-2: getCursorScreenCoords
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void clearSearchDecorations() {
         searchDecorations.clear();
         searchActiveIndex = -1;
         invalidate();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — AD-3: replaceRange / search decorations / scrollToOffset
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void scrollToOffset(int flatOffset) {
         ContentPosition pos = content.positionAt(flatOffset);
@@ -1680,17 +1610,9 @@ public class CodeEditText extends View {
         return cursor.line + 1;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — goToLine
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void setOnScrollChangeListener(OnScrollChangeListener listener) {
         this.scrollChangeListener = listener;
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — line count / current line (CodeEditorLayout compat)
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void applyDiagnostics(List<Problem> problems) {
         this.currentProblems = problems != null ? problems : new ArrayList<>();
@@ -1700,10 +1622,6 @@ public class CodeEditText extends View {
     public FileType getFileType() {
         return fileType;
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Public API — scroll listener
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void setFileType(FileType fileType) {
         this.fileType = fileType;
@@ -1764,9 +1682,7 @@ public class CodeEditText extends View {
         scheduleHighlight();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Public API — diagnostics
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void setCurrentFile(File file) {
         this.currentFile = file;
@@ -1783,9 +1699,7 @@ public class CodeEditText extends View {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Public API — settings
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void setAutoCloseBrackets(boolean autoClose) {
         this.autoCloseBrackets = autoClose;
@@ -1956,9 +1870,7 @@ public class CodeEditText extends View {
         return new UndoStack.EditorSnapshot(cur, sel, getScrollX(), getScrollY());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Public API — snippet
-    // ─────────────────────────────────────────────────────────────────────────
 
     public void undo() {
         undoStack.commitPending();
@@ -1997,9 +1909,7 @@ public class CodeEditText extends View {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Public API — undo / redo
-    // ─────────────────────────────────────────────────────────────────────────
 
     public boolean canUndo() {
         return undoStack.canUndo();
@@ -2113,9 +2023,7 @@ public class CodeEditText extends View {
         mainHandler.postDelayed(autoCompleteRunnable, AUTOCOMPLETE_DELAY_MS);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void triggerAutoComplete() {
         if (autoCompleteEngine == null) return;
@@ -2168,9 +2076,7 @@ public class CodeEditText extends View {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Internal — highlight
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Returns true if the editor is currently inserting a completion item.
@@ -2281,9 +2187,7 @@ public class CodeEditText extends View {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Internal — autocomplete
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void handleAutoClose(CharSequence text, int insertFlatPos, char typed) {
         String closing = getClosingPair(typed);
@@ -2362,9 +2266,7 @@ public class CodeEditText extends View {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Internal — auto-close brackets / indent
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void handleAutoIndent(String text, int newlineIndex) {
         if (!autoIndent || indentEngine == null) return;
@@ -2488,26 +2390,20 @@ public class CodeEditText extends View {
         return sp * ctx.getResources().getDisplayMetrics().scaledDensity;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Internal — bracket match
-    // ─────────────────────────────────────────────────────────────────────────
 
     private float dpToPx(float dp, Context ctx) {
         return dp * ctx.getResources().getDisplayMetrics().density;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Internal — comment detection
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void updateLongestLine(int changedLine) {
         int len = content.lineLength(changedLine);
         if (len > longestLineLength) longestLineLength = len;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Internal — helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private int getLongestLineLength() {
         if (longestLineDirty) {
@@ -2660,8 +2556,8 @@ public class CodeEditText extends View {
     }
 
     /**
-     * CharSequence adapter over the Content model (AD-1 / AD-7).
-     * toString() materialises the full text; length() is O(1) via Content.
+     * CharSequence adapter backed by the underlying {@link Content} model.
+     * {@link #toString()} materializes the full text, while {@link #length()} is O(1).
      */
     private static final class ContentCharSequence implements CharSequence {
         private final Content content;
@@ -2696,10 +2592,7 @@ public class CodeEditText extends View {
         }
     }
 
-
-    // ─────────────────────────────────────────────────────────────────────────
     // Inner classes
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Custom InputConnection that routes all IME mutations through the {@link Content} model.
@@ -2718,8 +2611,6 @@ public class CodeEditText extends View {
             this.editor = editor;
         }
 
-        // ── commitText ─────────────────────────────────────────────────────────────
-
         /**
          * Computes the cursor position after inserting {@code text} starting at {@code from}.
          */
@@ -2734,8 +2625,6 @@ public class CodeEditText extends View {
             }
             return new ContentPosition(line, col);
         }
-
-        // ── setComposingText ───────────────────────────────────────────────────────
 
         @Override
         public boolean commitText(CharSequence text, int newCursorPosition) {
@@ -2823,16 +2712,12 @@ public class CodeEditText extends View {
             return true;
         }
 
-        // ── deleteSurroundingText ──────────────────────────────────────────────────
-
         @Override
         public boolean setComposingRegion(int start, int end) {
             editor.composingStart = Math.max(0, start);
             editor.composingEnd = Math.min(editor.content.totalLength(), end);
             return true;
         }
-
-        // ── getTextBeforeCursor / getTextAfterCursor ───────────────────────────────
 
         @Override
         public boolean deleteSurroundingText(int beforeLength, int afterLength) {
@@ -2919,8 +2804,6 @@ public class CodeEditText extends View {
             }
         }
 
-        // ── setSelection ───────────────────────────────────────────────────────────
-
         @Override
         public CharSequence getSelectedText(int flags) {
             if (editor.selectionAnchor == null) return "";
@@ -2932,8 +2815,6 @@ public class CodeEditText extends View {
                 return "";
             }
         }
-
-        // ── sendKeyEvent ───────────────────────────────────────────────────────────
 
         @Override
         public boolean setSelection(int start, int end) {
@@ -2949,8 +2830,6 @@ public class CodeEditText extends View {
             }
             return true;
         }
-
-        // ── Private helpers ────────────────────────────────────────────────────────
 
         @Override
         public boolean sendKeyEvent(android.view.KeyEvent event) {

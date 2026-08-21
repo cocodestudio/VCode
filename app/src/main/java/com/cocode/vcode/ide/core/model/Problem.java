@@ -2,6 +2,9 @@ package com.cocode.vcode.ide.core.model;
 
 import java.io.File;
 
+/**
+ * Model representing a diagnostic problem (error, warning, or info) in a source file.
+ */
 public class Problem {
     private final File file;
     private final int line;

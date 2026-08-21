@@ -5,6 +5,9 @@ import com.cocode.vcode.ide.core.model.CompletionItem;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Static definitions of CSS properties, at-rules, pseudo-classes, pseudo-elements, and units.
+ */
 public class CssDefinitions {
     public static final List<CompletionItem> PSEUDO_ITEMS = new ArrayList<>();
     public static final List<CompletionItem> AT_RULE_ITEMS = new ArrayList<>();

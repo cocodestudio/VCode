@@ -23,6 +23,9 @@ import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.List;
 
+/**
+ * Bottom sheet dialog for resolving merge and rebase conflicts with side-by-side choices.
+ */
 public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
 
     private static final String TAG = "GitConflictBottomSheet";
@@ -148,7 +151,7 @@ public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
         binding = null;
     }
 
-    // ── Adapter ──────────────────────────────────────────────────────────────
+    // Conflict file adapter
 
     private static class FilesAdapter extends RecyclerView.Adapter<FilesAdapter.VH> {
         private final List<String> files;

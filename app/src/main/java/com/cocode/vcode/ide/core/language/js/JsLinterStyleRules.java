@@ -15,6 +15,9 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Style and best-practice rules for JavaScript linting (strict equality, console statements, unused variables).
+ */
 public class JsLinterStyleRules {
     public static final Pattern PAT_TYPEOF_CMP = Pattern.compile("\\btypeof\\b[^=]*===?\\s*(undefined|null|NaN|true|false|\\d+)");
     public static final Pattern PAT_TODO = Pattern.compile("(?://|/\\*).*?(TODO|FIXME)([^\n]*)");
@@ -158,7 +161,6 @@ public class JsLinterStyleRules {
             }
         }
     }
-
 
     public static void checkUnclosedString(File file, String text, String[] lines, TokenMask mask, List<Problem> out) {
         for (int i = 0; i < lines.length; i++) {

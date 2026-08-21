@@ -16,6 +16,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Adapter for listing destination folders in the file import destination picker.
+ */
 public class DestinationAdapter extends RecyclerView.Adapter<DestinationAdapter.DestinationViewHolder> {
 
     private final List<FileNode> folders = new ArrayList<>();

@@ -40,7 +40,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class Content {
 
-    // ── Internal state ────────────────────────────────────────────────────────
+    // Internal state
 
     /**
      * The ordered line store. Element {@code i} is the {@code ContentLine} for line {@code i}.
@@ -67,7 +67,7 @@ public final class Content {
     private long[] bit;
     private int bitCapacity = 0;
 
-    // ── Construction ──────────────────────────────────────────────────────────
+    // Construction
 
     public Content() {
         lines.add(new ContentLine());
@@ -81,7 +81,7 @@ public final class Content {
         loadText(text);
     }
 
-    // ── Listener management ───────────────────────────────────────────────────
+    // Listener management
 
     /**
      * Off-thread-safe: builds a complete replacement line/index structure without touching
@@ -125,7 +125,7 @@ public final class Content {
         return -1;
     }
 
-    // ── Core mutations ────────────────────────────────────────────────────────
+
 
     private static char[] toCharArray(CharSequence s) {
         char[] arr = new char[s.length()];
@@ -231,7 +231,7 @@ public final class Content {
         version.incrementAndGet();
     }
 
-    // ── Queries (main-thread safe without lock for single values) ─────────────
+
 
     /**
      * Applies a {@link LoadedLines} built via {@link #prepareLoad}, in place, preserving this
@@ -518,7 +518,7 @@ public final class Content {
         lock.readLock().lock();
     }
 
-    // ── Internal mutation helpers (called under the write lock) ───────────────
+
 
     /**
      * Releases a previously acquired read lock.
@@ -612,7 +612,7 @@ public final class Content {
         return sum;
     }
 
-    // ── Listener notification ─────────────────────────────────────────────────
+
 
     private void rebuildBit() {
         int n = lines.size();
@@ -635,7 +635,7 @@ public final class Content {
         for (ContentChangeListener l : listeners) l.onInsert(line, col, text);
     }
 
-    // ── Static helpers ────────────────────────────────────────────────────────
+
 
     private void notifyDelete(int startLine, int startCol, int endLine, int endCol) {
         for (ContentChangeListener l : listeners) l.onDelete(startLine, startCol, endLine, endCol);

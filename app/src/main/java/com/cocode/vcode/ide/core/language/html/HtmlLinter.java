@@ -16,6 +16,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Real-time linter for HTML, validating tag pairing, deprecated elements/attributes, accessibility, and syntax.
+ */
 public class HtmlLinter {
 
     private static final Set<String> EMPTY_CHECK_TAGS = new HashSet<>(java.util.Arrays.asList(
@@ -206,7 +209,7 @@ public class HtmlLinter {
                 // Update tagLen to cover the entire tag
                 tagLen = j - i;
 
-                // ── RULE: unknown tag ──────────────────────────────────────
+    // RULE: unknown tag
                 if (!KnownElements.VALID_HTML_TAGS.contains(tagName)
                         && !KnownElements.DEPRECATED_ELEMENTS.containsKey(tagName)
                         && !tagName.contains("-")) {
@@ -215,14 +218,14 @@ public class HtmlLinter {
                             Problem.Severity.ERROR));
                 }
 
-                // ── RULE: deprecated element ───────────────────────────────
+    // RULE: deprecated element
                 if (KnownElements.DEPRECATED_ELEMENTS.containsKey(tagName)) {
                     problems.add(new Problem(file, tagLine, tagCol, tagLen,
                             "'<" + tagName + ">' is deprecated — use " + KnownElements.DEPRECATED_ELEMENTS.get(tagName) + " instead",
                             Problem.Severity.WARNING));
                 }
 
-                // ── RULE: deprecated attributes ────────────────────────────
+    // RULE: deprecated attributes
                 for (Map.Entry<String, String> attrEntry : attrs.entrySet()) {
                     String ak = attrEntry.getKey();
                     String tagSpecific = tagName + ":" + ak;
@@ -240,7 +243,7 @@ public class HtmlLinter {
                     }
                 }
 
-                // ── RULE: id uniqueness ────────────────────────────────────
+    // RULE: id uniqueness
                 if (attrs.containsKey("id")) {
                     String idVal = attrs.get("id");
                     if (!Objects.requireNonNull(idVal).isEmpty() && !seenIds.add(idVal)) {
@@ -250,14 +253,14 @@ public class HtmlLinter {
                     }
                 }
 
-                // ── RULE: inline style ────────────────────────────────────
+    // RULE: inline style
                 if (attrs.containsKey("style")) {
                     problems.add(new Problem(file, tagLine, tagCol, tagLen,
                             "Avoid inline styles on '<" + tagName + ">': prefer CSS classes",
                             Problem.Severity.WARNING));
                 }
 
-                // ── RULE: event handler attributes ────────────────────────
+    // RULE: event handler attributes
                 for (String ak : attrs.keySet()) {
                     if (ak.startsWith("on")) {
                         problems.add(new Problem(file, tagLine, tagCol, ak.length(),
@@ -266,7 +269,7 @@ public class HtmlLinter {
                     }
                 }
 
-                // ── RULE: required parent ─────────────────────────────────
+    // RULE: required parent
                 Set<String> requiredParents = KnownElements.REQUIRED_PARENTS.get(tagName);
                 if (requiredParents != null) {
                     String immediateParent = openStack.isEmpty() ? "" : Objects.requireNonNull(openStack.peek()).name;
@@ -277,7 +280,7 @@ public class HtmlLinter {
                     }
                 }
 
-                // ── RULE: nested <a> ─────────────────────────────────────
+    // RULE: nested <a>
                 if (tagName.equals("a")) {
                     for (TagFrame frame : openStack) {
                         if (frame.name.equals("a")) {
@@ -289,7 +292,7 @@ public class HtmlLinter {
                     }
                 }
 
-                // ── PER-TAG RULES ─────────────────────────────────────────
+    // PER-TAG RULES
                 switch (tagName) {
                     case "html":
                         hasLangOnHtml = attrs.containsKey("lang");
@@ -411,7 +414,7 @@ public class HtmlLinter {
                         break;
                 }
 
-                // ── RULE: heading level skip ──────────────────────────────
+    // RULE: heading level skip
                 if (tagName.matches("h[1-6]")) {
                     int level = tagName.charAt(1) - '0';
                     if (headingLevel > 0 && level > headingLevel + 1) {
@@ -422,7 +425,7 @@ public class HtmlLinter {
                     headingLevel = level;
                 }
 
-                // ── RULE: required attributes (not img, handled above) ────
+    // RULE: required attributes (not img, handled above)
                 if (!tagName.equals("img") && !tagName.equals("script")) {
                     Set<String> req = KnownElements.REQUIRED_ATTRIBUTES.get(tagName);
                     if (req != null) {
@@ -464,7 +467,7 @@ public class HtmlLinter {
                     Problem.Severity.ERROR));
         }
 
-        // ── DOCUMENT-LEVEL WARNINGS ────────────────────────────────────────
+    // DOCUMENT-LEVEL WARNINGS
         if (!hasCharset) {
             problems.add(new Problem(file, 1, 1, 1,
                     "Missing '<meta charset=\"...\">' in <head>: may cause encoding issues",
@@ -486,7 +489,7 @@ public class HtmlLinter {
                     Problem.Severity.INFO));
         }
 
-        // ── RULE: empty tags check ─────────────────────────────────────────
+    // RULE: empty tags check
         checkEmptyTags(file, text, mask, problems);
 
         return problems;

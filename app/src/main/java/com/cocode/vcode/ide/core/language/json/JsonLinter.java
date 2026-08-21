@@ -6,6 +6,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Real-time syntax and schema linter for JSON documents.
+ */
 public class JsonLinter {
     public static List<Problem> analyze(File file, String text) {
         List<Problem> problems = new ArrayList<>();

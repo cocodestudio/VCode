@@ -23,9 +23,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Multi-purpose file manager providing core primitives for the IDE file manager.
- * Performs nested recursive deletions, deep branch duplications, tree construction indexes,
- * and handles localized system file provider interactions.
+ * Utility methods for file and directory operations, tree building, URI resolution, and storage management.
  */
 public class FileUtils {
 
@@ -35,7 +33,7 @@ public class FileUtils {
     }
 
     /**
-     * Reads string blocks out of targeted disk files using strict UTF-8 normalization mappings.
+     * Reads the content of a file as a UTF-8 string.
      */
     public static String readFile(File file) throws IOException {
         if (file == null || !file.exists()) throw new IOException("File not found: " + file);
@@ -47,7 +45,6 @@ public class FileUtils {
                 sb.append(line).append('\n');
             }
         }
-        // Remove trailing newline added by readLine loop to match the pristine document footprint
         if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\n') {
             sb.deleteCharAt(sb.length() - 1);
         }
@@ -55,7 +52,7 @@ public class FileUtils {
     }
 
     /**
-     * Persists text character logs into selected disk paths, initializing parent scopes as needed.
+     * Writes the provided text content to a file with UTF-8 encoding, creating parent directories if needed.
      */
     public static void writeFile(File file, String content) throws IOException {
         if (file == null) throw new IOException("File is null");
@@ -68,7 +65,7 @@ public class FileUtils {
     }
 
     /**
-     * Extracts lowercase file extensions components from trailing dot delimiters.
+     * Returns the lowercase file extension of the given file name, or an empty string if none.
      */
     public static String getExtension(String fileName) {
         if (fileName == null) return "";
@@ -77,9 +74,8 @@ public class FileUtils {
         return fileName.substring(dot + 1).toLowerCase();
     }
 
-
     /**
-     * Creates new files on the file system, failing early if an object already occupies that name.
+     * Creates a new empty file in the specified directory.
      */
     public static File createFile(File dir, String name) throws IOException {
         if (dir == null || name == null || name.isEmpty())
@@ -92,7 +88,7 @@ public class FileUtils {
     }
 
     /**
-     * Generates directory subfolder branches down to target directory coordinates.
+     * Creates a new folder in the specified directory.
      */
     public static void createFolder(File dir, String name) throws IOException {
         if (dir == null || name == null || name.isEmpty())
@@ -103,7 +99,7 @@ public class FileUtils {
     }
 
     /**
-     * Recursively steps through internal directory sub-trees to completely wipe files from storage.
+     * Recursively deletes a file or directory and all its contents.
      */
     public static boolean deleteRecursive(File file) {
         if (file == null || !file.exists()) return false;
@@ -119,7 +115,7 @@ public class FileUtils {
     }
 
     /**
-     * Duplicates data content chunks between files via an intermediate buffer block allocation stream.
+     * Copies a file to a destination with optional cancellation and progress reporting.
      */
     public static boolean copyFile(File src, File dst, java.util.concurrent.atomic.AtomicBoolean isCancelled, ProgressListener listener) {
         if (src == null || !src.exists() || dst == null) return false;
@@ -145,7 +141,7 @@ public class FileUtils {
     }
 
     /**
-     * Clones complex directory trees by systematically mapping subfolders and files.
+     * Recursively copies a directory to a destination with optional cancellation and progress reporting.
      */
     public static boolean copyDirectory(File src, File dst, java.util.concurrent.atomic.AtomicBoolean isCancelled, ProgressListener listener) {
         if (src == null || !src.isDirectory()) return false;
@@ -170,7 +166,7 @@ public class FileUtils {
     }
 
     /**
-     * Modifies local directory entity names within shared parent folders.
+     * Renames a file or directory.
      */
     public static void renameFile(File file, String newName) throws IOException {
         if (file == null || !file.exists()) throw new IOException("File not found");
@@ -182,7 +178,7 @@ public class FileUtils {
     }
 
     /**
-     * Navigates local shared user memory scopes to configure the app workspace root dir.
+     * Returns the workspace root directory for VCode projects on external storage, creating .nomedia if needed.
      */
     public static File getProjectsDir(Context ctx) {
         File root = Environment.getExternalStorageDirectory();
@@ -192,7 +188,7 @@ public class FileUtils {
             dir.mkdirs();
         }
 
-        // Inform external media indexes to ignore internal code configurations scripts text data
+        // Exclude workspace directory from Android media indexing
         File nomedia = new File(dir, ".nomedia");
         if (!nomedia.exists()) {
             try {
@@ -205,7 +201,7 @@ public class FileUtils {
     }
 
     /**
-     * Forwards a file out to external device viewers by computing file provider intent mappings.
+     * Launches a system chooser intent to open the specified file with an external application.
      */
     public static void openFileExternally(Context context, java.io.File file) {
         try {
@@ -235,7 +231,7 @@ public class FileUtils {
     }
 
     /**
-     * Generates a fully populated navigation model representable in sidebar layout folders views.
+     * Builds a hierarchical list of {@link FileNode} items representing the project directory tree.
      */
     public static List<FileNode> buildFileTree(File root) {
         FileNode rootNode = new FileNode(root, 0);
@@ -247,10 +243,6 @@ public class FileUtils {
         return tree;
     }
 
-    /**
-     * Sorts folders above plain documents, alphabetically filtering internal versioning
-     * metadata elements like .git profiles or tracking sheets from presentation views.
-     */
     private static List<FileNode> buildFileTreeRecursive(File dir, int depth) {
         List<FileNode> nodes = new ArrayList<>();
         if (dir == null || !dir.isDirectory()) return nodes;
@@ -281,7 +273,7 @@ public class FileUtils {
     }
 
     /**
-     * Converts a file size metric integer value into a legible text display scale descriptor.
+     * Formats a file size in bytes to a human-readable string (B, KB, MB).
      */
     public static String formatSize(long bytes) {
         if (bytes < 1024) return bytes + " B";
@@ -291,7 +283,7 @@ public class FileUtils {
     }
 
     /**
-     * Walks recursive data tracks to compute overall file aggregates within a target workspace path.
+     * Recursively counts the total number of files in a directory, ignoring hidden IDE directories.
      */
     public static int countFilesInDir(File dir) {
         if (dir == null || !dir.isDirectory()) return 0;

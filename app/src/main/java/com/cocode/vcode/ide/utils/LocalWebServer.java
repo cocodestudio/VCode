@@ -9,9 +9,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 /**
- * High-performance lightweight embedded application server.
- * Listens on dynamic loopback interfaces to stream working folder items directly into
- * internal web layout render views for real-time mobile code pre-visualization.
+ * Lightweight embedded HTTP server running on the device loopback interface.
+ * Serves static workspace project files to the internal preview WebView with CORS headers enabled.
  */
 public class LocalWebServer {
 
@@ -30,13 +29,13 @@ public class LocalWebServer {
     }
 
     /**
-     * Spawns socket listener loops on alternative threads to bypass primary interface blocks.
+     * Starts the embedded server on an auto-allocated local port.
      */
     public void start() {
         if (isRunning) return;
 
         try {
-            // Setting port variable integer to 0 instructs the device to auto-allocate any free dynamic port
+            // Port 0 auto-allocates an available system port
             serverSocket = new ServerSocket(0);
             port = serverSocket.getLocalPort();
             isRunning = true;
@@ -58,7 +57,7 @@ public class LocalWebServer {
     }
 
     /**
-     * Dismantles execution channels and socket structures during session termination events.
+     * Stops the embedded server and releases the server socket.
      */
     public void stop() {
         isRunning = false;
@@ -73,15 +72,14 @@ public class LocalWebServer {
     }
 
     /**
-     * Computes loopback navigation string paths for targeted project assets elements.
+     * Returns the HTTP localhost URL for the specified file in the document root.
      */
     public String getUrl(String fileName) {
         return "http://localhost:" + port + "/" + fileName;
     }
 
     /**
-     * Parses standard primitive HTTP request fields to pull target files, injecting
-     * explicit CORS access allowance flags and calculated MIME metadata types into downstream returns.
+     * Handles incoming HTTP GET requests, serving files from the document root.
      */
     private void handleRequest(Socket socket) {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -129,7 +127,7 @@ public class LocalWebServer {
     }
 
     /**
-     * Resolves standard network content type mapping labels matching filename suffixes.
+     * Resolves the MIME type for the requested file path.
      */
     private String getMimeType(String path) {
         path = path.toLowerCase();

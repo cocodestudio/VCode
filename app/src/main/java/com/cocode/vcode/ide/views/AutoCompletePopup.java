@@ -93,10 +93,7 @@ public class AutoCompletePopup {
 
         popupWindow.setHeight(estimatedHeight);
 
-        // AD-2: getCursorScreenCoords() already returns window-absolute pixel coordinates
-        // (it calls getLocationInWindow() internally and factors in scroll + padding).
-        // We must NOT convert back to view-local then re-add editorLocation — that would
-        // double-subtract getScrollX/Y which are already baked in.
+        // getCursorScreenCoords() returns window-absolute coordinates including scroll and padding.
         int windowX = 0;
         int windowYTop = 0;
         int windowYBottom = 0;
@@ -104,7 +101,6 @@ public class AutoCompletePopup {
         if (editorView instanceof CodeEditText) {
             CodeEditText codeEditor = (CodeEditText) editorView;
             int[] coords = codeEditor.getCursorScreenCoords(cursorOffset);
-            // coords[0] = window-absolute X, coords[1] = window-absolute top Y, coords[2] = bottom Y
             windowX = coords[0];
             windowYTop = coords[1];
             windowYBottom = coords[2];
@@ -244,7 +240,6 @@ public class AutoCompletePopup {
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             CompletionItem item = items.get(position);
 
-            // ── Type badge / icon ────────────────────────────────────────────
             if (item.getType() == CompletionItem.Type.FILE || item.getType() == CompletionItem.Type.FOLDER) {
                 holder.binding.tvTypeBadge.setVisibility(View.GONE);
                 holder.binding.ivTypeIcon.setVisibility(View.VISIBLE);
@@ -266,7 +261,6 @@ public class AutoCompletePopup {
                 holder.binding.tvTypeBadge.setTypeface(uiFontBold);
             }
 
-            // ── Label ────────────────────────────────────────────────────────
             String labelText = item.getLabel();
             if (labelText != null && labelText.length() > 24) {
                 holder.binding.tvLabel.setText(labelText.substring(0, 24) + "\u2026");
@@ -275,11 +269,9 @@ public class AutoCompletePopup {
             }
             holder.binding.tvLabel.setTypeface(codeFont, position == highlightedIndex ? Typeface.BOLD : Typeface.NORMAL);
 
-            // ── Detail ───────────────────────────────────────────────────────
             holder.binding.tvDetail.setText(item.getDetail() != null ? item.getDetail() : "");
             holder.binding.tvDetail.setTypeface(uiFont);
 
-            // ── Click handler ────────────────────────────────────────────────
             holder.itemView.setOnClickListener(v -> {
                 if (listener != null) listener.onItemSelected(item);
             });

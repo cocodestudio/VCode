@@ -19,6 +19,9 @@ import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.Objects;
 
+/**
+ * Bottom sheet dialog for entering an optional message when creating a Git stash.
+ */
 public class StashMessageBottomSheet extends BaseBottomSheetDialogFragment {
     private BottomSheetStashMessageBinding binding;
     private StashMessageListener listener;

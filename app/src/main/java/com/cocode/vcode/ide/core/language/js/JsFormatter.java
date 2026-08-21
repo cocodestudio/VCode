@@ -4,6 +4,9 @@ import com.cocode.vcode.ide.core.language.base.BaseFormatter;
 
 import java.util.regex.Pattern;
 
+/**
+ * Formatter for JavaScript and TypeScript source code.
+ */
 public class JsFormatter extends BaseFormatter {
 
     private static final Pattern MULTI_NL = Pattern.compile("\\n{3,}");
@@ -15,19 +18,19 @@ public class JsFormatter extends BaseFormatter {
 
         code = code.replace("\r\n", "\n").replace("\r", "\n");
 
-        // ── Pass 1: normalise the token stream ─────────────────────────────
+    // Pass 1: normalise the token stream
         String norm = normalise(code);
 
-        // ── Pass 2: re-indent ───────────────────────────────────────────────
+    // Pass 2: re-indent
         String indented = reIndent(norm);
 
-        // ── Pass 3: post-process ────────────────────────────────────────────
+    // Pass 3: post-process
         indented = TRAILING_SP.matcher(indented).replaceAll("\n");
         indented = MULTI_NL.matcher(indented).replaceAll("\n\n");
         return indented.trim() + "\n";
     }
 
-    // ── Pass 1: Produce a clean, single-normalised-space stream ────────────
+    // Pass 1: Produce a clean, single-normalised-space stream
     private String normalise(String code) {
         StringBuilder out = new StringBuilder(code.length() + code.length() / 4);
         int len = code.length();
@@ -39,7 +42,7 @@ public class JsFormatter extends BaseFormatter {
         for (int i = 0; i < len; i++) {
             char c = code.charAt(i);
 
-            // ── Block comment ──────────────────────────────────────────────
+    // Block comment
             if (inBlockComment) {
                 out.append(c);
                 if (c == '*' && i + 1 < len && code.charAt(i + 1) == '/') {
@@ -50,13 +53,13 @@ public class JsFormatter extends BaseFormatter {
                 }
                 continue;
             }
-            // ── Line comment ───────────────────────────────────────────────
+    // Line comment
             if (inLineComment) {
                 out.append(c);
                 if (c == '\n') inLineComment = false;
                 continue;
             }
-            // ── String / template literal ──────────────────────────────────
+    // String / template literal
             if (inString) {
                 out.append(c);
                 if (c == '\\') {
@@ -175,7 +178,7 @@ public class JsFormatter extends BaseFormatter {
         return out.toString();
     }
 
-    // ── Pass 2: re-indent the normalised stream ─────────────────────────────
+    // Pass 2: re-indent the normalised stream
     private String reIndent(String norm) {
         StringBuilder out = new StringBuilder(norm.length());
         String[] lines = norm.split("\n", -1);

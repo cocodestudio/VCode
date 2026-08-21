@@ -17,10 +17,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Static lookup tables and caches for HTML elements, attributes, CSS properties, colors, and JS globals used by linters.
+ */
 public final class KnownElements {
 
-    // ── Asset-populated sets (mutable, replaced by init()) ───────────────────
-
+    // Asset-populated sets (initialized via init())
     public static final Map<String, String> DEPRECATED_ELEMENTS = new HashMap<>();
     public static final Map<String, String> DEPRECATED_ATTRIBUTES = new HashMap<>();
     public static final Set<String> BLOCK_ELEMENTS = new HashSet<>(Arrays.asList(
@@ -31,7 +33,7 @@ public final class KnownElements {
     ));
     public static final Map<String, Set<String>> REQUIRED_PARENTS = new HashMap<>();
 
-    // ── Linter-logic tables (static, no asset equivalent) ────────────────────
+    // Linter-logic lookup tables
     public static final Map<String, Set<String>> REQUIRED_ATTRIBUTES = new HashMap<>();
     public static final Map<String, String> SEMANTIC_SUGGESTIONS = new LinkedHashMap<>();
     public static final Map<String, String> VENDOR_PREFIX_NEEDED = new LinkedHashMap<>();
@@ -258,7 +260,7 @@ public final class KnownElements {
                 "outline-color", "outline-width", "outline-style")));
     }
 
-    // ── Asset loader — call once from Application.onCreate() ─────────────────
+    // Asset loader — call once from Application.onCreate()
 
     private KnownElements() {
     }

@@ -28,6 +28,9 @@ import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Bottom sheet dialog for authenticating with GitHub using personal access tokens or OAuth device flow.
+ */
 public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
 
     private final AtomicBoolean isPollingCancelled = new AtomicBoolean(false);

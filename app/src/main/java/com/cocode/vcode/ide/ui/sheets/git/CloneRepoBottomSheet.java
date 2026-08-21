@@ -29,6 +29,9 @@ import java.io.File;
 import java.util.Locale;
 import java.util.UUID;
 
+/**
+ * Bottom sheet dialog for initiating Git repository clone operations from a remote URL.
+ */
 public class CloneRepoBottomSheet extends BaseBottomSheetDialogFragment {
 
     private BottomSheetCloneRepoBinding binding;

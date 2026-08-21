@@ -14,6 +14,9 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Formatter for HTML documents, handling indentation and nested element layout.
+ */
 public class HtmlFormatter extends BaseFormatter {
 
     private static final Set<String> VOID = new HashSet<>(Arrays.asList(

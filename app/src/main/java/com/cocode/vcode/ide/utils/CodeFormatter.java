@@ -12,13 +12,11 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Central routing service for source code formatting.
- * Matches specific programming languages with their corresponding
- * base formatter implementation to handle formatting requests.
+ * Dispatcher that routes source code formatting requests to language-specific formatters
+ * (HTML, CSS, JavaScript, TypeScript, JSON).
  */
 public class CodeFormatter {
 
-    // An optimized map lookup structure mapped to language enum keys
     private static final Map<FileType, BaseFormatter> FORMATTERS = new EnumMap<>(FileType.class);
 
     static {
@@ -29,19 +27,21 @@ public class CodeFormatter {
         FORMATTERS.put(FileType.TYPESCRIPT, new TsFormatter());
     }
 
+    /**
+     * Returns true if code formatting is supported for the given file type.
+     */
     public static boolean isFormatSupported(FileType language) {
         return FORMATTERS.containsKey(language);
     }
 
     /**
-     * Formats incoming source text block based on target language style standards.
+     * Formats the given source code based on its language type.
      *
-     * @param code     The unformatted raw code text block.
-     * @param language The targeted language configuration identifier.
-     * @return The beautified structural code string.
+     * @param code     the raw source code string
+     * @param language the file type of the code
+     * @return the formatted code string, or the original code if unsupported or on syntax errors
      */
     public static String format(String code, FileType language) {
-        // Return original string immediately if empty or null to avoid unneeded allocation steps
         if (code == null || code.trim().isEmpty()) return code;
 
         try {
@@ -49,10 +49,10 @@ public class CodeFormatter {
             if (formatter != null) {
                 return formatter.format(code);
             }
-            return code; // Return unmodified string if language does not have a dedicated formatter class
+            return code;
         } catch (Exception e) {
             android.util.Log.e("VCode", "Formatting failed", e);
-            return code; // Structural fallback to protect data integrity on invalid syntax states
+            return code;
         }
     }
 }

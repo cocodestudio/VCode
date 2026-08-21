@@ -3,6 +3,9 @@ package com.cocode.vcode.ide.core.language.js;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Scope parser for JavaScript, analyzing declared variables, functions, and block scopes.
+ */
 public class JsScopeParser {
 
     /**

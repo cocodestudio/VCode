@@ -19,9 +19,7 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * Work-tree modifications change tracking file listing controller.
- * Groups status codes (Added, Modified, Untracked, Deleted) to apply contextual color backgrounds,
- * formats source path trees relative to active root setups, and handles multi-language icon mappings.
+ * RecyclerView adapter for displaying changed files in Git staging and working tree lists.
  */
 public class GitFilesAdapter extends ListAdapter<GitFileItem, GitFilesAdapter.ViewHolder> {
 
@@ -44,9 +42,6 @@ public class GitFilesAdapter extends ListAdapter<GitFileItem, GitFilesAdapter.Vi
         this.listener = listener;
     }
 
-    /**
-     * Sets the active project name configuration to format root path layouts beautifully.
-     */
     public void setProjectName(String projectName) {
         this.projectName = projectName != null ? projectName.trim() : "";
     }
@@ -89,8 +84,6 @@ public class GitFilesAdapter extends ListAdapter<GitFileItem, GitFilesAdapter.Vi
             binding.tvFileName.setText(item.getFileName());
             binding.tvStatusBadge.setText(item.getStatus());
 
-            // Core path styling layout adjustment: if the path has no directory separators,
-            // append the project name token directly to establish standard workspace visibility structures.
             String pristinePath = item.getPath();
             if (!projectName.isEmpty() && !pristinePath.contains("/")) {
                 binding.tvFilePath.setText(projectName.concat("/").concat(pristinePath));
@@ -98,19 +91,18 @@ public class GitFilesAdapter extends ListAdapter<GitFileItem, GitFilesAdapter.Vi
                 binding.tvFilePath.setText(pristinePath);
             }
 
-            // Assign localized branding identifiers corresponding to the specific Git action code character
             int statusColor;
             switch (item.getStatus()) {
-                case "A": // Staged Addition
+                case "A":
                     statusColor = R.color.vcode_git_staged_color;
                     break;
-                case "D": // Deleted item context
+                case "D":
                     statusColor = R.color.vcode_git_deleted_color;
                     break;
-                case "?": // Untracked workspace component
+                case "?":
                     statusColor = R.color.vcode_git_untracked_color;
                     break;
-                default:  // Modified text rule block
+                default:
                     statusColor = R.color.vcode_git_modified_color;
                     break;
             }
@@ -120,12 +112,10 @@ public class GitFilesAdapter extends ListAdapter<GitFileItem, GitFilesAdapter.Vi
             badge.setColor(ContextCompat.getColor(context, statusColor));
             binding.tvStatusBadge.setBackground(badge);
 
-            // Handle staging action icon shapes and color theme updates
             binding.btnAction.setImageResource(item.isStaged() ? R.drawable.ic_minus : R.drawable.ic_plus);
             binding.btnAction.setColorFilter(ContextCompat.getColor(context,
                     item.isStaged() ? R.color.vcode_accent_error : R.color.vcode_accent_primary));
 
-            // Select graphic layout vectors depending on file type metrics
             FileIconHelper.setFileIconAndColor(binding.ivFileIcon, item.getFileName());
 
             binding.getRoot().setOnClickListener(v -> listener.onFileClick(item));

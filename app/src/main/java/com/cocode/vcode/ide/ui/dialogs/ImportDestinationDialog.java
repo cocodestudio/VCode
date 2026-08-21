@@ -20,6 +20,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import java.io.File;
 import java.util.List;
 
+/**
+ * Dialog for selecting the target directory when importing files into a project.
+ */
 public class ImportDestinationDialog extends DialogFragment {
 
     private File projectRoot;

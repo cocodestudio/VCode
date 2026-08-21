@@ -13,6 +13,9 @@ import com.cocode.vcode.ide.databinding.ItemStashBinding;
 import com.cocode.vcode.ide.git.model.StashItem;
 import com.cocode.vcode.ide.utils.FontManager;
 
+/**
+ * RecyclerView adapter for displaying stashed changes in the stash management sheet.
+ */
 public class StashAdapter extends ListAdapter<StashItem, StashAdapter.ViewHolder> {
 
     private final StashListener listener;

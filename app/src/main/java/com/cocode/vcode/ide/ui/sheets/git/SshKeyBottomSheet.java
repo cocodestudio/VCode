@@ -20,6 +20,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 
+/**
+ * Bottom sheet dialog for viewing, generating, and copying SSH key pairs for Git authentication.
+ */
 public class SshKeyBottomSheet extends BaseBottomSheetDialogFragment {
 
     private TextView tvPublicKey;

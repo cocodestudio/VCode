@@ -18,9 +18,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Access provider interface interacting with local SharedPreferences.
- * Synchronizes identity profiles, handles system fallback evaluations,
- * and ensures global configuration modifications map up dynamically into Git credential stores.
+ * Repository for managing global IDE settings (via {@link SharedPreferences}) and per-project settings overrides.
  */
 public class SettingsRepository {
 
@@ -33,10 +31,8 @@ public class SettingsRepository {
         this.prefs = this.context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
-    // --- Section: Load ---
-
     /**
-     * Hydrates an AppSettings entity block by reading serialized preferences from local partitions.
+     * Loads the global application settings from SharedPreferences.
      */
     public AppSettings loadSettings() {
         AppSettings s = new AppSettings();
@@ -56,12 +52,11 @@ public class SettingsRepository {
         // Language syntax preferences
         s.jsonFormatOnSave = prefs.getBoolean(PreferenceKeys.JSON_FORMAT_ON_SAVE, s.jsonFormatOnSave);
 
-        // Version control mapping: Pull security settings from secure credential managers first
+        // Git author credentials
         GitCredentialStore credentialStore = new GitCredentialStore();
         s.gitAuthorName = credentialStore.getLocalAuthorName(context);
         s.gitAuthorEmail = credentialStore.getLocalAuthorEmail(context);
 
-        // Fallback approach: If credential keys are missing, extract baseline properties from flat storage layers
         if (s.gitAuthorName == null || s.gitAuthorName.isEmpty()) {
             s.gitAuthorName = prefs.getString(PreferenceKeys.GIT_AUTHOR_NAME, "");
         }
@@ -76,28 +71,32 @@ public class SettingsRepository {
         s.gitShowFileTreeStatus = prefs.getBoolean(PreferenceKeys.GIT_SHOW_FILE_STATUS, s.gitShowFileTreeStatus);
         s.gitDefaultRemote = prefs.getString(PreferenceKeys.GIT_DEFAULT_REMOTE, s.gitDefaultRemote);
 
-        // Visual Presentation modes
+        // Theme and appearance
         String themeStr = prefs.getString(PreferenceKeys.THEME, s.theme.name());
         try {
             s.theme = AppSettings.Theme.valueOf(themeStr);
         } catch (Exception e) {
             s.theme = AppSettings.Theme.SYSTEM;
         }
-        // Preview rendering options
+
+        // Preview options
         s.openPreviewInApp = prefs.getBoolean(PreferenceKeys.OPEN_PREVIEW_IN_APP, s.openPreviewInApp);
         s.autoRefreshPreview = prefs.getBoolean(PreferenceKeys.AUTO_REFRESH_PREVIEW, s.autoRefreshPreview);
 
-        // Automation intervals
+        // Auto-save
         s.autoSave = prefs.getBoolean(PreferenceKeys.AUTO_SAVE, s.autoSave);
         s.autoSaveDelay = prefs.getInt(PreferenceKeys.AUTO_SAVE_INTERVAL, s.autoSaveDelay);
 
-        // Safety checkpoint parameters
+        // Confirmation dialogs
         s.confirmOnTabClose = prefs.getBoolean(PreferenceKeys.CONFIRM_ON_TAB_CLOSE, s.confirmOnTabClose);
         s.confirmOnProjectDelete = prefs.getBoolean(PreferenceKeys.CONFIRM_ON_PROJECT_DEL, s.confirmOnProjectDelete);
 
         return s;
     }
 
+    /**
+     * Loads settings merged with project-specific settings if present.
+     */
     public AppSettings loadMergedSettings(java.io.File projectDir) {
         AppSettings global = loadSettings();
         if (projectDir == null) return global;
@@ -124,8 +123,7 @@ public class SettingsRepository {
                         global.autoCloseHtmlTags = sObj.getBoolean("autoCloseHtmlTags");
                 }
             }
-        } catch (Exception e) {
-            // Ignore
+        } catch (Exception ignored) {
         }
         return global;
     }
@@ -145,16 +143,13 @@ public class SettingsRepository {
         if (targetFile == metaFile && obj.has("settings")) {
             sObj = obj.getJSONObject("settings");
         } else if (targetFile == settingsFile) {
-            sObj = obj; // project_settings.json itself is the settings object
+            sObj = obj;
         }
         return sObj;
     }
 
-    // --- Section: Save ---
-
     /**
-     * Commits configuration values to local workspace preference maps.
-     * Forwards identity declarations directly into version control secure storage blocks.
+     * Saves the global application settings to SharedPreferences.
      */
     public void saveSettings(AppSettings s) {
         if (s == null) return;
@@ -195,7 +190,7 @@ public class SettingsRepository {
 
         ed.apply();
 
-        // Synchronize author configurations directly into secure version control credential stores
+        // Update Git author credentials store
         GitCredentialStore credentialStore = new GitCredentialStore();
         credentialStore.saveLocalAuthor(
                 context,
@@ -204,6 +199,9 @@ public class SettingsRepository {
         );
     }
 
+    /**
+     * Saves per-project settings overrides into the project's metadata configuration file.
+     */
     public void saveProjectSettings(java.io.File projectDir, AppSettings s) {
         if (projectDir == null || s == null) return;
         java.io.File metaFile = new java.io.File(new java.io.File(new java.io.File(projectDir, ProjectRepository.VCODE_DIR), ProjectRepository.META_DIR), ProjectRepository.PROJECT_FILE);
@@ -230,22 +228,19 @@ public class SettingsRepository {
             try (java.io.BufferedWriter writer = new java.io.BufferedWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(metaFile), StandardCharsets.UTF_8))) {
                 writer.write(obj.toString(2));
             }
-        } catch (Exception e) {
-            // Ignore
+        } catch (Exception ignored) {
         }
     }
 
-    // --- Section: Last Project ---
-
     /**
-     * Caches the identifier of the project most recently active in the developer workspace.
+     * Caches the ID of the last active project.
      */
     public void saveLastProjectId(String projectId) {
         prefs.edit().putString(PreferenceKeys.LAST_PROJECT_ID, projectId != null ? projectId : "").apply();
     }
 
     /**
-     * Resolves the historical workspace tracking anchor to resume previous workspace sessions on launch.
+     * Returns the ID of the last active project.
      */
     public String loadLastProjectId() {
         return prefs.getString(PreferenceKeys.LAST_PROJECT_ID, "");

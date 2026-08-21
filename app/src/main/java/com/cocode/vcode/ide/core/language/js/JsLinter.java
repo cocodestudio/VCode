@@ -8,10 +8,13 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Real-time linter for JavaScript, checking syntax errors, undefined variables, missing semicolons, and code quality.
+ */
 public class JsLinter {
 
-    // ── Patterns compiled once ──────────────────────────────────────────────
-    // ── Entry point ─────────────────────────────────────────────────────────
+    // Patterns compiled once
+    // Entry point
     public static List<Problem> analyze(File file, String text) {
         if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
 
@@ -53,7 +56,5 @@ public class JsLinter {
         return problems;
     }
 
-
-    // ── Rule implementations ────────────────────────────────────────────────
-
+    // Rule implementations
 }

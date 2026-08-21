@@ -101,8 +101,6 @@ public class SelectionToolbar {
         return popupWindow.isShowing();
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
-
     private void updatePosition() {
         if (editor == null || !popupWindow.isShowing()) return;
 
@@ -138,12 +136,12 @@ public class SelectionToolbar {
         int anchorYTop = coords[1];
         int anchorYBot = coords[2];
 
-        // ── Horizontal: center over anchor, clamp to screen ───────────────────
+        // Horizontal positioning: center over anchor and clamp within screen margins
         int x = anchorX - (popupWidth / 2);
         if (x < graceH) x = graceH;
         if (x + popupWidth > screenW - graceH) x = screenW - popupWidth - graceH;
 
-        // ── Vertical: prefer above anchor; fall back to below ─────────────────
+        // Vertical positioning: prefer above the anchor, fall back to below
         int yAbove = anchorYTop - popupHeight - margin;
         int yBelow = anchorYBot + margin;
 

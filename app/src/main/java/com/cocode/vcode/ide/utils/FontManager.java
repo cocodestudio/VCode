@@ -7,9 +7,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Typeface asset manager optimizing UI typography workflows.
- * Implements a private local cache layout to track loaded custom font families,
- * avoiding redundant file reads and resource footprint spikes on re-rendering cycles.
+ * Typeface manager and cache for application fonts.
+ * Caches loaded fonts (JetBrains Mono for code, Sora for UI) to prevent redundant asset reads.
  */
 public class FontManager {
 
@@ -25,7 +24,7 @@ public class FontManager {
     }
 
     /**
-     * Double-checked locking singleton factory accessor interface.
+     * Returns the singleton instance of FontManager.
      */
     public static FontManager getInstance() {
         if (instance == null) {
@@ -38,9 +37,6 @@ public class FontManager {
         return instance;
     }
 
-    /**
-     * Low-level vector reader targeting application assets corridors.
-     */
     private Typeface load(Context ctx, String path) {
         Typeface cached = cache.get(path);
         if (cached != null) return cached;
@@ -49,7 +45,7 @@ public class FontManager {
             cache.put(path, tf);
             return tf;
         } catch (Exception e) {
-            return Typeface.DEFAULT; // Degrade gracefully to platform base font if data gets deleted
+            return Typeface.DEFAULT;
         }
     }
 

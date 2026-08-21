@@ -3,11 +3,10 @@ package com.cocode.vcode.ide.data.model;
 import androidx.annotation.NonNull;
 
 /**
- * Functional data wrapper type mapping background task outcomes.
- * Streamlines architecture flows by clearly grouping payload data structures
- * along with descriptive exception status strings across application pipelines.
+ * Generic result wrapper for background operations, encapsulating either a successful data payload
+ * or an error message.
  *
- * @param <T> The expected entity type parameter wrapped by successful process resolutions.
+ * @param <T> the type of data returned on success
  */
 public class Result<T> {
 
@@ -22,14 +21,14 @@ public class Result<T> {
     }
 
     /**
-     * Static factory initializer indicating task completion, wrapping the resulting object data.
+     * Creates a successful result holding the provided data.
      */
     public static <T> Result<T> success(T data) {
         return new Result<>(data, null, true);
     }
 
     /**
-     * Static factory initializer capturing operational breakdowns complete with localized diagnosis text.
+     * Creates an error result with the specified error message.
      */
     public static <T> Result<T> error(String message) {
         return new Result<>(null, message != null ? message : "Unknown error", false);
@@ -47,9 +46,6 @@ public class Result<T> {
         return errorMessage;
     }
 
-    /**
-     * String conversion helper returning diagnostic data states for application tracking logs.
-     */
     @NonNull
     @Override
     public String toString() {

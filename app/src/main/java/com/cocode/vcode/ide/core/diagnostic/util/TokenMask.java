@@ -1,5 +1,9 @@
 package com.cocode.vcode.ide.core.diagnostic.util;
 
+/**
+ * Token mask builder that identifies ranges of strings, comments, and regular expression literals
+ * in source code so linters and analyzers can ignore them.
+ */
 public class TokenMask {
     public final boolean[] inString;
     public final boolean[] inComment;
@@ -24,14 +28,14 @@ public class TokenMask {
         boolean isJs = "js".equals(language) || "ts".equals(language);
 
         int i = 0;
-        // track last non-ws token type for regex disambiguation
-        // 0=none/operator/keyword, 1=identifier/number/closeParen
+        // track last non-ws token type for regex disambiguation:
+        // 0 = none/operator/keyword, 1 = identifier/number/closeParen
         int lastTokenType = 0;
 
         while (i < len) {
             char quote = source.charAt(i);
 
-            // ── HTML comment <!-- --> ──────────────────────────────────────
+            // HTML comment <!-- -->
             if (isHtml && quote == '<' && i + 3 < len
                     && source.charAt(i + 1) == '!'
                     && source.charAt(i + 2) == '-'
@@ -54,7 +58,7 @@ public class TokenMask {
                 continue;
             }
 
-            // ── Block comment /* */ ────────────────────────────────────────
+            // Block comment /* */
             if ((isJs || isCss || isHtml) && quote == '/' && i + 1 < len && source.charAt(i + 1) == '*') {
                 int start = i;
                 i += 2;
@@ -71,7 +75,7 @@ public class TokenMask {
                 continue;
             }
 
-            // ── Line comment // ────────────────────────────────────────────
+            // Line comment //
             if (isJs && quote == '/' && i + 1 < len && source.charAt(i + 1) == '/') {
                 int start = i;
                 while (i < len && source.charAt(i) != '\n') i++;
@@ -80,7 +84,7 @@ public class TokenMask {
                 continue;
             }
 
-            // ── String literals ' " ────────────────────────────────────────
+            // String literals ' "
             if (!isCss && (quote == '\'' || quote == '"')) {
                 int start = i;
                 i++;
@@ -123,7 +127,7 @@ public class TokenMask {
                 continue;
             }
 
-            // ── Template literal ` ─────────────────────────────────────────
+            // Template literal `
             if (isJs && quote == '`') {
                 int start = i;
                 i++;
@@ -185,7 +189,7 @@ public class TokenMask {
                 continue;
             }
 
-            // ── Regex literal / ────────────────────────────────────────────
+            // Regex literal /
             if (isJs && quote == '/' && lastTokenType == 0) {
                 // Confirm next char is not * or / (those are comments, handled above)
                 if (i + 1 < len && source.charAt(i + 1) != '*' && source.charAt(i + 1) != '/') {
@@ -223,7 +227,7 @@ public class TokenMask {
                 }
             }
 
-            // ── Track last token type for regex disambiguation ──────────────
+            // Track last token type for regex disambiguation
             if (quote == ')' || quote == ']' || Character.isDigit(quote)) {
                 lastTokenType = 1;
             } else if (Character.isLetter(quote) || quote == '_' || quote == '$') {

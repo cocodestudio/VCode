@@ -19,9 +19,7 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * Version control revision tree adapter.
- * Renders repository commit history as a linear timeline graph, dynamically shifting node styling
- * and connecting line segments based on the relative position of individual entries.
+ * RecyclerView adapter for displaying commit history as a visual timeline graph.
  */
 public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryAdapter.ViewHolder> {
 
@@ -46,18 +44,14 @@ public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryA
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         return new ViewHolder(ItemCommitHistoryBinding.inflate(
-                LayoutInflater.from(parent.getContext()), parent, false));
+            LayoutInflater.from(parent.getContext()), parent, false));
     }
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        // Evaluate tree boundaries by checking position flags against list bounds indices
         holder.bind(getItem(position), position == 0, position == getItemCount() - 1);
     }
 
-    /**
-     * Interception contract listening for item details expansion or checkout trigger updates.
-     */
     public interface CommitHistoryListener {
         void onOverflowClick(CommitItem item, View anchor);
 
@@ -75,7 +69,6 @@ public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryA
         void bind(CommitItem item, boolean isFirst, boolean isLast) {
             Context context = itemView.getContext();
 
-            // Set typography layouts
             binding.tvHeadBadge.setTypeface(FontManager.getInstance().getUiMedium(context));
             binding.tvSha.setTypeface(FontManager.getInstance().getUiFont(context));
             binding.tvMessage.setTypeface(FontManager.getInstance().getUiSemiBold(context));
@@ -85,7 +78,7 @@ public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryA
             binding.tvMessage.setText(item.getMessage());
             binding.tvAuthorTime.setText(String.format("%s • %s", item.getAuthor(), item.getTimestamp()));
 
-            // HEAD Badge tracking layout logic: display badge only for the topmost tip commit
+            // Display HEAD badge only for the topmost commit
             binding.tvHeadBadge.setVisibility(isFirst ? View.VISIBLE : View.GONE);
 
             GradientDrawable nodeDrawable = new GradientDrawable();
@@ -93,17 +86,14 @@ public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryA
             int accent = ContextCompat.getColor(context, R.color.vcode_accent_primary);
 
             if (isFirst) {
-                // Style tip commit nodes with a solid filled visual accent weight
                 nodeDrawable.setColor(accent);
                 binding.viewNode.setBackground(nodeDrawable);
             } else {
-                // Style older chronological nodes with clear bordered stroke indicators
                 nodeDrawable.setStroke(UiUtils.dpToPx(context, 2), accent);
                 nodeDrawable.setColor(ContextCompat.getColor(context, android.R.color.transparent));
                 binding.viewNode.setBackground(nodeDrawable);
             }
 
-            // Timeline line connection rules: isolate terminal points to match list constraints smoothly
             binding.viewLineTop.setVisibility(isFirst ? View.INVISIBLE : View.VISIBLE);
             binding.viewLineBottom.setVisibility(isLast ? View.INVISIBLE : View.VISIBLE);
 

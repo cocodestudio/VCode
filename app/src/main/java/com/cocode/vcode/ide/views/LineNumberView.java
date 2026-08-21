@@ -13,13 +13,8 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.utils.FontManager;
 
 /**
- * Vertical line layout margin gutter designed for the editor hierarchy view.
- * Utilizes low-level canvas drawing pipelines to display row counts index identifiers,
- * tracking baseline offsets to follow edit rows seamlessly.
- *
- * <p>Switched in Phase 2 to use the AD-4 methods ({@link CodeEditText#getEditorLineHeight()},
- * {@link CodeEditText#getFirstVisibleLine()}, {@link CodeEditText#getLogicalLineCount()}) instead
- * of the old {@code editor.getLayout().*} calls.
+ * Vertical line number gutter view for the code editor.
+ * Draws line numbers aligned with the editor's visual lines and highlights the active line.
  */
 public class LineNumberView extends View {
 
@@ -81,10 +76,8 @@ public class LineNumberView extends View {
     protected void onDraw(@NonNull Canvas canvas) {
         if (editor == null) return;
 
-        // Render sidebar background sheet strip bounds
         canvas.drawRect(0, 0, getWidth(), getHeight(), bgPaint);
 
-        // Render the sharp edge vertical separation divider string rule
         canvas.drawLine(getWidth() - DIVIDER_WIDTH_PX, 0,
                 getWidth() - DIVIDER_WIDTH_PX, getHeight(), dividerPaint);
 
@@ -110,27 +103,22 @@ public class LineNumberView extends View {
         int _colorSecondary = colorsLoaded ? colorSecondary : ContextCompat.getColor(getContext(), R.color.vcode_line_number_text);
 
         for (int i = firstLine; i <= lastLine; i++) {
-            // Mirror the exact baseline Y formula used in CodeEditText.onDraw:
-            //   y = paddingTop + (line * lineHeightPx) - ascent - scrollY
-            // Include the editor's paddingTop so numbers align with their text lines.
             int visualRow = editor.getVisualRowStart(i);
             float y = editor.getEditorPaddingTop() + (visualRow * lineH) - ascent - scrollY;
 
             boolean isActive = (i == activeLine);
             numberPaint.setColor(isActive ? _colorPrimary : _colorSecondary);
-            // Perf: use char-buffer drawText to avoid String.valueOf() allocation per line
             int s = fillLineNum(i + 1, lineNumBuffer);
             canvas.drawText(lineNumBuffer, s, lineNumBuffer.length - s, textX, y, numberPaint);
         }
     }
 
     /**
-     * Pairs up an edit view text field instance to synchronize font metrics configurations.
+     * Binds this line number view to a CodeEditText instance.
      */
     public void bindEditor(CodeEditText editor) {
         this.editor = editor;
         if (editor != null) {
-            // Use FontManager directly (consistent with CodeEditText's own init)
             numberPaint.setTypeface(FontManager.getInstance().getCodeFont(getContext()));
         }
         invalidate();
@@ -150,7 +138,6 @@ public class LineNumberView extends View {
     }
 
     public void setLineCount() {
-        // invalidate is driven by syncComplete()
     }
 
     public void setScrollY(int scrollY) {
@@ -158,20 +145,17 @@ public class LineNumberView extends View {
     }
 
     public void setLineHeight() {
-        // invalidate is driven by syncComplete()
     }
 
     /**
-     * Monitors changes in overall digit lengths thresholds to expand gutter widths safely.
-     * Prevents infinite measuring update cycles by gating execution behind distinct state changes.
+     * Updates the gutter width based on the total line count to accommodate the number of digits.
      */
     public void updateGutterWidth(int maxLines) {
         int digits = String.valueOf(maxLines).length();
-        digits = Math.max(digits, 2); // Enforce a minimum 2-digit column layout base width
+        digits = Math.max(digits, 2); // Enforce a minimum 2-digit column width
 
         int newGutterWidth = (int) (numberPaint.measureText("0") * digits + dpToPx(8) * 2 + DIVIDER_WIDTH_PX);
 
-        // Layout calls trigger only when changes are confirmed, eliminating jitter loops
         if (gutterWidth != newGutterWidth) {
             gutterWidth = newGutterWidth;
             requestLayout();

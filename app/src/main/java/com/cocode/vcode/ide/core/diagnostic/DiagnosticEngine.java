@@ -15,6 +15,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Central orchestrator for code diagnostics and linting across all supported languages.
+ */
 public class DiagnosticEngine {
     private static final int MAX_PROBLEMS = 60;
 

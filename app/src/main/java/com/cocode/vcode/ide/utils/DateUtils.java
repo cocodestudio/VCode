@@ -5,28 +5,21 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * Universal date formatting utility class.
- * Computes human-readable relative time expressions and absolute text timestamps
- * for commit logs and file histories.
+ * Utility methods for formatting timestamps and generating relative time strings (e.g. "5 minutes ago").
  */
 public class DateUtils {
 
-    // Prevent direct instantiation since all methods are utility functions
     private DateUtils() {
     }
 
     /**
-     * Converts absolute date values into relative textual representations.
-     *
-     * @param date The baseline target timestamp value.
-     * @return A localized narrative segment description representing the elapsed interval.
+     * Returns a human-readable relative time string for the given date (e.g. "just now", "5 minutes ago").
      */
     public static String getRelativeTime(Date date) {
         if (date == null) return "unknown";
         long now = System.currentTimeMillis();
         long diff = now - date.getTime();
 
-        // Account for slight internal processing time alignment variations
         if (diff < 0) return "just now";
 
         long seconds = diff / 1000;
@@ -47,7 +40,7 @@ public class DateUtils {
     }
 
     /**
-     * Formats absolute calendar markers into full combined chronological descriptions.
+     * Formats a date into a full date and time string (e.g. "Jan 15, 2026 · 14:30").
      */
     public static String formatDate(Date date) {
         if (date == null) return "";
@@ -55,7 +48,7 @@ public class DateUtils {
     }
 
     /**
-     * Formats date coordinates into streamlined single card day layout tracks.
+     * Formats a date into a short date string (e.g. "Jan 15, 2026").
      */
     public static String formatDateShort(Date date) {
         if (date == null) return "";

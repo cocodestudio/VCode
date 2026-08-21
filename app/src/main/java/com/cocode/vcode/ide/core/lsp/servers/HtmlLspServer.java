@@ -386,9 +386,7 @@ public final class HtmlLspServer implements LspServer {
         return null;
     }
 
-    // -------------------------------------------------------------------------
-    // Cross-file completion helpers (Phase 2 IntelliSense)
-    // -------------------------------------------------------------------------
+    // Cross-file reference resolution
 
     private List<LspLocation> findUsagesInProject(String name, boolean isId) {
         List<LspLocation> result = new ArrayList<>();

@@ -117,7 +117,7 @@ public class SshKeyManager {
         return sb.toString().trim();
     }
 
-    // ── SSH wire-format helpers ───────────────────────────────────────────────
+    // SSH wire-format helpers
 
     private static byte[] buildOpenSshPublicKey(RSAPublicKey pub) throws Exception {
         byte[] type = "ssh-rsa".getBytes(StandardCharsets.UTF_8);

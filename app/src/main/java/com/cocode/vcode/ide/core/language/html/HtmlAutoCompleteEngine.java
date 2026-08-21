@@ -43,7 +43,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
     // Patterns removed in favor of high-performance State Machine parser
 
-    // ─── Instance state ──────────────────────────────────────────────────────────
+    // Instance state
     private static final FastTrie TAG_TRIE = new FastTrie();
     private final List<CompletionItem> tagItems = new ArrayList<>();
     private final HtmlTagParser tagParser = new HtmlTagParser();
@@ -70,8 +70,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Tag loading ────────────────────────────────────────────────────────────
-
+    // Tag loading
     /**
      * Initialises HTML tag completions and per-tag attribute lists from the JSON asset.
      */
@@ -121,8 +120,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Main entry point ───────────────────────────────────────────────────────
-
+    // Main entry point
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
         if (fullText == null || cursorPos < 0 || cursorPos > fullText.length()) {
@@ -133,13 +131,13 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         String trimmed = lineBefore.trim();
         String word = getWordBeforeCursor(fullText, cursorPos);
 
-        // ── 1. DOCTYPE / comment completions (when typing "<!" or "<!D") ─────────
+    // 1. DOCTYPE / comment completions (when typing "<!" or "<!D")
         if (trimmed.equals("<!") || trimmed.startsWith("<!D") || trimmed.startsWith("<!d")) {
             String filter = trimmed.startsWith("<!") ? trimmed.substring(2) : "";
             return fuzzyFilter(HtmlDefinitions.DOCTYPE_ITEMS, filter);
         }
 
-        // ── 1b. Entity completions (when typing "&" followed by letters) ──────
+    // 1b. Entity completions (when typing "&" followed by letters)
         if (!lineBefore.isEmpty()) {
             int ampIdx = lineBefore.lastIndexOf('&');
             if (ampIdx >= 0) {
@@ -155,7 +153,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
         HtmlTagParser.HtmlContext ctx = tagParser.parseContext(fullText, cursorPos);
 
-        // ── 3. Closing-tag suggestion on "</" ─────────────────────────────────
+    // 3. Closing-tag suggestion on "</"
         if (trimmed.endsWith("</") || lineBefore.endsWith("</")) {
             if (ctx.unclosedTag != null && !ctx.unclosedTag.isEmpty()) {
                 List<CompletionItem> result = new ArrayList<>();
@@ -168,7 +166,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── 4. Embedded <style> / <script> block delegation ───────────────────
+    // 4. Embedded <style> / <script> block delegation
         if ("style".equals(ctx.unclosedTag)) {
             // Extract only the CSS content between <style> and cursor
             int styleStart = findBlockContentStart(fullText, cursorPos, "style");
@@ -189,7 +187,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             return jsEngine.getSuggestions(fullText, cursorPos);
         }
 
-        // ── 5. Inside an open tag — attribute / attribute-value completions ───
+    // 5. Inside an open tag — attribute / attribute-value completions
         if (ctx.isInsideOpenTag && !ctx.isTypingTagName && ctx.currentTagName != null) {
             if (ctx.isInsideAttributeValue && ctx.currentAttributeName != null) {
                 String attrName = ctx.currentAttributeName;
@@ -258,7 +256,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             return fuzzyFilter(attrs, word);
         }
 
-        // ── 6. Emmet expansion ────────────────────────────────────────────────
+    // 6. Emmet expansion
         String emmetAbbr = getEmmetAbbreviationBeforeCursor(fullText, cursorPos);
         List<CompletionItem> emmetResults = new ArrayList<>();
         if (emmetAbbr != null && !emmetAbbr.isEmpty() && !emmetAbbr.contains("<")) {
@@ -288,7 +286,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── 7. Tag name completions (when typing "div", "<div", etc.) ─────────
+    // 7. Tag name completions (when typing "div", "<div", etc.)
         // Suppress tag suggestions when cursor is inside Emmet text braces {}
         if ((word != null && !word.isEmpty()) || trimmed.endsWith("<")) {
             if (isInsideEmmetBraces(lineBefore)) {
@@ -326,8 +324,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return pathQuery;
     }
 
-    // ─── Emmet brace detection ─────────────────────────────────────────────────
-
+    // Emmet brace detection
     /**
      * Returns true if the cursor is inside unmatched curly braces on the current line.
      * This indicates the user is typing Emmet text content like {@code a{Click me|}}
@@ -343,8 +340,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return depth > 0;
     }
 
-    // ─── Embedded block content extraction ─────────────────────────────────────
-
+    // Embedded block content extraction
     /**
      * Finds the content start position of the last unclosed &lt;style&gt; or &lt;script&gt; block
      * before the cursor. Returns the position right after the closing '>' of the opening tag.
@@ -384,8 +380,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return lastOpen;
     }
 
-    // ─── File / folder path suggestions ────────────────────────────────────────
-
+    // File / folder path suggestions
     /**
      * Provides VS Code-style file/folder path completions for path-bearing attributes
      * (src, href, action…). Shows the immediate directory contents when a slash is
@@ -464,8 +459,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return (size / (1024 * 1024)) + " MB";
     }
 
-    // ─── Path helpers ───────────────────────────────────────────────────────────
-
+    // Path helpers
     private File getProjectRoot(File file) {
         return ProjectRepository.findProjectRoot(file);
     }

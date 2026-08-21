@@ -6,9 +6,8 @@ import com.cocode.vcode.ide.utils.FileUtils;
 import java.io.File;
 
 /**
- * Workspace runtime object representing an active file session inside the editor stage.
- * Tracks character mutations, text dirty states, target languages, scrolling viewport
- * coordinates, and caret cursor locations for state persistence across tabs.
+ * Model representing an open file session in the editor.
+ * Tracks file path, text content, dirty status, cursor position, scroll position, and virtual file state.
  */
 public class EditorFile {
 
@@ -34,9 +33,6 @@ public class EditorFile {
     public EditorFile() {
     }
 
-    /**
-     * Initializes an active workspace tracking session for a local target file.
-     */
     public EditorFile(String id, File file, String content, FileType fileType) {
         this.id = id;
         this.file = file;
@@ -55,7 +51,7 @@ public class EditorFile {
     }
 
     /**
-     * Helper to check if the UI needs to show an Image/Font viewer instead of the text editor.
+     * Returns true if this file is a non-text binary asset (e.g. image, font).
      */
     public boolean isBinaryAsset() {
         return fileType != null && !fileType.isTextBased();
@@ -70,14 +66,11 @@ public class EditorFile {
     }
 
     /**
-     * Compares active working text lines against disk persistence states to look for unsaved edits.
-     * Prevents tracking mutations on external asset models.
-     *
-     * @return True if there are uncommitted buffer changes waiting for a disk write sequence.
+     * Returns true if there are unsaved in-memory edits.
      */
     public boolean isDirty() {
         if (isBinaryAsset())
-            return false; // Binary assets edited externally cannot be "dirty" in our text editor
+            return false;
         if (manuallyDirty) return true;
         if (content == null && savedContent == null) return false;
         if (content == null || savedContent == null) return true;
@@ -89,7 +82,7 @@ public class EditorFile {
     }
 
     /**
-     * Synchronizes storage bookmarks after writing data to disk, clearing dirty markers.
+     * Marks the current content as saved, clearing the dirty flag.
      */
     public void markSaved() {
         this.savedContent = this.content;
@@ -104,8 +97,7 @@ public class EditorFile {
     }
 
     /**
-     * Computes localized file tree routing rules relative to the active root project path.
-     * Clean up long file layouts so tab headers display clean paths.
+     * Returns the path relative to the given project root, or the file name if outside the root.
      */
     public String getRelativePath(File projectRoot) {
         if (file == null || projectRoot == null) return getFileName();

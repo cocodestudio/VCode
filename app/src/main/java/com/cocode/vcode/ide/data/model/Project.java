@@ -1,8 +1,8 @@
 package com.cocode.vcode.ide.data.model;
 
 /**
- * Data model capturing core workspace metadata descriptions for an IDE project.
- * Encapsulates identity parameters, names, file metrics, and chronological modification history.
+ * Data model representing a project in the workspace, including metadata like name, creation date,
+ * last modification timestamp, main entry file, and file count.
  */
 public class Project {
 
@@ -10,15 +10,12 @@ public class Project {
     private String name;
     private long createdAt;
     private long lastModifiedAt;
-    private String mainFile; // Path pointing to the project entry point (e.g. index.html)
+    private String mainFile; // Path to project entry point (e.g. index.html)
     private int fileCount;
 
     public Project() {
     }
 
-    /**
-     * Initializes an immutable metadata model frame representing an existing storage project folder.
-     */
     public Project(String id, String name, long createdAt, long lastModifiedAt,
                    String mainFile, int fileCount) {
         this.id = id;

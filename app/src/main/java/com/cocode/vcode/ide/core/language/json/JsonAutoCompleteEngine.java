@@ -30,11 +30,11 @@ import java.util.Map;
  */
 public class JsonAutoCompleteEngine extends AutoCompleteEngine {
 
-    // ─── Value type templates ────────────────────────────────────────────────────
+    // Value type templates
     private static final List<CompletionItem> VALUE_ITEMS;
     private static final List<CompletionItem> BOOL_NULL_ITEMS;
 
-    // ─── Schema-aware key completions for known JSON files ────────────────────
+    // Schema-aware key completions for known JSON files
     private static final Map<String, List<CompletionItem>> SCHEMA_KEYS = new HashMap<>();
 
     static {
@@ -52,7 +52,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         BOOL_NULL_ITEMS.add(new CompletionItem("false", "false", "Boolean", CompletionItem.Type.VALUE, 0));
         BOOL_NULL_ITEMS.add(new CompletionItem("null", "null", "Null", CompletionItem.Type.VALUE, 0));
 
-        // ── package.json keys ────────────────────────────────────────────
+    // package.json keys
         List<CompletionItem> pkgKeys = new ArrayList<>();
         String[][] pkgEntries = {
                 {"name", "\"name\": \"|\"", "Package name"},
@@ -87,7 +87,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
         SCHEMA_KEYS.put("package.json", pkgKeys);
 
-        // ── tsconfig.json keys ───────────────────────────────────────────
+    // tsconfig.json keys
         List<CompletionItem> tsKeys = new ArrayList<>();
         String[][] tsEntries = {
                 {"compilerOptions", "\"compilerOptions\": {\n  |\n}", "Compiler settings"},
@@ -102,7 +102,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
         SCHEMA_KEYS.put("tsconfig.json", tsKeys);
 
-        // ── tsconfig compilerOptions keys ────────────────────────────────
+    // tsconfig compilerOptions keys
         List<CompletionItem> tsCompilerKeys = new ArrayList<>();
         String[][] tsCompilerEntries = {
                 {"target", "\"target\": \"|ES2020\"", "ECMAScript target"},
@@ -133,7 +133,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
         SCHEMA_KEYS.put("tsconfig_compilerOptions", tsCompilerKeys);
 
-        // ── .eslintrc.json keys ──────────────────────────────────────────
+    // .eslintrc.json keys
         List<CompletionItem> eslintKeys = new ArrayList<>();
         String[][] eslintEntries = {
                 {"env", "\"env\": {\n  \"browser\": true,\n  \"es2021\": true,\n  \"node\": true\n}|", "Environments"},
@@ -152,7 +152,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
         SCHEMA_KEYS.put(".eslintrc.json", eslintKeys);
 
-        // ── manifest.json (PWA) keys ─────────────────────────────────────
+    // manifest.json (PWA) keys
         List<CompletionItem> manifestKeys = new ArrayList<>();
         String[][] manifestEntries = {
                 {"name", "\"name\": \"|\"", "App name"},
@@ -200,8 +200,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         return currentFile.getName();
     }
 
-    // ─── Snippet loading ──────────────────────────────────────────────────────────
-
+    // Snippet loading
     /**
      * Reads complex dictionary keys and developer-defined boilerplate schemas out of the JSON asset.
      */
@@ -229,8 +228,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Document key scanning ─────────────────────────────────────────────────
-
+    // Document key scanning
     /**
      * Scans the full JSON document for quoted keys (strings before {@code :}) and caches them.
      * Only re-scans when the document content has changed.
@@ -260,8 +258,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    // ─── Main entry point ──────────────────────────────────────────────────────
-
+    // Main entry point
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
         if (fullText == null || cursorPos < 0) return new ArrayList<>();
@@ -288,24 +285,24 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── After ':' — value completions ────────────────────────────────────
+    // After ':' — value completions
         if (trimmed.endsWith(":") || trimmed.endsWith(": ")) {
             List<CompletionItem> items = new ArrayList<>(VALUE_ITEMS);
             return fuzzyFilter(items, word.isEmpty() ? "" : word);
         }
 
-        // ── Inside array or after comma — value completions ──────────────────
+    // Inside array or after comma — value completions
         if (trimmed.endsWith("[") || trimmed.endsWith(",")) {
             List<CompletionItem> items = new ArrayList<>(VALUE_ITEMS);
             return fuzzyFilter(items, word);
         }
 
-        // ── Boolean / null keyword completions ──────────────────────────────
+    // Boolean / null keyword completions
         if (!word.isEmpty() && ("true".startsWith(word) || "false".startsWith(word) || "null".startsWith(word))) {
             return fuzzyFilter(BOOL_NULL_ITEMS, word);
         }
 
-        // ── Schema-aware key suggestions based on file name ──────────────────
+    // Schema-aware key suggestions based on file name
         String fileName = getCurrentFileName();
         if (fileName != null) {
             List<CompletionItem> schemaKeys = SCHEMA_KEYS.get(fileName);
@@ -323,7 +320,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // ── Key suggestions: snippets + document-extracted keys ──────────────
+    // Key suggestions: snippets + document-extracted keys
         List<CompletionItem> all = new ArrayList<>();
         List<CompletionItem> prefixMatches = docKeysTrie.getCompletions(word, MAX_SUGGESTIONS);
         if (!prefixMatches.isEmpty()) {

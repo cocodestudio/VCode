@@ -29,6 +29,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Bottom sheet dialog for searching and replacing text across all files in the project.
+ */
 public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
     private File projectRoot;

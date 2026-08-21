@@ -42,9 +42,7 @@ public abstract class AutoCompleteEngine {
      */
     public abstract List<CompletionItem> getSuggestions(String fullText, int cursorPos);
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Text extraction helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Traces backward from the current cursor location to extract the current word fragment being typed.
@@ -181,9 +179,7 @@ public abstract class AutoCompleteEngine {
         return text.substring(start, end);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // VS Code-style fuzzy filter with score-based ranking
-    // ─────────────────────────────────────────────────────────────────────────
+    // Fuzzy filtering and scoring
 
     /**
      * Checks if the cursor is inside a string literal on the current line.
@@ -280,17 +276,16 @@ public abstract class AutoCompleteEngine {
         int queryLen = lowerQuery.length();
         int labelLen = lowerLabel.length();
 
-        // ── Tier 1: exact match ──────────────────────────────────────────────
+        // Exact match
         if (lowerLabel.equals(lowerQuery)) return 1000;
 
-        // ── Tier 2: prefix match ─────────────────────────────────────────────
+        // Prefix match
         if (lowerLabel.startsWith(lowerQuery)) {
             // Prefer shorter labels (more precise match)
             return 800 - (labelLen - queryLen);
         }
 
-        // ── Tier 3: word-boundary prefix ─────────────────────────────────────
-        // e.g., query "log" matches "console.log" or "getLogger"
+        // Word-boundary prefix (e.g. "log" matching "console.log")
         for (int i = 1; i < labelLen; i++) {
             char prev = label.charAt(i - 1);
             char curr = label.charAt(i);
@@ -301,7 +296,7 @@ public abstract class AutoCompleteEngine {
             }
         }
 
-        // ── Tier 4: fuzzy subsequence with run/boundary bonuses ───────────────
+        // Fuzzy subsequence with bonuses
         int qi = 0; // query index
         int score = 0;
         int consecutive = 0;
@@ -345,9 +340,7 @@ public abstract class AutoCompleteEngine {
         return Math.max(1, score);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Asset loading helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Standard utility to extract and parse string configuration data out of local JSON asset documents.
@@ -361,7 +354,7 @@ public abstract class AutoCompleteEngine {
             while ((line = reader.readLine()) != null) sb.append(line);
             return sb.toString();
         } catch (Exception e) {
-            return "[]"; // Structural fallback payload preventing crash downstream
+            return "[]";
         }
     }
 
@@ -383,9 +376,7 @@ public abstract class AutoCompleteEngine {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Character classification
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Validates whether a character qualifies as a standard part of code keywords,

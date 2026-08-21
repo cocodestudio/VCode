@@ -46,6 +46,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Viewer component for testing HTTP API endpoints directly within the editor.
+ */
 public class ApiTesterViewer implements IFileViewer {
 
     private ViewerApiTesterBinding binding;

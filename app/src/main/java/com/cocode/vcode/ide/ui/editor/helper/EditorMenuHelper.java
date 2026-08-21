@@ -22,6 +22,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Helper for managing popup menus, options, and actions in the editor toolbar.
+ */
 public class EditorMenuHelper {
 
     public static void showOverflowMenu(EditorActivity activity, EditorViewModel viewModel, FragmentManager fragmentManager, String projectName, MenuCallbacks callbacks) {

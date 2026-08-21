@@ -26,6 +26,9 @@ import com.cocode.vcode.ide.views.CodeEditText;
 import java.io.File;
 import java.io.FileInputStream;
 
+/**
+ * Custom file viewer for inspecting and previewing TTF/OTF font files.
+ */
 public class FontFileViewer implements IFileViewer {
 
     private LinearLayout container;
