@@ -159,9 +159,12 @@ public class ProjectsActivity extends BaseActivity {
         // Re-evaluate storage permissions and project list when returning to this screen
         refreshUIState();
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(cloneCompleteReceiver, new IntentFilter("com.cocode.vcode.ide.ACTION_CLONE_COMPLETE"), Context.RECEIVER_NOT_EXPORTED);
-            }
+        IntentFilter filter = new IntentFilter("com.cocode.vcode.ide.ACTION_CLONE_COMPLETE");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(cloneCompleteReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(cloneCompleteReceiver, filter);
+        }
     }
 
     @Override
@@ -175,7 +178,11 @@ public class ProjectsActivity extends BaseActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(cloneCompleteReceiver);
+        try {
+            unregisterReceiver(cloneCompleteReceiver);
+        } catch (IllegalArgumentException e) {
+            // Ignored if receiver was not registered
+        }
     }
 
     /**
