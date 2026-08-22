@@ -4,6 +4,8 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
+import com.cocode.vcode.ide.core.model.Problem;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -103,7 +105,7 @@ public final class LspClientManager {
      * @param callback result delivered on the main thread
      */
     public void requestDiagnostics(LspDocument doc,
-                                   LspCallback<List<LspDiagnostic>> callback) {
+                                   LspCallback<List<Problem>> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
@@ -111,7 +113,7 @@ public final class LspClientManager {
                     deliverResult(callback, Collections.emptyList());
                     return;
                 }
-                List<LspDiagnostic> diags = server.diagnostics(doc);
+                List<Problem> diags = server.diagnostics(doc);
                 deliverResult(callback, diags != null ? diags : Collections.emptyList());
             } catch (Exception e) {
                 deliverError(callback, e.getMessage());

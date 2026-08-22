@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.lsp;
 
+import com.cocode.vcode.ide.core.model.Problem;
 import java.util.List;
 
 /**
@@ -59,7 +60,7 @@ public interface LspServer {
      * @param doc current document snapshot
      * @return list of diagnostics, never null
      */
-    List<LspDiagnostic> diagnostics(LspDocument doc);
+    List<Problem> diagnostics(LspDocument doc);
 
     /**
      * Resolve the definition location for the symbol at the given position.

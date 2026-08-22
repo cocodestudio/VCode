@@ -6,7 +6,7 @@ import com.cocode.vcode.ide.core.language.html.HtmlAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.html.HtmlLinter;
 import com.cocode.vcode.ide.core.language.html.HtmlTagParser;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -126,30 +126,7 @@ public final class HtmlLspServer implements LspServer {
     // Completions
     // -------------------------------------------------------------------------
 
-    private static List<LspDiagnostic> convertProblems(List<Problem> problems) {
-        if (problems == null || problems.isEmpty()) return Collections.emptyList();
-        List<LspDiagnostic> result = new ArrayList<>(problems.size());
-        for (Problem p : problems) {
-            if (p == null) continue;
-            // Problem uses 1-based line; LSP uses 0-based
-            int line = Math.max(0, p.getLine() - 1);
-            int col = Math.max(0, p.getColumn());
-            int end = col + Math.max(1, p.getLength());
-            int severity = p.getSeverity() == Problem.Severity.ERROR
-                    ? LspDiagnostic.SEVERITY_ERROR
-                    : p.getSeverity() == Problem.Severity.WARNING
-                    ? LspDiagnostic.SEVERITY_WARNING
-                    : LspDiagnostic.SEVERITY_INFORMATION;
-            result.add(new LspDiagnostic(
-                    new LspRange(line, col, line, end),
-                    severity,
-                    p.getMessage(),
-                    null,
-                    "html"
-            ));
-        }
-        return result;
-    }
+
 
     // -------------------------------------------------------------------------
     // Diagnostics
@@ -265,14 +242,14 @@ public final class HtmlLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
 
         File file = new File(doc.uri);
         List<Problem> problems = HtmlLinter.analyze(file, doc.text);
-        return convertProblems(problems);
+        return problems != null ? problems : Collections.emptyList();
     }
 
     @Override

@@ -5,7 +5,8 @@ import com.cocode.vcode.ide.core.language.json.JsonError;
 import com.cocode.vcode.ide.core.language.json.JsonValidator;
 import com.cocode.vcode.ide.core.language.json.ValidationReport;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+import com.cocode.vcode.ide.core.model.Problem;
+import java.io.File;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -28,7 +29,7 @@ import java.util.List;
  *       which already provides schema-aware completions for {@code package.json},
  *       {@code tsconfig.json}, etc., as well as generic JSON key/value suggestions.</li>
  *   <li><b>Diagnostics</b>: Uses {@link JsonValidator} to detect syntax errors and
- *       malformed JSON, mapped to LSP {@link LspDiagnostic} objects.</li>
+ *       malformed JSON, mapped to {@link Problem} objects.</li>
  *   <li><b>Go to Definition</b>: Resolves file path string values (e.g. {@code "main": "./src/index.js"})
  *       to their corresponding file in the {@link ProjectIndex}.</li>
  *   <li><b>Find References</b>: Not applicable for JSON; returns empty list.</li>
@@ -208,7 +209,7 @@ public final class JsonLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
@@ -217,19 +218,17 @@ public final class JsonLspServer implements LspServer {
         List<JsonError> errors = report.getErrors();
         if (errors == null || errors.isEmpty()) return Collections.emptyList();
 
-        List<LspDiagnostic> result = new ArrayList<>(errors.size());
+        List<Problem> result = new ArrayList<>(errors.size());
+        File docFile = new File(doc.uri);
         for (JsonError err : errors) {
-            // JsonError uses 1-based line; LSP uses 0-based
-            int line = Math.max(0, err.line - 1);
             int col = Math.max(0, err.column - 1);
             int tokenLen = getTokenLength(doc.text, err.line, err.column);
 
-            int severity = "WARNING".equalsIgnoreCase(err.severity)
-                    ? LspDiagnostic.SEVERITY_WARNING
-                    : LspDiagnostic.SEVERITY_ERROR;
+            Problem.Severity severity = "WARNING".equalsIgnoreCase(err.severity)
+                    ? Problem.Severity.WARNING
+                    : Problem.Severity.ERROR;
 
-            LspRange range = new LspRange(line, col, line, col + tokenLen);
-            result.add(new LspDiagnostic(range, severity, err.message, null, "json"));
+            result.add(new Problem(docFile, err.line, col, tokenLen, err.message, severity));
         }
         return result;
     }

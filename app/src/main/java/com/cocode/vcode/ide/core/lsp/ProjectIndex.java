@@ -110,10 +110,10 @@ public final class ProjectIndex {
      */
     public void indexProject(File root, Runnable onComplete) {
         projectRoot = root.getAbsolutePath();
-        documents.clear();
-        fileSymbols.clear();
 
         ExecutorProvider.getInstance().runOnIo(() -> {
+            documents.clear();
+            fileSymbols.clear();
             indexDirectory(root);
             if (onComplete != null) {
                 ExecutorProvider.getInstance().runOnMain(onComplete);

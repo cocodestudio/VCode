@@ -77,8 +77,8 @@ public class CodeFileViewer implements IFileViewer {
             lspBridge.attach(codeEditText);
 
             if (context instanceof IEditorCallback) {
-
                 editorCallback = (IEditorCallback) context;
+                lspBridge.setEditorCallback(editorCallback);
             }
         }
         return viewContainer;
@@ -261,21 +261,26 @@ public class CodeFileViewer implements IFileViewer {
                         ExecutorProvider.getInstance().runOnMain(() -> viewModel.triggerAutoSave());
                     }
 
-                    // 4. Run language diagnostics
-                    java.util.List<Problem> problems =
-                            com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(capturedFile.getFile(), textSnapshot, capturedFile.getFileType());
+                    // 4. Run language diagnostics (bypassed if LSP active)
+                    java.util.List<Problem> problems = null;
+                    if (!lspBridge.isLspActive()) {
+                        problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(capturedFile.getFile(), textSnapshot, capturedFile.getFileType());
+                    }
 
-                    ExecutorProvider.getInstance().runOnMain(() -> {
-                        if (editorLayout == null || editorLayout.getParent() == null || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
-                            return;
-                        }
-                        if (codeEditText != null) {
-                            codeEditText.applyDiagnostics(problems);
-                        }
-                        if (capturedCallback != null) {
-                            capturedCallback.reportProblems(capturedFile.getFile(), problems);
-                        }
-                    });
+                    if (problems != null) {
+                        final java.util.List<Problem> finalProblems = problems;
+                        ExecutorProvider.getInstance().runOnMain(() -> {
+                            if (editorLayout == null || editorLayout.getParent() == null || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
+                                return;
+                            }
+                            if (codeEditText != null) {
+                                codeEditText.applyDiagnostics(finalProblems);
+                            }
+                            if (capturedCallback != null) {
+                                capturedCallback.reportProblems(capturedFile.getFile(), finalProblems);
+                            }
+                        });
+                    }
                 });
             };
 

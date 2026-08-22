@@ -5,7 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.css.CssLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -112,36 +112,7 @@ public final class CssLspServer implements LspServer {
         }
     }
 
-    private static List<LspDiagnostic> convertProblems(List<Problem> problems) {
-        if (problems == null || problems.isEmpty()) return Collections.emptyList();
-        List<LspDiagnostic> result = new ArrayList<>(problems.size());
-        for (Problem p : problems) {
-            if (p == null) continue;
-            // CssLinter occasionally reports line 0 (1-based) for selector-level checks
-            // that haven't tracked the line correctly. Skip those rather than rendering
-            // a spurious squiggle at the top of the file.
-            if (p.getLine() <= 0) continue;
-            int line = p.getLine() - 1; // Convert 1-based → 0-based
-            int col = Math.max(0, p.getColumn());
-            // getLength() from CssLinter covers the whole declaration span; clamp to a
-            // reasonable maximum so the squiggle stays within the token that caused the error.
-            int length = p.getLength() > 0 ? Math.min(p.getLength(), 80) : 1;
-            int end = col + length;
-            int severity = p.getSeverity() == Problem.Severity.ERROR
-                    ? LspDiagnostic.SEVERITY_ERROR
-                    : p.getSeverity() == Problem.Severity.WARNING
-                    ? LspDiagnostic.SEVERITY_WARNING
-                    : LspDiagnostic.SEVERITY_INFORMATION;
-            result.add(new LspDiagnostic(
-                    new LspRange(line, col, line, end),
-                    severity,
-                    p.getMessage(),
-                    null,
-                    "css"
-            ));
-        }
-        return result;
-    }
+
 
     // -------------------------------------------------------------------------
     // Completions
@@ -201,14 +172,27 @@ public final class CssLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
 
         File file = new File(doc.uri);
         List<Problem> problems = CssLinter.analyze(file, doc.text);
-        return convertProblems(problems);
+        
+        // CssLinter occasionally reports line 0 (1-based) for selector-level checks
+        // that haven't tracked the line correctly. Filter those out rather than rendering
+        // a spurious squiggle at the top of the file.
+        if (problems != null) {
+            List<Problem> filtered = new ArrayList<>();
+            for (Problem p : problems) {
+                if (p != null && p.getLine() > 0) {
+                    filtered.add(p);
+                }
+            }
+            return filtered;
+        }
+        return Collections.emptyList();
     }
 
     @Override

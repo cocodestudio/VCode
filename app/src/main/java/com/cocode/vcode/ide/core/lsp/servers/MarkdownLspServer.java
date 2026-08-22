@@ -1,7 +1,7 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -152,7 +152,7 @@ public final class MarkdownLspServer implements LspServer {
     }
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.uri == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
@@ -163,7 +163,7 @@ public final class MarkdownLspServer implements LspServer {
             return Collections.emptyList();
         }
 
-        List<LspDiagnostic> diagnostics = new ArrayList<>();
+        List<Problem> diagnostics = new ArrayList<>();
         Matcher matcher = LINK_PATTERN.matcher(doc.text);
 
         while (matcher.find()) {
@@ -185,13 +185,20 @@ public final class MarkdownLspServer implements LspServer {
             File targetFile = new File(parent, filePath);
             if (!targetFile.exists()) {
                 LspPosition start = SymbolExtractor.offsetToPosition(doc.text, matcher.start());
-                LspPosition end = SymbolExtractor.offsetToPosition(doc.text, matcher.end());
-                diagnostics.add(new LspDiagnostic(
-                        new LspRange(start, end),
-                        LspDiagnostic.SEVERITY_WARNING,
+                int newlineIdx = doc.text.indexOf('\n', matcher.start());
+                int length;
+                if (newlineIdx != -1 && newlineIdx < matcher.end()) {
+                    length = newlineIdx - matcher.start();
+                } else {
+                    length = matcher.end() - matcher.start();
+                }
+                diagnostics.add(new Problem(
+                        docFile,
+                        start.line + 1,
+                        start.character,
+                        Math.max(1, length),
                         "Broken link: " + linkTarget,
-                        null,
-                        "markdown"
+                        Problem.Severity.WARNING
                 ));
             }
         }

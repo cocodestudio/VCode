@@ -48,6 +48,7 @@ import com.cocode.vcode.ide.core.language.markdown.MarkdownSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsSyntaxHighlighter;
+import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -166,6 +167,7 @@ public class CodeEditText extends View {
     private boolean autoIndent = true;
     private IndentationEngine indentEngine;
     private final AutoCompletePopup autoCompletePopup;
+    private final SignatureHintPopup signatureHintPopup;
     private boolean lspCompletionActive = false;
 
     // Highlighting buffers
@@ -202,18 +204,21 @@ public class CodeEditText extends View {
     public CodeEditText(Context context) {
         super(context);
         autoCompletePopup = new AutoCompletePopup(context);
+        signatureHintPopup = new SignatureHintPopup(context);
         init(context);
     }
 
     public CodeEditText(Context context, AttributeSet attrs) {
         super(context, attrs);
         autoCompletePopup = new AutoCompletePopup(context);
+        signatureHintPopup = new SignatureHintPopup(context);
         init(context);
     }
 
     public CodeEditText(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         autoCompletePopup = new AutoCompletePopup(context);
+        signatureHintPopup = new SignatureHintPopup(context);
         init(context);
     }
 
@@ -1281,7 +1286,24 @@ public class CodeEditText extends View {
      * server returns an empty completion list for the current position.
      */
     public void dismissAutoCompletePopup() {
-        if (autoCompletePopup != null) autoCompletePopup.dismiss();
+        if (autoCompletePopup != null) {
+            autoCompletePopup.dismiss();
+        }
+    }
+
+    public void showSignatureHint(LspSignatureHelp help) {
+        if (help == null) {
+            signatureHintPopup.dismiss();
+            return;
+        }
+        int flatCursor = content.flatOffset(cursor);
+        signatureHintPopup.show(help, this, flatCursor);
+    }
+
+    public void dismissSignatureHint() {
+        if (signatureHintPopup != null) {
+            signatureHintPopup.dismiss();
+        }
     }
 
     public void setSelection(int index) {
@@ -1929,6 +1951,7 @@ public class CodeEditText extends View {
         mainHandler.removeCallbacks(bracketMatchRunnable);
         mainHandler.removeCallbacksAndMessages(null);
         if (autoCompletePopup != null) autoCompletePopup.dismiss();
+        if (signatureHintPopup != null) signatureHintPopup.dismiss();
     }
 
     private void scheduleHighlight() {

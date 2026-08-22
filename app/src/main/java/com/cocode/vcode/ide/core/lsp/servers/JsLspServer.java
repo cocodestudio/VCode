@@ -5,7 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -310,17 +310,7 @@ public final class JsLspServer implements LspServer {
     // Completions
     // -------------------------------------------------------------------------
 
-    private static int mapSeverity(Problem.Severity severity) {
-        if (severity == null) return LspDiagnostic.SEVERITY_INFORMATION;
-        switch (severity) {
-            case ERROR:
-                return LspDiagnostic.SEVERITY_ERROR;
-            case WARNING:
-                return LspDiagnostic.SEVERITY_WARNING;
-            default:
-                return LspDiagnostic.SEVERITY_INFORMATION;
-        }
-    }
+
 
     // -------------------------------------------------------------------------
     // Diagnostics
@@ -452,28 +442,13 @@ public final class JsLspServer implements LspServer {
     }
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
         File file = new File(doc.uri);
         List<Problem> problems = JsLinter.analyze(file, doc.text);
-        if (problems == null) return Collections.emptyList();
-
-        List<LspDiagnostic> diagnostics = new ArrayList<>(problems.size());
-        for (Problem p : problems) {
-            int startLine = Math.max(0, p.getLine() - 1); // Problem is 1-based
-            int startChar = Math.max(0, p.getColumn());
-            int endChar = startChar + Math.max(1, p.getLength());
-            diagnostics.add(new LspDiagnostic(
-                    new LspRange(startLine, startChar, startLine, endChar),
-                    mapSeverity(p.getSeverity()),
-                    p.getMessage(),
-                    null,
-                    "javascript"
-            ));
-        }
-        return diagnostics;
+        return problems != null ? problems : Collections.emptyList();
     }
 
     // -------------------------------------------------------------------------
@@ -552,6 +527,6 @@ public final class JsLspServer implements LspServer {
 
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
-        return null; // Will be enhanced in a future phase
+        return JsSignatureParser.parse(doc, pos);
     }
 }

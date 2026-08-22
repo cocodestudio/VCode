@@ -8,6 +8,7 @@ import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.views.CodeEditText;
 
+import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,8 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>Listens to text changes via {@link CodeEditText.OnContentChangeListener}.</li>
  *   <li>Debounces rapid keystrokes (300 ms) before dispatching diagnostic requests.</li>
  *   <li>Builds an {@link LspDocument} snapshot from the editor's current text on every change.</li>
- *   <li>Converts {@link LspDiagnostic} results back into {@link Problem} objects and feeds
- *       them to {@link CodeEditText#applyDiagnostics(List)}.</li>
+ *   <li>Feeds LSP diagnostic results to {@link CodeEditText#applyDiagnostics(List)}.</li>
  *   <li>Exposes async methods for completion, definition, references, and signature help
  *       that callers can invoke directly (e.g., from a long-press context menu).</li>
  * </ul>
@@ -59,6 +59,7 @@ public final class LspEditorBridge {
      * Whether the bridge is actively connected to an editor instance.
      */
     private boolean attached = false;
+    private IEditorCallback editorCallback;
     private final Runnable diagnosticRunnable = this::performDiagnostics;
 
     // -------------------------------------------------------------------------
@@ -71,6 +72,15 @@ public final class LspEditorBridge {
      */
     private boolean hasLspServer = false;
     private final Runnable completionRunnable = this::performCompletion;
+    private final Runnable signatureHelpRunnable = this::performSignatureHelp;
+
+    public void setEditorCallback(IEditorCallback callback) {
+        this.editorCallback = callback;
+    }
+
+    public boolean isLspActive() {
+        return hasLspServer;
+    }
 
     // -------------------------------------------------------------------------
     // ContentChangeListener wired to the editor
@@ -89,6 +99,10 @@ public final class LspEditorBridge {
         } else {
             editor.dismissAutoCompletePopup();
         }
+        
+        mainHandler.removeCallbacks(signatureHelpRunnable);
+        mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
+        
         // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
         updateProjectIndex();
     };
@@ -284,8 +298,10 @@ public final class LspEditorBridge {
         attached = false;
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.removeCallbacks(completionRunnable);
+        mainHandler.removeCallbacks(signatureHelpRunnable);
         if (editor != null) {
             editor.removeContentChangeListener(contentListener);
+            editor.dismissSignatureHint();
             editor = null;
         }
         currentFile = null;
@@ -301,13 +317,16 @@ public final class LspEditorBridge {
         if (doc == null) return;
         final int capturedVersion = doc.version;
 
-        LspClientManager.getInstance().requestDiagnostics(doc, new LspCallback<List<LspDiagnostic>>() {
+        LspClientManager.getInstance().requestDiagnostics(doc, new LspCallback<List<Problem>>() {
             @Override
-            public void onResult(List<LspDiagnostic> result) {
+            public void onResult(List<Problem> result) {
                 // Discard stale result if the document has changed since the request
                 if (capturedVersion != docVersion.get()) return;
                 if (!attached || editor == null) return;
-                editor.applyDiagnostics(convertDiagnostics(result));
+                editor.applyDiagnostics(result);
+                if (editorCallback != null && currentFile != null) {
+                    editorCallback.reportProblems(currentFile, result);
+                }
             }
 
             @Override
@@ -369,6 +388,34 @@ public final class LspEditorBridge {
                 // Server not ready — dismiss stale popup silently
                 if (attached && editor != null && capturedVersion == docVersion.get()) {
                     editor.dismissAutoCompletePopup();
+                }
+            }
+        });
+    }
+
+    private void performSignatureHelp() {
+        if (!attached || editor == null || !hasLspServer) return;
+        LspDocument doc = buildSnapshot();
+        if (doc == null || doc.text == null) return;
+
+        LspPosition pos = cursorPosition();
+        final int capturedVersion = docVersion.get();
+        
+        LspClientManager.getInstance().requestSignatureHelp(doc, pos, new LspCallback<LspSignatureHelp>() {
+            @Override
+            public void onResult(LspSignatureHelp result) {
+                if (capturedVersion != docVersion.get() || !attached || editor == null) return;
+                if (result != null) {
+                    editor.showSignatureHint(result);
+                } else {
+                    editor.dismissSignatureHint();
+                }
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                if (attached && editor != null && capturedVersion == docVersion.get()) {
+                    editor.dismissSignatureHint();
                 }
             }
         });
@@ -457,27 +504,5 @@ public final class LspEditorBridge {
         }
     }
 
-    /**
-     * Converts a list of {@link LspDiagnostic} objects into the editor's native
-     * {@link Problem} list format so they can be rendered as squiggly underlines.
-     */
-    private List<Problem> convertDiagnostics(List<LspDiagnostic> lspDiagnostics) {
-        if (lspDiagnostics == null || lspDiagnostics.isEmpty()) return new ArrayList<>();
-        List<Problem> problems = new ArrayList<>(lspDiagnostics.size());
-        for (LspDiagnostic d : lspDiagnostics) {
-            if (d == null || d.range == null) continue;
-            int line = d.range.start.line;
-            int col = d.range.start.character;
-            int endCol = d.range.end.character;
-            int length = Math.max(1, endCol - col);
-            Problem.Severity severity = d.severity == LspDiagnostic.SEVERITY_ERROR
-                    ? Problem.Severity.ERROR
-                    : d.severity == LspDiagnostic.SEVERITY_WARNING
-                    ? Problem.Severity.WARNING
-                    : Problem.Severity.INFO;
-            // Problem constructor is 1-indexed for line; LSP is 0-indexed
-            problems.add(new Problem(currentFile, line + 1, col, length, d.message, severity));
-        }
-        return problems;
-    }
+
 }

@@ -102,7 +102,9 @@ public class ProjectSymbolIndex {
     }
 
     private void indexDirectoryRecursively(File dir, Set<String> classNames, Set<String> cssIds, Set<String> htmlIds) {
-        List<File> files = VFSManager.getInstance().listCachedFiles(dir);
+
+
+        List<File> files = com.cocode.vcode.ide.core.autocomplete.VFSManager.getInstance().listCachedFiles(dir);
         if (files == null) {
             // Fallback if VFS isn't built yet
             File[] diskFiles = dir.listFiles();
@@ -333,6 +335,11 @@ public class ProjectSymbolIndex {
     }
 
     private String readFile(File file) {
+        com.cocode.vcode.ide.core.lsp.LspDocument doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath());
+        if (doc != null && doc.text != null) {
+            return doc.text;
+        }
+
         try {
             if (file.length() > 500 * 1024) return null; // Skip files > 500KB
             StringBuilder sb = new StringBuilder();
