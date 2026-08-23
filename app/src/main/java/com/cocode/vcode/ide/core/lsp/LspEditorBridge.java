@@ -61,6 +61,41 @@ public final class LspEditorBridge {
     private boolean attached = false;
     private IEditorCallback editorCallback;
     private final Runnable diagnosticRunnable = this::performDiagnostics;
+    /**
+     * Tracks whether the one-time incremental project index scan has been started
+     * for the current project session. Reset to {@code false} by {@link #reset()}
+     * when the project is closed. This prevents {@link #setFile(File)} from launching
+     * a new full index scan on every tab switch, which would wipe live in-memory data.
+     */
+    private static final java.util.concurrent.atomic.AtomicBoolean hasIndexedProject = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
+     * True from the moment {@link #setFile(File)} switches {@code currentFile} until
+     * {@link #textLoadListener} reports the load complete. {@link CodeEditText#setText}
+     * (which loads the new file's actual text into the editor) runs AFTER
+     * {@link #setFile(File)} returns and does so asynchronously — so {@code editor.getText()}
+     * still holds the PREVIOUS file's content for a window after the switch. Note this can
+     * NOT be detected via {@code OnContentChangeListener}: {@code setText()} is a bulk load
+     * that bypasses the insert/delete edit path that listener is wired to, so it never fires
+     * for a file open. While this flag is set, {@link #buildSnapshot()}'s (uri, text) pairing
+     * cannot be trusted, so diagnostics are withheld. {@link #textLoadListener} clears the
+     * flag when the load actually completes and triggers the deferred diagnostic pass.
+     */
+    private boolean contentSyncPending = false;
+
+    /**
+     * Fires when {@link CodeEditText#setText} finishes loading new content into the editor.
+     * Used to detect the moment a file switch's real content has landed (see
+     * {@link #contentSyncPending}) and to run the diagnostic pass that {@link #setFile(File)}
+     * had to defer, now that {@code editor.getText()} is guaranteed to match {@code currentFile}.
+     */
+    private final CodeEditText.OnTextLoadListener textLoadListener = isLoading -> {
+        if (isLoading || !contentSyncPending) return;
+        contentSyncPending = false;
+        if (!attached || editor == null) return;
+        mainHandler.removeCallbacks(diagnosticRunnable);
+        mainHandler.post(diagnosticRunnable);
+    };
 
     // -------------------------------------------------------------------------
     // Debounce runnables — cancelled and rescheduled on every keystroke
@@ -73,6 +108,12 @@ public final class LspEditorBridge {
     private boolean hasLspServer = false;
     private final Runnable completionRunnable = this::performCompletion;
     private final Runnable signatureHelpRunnable = this::performSignatureHelp;
+    
+    private final Runnable cursorChangeListener = () -> {
+        if (!attached || editor == null) return;
+        mainHandler.removeCallbacks(signatureHelpRunnable);
+        mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
+    };
 
     public void setEditorCallback(IEditorCallback callback) {
         this.editorCallback = callback;
@@ -161,6 +202,8 @@ public final class LspEditorBridge {
         this.fileType = codeEditor.getFileType();
         this.attached = true;
         codeEditor.addContentChangeListener(contentListener);
+        codeEditor.addCursorChangeListener(cursorChangeListener);
+        codeEditor.addTextLoadListener(textLoadListener);
         // Pass the application context so LSP servers can load JSON assets (keywords, etc.)
         LspClientManager.getInstance().setApplicationContext(codeEditor.getContext());
     }
@@ -172,28 +215,93 @@ public final class LspEditorBridge {
      * @param file the open file (used as the document URI)
      */
     public void setFile(File file) {
+        File previousFile = this.currentFile;
+
+        // 1. Flush the previous file's LATEST content under its own URI, then
+        //    re-derive its symbols. Do this BEFORE overwriting this.currentFile.
+        if (previousFile != null) {
+            docVersion.incrementAndGet();
+            updateProjectIndex();
+            if (!previousFile.equals(file)) {
+                String prevPath = previousFile.getAbsolutePath();
+                com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().invalidateFile(prevPath);
+                ProjectIndex.getInstance().reindexFile(previousFile);
+                com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().updateFileFromIndex(previousFile);
+            }
+        }
+
+        // 2. Switch to the new file
         this.currentFile = file;
         this.fileType = editor != null ? editor.getFileType() : fileType;
-        // Determine whether this language has a registered LSP server.
-        // If so, suppress the legacy autocomplete engine so LSP is the sole source.
-        String languageId = fileType != null ? fileType.getLspLanguageId() : "plaintext";
+
+        // 3. Ensure the new file has an entry in ProjectIndex.
+        //    We CANNOT use updateProjectIndex() here because the editor still
+        //    contains the previous file's text — the caller's editor.setText(newContent)
+        //    call hasn't happened yet.
+        //    Use the existing in-memory document if available, otherwise schedule
+        //    a disk read from the incremental scanner.
+        if (file != null) {
+            String uri = file.getAbsolutePath();
+            boolean incrementalWillRun = hasIndexedProject.get() == false; // about to be flipped below
+            if (!incrementalWillRun && ProjectIndex.getInstance().getDocument(uri) == null) {
+                // Only schedule a single-file read when the incremental scan has ALREADY run.
+                // If it hasn't run yet, the upcoming indexProjectIncremental() will cover it.
+                final File fileRef = file;
+                com.cocode.vcode.ide.utils.ExecutorProvider.getInstance().runOnIo(() -> ProjectIndex.getInstance().indexFile(fileRef));
+            }
+        }
+
+        String languageId = this.fileType != null ? this.fileType.getLspLanguageId() : "plaintext";
         hasLspServer = !"plaintext".equals(languageId);
         if (editor != null) {
             editor.suppressLegacyAutoComplete(hasLspServer);
         }
-        docVersion.incrementAndGet();
-        updateProjectIndex();
-        // Kick off background project-wide indexing the first time a file is set.
-        // This populates ProjectIndex so that Go to Definition / Find References work
-        // across all files in the project, not just the currently open one.
-        if (file != null && file.getParentFile() != null) {
+        // ONE-TIME incremental project scan per session. Unlike indexProject() this does
+        // NOT wipe live in-memory data — it only fills gaps for files not yet opened.
+        if (file != null && hasIndexedProject.compareAndSet(false, true)) {
             File projectRoot = findProjectRoot(file);
             if (projectRoot == null) projectRoot = file.getParentFile();
-            ProjectIndex.getInstance().indexProject(projectRoot, null);
+            ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
         }
-        // Trigger an immediate diagnostic pass for the newly opened file
+        // Do NOT post an immediate diagnostic pass here. The caller's subsequent
+        // editor.setText(newContent) call — which actually loads the new file's text into
+        // the editor — runs AFTER this method returns and completes asynchronously, so
+        // editor.getText() still holds the PREVIOUS file's content right now — see the
+        // ProjectIndex comment above. Posting a diagnostic run here would build a snapshot
+        // that pairs the NEW file's URI with the OLD file's text. Instead, mark the switch
+        // as pending; textLoadListener fires once that setText() call completes and runs
+        // diagnostics immediately at that point (see textLoadListener). Note this can't be
+        // detected via contentListener/OnContentChangeListener — setText() is a bulk load
+        // that never triggers it (see contentSyncPending).
         mainHandler.removeCallbacks(diagnosticRunnable);
-        mainHandler.post(diagnosticRunnable);
+        contentSyncPending = (file != null);
+    }
+
+    /**
+     * Re-arms the content-sync guard so the NEXT {@link CodeEditText.OnTextLoadListener}
+     * "load complete" callback triggers the deferred diagnostic pass, superseding any earlier
+     * one that already cleared it.
+     *
+     * <p>Needed for callers like {@code CodeFileViewer} that show a placeholder
+     * {@code editor.setText("")} immediately after {@link #setFile(File)} (e.g. while the real
+     * content is still being read from disk on a background thread), then apply the real
+     * content in a later, separate {@code setText(realContent)} call. Since every
+     * {@code setText()} call — including one with an empty placeholder — is itself
+     * asynchronous and fires {@link CodeEditText.OnTextLoadListener}, the placeholder's
+     * completion would otherwise be mistaken by {@link #textLoadListener} for the real
+     * content's completion: it would clear {@link #contentSyncPending} and fire diagnostics
+     * against the empty placeholder, then ignore the real content's own completion callback
+     * because the guard was already cleared — leaving diagnostics stuck on stale/empty content
+     * until the user's next keystroke.
+     *
+     * <p>Call this immediately before any {@code setText(realContent)} call that follows a
+     * placeholder {@code setText()} for the same file switch, so the guard is armed again for
+     * the completion that actually matters.
+     */
+    public void markContentSyncPending() {
+        if (!attached) return;
+        contentSyncPending = true;
+        mainHandler.removeCallbacks(diagnosticRunnable);
     }
 
     /**
@@ -296,15 +404,35 @@ public final class LspEditorBridge {
      */
     public void detach() {
         attached = false;
+        contentSyncPending = false;
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.removeCallbacks(completionRunnable);
         mainHandler.removeCallbacks(signatureHelpRunnable);
         if (editor != null) {
             editor.removeContentChangeListener(contentListener);
+            editor.removeCursorChangeListener(cursorChangeListener);
+            editor.removeTextLoadListener(textLoadListener);
             editor.dismissSignatureHint();
             editor = null;
         }
+        // DO NOT clear currentFile here — it is needed by setFile() to detect the previous file
+    }
+
+    /**
+     * Completely resets the bridge state. Call this when the project is closed.
+     */
+    public void reset() {
+        detach();
         currentFile = null;
+        // Do NOT reset hasIndexedProject here — it is session-level state shared
+        // across all tabs. Only resetProjectSession() should reset it.
+    }
+
+    /**
+     * Called only when the entire project session is closed (different from tab close).
+     */
+    public static void resetProjectSession() {
+        hasIndexedProject.set(false);
     }
 
     // -------------------------------------------------------------------------
@@ -313,6 +441,11 @@ public final class LspEditorBridge {
 
     private void performDiagnostics() {
         if (!attached || editor == null) return;
+        // Defense in depth: if we're still waiting for the post-file-switch content sync
+        // (see contentSyncPending), editor.getText() may not correspond to currentFile yet.
+        // Bail rather than risk sending a mismatched (uri, text) pair — textLoadListener will
+        // re-trigger this once the real content lands.
+        if (contentSyncPending) return;
         LspDocument doc = buildSnapshot();
         if (doc == null) return;
         final int capturedVersion = doc.version;
@@ -331,9 +464,12 @@ public final class LspEditorBridge {
 
             @Override
             public void onError(String errorMessage) {
-                // Server not ready yet — clear any stale squiggles
+                // Server not ready yet — clear any stale squiggles and clear the analyzing UI
                 if (attached && editor != null && capturedVersion == docVersion.get()) {
                     editor.applyDiagnostics(new ArrayList<>());
+                    if (editorCallback != null && currentFile != null) {
+                        editorCallback.reportProblems(currentFile, new ArrayList<>());
+                    }
                 }
             }
         });
@@ -351,9 +487,17 @@ public final class LspEditorBridge {
             editor.dismissAutoCompletePopup();
             return;
         }
+        
+        final boolean isInsideCallArgs = isInsideCallArguments(doc.text, flatCursor);
+        final boolean isInsideFuncDef = isInsideFunctionDefinition(doc.text, flatCursor);
+
+        if (isInsideFuncDef) {
+            editor.dismissAutoCompletePopup();
+            return;
+        }
 
         char lastChar = doc.text.charAt(flatCursor - 1);
-        if (Character.isWhitespace(lastChar)) {
+        if (Character.isWhitespace(lastChar) && !isInsideCallArgs) {
             editor.dismissAutoCompletePopup();
             return;
         }
@@ -363,7 +507,7 @@ public final class LspEditorBridge {
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$' || lastChar == '-';
 
-        if (!isIdentifier && !isTriggerChar) {
+        if (!isIdentifier && !isTriggerChar && !isInsideCallArgs) {
             editor.dismissAutoCompletePopup();
             return;
         }
@@ -375,6 +519,11 @@ public final class LspEditorBridge {
             @Override
             public void onResult(List<LspCompletionItem> result) {
                 if (capturedVersion != docVersion.get() || !attached || editor == null) return;
+                
+                if (result != null && isInsideCallArgs) {
+                    result = filterForArgumentContext(result);
+                }
+                
                 if (result != null && !result.isEmpty()) {
                     editor.showLspCompletions(convertToLegacy(result));
                 } else {
@@ -391,6 +540,314 @@ public final class LspEditorBridge {
                 }
             }
         });
+    }
+
+    private static boolean isInsideCallArguments(String text, int cursor) {
+        if (cursor <= 0 || cursor > text.length()) return false;
+        int i = cursor - 1;
+        int parenDepth = 0;
+        int braceDepth = 0;
+        boolean inString = false;
+        char stringChar = 0;
+        int maxDepth = 2000;
+        int scanned = 0;
+        
+        while (i >= 0 && scanned < maxDepth) {
+            scanned++;
+            char c = text.charAt(i);
+            
+            if (inString) {
+                if (c == stringChar) {
+                    int backslashes = 0;
+                    int k = i - 1;
+                    while (k >= 0 && text.charAt(k) == '\\') {
+                        backslashes++;
+                        k--;
+                    }
+                    if (backslashes % 2 == 0) {
+                        inString = false;
+                    }
+                }
+            } else {
+                if (c == '"' || c == '\'' || c == '`') {
+                    inString = true;
+                    stringChar = c;
+                } else if (c == ')') {
+                    parenDepth++;
+                } else if (c == '(') {
+                    if (parenDepth == 0) {
+                        return true;
+                    }
+                    parenDepth--;
+                } else if (c == '}') {
+                    braceDepth++;
+                } else if (c == '{') {
+                    if (braceDepth > 0) {
+                        braceDepth--;
+                    } else if (parenDepth == 0) {
+                        return false;
+                    }
+                } else if (c == ';') {
+                    if (parenDepth == 0) {
+                        return false;
+                    }
+                }
+            }
+            i--;
+        }
+        return false;
+    }
+
+    private static boolean isInsideFunctionDefinition(String text, int cursor) {
+        if (cursor <= 0 || cursor > text.length()) return false;
+        
+        // Check for single-arg arrow function (no parens) e.g. `const fn = x =>`
+        int forward = cursor;
+        while (forward < text.length() && forward - cursor < 500) {
+            char c = text.charAt(forward);
+            if (Character.isWhitespace(c) || Character.isLetterOrDigit(c) || c == '_' || c == '$') {
+                forward++;
+            } else if (c == '=' && forward + 1 < text.length() && text.charAt(forward + 1) == '>') {
+                return true;
+            } else {
+                break;
+            }
+        }
+
+        int i = cursor - 1;
+        int parenDepth = 0;
+        int braceDepth = 0;
+        boolean inString = false;
+        char stringChar = 0;
+        int maxDepth = 2000;
+        int scanned = 0;
+        
+        while (i >= 0 && scanned < maxDepth) {
+            scanned++;
+            char c = text.charAt(i);
+            if (inString) {
+                if (c == stringChar) {
+                    int backslashes = 0;
+                    int k = i - 1;
+                    while (k >= 0 && text.charAt(k) == '\\') { backslashes++; k--; }
+                    if (backslashes % 2 == 0) inString = false;
+                }
+            } else {
+                if (c == '"' || c == '\'' || c == '`') {
+                    inString = true;
+                    stringChar = c;
+                } else if (c == ')') {
+                    parenDepth++;
+                } else if (c == '(') {
+                    if (parenDepth == 0) {
+                        // Found the opening parenthesis. Now check what precedes it.
+                        int j = i - 1;
+                        while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
+                        if (j < 0) return false;
+                        
+                        // Check if it's an arrow function: `(...) =>`
+                        int fwd = cursor;
+                        while (fwd < text.length() && fwd - cursor < 500) {
+                            char fc = text.charAt(fwd);
+                            if (Character.isWhitespace(fc) || Character.isLetterOrDigit(fc) || 
+                                fc == ',' || fc == ')' || fc == ':' || fc == '<' || fc == '>' || fc == '[' || fc == ']' || fc == '_' || fc == '$') {
+                                if (fc == ')') {
+                                    int next = fwd + 1;
+                                    while (next < text.length() && Character.isWhitespace(text.charAt(next))) next++;
+                                    if (next + 1 < text.length() && text.charAt(next) == '=' && text.charAt(next + 1) == '>') {
+                                        return true;
+                                    }
+                                    break;
+                                }
+                                fwd++;
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        // Check for standard function: `function foo(` or `class A { constructor(` or `foo(` in a class
+                        int endWord = j + 1;
+                        while (j >= 0 && (Character.isLetterOrDigit(text.charAt(j)) || text.charAt(j) == '_' || text.charAt(j) == '$')) j--;
+                        int startWord = j + 1;
+                        if (startWord <= endWord) {
+                            String word = text.substring(startWord, endWord);
+                            while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
+                            
+                            if (word.equals("function") || word.equals("constructor") || word.equals("catch")) {
+                                return true;
+                            }
+                            
+                            // Check if preceded by "function" (e.g. `function foo(`)
+                            if (j >= 7) {
+                                int k = j;
+                                int endKeyword = k + 1;
+                                while (k >= 0 && (Character.isLetterOrDigit(text.charAt(k)) || text.charAt(k) == '_' || text.charAt(k) == '$')) k--;
+                                int startKeyword = k + 1;
+                                if (startKeyword < endKeyword) {
+                                    String keyword = text.substring(startKeyword, endKeyword);
+                                    if (keyword.equals("function")) {
+                                        return true;
+                                    }
+                                }
+                            }
+                            
+                            // Check for class methods by finding the enclosing '{' and tracing back to 'class'
+                            int tempDepth = 0;
+                            int classBrace = -1;
+                            int scanIndex = startWord - 1;
+                            int braceLookDepth = 2000;
+                            while (scanIndex >= 0 && braceLookDepth-- > 0) {
+                                char sc = text.charAt(scanIndex);
+                                if (sc == '}') {
+                                    tempDepth++;
+                                } else if (sc == '{') {
+                                    if (tempDepth == 0) {
+                                        classBrace = scanIndex;
+                                        break;
+                                    }
+                                    tempDepth--;
+                                }
+                                scanIndex--;
+                            }
+
+                            if (classBrace != -1) {
+                                int k = classBrace - 1;
+                                int maxLook = 150;
+                                boolean foundClass = false;
+                                int braceSkipDepth = 0;
+                                while (k >= 0 && maxLook > 0) {
+                                    char sc = text.charAt(k);
+                                    if (sc == '}') {
+                                        braceSkipDepth++;
+                                    } else if (sc == '{') {
+                                        if (braceSkipDepth > 0) {
+                                            braceSkipDepth--;
+                                        } else {
+                                            break; // Hit an unmatched '{' — went too far
+                                        }
+                                    } else if (sc == ';' && braceSkipDepth == 0) {
+                                        break; // Statement boundary outside any brace pair
+                                    } else if (braceSkipDepth == 0 && k >= 4 &&
+                                               text.substring(k - 4, k + 1).equals("class") &&
+                                               (k == 4 || !Character.isLetterOrDigit(text.charAt(k - 5))) &&
+                                               (k == text.length() - 1 || !Character.isLetterOrDigit(text.charAt(k + 1)))) {
+                                        foundClass = true;
+                                        break;
+                                    }
+                                    k--;
+                                    // Only spend the lookback budget on chars OUTSIDE skipped brace
+                                    // pairs (method bodies). Otherwise a class with a couple of
+                                    // sibling methods before the current one burns through maxLook
+                                    // while skipping their bodies and never reaches the `class`
+                                    // keyword, incorrectly reporting foundClass = false.
+                                    if (braceSkipDepth == 0) maxLook--;
+                                }
+                                
+                                if (foundClass && j >= 0) {
+                                    // Extra guard: ensure the context looks like a class body, not an object literal.
+                                    // In a class body, the first non-whitespace after '{' should be a modifier, method name,
+                                    // or '#'. In an object literal, a property is always followed by ':' or '('.
+                                    // We verify: at no point between classBrace+1 and startWord does a bare ':' appear
+                                    // at depth 0 (outside of nested parens/braces/strings). If it does, it's object literal.
+                                    boolean looksLikeClassBody = true;
+                                    int checkDepth = 0;
+                                    boolean inStr = false;
+                                    char strCh = 0;
+                                    for (int ci = classBrace + 1; ci < startWord && ci < text.length(); ci++) {
+                                        char ch = text.charAt(ci);
+                                        if (inStr) {
+                                            if (ch == strCh) inStr = false;
+                                        } else if (ch == '"' || ch == '\'' || ch == '`') {
+                                            inStr = true; strCh = ch;
+                                        } else if (ch == '(' || ch == '[' || ch == '{') {
+                                            checkDepth++;
+                                        } else if (ch == ')' || ch == ']' || ch == '}') {
+                                            checkDepth--;
+                                        } else if (ch == ':' && checkDepth == 0) {
+                                            // A bare ':' can be either:
+                                            //   - Object literal property separator: { key: value, ... }
+                                            //   - TypeScript type annotation: class { prop: Type; method() }
+                                            // Distinguish by checking if a ';' appears before the next unbalanced ','
+                                            // If yes: it's a TS type annotation — don't disqualify.
+                                            // If no: it's an object literal separator — disqualify.
+                                            boolean foundSemicolon = false;
+                                            int lookahead = ci + 1;
+                                            int laDepth = 0;
+                                            while (lookahead < startWord && lookahead < text.length()) {
+                                                char lc = text.charAt(lookahead);
+                                                if (lc == '(' || lc == '[' || lc == '{') laDepth++;
+                                                else if (lc == ')' || lc == ']' || lc == '}') laDepth--;
+                                                else if (lc == ';' && laDepth == 0) { foundSemicolon = true; break; }
+                                                else if (lc == ',' && laDepth == 0) break; // object literal separator
+                                                lookahead++;
+                                            }
+                                            if (!foundSemicolon) {
+                                                looksLikeClassBody = false;
+                                                break;
+                                            }
+                                            // else: it's a type annotation — continue scanning
+                                        }
+                                    }
+                                    
+                                    if (!looksLikeClassBody) {
+                                        return false; // object literal, not a class body
+                                    }
+                                    
+                                    char beforeName = text.charAt(j);
+                                    if (beforeName == '{' || beforeName == '}' || beforeName == ';') {
+                                        return true;
+                                    }
+                                    
+                                    // Modifiers (static, async, get, set, etc.)
+                                    int m = j;
+                                    int endMod = m + 1;
+                                    while (m >= 0 && (Character.isLetterOrDigit(text.charAt(m)) || text.charAt(m) == '_' || text.charAt(m) == '$')) m--;
+                                    int startMod = m + 1;
+                                    if (startMod < endMod) {
+                                        String mod = text.substring(startMod, endMod);
+                                        if (mod.equals("static") || mod.equals("async") || mod.equals("get") || mod.equals("set") || 
+                                            mod.equals("public") || mod.equals("private") || mod.equals("protected") || mod.equals("readonly")) {
+                                            return true;
+                                        }
+                                    }
+                                    
+                                    // Fallback for methods preceded by comments e.g. /* ... */ method()
+                                    if (beforeName == '/' || beforeName == '*') {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        return false; // Found a `(`, but doesn't look like a definition
+                    }
+                    parenDepth--;
+                } else if (c == '}') {
+                    braceDepth++;
+                } else if (c == '{') {
+                    if (braceDepth > 0) braceDepth--;
+                    else if (parenDepth == 0) return false;
+                } else if (c == ';') {
+                    if (parenDepth == 0) return false;
+                }
+            }
+            i--;
+        }
+        return false;
+    }
+
+    private static List<LspCompletionItem> filterForArgumentContext(List<LspCompletionItem> items) {
+        List<LspCompletionItem> filtered = new ArrayList<>();
+        for (LspCompletionItem item : items) {
+            int k = item.kind;
+            if (k == LspCompletionItem.KIND_FUNCTION
+                    || k == LspCompletionItem.KIND_VARIABLE
+                    || k == LspCompletionItem.KIND_VALUE
+                    || k == LspCompletionItem.KIND_TEXT
+                    || k == LspCompletionItem.KIND_PROPERTY) {
+                filtered.add(item);
+            }
+        }
+        return filtered;
     }
 
     private void performSignatureHelp() {

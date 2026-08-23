@@ -49,6 +49,7 @@ public final class ProjectIndex {
      * Absolute path of the currently indexed project root.
      */
     private volatile String projectRoot;
+    private final java.util.concurrent.atomic.AtomicBoolean isIncrementalScanRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private ProjectIndex() {
     }
@@ -103,7 +104,11 @@ public final class ProjectIndex {
 
     /**
      * Recursively indexes all supported source files under {@code root} on the IO thread pool.
-     * Calls {@code onComplete} on the main thread when finished.
+     * <p>
+     * <strong>WARNING: This method clears all existing in-memory snapshots.</strong> Only use
+     * this for a full reset (e.g. when the project itself changes). For normal tab-switch
+     * scenarios, use {@link #indexProjectIncremental(File)} instead so live editor data
+     * is not discarded.
      *
      * @param root       project root directory
      * @param onComplete optional callback, invoked on the main thread when indexing is done
@@ -122,12 +127,37 @@ public final class ProjectIndex {
     }
 
     /**
+     * Indexes all source files under {@code root} that are <em>not</em> already tracked
+     * in the in-memory document cache. This is the preferred method for the initial
+     * project scan triggered during a session, because it never overwrites live unsaved
+     * editor content with stale data from disk.
+     *
+     * <p>Files already present in {@link #documents} (i.e. currently open in the editor)
+     * are skipped — their live snapshot is already the authoritative source of truth.
+     *
+     * @param root project root directory
+     */
+    public void indexProjectIncremental(File root) {
+        if (root == null) return;
+        if (!isIncrementalScanRunning.compareAndSet(false, true)) return;
+        projectRoot = root.getAbsolutePath();
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                indexDirectoryIncremental(root);
+            } finally {
+                isIncrementalScanRunning.set(false);
+            }
+        });
+    }
+
+    /**
      * Clears all indexed data. Should be called when the project is closed.
      */
     public void clear() {
         projectRoot = null;
         documents.clear();
         fileSymbols.clear();
+        LspEditorBridge.resetProjectSession();
     }
 
     /**
@@ -144,6 +174,43 @@ public final class ProjectIndex {
             fileSymbols.put(doc.uri, symbols);
         });
     }
+
+    /**
+     * Removes the extracted symbols for the given URI, forcing a re-extract on next access if needed.
+     */
+    public void invalidateSymbols(String uri) {
+        fileSymbols.remove(uri);
+    }
+
+    /**
+     * Re-reads the file from disk and updates its document and symbol index.
+     * Useful when switching away from a file to ensure disk changes are picked up.
+     */
+    public void reindexFile(File file) {
+        String uri = file.getAbsolutePath();
+        LspDocument existing = documents.get(uri);
+        if (existing != null) {
+            // Re-extract symbols from the already-up-to-date in-memory snapshot
+            ExecutorProvider.getInstance().runOnIo(() -> {
+                List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(existing);
+                fileSymbols.put(uri, symbols);
+            });
+        } else {
+            ExecutorProvider.getInstance().runOnIo(() -> indexFile(file));
+        }
+    }
+
+    /**
+     * Removes the live in-memory snapshot for the file and re-reads it from disk.
+     * Call this when a file is closed in the editor to ensure the index reflects
+     * the true disk state, discarding any unsaved changes that were kept in memory.
+     */
+    public void revertToDisk(File file) {
+        String uri = file.getAbsolutePath();
+        documents.remove(uri);
+        ExecutorProvider.getInstance().runOnIo(() -> indexFile(file));
+    }
+
 
     /**
      * Returns the latest document snapshot for the given file path, or null if not indexed.
@@ -267,13 +334,45 @@ public final class ProjectIndex {
         }
     }
 
-    private void indexFile(File file) {
+    /**
+     * Walks {@code dir} recursively and indexes any supported file that is <em>not</em>
+     * already present in {@link #documents}. Used by {@link #indexProjectIncremental(File)}
+     * to fill gaps (files the user hasn't opened yet) without evicting live editor snapshots.
+     */
+    private void indexDirectoryIncremental(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                String name = f.getName();
+                if (!name.startsWith(".") && !name.equals("node_modules") && !name.equals("build")) {
+                    indexDirectoryIncremental(f);
+                }
+            } else if (isSupportedFile(f)) {
+                // Only read from disk if this file hasn't been opened by the editor.
+                // The editor's live snapshot (version > 0) is the authoritative source.
+                if (!documents.containsKey(f.getAbsolutePath())) {
+                    indexFile(f);
+                }
+            }
+        }
+    }
+
+    public void indexFile(File file) {
         try {
+            String uri = file.getAbsolutePath();
+            // Never overwrite an in-memory snapshot that was pushed by the editor.
+            // Editor-pushed documents have version > 0; disk-read ones use version 0.
+            LspDocument existing = documents.get(uri);
+            if (existing != null && existing.version > 0) {
+                // Re-derive symbols from the live copy without touching the text.
+                List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(existing);
+                fileSymbols.put(uri, symbols);
+                return;
+            }
             String text = readFile(file);
             String languageId = getLanguageId(file.getName());
-            String uri = file.getAbsolutePath();
-            int version = 0;
-            LspDocument doc = new LspDocument(uri, text, languageId, version);
+            LspDocument doc = new LspDocument(uri, text, languageId, 0);
             documents.put(uri, doc);
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
             fileSymbols.put(uri, symbols);

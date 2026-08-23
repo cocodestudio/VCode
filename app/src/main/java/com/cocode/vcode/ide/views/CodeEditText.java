@@ -155,10 +155,18 @@ public class CodeEditText extends View {
     private boolean isSettingText = false;
     private boolean isTypingText = false;
     private boolean isInsertingCompletion = false;
-    private OnTextLoadListener textLoadListener;
+    /**
+     * Multiple listeners for text-load lifecycle (used e.g. by a "loading…" UI and by
+     * LspEditorBridge to know when a fresh file's content has actually landed in the
+     * editor, since {@link #setText(CharSequence)} does NOT fire {@link OnContentChangeListener}
+     * — see {@link #dispatchContentChanged()}, which is wired to discrete Content
+     * insert/delete edits, not to bulk loads).
+     */
+    private final List<OnTextLoadListener> textLoadListeners = new ArrayList<>();
 
     // Listeners and diagnostics
     private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
+    private final List<Runnable> cursorChangeListeners = new ArrayList<>();
     private List<Problem> currentProblems = new ArrayList<>();
     private float lastSquiggleConfigHash = 0;
 
@@ -1461,6 +1469,16 @@ public class CodeEditText extends View {
         notifySelectionChanged();
     }
 
+    public void addCursorChangeListener(Runnable listener) {
+        if (!cursorChangeListeners.contains(listener)) {
+            cursorChangeListeners.add(listener);
+        }
+    }
+
+    public void removeCursorChangeListener(Runnable listener) {
+        cursorChangeListeners.remove(listener);
+    }
+
     /**
      * Notifies any registered selection-change observer (e.g. to show/hide the SelectionToolbar).
      * Called whenever the selection state changes.
@@ -1474,6 +1492,9 @@ public class CodeEditText extends View {
         // isSettingSelectionFromIme = true — skip the toolbar in that case.
         if (selectionChangeListener != null && !isSettingSelectionFromIme) {
             selectionChangeListener.onSelectionChanged(selectionAnchor != null);
+        }
+        for (Runnable listener : cursorChangeListeners) {
+            listener.run();
         }
         mainHandler.removeCallbacks(bracketMatchRunnable);
         mainHandler.postDelayed(bracketMatchRunnable, 80);
@@ -1493,9 +1514,9 @@ public class CodeEditText extends View {
         final String textStr = text != null ? text.toString() : "";
         final long myToken = ++textLoadToken;
         isSettingText = true;
-        if (textLoadListener != null) {
+        if (!textLoadListeners.isEmpty()) {
             mainHandler.post(() -> {
-                if (textLoadListener != null) textLoadListener.onTextLoadStateChanged(true);
+                for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(true);
             });
         }
         ExecutorProvider.getInstance().runOnCpu(() -> {
@@ -1509,7 +1530,7 @@ public class CodeEditText extends View {
                 longestLineLength = loaded.longestLineLength;
                 longestLineDirty = false;
                 isSettingText = false;
-                if (textLoadListener != null) textLoadListener.onTextLoadStateChanged(false);
+                for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
                 dirtyTracker.reset();
                 dirtyTracker.addEdit(0, 0, content.totalLength());
                 rebuildVisualLayout();
@@ -1519,6 +1540,10 @@ public class CodeEditText extends View {
                 notifySelectionChanged();
             });
         });
+    }
+
+    public boolean isSettingText() {
+        return isSettingText;
     }
 
     public void setTextSize(float sizeSp) {
@@ -1544,8 +1569,19 @@ public class CodeEditText extends View {
         }
     }
 
-    public void setOnTextLoadListener(OnTextLoadListener listener) {
-        this.textLoadListener = listener;
+    /**
+     * Registers a listener for text-load lifecycle events (fired by {@link #setText(CharSequence, Object)}).
+     * Adds to an internal list rather than replacing — safe to call from multiple independent
+     * observers (e.g. a loading-state UI and {@code LspEditorBridge}) without one clobbering another.
+     */
+    public void addTextLoadListener(OnTextLoadListener listener) {
+        if (listener != null && !textLoadListeners.contains(listener)) {
+            textLoadListeners.add(listener);
+        }
+    }
+
+    public void removeTextLoadListener(OnTextLoadListener listener) {
+        textLoadListeners.remove(listener);
     }
 
     public void removeContentChangeListener(OnContentChangeListener listener) {

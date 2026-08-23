@@ -33,6 +33,13 @@ public class CodeFileViewer implements IFileViewer {
 
     public void flushContentToViewModel() {
         if (currentFile != null && codeEditText != null) {
+            // CRITICAL: Do NOT flush if the editor is currently asynchronously loading text.
+            // If isSettingText() is true, the editor buffer has not yet swapped to currentFile's text
+            // (it holds the previous tab's text or a placeholder). Flushing now would corrupt currentFile
+            // by injecting another file's content into its data model.
+            if (codeEditText.isSettingText()) {
+                return;
+            }
             currentFile.setContent(codeEditText.getTextAsString());
             currentFile.setCursorPosition(codeEditText.getSelectionStart());
             currentFile.setScrollY(codeEditText.getScrollY());
@@ -66,7 +73,7 @@ public class CodeFileViewer implements IFileViewer {
                     validateCodeIfRequired();
                 }
             });
-            codeEditText.setOnTextLoadListener(isLoading -> {
+            codeEditText.addTextLoadListener(isLoading -> {
                 if (viewModel != null) {
                     viewModel.setEditorLoading(isLoading);
                 }
@@ -137,12 +144,28 @@ public class CodeFileViewer implements IFileViewer {
                     ExecutorProvider.getInstance().runOnMain(() -> {
                         // Only apply if this viewer is still bound to the same file.
                         if (currentFile == capturedFile && capturedEditor == codeEditText) {
+                            // Re-arm the LSP bridge's content-sync guard: the placeholder
+                            // setText("") above already fired one async load-complete
+                            // callback (which the bridge deferred diagnostics on), so without
+                            // this the bridge would treat that placeholder's completion as
+                            // the real content and never run diagnostics again until the
+                            // user's first keystroke. See LspEditorBridge.markContentSyncPending().
+                            lspBridge.markContentSyncPending();
                             capturedEditor.setText(content);
-                            int cursor = capturedFile.getCursorPosition();
-                            if (cursor >= 0 && cursor <= capturedEditor.length()) {
-                                capturedEditor.setSelection(cursor);
-                            }
-                            capturedEditor.scrollTo(0, capturedFile.getScrollY());
+                            capturedEditor.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
+                                @Override
+                                public void onTextLoadStateChanged(boolean isLoading) {
+                                    if (!isLoading) {
+                                        capturedEditor.removeTextLoadListener(this);
+                                        if (currentFile != capturedFile) return;
+                                        int cursor = capturedFile.getCursorPosition();
+                                        if (cursor >= 0 && cursor <= capturedEditor.length()) {
+                                            capturedEditor.setSelection(cursor);
+                                        }
+                                        capturedEditor.scrollTo(0, capturedFile.getScrollY());
+                                    }
+                                }
+                            });
                             validateCodeIfRequired();
                         }
                     });
@@ -158,6 +181,22 @@ public class CodeFileViewer implements IFileViewer {
         String currentText = codeEditText.getText() != null ? codeEditText.getText().toString() : "";
         if (!currentText.equals(file.getContent())) {
             codeEditText.setText(file.getContent());
+            codeEditText.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
+                @Override
+                public void onTextLoadStateChanged(boolean isLoading) {
+                    if (!isLoading) {
+                        codeEditText.removeTextLoadListener(this);
+                        if (currentFile != file) return;
+                        int cursor = file.getCursorPosition();
+                        if (cursor >= 0 && cursor <= codeEditText.length()) {
+                            codeEditText.setSelection(cursor);
+                        }
+                        codeEditText.scrollTo(0, file.getScrollY());
+                    }
+                }
+            });
+        } else {
+            // Text is identical, so no async load is triggered. Restore cursor immediately.
             int cursor = file.getCursorPosition();
             if (cursor >= 0 && cursor <= codeEditText.length()) {
                 codeEditText.setSelection(cursor);
@@ -220,10 +259,6 @@ public class CodeFileViewer implements IFileViewer {
             final EditorFile capturedFile = currentFile;
             final IEditorCallback capturedCallback = editorCallback;
 
-            // Capture UI state on main thread
-            final int cursor = codeEditText.getSelectionStart();
-            final int scrollY = codeEditText.getScrollY();
-
             // Use a self-referencing Runnable array so it can re-post itself when the
             // async setText() hasn't finished applying content yet.
             final Runnable[] runnableHolder = new Runnable[1];
@@ -234,29 +269,32 @@ public class CodeFileViewer implements IFileViewer {
                     return;
                 }
 
+                // If the editor is currently loading text asynchronously (e.g. from a tab switch),
+                // do not snapshot the text! The buffer currently holds the OLD file's text.
+                if (codeEditText != null && codeEditText.isSettingText()) {
+                    jsonValidationHandler.postDelayed(runnableHolder[0], 300L);
+                    return;
+                }
+
+                // Capture UI state on main thread ONLY AFTER text is fully loaded
+                final int cursor = codeEditText != null ? codeEditText.getSelectionStart() : 0;
+                final int scrollY = codeEditText != null ? codeEditText.getScrollY() : 0;
+                
                 // CRITICAL: Capture the text on the MAIN THREAD before dispatching to IO.
                 // Reading codeEditText from a background thread while the main thread may be
                 // calling setText() causes a race condition where the Content object is in a
                 // partially-modified state. Per AGENTS.md: always snapshot on main thread.
                 final String textSnapshot = codeEditText != null ? codeEditText.getTextAsString() : "";
 
-                // If the snapshot is empty but the model has content, the async setText()
-                // CPU task hasn't finished yet (Content.prepareLoad is still running).
-                // Retry in 300ms instead of overwriting the model with an empty string.
-                final String modelContent = capturedFile.getContent();
-                final boolean modelIsEmpty = modelContent == null || modelContent.isEmpty();
-                if (textSnapshot.isEmpty() && !modelIsEmpty) {
-                    jsonValidationHandler.postDelayed(runnableHolder[0], 300L);
-                    return;
-                }
+                // 1. Update EditorFile with latest state synchronously on the Main Thread!
+                // This ensures that the model always gets the most recent keystrokes in order,
+                // avoiding IO thread pool race conditions where older tasks overwrite newer tasks.
+                capturedFile.setContent(textSnapshot);
+                capturedFile.setCursorPosition(cursor);
+                capturedFile.setScrollY(scrollY);
 
                 ExecutorProvider.getInstance().runOnIo(() -> {
-                    // 2. Update EditorFile with latest state so AutoSave will pick it up.
-                    capturedFile.setContent(textSnapshot);
-                    capturedFile.setCursorPosition(cursor);
-                    capturedFile.setScrollY(scrollY);
-
-                    // 3. Trigger AutoSave on Main Thread
+                    // 2. Trigger AutoSave on Main Thread
                     if (settings.autoSave && !textSnapshot.isEmpty()) {
                         ExecutorProvider.getInstance().runOnMain(() -> viewModel.triggerAutoSave());
                     }

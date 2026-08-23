@@ -56,6 +56,8 @@ public class ProjectSymbolIndex {
     // Maps absolute file path to its exported CompletionItems
     private final Map<String, List<CompletionItem>> jsFileExports = new HashMap<>();
     private String projectRoot = null;
+    // Guards against multiple concurrent buildIndex() calls for the same root.
+    private final java.util.concurrent.atomic.AtomicBoolean isBuilding = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private ProjectSymbolIndex() {
     }
@@ -73,30 +75,37 @@ public class ProjectSymbolIndex {
 
     public void buildIndex(File rootDir) {
         if (rootDir == null) return;
-        String rootPath = rootDir.getAbsolutePath();
-        if (rootPath.equals(projectRoot)) return;
+        // Use a CAS guard to avoid concurrent rebuilds. Unlike the old project-root equality
+        // check (which permanently prevented re-indexing after the first build), this guard
+        // only blocks concurrent runs — a subsequent call after the previous one completes
+        // will proceed normally, picking up any new files added to the project.
+        if (!isBuilding.compareAndSet(false, true)) return;
 
-        projectRoot = rootPath;
+        projectRoot = rootDir.getAbsolutePath();
         ExecutorProvider.getInstance().runOnIo(() -> {
-            Set<String> classNames = new HashSet<>();
-            Set<String> cssIds = new HashSet<>();
-            Set<String> htmlIds = new HashSet<>();
+            try {
+                Set<String> classNames = new HashSet<>();
+                Set<String> cssIds = new HashSet<>();
+                Set<String> htmlIds = new HashSet<>();
 
-            indexDirectoryRecursively(rootDir, classNames, cssIds, htmlIds);
+                indexDirectoryRecursively(rootDir, classNames, cssIds, htmlIds);
 
-            synchronized (this) {
-                cssClassItems.clear();
-                for (String c : classNames) {
-                    cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+                synchronized (this) {
+                    cssClassItems.clear();
+                    for (String c : classNames) {
+                        cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+                    }
+                    cssIdItems.clear();
+                    for (String id : cssIds) {
+                        cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+                    }
+                    htmlIdItems.clear();
+                    for (String id : htmlIds) {
+                        htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
+                    }
                 }
-                cssIdItems.clear();
-                for (String id : cssIds) {
-                    cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
-                }
-                htmlIdItems.clear();
-                for (String id : htmlIds) {
-                    htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
-                }
+            } finally {
+                isBuilding.set(false);
             }
         });
     }
@@ -335,7 +344,12 @@ public class ProjectSymbolIndex {
     }
 
     private String readFile(File file) {
-        com.cocode.vcode.ide.core.lsp.LspDocument doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath());
+        String queryPath = file.getAbsolutePath();
+        try {
+            queryPath = file.getCanonicalPath();
+        } catch (Exception ignored) {}
+        
+        com.cocode.vcode.ide.core.lsp.LspDocument doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(queryPath);
         if (doc != null && doc.text != null) {
             return doc.text;
         }
@@ -403,5 +417,38 @@ public class ProjectSymbolIndex {
         }
 
         return exports != null ? new ArrayList<>(exports) : new ArrayList<>();
+    }
+
+    public synchronized void invalidateFile(String absolutePath) {
+        try {
+            String canonical = new File(absolutePath).getCanonicalPath();
+            jsFileExports.remove(canonical);
+            fileClassMembers.remove(canonical);
+        } catch (Exception e) {
+            // fall back to absolute
+        }
+        jsFileExports.remove(absolutePath);
+        fileClassMembers.remove(absolutePath);
+    }
+
+    /**
+     * Re-indexes a single JS/TS file's exports using the latest in-memory snapshot
+     * from {@link com.cocode.vcode.ide.core.lsp.ProjectIndex}. This ensures the
+     * export cache stays current even when auto-save is off, by reading from the live
+     * editor buffer rather than disk.
+     *
+     * <p>Called from {@link com.cocode.vcode.ide.core.lsp.LspEditorBridge#setFile(java.io.File)}
+     * whenever the user switches away from a file.
+     *
+     * @param file the file to re-index (no-op if not a JS/TS variant)
+     */
+    public void updateFileFromIndex(File file) {
+        if (file == null) return;
+        String name = file.getName().toLowerCase();
+        if (!name.endsWith(".js") && !name.endsWith(".ts") && !name.endsWith(".jsx")
+                && !name.endsWith(".tsx") && !name.endsWith(".mjs")) return;
+        // Re-index on the IO thread. indexJsFile() atomically puts results into jsFileExports,
+        // replacing any stale entry only when new data is ready. No eager invalidation needed.
+        ExecutorProvider.getInstance().runOnIo(() -> indexJsFile(file));
     }
 }

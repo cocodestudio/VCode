@@ -251,7 +251,13 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         binding.btnOverflow.setOnClickListener(v -> showOverflowMenu());
 
         binding.tabBar.setOnTabClickListener(index -> {
-            saveCurrentEditorState();
+            // Flush active editor content into its EditorFile before switching.
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            }
+            // Push ALL open files' latest content to ProjectIndex so cross-file LSP
+            // features (completions, signature help, go-to-definition) see live data.
+            viewModel.syncAllOpenFilesToIndex();
             viewModel.setActiveTab(index);
         });
 
@@ -605,6 +611,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         Runnable doClose = () -> {
             viewerManager.destroyViewer(file.getId());
             viewModel.closeFile(index);
+            // Revert LSP index to disk state since the live editor buffer is gone
+            if (!file.isBinaryAsset() && file.getFile() != null) {
+                com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().revertToDisk(file.getFile());
+            }
         };
 
         if (file.isDirty() && confirm) {
@@ -766,6 +776,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     public void onFileSelected(FileNode fileNode) {
         binding.drawerLayout.closeDrawer(GravityCompat.START);
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
+        viewModel.syncAllOpenFilesToIndex();
         saveCurrentEditorState();
         viewModel.openFile(fileNode.getFile());
     }
@@ -773,6 +787,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     public void onFindInFile(FileNode fileNode) {
         binding.drawerLayout.closeDrawer(GravityCompat.START);
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
+        viewModel.syncAllOpenFilesToIndex();
         saveCurrentEditorState();
         viewModel.openFile(fileNode.getFile());
         
