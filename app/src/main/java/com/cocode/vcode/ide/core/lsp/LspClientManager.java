@@ -100,13 +100,15 @@ public final class LspClientManager {
 
     /**
      * Requests diagnostics (errors / warnings) for the document.
+     * Runs on the dedicated diagnostic executor — isolated from disk I/O — so results
+     * arrive immediately without waiting for auto-saves or project indexing to complete.
      *
      * @param doc      current document snapshot
      * @param callback result delivered on the main thread
      */
     public void requestDiagnostics(LspDocument doc,
                                    LspCallback<List<Problem>> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnDiagnostic(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {

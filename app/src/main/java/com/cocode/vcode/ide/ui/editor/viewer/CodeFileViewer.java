@@ -253,62 +253,64 @@ public class CodeFileViewer implements IFileViewer {
         if (editorCallback == null || currentFile == null || viewModel == null) return;
 
         AppSettings settings = viewModel.getSettingsLiveData().getValue();
-        if (settings != null) {
-            jsonValidationHandler.removeCallbacksAndMessages(null);
+        if (settings == null) return;
 
-            final EditorFile capturedFile = currentFile;
-            final IEditorCallback capturedCallback = editorCallback;
+        jsonValidationHandler.removeCallbacksAndMessages(null);
 
-            // Use a self-referencing Runnable array so it can re-post itself when the
-            // async setText() hasn't finished applying content yet.
-            final Runnable[] runnableHolder = new Runnable[1];
-            runnableHolder[0] = () -> {
-                if (capturedFile == null || capturedFile.getFile() == null) {
-                    if (codeEditText != null)
-                        codeEditText.applyDiagnostics(new java.util.ArrayList<>());
-                    return;
-                }
+        final EditorFile capturedFile = currentFile;
+        final IEditorCallback capturedCallback = editorCallback;
 
-                // If the editor is currently loading text asynchronously (e.g. from a tab switch),
-                // do not snapshot the text! The buffer currently holds the OLD file's text.
-                if (codeEditText != null && codeEditText.isSettingText()) {
-                    jsonValidationHandler.postDelayed(runnableHolder[0], 300L);
-                    return;
-                }
+        // Use a self-referencing Runnable array so it can re-post itself when the
+        // async setText() hasn't finished applying content yet.
+        final Runnable[] runnableHolder = new Runnable[1];
+        runnableHolder[0] = () -> {
+            if (capturedFile == null || capturedFile.getFile() == null) {
+                if (codeEditText != null)
+                    codeEditText.applyDiagnostics(new java.util.ArrayList<>());
+                return;
+            }
 
-                // Capture UI state on main thread ONLY AFTER text is fully loaded
-                final int cursor = codeEditText != null ? codeEditText.getSelectionStart() : 0;
-                final int scrollY = codeEditText != null ? codeEditText.getScrollY() : 0;
-                
-                // CRITICAL: Capture the text on the MAIN THREAD before dispatching to IO.
-                // Reading codeEditText from a background thread while the main thread may be
-                // calling setText() causes a race condition where the Content object is in a
-                // partially-modified state. Per AGENTS.md: always snapshot on main thread.
-                final String textSnapshot = codeEditText != null ? codeEditText.getTextAsString() : "";
+            // If the editor is currently loading text asynchronously (e.g. from a tab switch),
+            // do not snapshot the text! The buffer currently holds the OLD file's text.
+            if (codeEditText != null && codeEditText.isSettingText()) {
+                jsonValidationHandler.postDelayed(runnableHolder[0], 300L);
+                return;
+            }
 
-                // 1. Update EditorFile with latest state synchronously on the Main Thread!
-                // This ensures that the model always gets the most recent keystrokes in order,
-                // avoiding IO thread pool race conditions where older tasks overwrite newer tasks.
-                capturedFile.setContent(textSnapshot);
-                capturedFile.setCursorPosition(cursor);
-                capturedFile.setScrollY(scrollY);
+            // Capture UI state on main thread ONLY AFTER text is fully loaded.
+            final String textSnapshot = codeEditText != null ? codeEditText.getTextAsString() : "";
+            final int cursor = codeEditText != null ? codeEditText.getSelectionStart() : 0;
+            final int scrollY = codeEditText != null ? codeEditText.getScrollY() : 0;
 
-                ExecutorProvider.getInstance().runOnIo(() -> {
-                    // 2. Trigger AutoSave on Main Thread
-                    if (settings.autoSave && !textSnapshot.isEmpty()) {
-                        ExecutorProvider.getInstance().runOnMain(() -> viewModel.triggerAutoSave());
-                    }
+            // 1. Update EditorFile with latest state synchronously on the Main Thread.
+            //    This ensures that the model always gets the most recent keystrokes in order.
+            capturedFile.setContent(textSnapshot);
+            capturedFile.setCursorPosition(cursor);
+            capturedFile.setScrollY(scrollY);
 
-                    // 4. Run language diagnostics (bypassed if LSP active)
-                    java.util.List<Problem> problems = null;
-                    if (!lspBridge.isLspActive()) {
-                        problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(capturedFile.getFile(), textSnapshot, capturedFile.getFileType());
-                    }
+            // 2. Show "Analyzing..." ONLY after the debounce has fired and we are actually
+            //    about to run diagnostics — not on every single keystroke.
+            viewModel.setDiagnosticLoading();
 
+            // 3. Auto-save: dispatch disk write to IO thread (non-blocking for diagnostics).
+            if (settings.autoSave && !textSnapshot.isEmpty()) {
+                ExecutorProvider.getInstance().runOnIo(() ->
+                        ExecutorProvider.getInstance().runOnMain(() -> viewModel.triggerAutoSave()));
+            }
+
+            // 4. Run legacy linter only when LSP is NOT active for this file type.
+            //    Uses the DIAGNOSTIC executor (not IO), so it never blocks behind auto-saves
+            //    or project-indexing tasks. LSP diagnostics are handled independently by
+            //    LspEditorBridge via LspClientManager.requestDiagnostics().
+            if (!lspBridge.isLspActive()) {
+                ExecutorProvider.getInstance().runOnDiagnostic(() -> {
+                    java.util.List<Problem> problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(
+                            capturedFile.getFile(), textSnapshot, capturedFile.getFileType());
                     if (problems != null) {
                         final java.util.List<Problem> finalProblems = problems;
                         ExecutorProvider.getInstance().runOnMain(() -> {
-                            if (editorLayout == null || editorLayout.getParent() == null || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
+                            if (editorLayout == null || editorLayout.getParent() == null
+                                    || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
                                 return;
                             }
                             if (codeEditText != null) {
@@ -320,15 +322,15 @@ public class CodeFileViewer implements IFileViewer {
                         });
                     }
                 });
-            };
+            }
+            // When LSP IS active: LspEditorBridge.contentListener has already scheduled
+            // its own debounced performDiagnostics() call on the diagnostic executor via
+            // LspClientManager — nothing more needed here.
+        };
 
-            // Set loading state immediately so the UI shows "Analyzing..." while waiting for debounce
-            viewModel.setDiagnosticLoading();
-
-            // Perf: adaptive delay — large files get more debounce time so diagnostics don't compete with typing
-            int contentLen = codeEditText != null ? codeEditText.length() : 0;
-            long diagDelay = contentLen > 20000 ? 1500L : 800L;
-            jsonValidationHandler.postDelayed(runnableHolder[0], diagDelay);
-        }
+        // Adaptive debounce delay: large files need more time to avoid competing with typing.
+        int contentLen = codeEditText != null ? codeEditText.length() : 0;
+        long diagDelay = contentLen > 20000 ? 1500L : 800L;
+        jsonValidationHandler.postDelayed(runnableHolder[0], diagDelay);
     }
 }
