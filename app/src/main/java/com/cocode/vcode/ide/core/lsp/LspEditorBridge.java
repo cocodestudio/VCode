@@ -182,16 +182,6 @@ public final class LspEditorBridge {
         }
     }
 
-    private static File findProjectRoot(File file) {
-        if (file == null) return null;
-        File dir = file.isDirectory() ? file : file.getParentFile();
-        while (dir != null) {
-            if (new File(dir, "project_meta.json").exists()) return dir;
-            dir = dir.getParentFile();
-        }
-        return null;
-    }
-
     /**
      * Attaches this bridge to the given editor instance and file.
      * Safe to call multiple times — detaches from the previous editor first.
@@ -261,7 +251,7 @@ public final class LspEditorBridge {
         // ONE-TIME incremental project scan per session. Unlike indexProject() this does
         // NOT wipe live in-memory data — it only fills gaps for files not yet opened.
         if (file != null && hasIndexedProject.compareAndSet(false, true)) {
-            File projectRoot = findProjectRoot(file);
+            File projectRoot = com.cocode.vcode.ide.data.repository.ProjectRepository.findProjectRoot(file);
             if (projectRoot == null) projectRoot = file.getParentFile();
             ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
         }

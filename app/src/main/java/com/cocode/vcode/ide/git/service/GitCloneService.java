@@ -229,7 +229,10 @@ public class GitCloneService extends Service {
                     metadata.put("fileCount", FileUtils.countFilesInDir(targetProjectDirectory));
 
                     // Persist metadata to disk
-                    File metaFile = new File(targetProjectDirectory, "project_meta.json");
+                    File metaFile = com.cocode.vcode.ide.data.repository.ProjectRepository.getProjectMetaFile(targetProjectDirectory);
+                    if (metaFile.getParentFile() != null) {
+                        metaFile.getParentFile().mkdirs();
+                    }
                     try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(metaFile), StandardCharsets.UTF_8))) {
                         writer.write(metadata.toString(2));
                     }

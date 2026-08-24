@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.ui.editor.helper;
 
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.utils.FileUtils;
 
 import java.io.File;
@@ -12,7 +13,7 @@ public class ProjectMetaHelper {
     public static String getMainFileFromMeta(File projectRoot) {
         if (projectRoot == null) return "";
         try {
-            File metaFile = new File(projectRoot, "project_meta.json");
+            File metaFile = ProjectRepository.getProjectMetaFile(projectRoot);
             if (metaFile.exists()) {
                 String metaContent = FileUtils.readFile(metaFile);
                 org.json.JSONObject metaJson = new org.json.JSONObject(metaContent);
@@ -26,7 +27,7 @@ public class ProjectMetaHelper {
     public static void updateMainFileInMeta(File projectRoot, String newMainFile) {
         if (projectRoot == null) return;
         try {
-            File metaFile = new File(projectRoot, "project_meta.json");
+            File metaFile = ProjectRepository.getProjectMetaFile(projectRoot);
             if (metaFile.exists()) {
                 String metaContent = FileUtils.readFile(metaFile);
                 org.json.JSONObject metaJson = new org.json.JSONObject(metaContent);

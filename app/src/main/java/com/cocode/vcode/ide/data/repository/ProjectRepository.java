@@ -50,6 +50,22 @@ public class ProjectRepository {
         return null;
     }
 
+    public static File getProjectMetaFile(File projectRoot) {
+        File legacyMeta = new File(projectRoot, LEGACY_META_FILE);
+        if (legacyMeta.exists()) {
+            return legacyMeta;
+        }
+        return new File(new File(new File(projectRoot, VCODE_DIR), META_DIR), PROJECT_FILE);
+    }
+
+    public static File getSessionStateFile(File projectRoot) {
+        File legacySession = new File(projectRoot, "session.json");
+        if (legacySession.exists()) {
+            return legacySession;
+        }
+        return new File(new File(new File(projectRoot, VCODE_DIR), STATE_DIR), "session.json");
+    }
+
     private static final String KEY_ID = "id";
     private static final String KEY_NAME = "name";
     private static final String KEY_CREATED_AT = "createdAt";
