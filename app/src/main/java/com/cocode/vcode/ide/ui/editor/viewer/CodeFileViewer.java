@@ -288,9 +288,15 @@ public class CodeFileViewer implements IFileViewer {
             capturedFile.setCursorPosition(cursor);
             capturedFile.setScrollY(scrollY);
 
-            // 2. Show "Analyzing..." ONLY after the debounce has fired and we are actually
-            //    about to run diagnostics — not on every single keystroke.
-            viewModel.setDiagnosticLoading();
+            // 2. Show "Analyzing..." ONLY when the legacy linter is about to run.
+            //    When LSP is active, the bridge fires its own 300ms-debounced diagnostic
+            //    and calls reportProblems() when done — so it manages loading state itself.
+            //    Calling setDiagnosticLoading() here when LSP is active causes a critical
+            //    race: the LSP already completed and cleared the UI at T+300ms, and this
+            //    re-sets it at T+800ms with NOTHING left to clear it → infinite hang.
+            if (!lspBridge.isLspActive()) {
+                viewModel.setDiagnosticLoading();
+            }
 
             // 3. Auto-save: dispatch disk write to IO thread (non-blocking for diagnostics).
             if (settings.autoSave && !textSnapshot.isEmpty()) {
@@ -324,8 +330,7 @@ public class CodeFileViewer implements IFileViewer {
                 });
             }
             // When LSP IS active: LspEditorBridge.contentListener has already scheduled
-            // its own debounced performDiagnostics() call on the diagnostic executor via
-            // LspClientManager — nothing more needed here.
+            // its own 300ms-debounced performDiagnostics() call — nothing more needed here.
         };
 
         // Adaptive debounce delay: large files need more time to avoid competing with typing.
