@@ -162,11 +162,9 @@ public class CodeEditText extends View {
      * — see {@link #dispatchContentChanged()}, which is wired to discrete Content
      * insert/delete edits, not to bulk loads).
      */
-    private final List<OnTextLoadListener> textLoadListeners = new ArrayList<>();
-
-    // Listeners and diagnostics
-    private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
-    private final List<Runnable> cursorChangeListeners = new ArrayList<>();
+    private final List<OnTextLoadListener> textLoadListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<OnContentChangeListener> contentChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Runnable> cursorChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private List<Problem> currentProblems = new ArrayList<>();
     private float lastSquiggleConfigHash = 0;
 
