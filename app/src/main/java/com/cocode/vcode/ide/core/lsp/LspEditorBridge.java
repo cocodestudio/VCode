@@ -820,7 +820,9 @@ public final class LspEditorBridge {
                     || k == LspCompletionItem.KIND_VARIABLE
                     || k == LspCompletionItem.KIND_VALUE
                     || k == LspCompletionItem.KIND_TEXT
-                    || k == LspCompletionItem.KIND_PROPERTY) {
+                    || k == LspCompletionItem.KIND_PROPERTY
+                    || k == LspCompletionItem.KIND_FILE
+                    || k == LspCompletionItem.KIND_FOLDER) {
                 filtered.add(item);
             }
         }
