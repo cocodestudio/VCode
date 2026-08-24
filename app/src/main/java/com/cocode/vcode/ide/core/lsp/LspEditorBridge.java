@@ -94,6 +94,7 @@ public final class LspEditorBridge {
         contentSyncPending = false;
         if (!attached || editor == null) return;
         mainHandler.removeCallbacks(diagnosticRunnable);
+        if (editorCallback != null) editorCallback.reportDiagnosticLoading();
         mainHandler.post(diagnosticRunnable);
     };
 
@@ -132,6 +133,7 @@ public final class LspEditorBridge {
         docVersion.incrementAndGet();
         // Reschedule debounced diagnostics
         mainHandler.removeCallbacks(diagnosticRunnable);
+        if (editorCallback != null) editorCallback.reportDiagnosticLoading();
         mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
         // Reschedule debounced completion
         mainHandler.removeCallbacks(completionRunnable);
@@ -302,6 +304,19 @@ public final class LspEditorBridge {
         if (!attached) return;
         contentSyncPending = true;
         mainHandler.removeCallbacks(diagnosticRunnable);
+    }
+
+    /**
+     * Clears the content-sync guard immediately and triggers the deferred diagnostic pass.
+     * Needed when the editor's text already matches the file's text, so no async load
+     * is triggered to clear the guard automatically.
+     */
+    public void clearContentSyncPending() {
+        if (!attached || !contentSyncPending) return;
+        contentSyncPending = false;
+        mainHandler.removeCallbacks(diagnosticRunnable);
+        if (editorCallback != null) editorCallback.reportDiagnosticLoading();
+        mainHandler.post(diagnosticRunnable);
     }
 
     /**

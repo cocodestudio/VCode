@@ -910,6 +910,13 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     @Override
+    public void reportDiagnosticLoading() {
+        if (viewModel != null) {
+            viewModel.setDiagnosticLoading();
+        }
+    }
+
+    @Override
     public void reportProblems(File file, List<Problem> problems) {
         if (viewModel != null) {
             viewModel.reportProblems(file, problems);

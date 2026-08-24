@@ -202,6 +202,9 @@ public class CodeFileViewer implements IFileViewer {
                 codeEditText.setSelection(cursor);
             }
             codeEditText.scrollTo(0, file.getScrollY());
+            // Since setText wasn't called, the async load event won't fire, so we must
+            // clear the LSP bridge's content-sync guard manually to allow diagnostics to run.
+            lspBridge.clearContentSyncPending();
         }
 
         validateCodeIfRequired();
