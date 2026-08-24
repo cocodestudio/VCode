@@ -115,6 +115,29 @@ public final class UndoStack {
         ContentPosition rangeStart = new ContentPosition(startLine, startColumn);
         ContentPosition rangeEnd = new ContentPosition(endLine, endColumn);
         boolean isBackspace = isSingleChar && after.cursor.isSameAs(rangeStart) && before.cursor.isSameAs(rangeEnd);
+
+        if (atomicDepth > 0) {
+            // Inside an atomic group — always append to the current pending batch,
+            // regardless of character class, direction, adjacency, or timeout.
+            // Mirrors recordInsert's atomic branch; previously recordDelete ignored
+            // atomicDepth entirely, so deletes could never be bundled atomically.
+            if (pendingType != null && pendingType != RecordType.DELETE) {
+                commitPending();
+            }
+            UndoRecord record = new UndoRecord(
+                    RecordType.DELETE,
+                    startLine, startColumn,
+                    endLine, endColumn,
+                    deletedText, before, after);
+            pendingGroup.add(record);
+            pendingType = RecordType.DELETE;
+            lastEditTimeMs = now;
+            lastAfter = after;
+            lastWasBackspace = isBackspace;
+            redoStack.clear();
+            return;
+        }
+
         boolean isForwardDelete = isSingleChar && before.cursor.isSameAs(rangeStart) && after.cursor.isSameAs(rangeStart);
 
         boolean sameGroupType = pendingType == RecordType.DELETE && !pendingGroup.isEmpty();
@@ -150,8 +173,6 @@ public final class UndoStack {
                               int endLine, int endColumn,
                               String deletedText, String insertedText,
                               EditorSnapshot before, EditorSnapshot after) {
-        commitPending();
-
         ArrayList<UndoRecord> records = new ArrayList<>(2);
         ContentPosition afterDelete = new ContentPosition(startLine, startColumn);
 
@@ -170,6 +191,23 @@ public final class UndoStack {
 
         if (records.isEmpty()) return;
 
+        if (atomicDepth > 0) {
+            // Bundle the replace's delete+insert pair into the currently-open atomic
+            // group instead of pushing it as its own standalone unit — otherwise a
+            // selection-replacing keystroke that also triggers an auto-close/auto-indent
+            // side effect would still end up split across two undo units.
+            if (pendingType != null && pendingType != RecordType.INSERT) {
+                commitPending();
+            }
+            pendingGroup.addAll(records);
+            pendingType = RecordType.INSERT;
+            lastEditTimeMs = System.currentTimeMillis();
+            lastAfter = after;
+            redoStack.clear();
+            return;
+        }
+
+        commitPending();
         pushUndo(new UndoUnit(records.toArray(new UndoRecord[0])));
         redoStack.clear();
     }
@@ -184,7 +222,6 @@ public final class UndoStack {
         pendingGroup.clear();
         pendingType = null;
         lastAfter = null;
-        atomicDepth = 0;
         pushUndo(new UndoUnit(records));
     }
 

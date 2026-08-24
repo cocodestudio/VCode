@@ -33,10 +33,8 @@ public class CodeFileViewer implements IFileViewer {
 
     public void flushContentToViewModel() {
         if (currentFile != null && codeEditText != null) {
-            // CRITICAL: Do NOT flush if the editor is currently asynchronously loading text.
-            // If isSettingText() is true, the editor buffer has not yet swapped to currentFile's text
-            // (it holds the previous tab's text or a placeholder). Flushing now would corrupt currentFile
-            // by injecting another file's content into its data model.
+            // Prevent flushing during async text load to avoid overwriting the data model
+            // with the previous tab's content.
             if (codeEditText.isSettingText()) {
                 return;
             }
@@ -144,13 +142,6 @@ public class CodeFileViewer implements IFileViewer {
                     ExecutorProvider.getInstance().runOnMain(() -> {
                         // Only apply if this viewer is still bound to the same file.
                         if (currentFile == capturedFile && capturedEditor == codeEditText) {
-                            // Re-arm the LSP bridge's content-sync guard: the placeholder
-                            // setText("") above already fired one async load-complete
-                            // callback (which the bridge deferred diagnostics on), so without
-                            // this the bridge would treat that placeholder's completion as
-                            // the real content and never run diagnostics again until the
-                            // user's first keystroke. See LspEditorBridge.markContentSyncPending().
-                            lspBridge.markContentSyncPending();
                             capturedEditor.setText(content);
                             capturedEditor.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
                                 @Override
@@ -158,10 +149,6 @@ public class CodeFileViewer implements IFileViewer {
                                     if (!isLoading) {
                                         capturedEditor.removeTextLoadListener(this);
                                         if (currentFile != capturedFile) return;
-                                        int cursor = capturedFile.getCursorPosition();
-                                        if (cursor >= 0 && cursor <= capturedEditor.length()) {
-                                            capturedEditor.setSelection(cursor);
-                                        }
                                         capturedEditor.scrollTo(0, capturedFile.getScrollY());
                                     }
                                 }
@@ -177,9 +164,18 @@ public class CodeFileViewer implements IFileViewer {
             return;
         }
 
-        // Only set text if it's different to prevent resetting cursor
+        // Only set text if it's different to prevent resetting cursor.
+        //
+        // EXCEPTION: if a load is still in flight (isSettingText()), we must NOT take the
+        // "already matches, skip setText()" shortcut below even when the buffer's current
+        // text happens to equal this file's content. That in-flight load belongs to some
+        // OTHER file (e.g. from a rapid A -> B -> A switch) and, if left unaddressed, will
+        // still apply itself into the buffer once it completes — silently swapping the
+        // visible editor content to the wrong file's text even though currentFile is
+        // correct. Calling setText() here bumps the load token and invalidates that stale
+        // load so only content for the file we're actually bound to can ever land.
         String currentText = codeEditText.getText() != null ? codeEditText.getText().toString() : "";
-        if (!currentText.equals(file.getContent())) {
+        if (!currentText.equals(file.getContent()) || codeEditText.isSettingText()) {
             codeEditText.setText(file.getContent());
             codeEditText.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
                 @Override
@@ -187,20 +183,12 @@ public class CodeFileViewer implements IFileViewer {
                     if (!isLoading) {
                         codeEditText.removeTextLoadListener(this);
                         if (currentFile != file) return;
-                        int cursor = file.getCursorPosition();
-                        if (cursor >= 0 && cursor <= codeEditText.length()) {
-                            codeEditText.setSelection(cursor);
-                        }
                         codeEditText.scrollTo(0, file.getScrollY());
                     }
                 }
             });
         } else {
-            // Text is identical, so no async load is triggered. Restore cursor immediately.
-            int cursor = file.getCursorPosition();
-            if (cursor >= 0 && cursor <= codeEditText.length()) {
-                codeEditText.setSelection(cursor);
-            }
+            // Text is identical, so no async load is triggered. Restore scroll position only.
             codeEditText.scrollTo(0, file.getScrollY());
             // Since setText wasn't called, the async load event won't fire, so we must
             // clear the LSP bridge's content-sync guard manually to allow diagnostics to run.
@@ -275,8 +263,15 @@ public class CodeFileViewer implements IFileViewer {
 
             // If the editor is currently loading text asynchronously (e.g. from a tab switch),
             // do not snapshot the text! The buffer currently holds the OLD file's text.
+            //
+            // Do NOT just re-poll on a timer here: a blind postDelayed() re-check can fire
+            // AFTER some unrelated, still-in-flight load (e.g. from a rapid A -> B -> A tab
+            // switch) flips isSettingText() back to false, at which point the buffer holds
+            // a DIFFERENT file's text — snapshotting then would corrupt capturedFile with
+            // the wrong file's content. Instead, bail out entirely and re-arm via a one-shot
+            // text-load listener gated on capturedFile, so this only ever re-fires once
+            // loading has genuinely finished for the bind that's actually current.
             if (codeEditText != null && codeEditText.isSettingText()) {
-                jsonValidationHandler.postDelayed(runnableHolder[0], 300L);
                 return;
             }
 
@@ -298,13 +293,12 @@ public class CodeFileViewer implements IFileViewer {
             //    race: the LSP already completed and cleared the UI at T+300ms, and this
             //    re-sets it at T+800ms with NOTHING left to clear it → infinite hang.
             if (!lspBridge.isLspActive()) {
-                viewModel.setDiagnosticLoading();
+                viewModel.setDiagnosticLoading(capturedFile.getFile());
             }
 
             // 3. Auto-save: dispatch disk write to IO thread (non-blocking for diagnostics).
             if (settings.autoSave && !textSnapshot.isEmpty()) {
-                ExecutorProvider.getInstance().runOnIo(() ->
-                        ExecutorProvider.getInstance().runOnMain(() -> viewModel.triggerAutoSave()));
+                viewModel.triggerAutoSave();
             }
 
             // 4. Run legacy linter only when LSP is NOT active for this file type.
@@ -338,7 +332,12 @@ public class CodeFileViewer implements IFileViewer {
 
         // Adaptive debounce delay: large files need more time to avoid competing with typing.
         int contentLen = codeEditText != null ? codeEditText.length() : 0;
-        long diagDelay = contentLen > 20000 ? 1500L : 800L;
+        long diagDelay;
+        if (lspBridge.isLspActive()) {
+            diagDelay = 300L;
+        } else {
+            diagDelay = contentLen > 20000 ? 1500L : 800L;
+        }
         jsonValidationHandler.postDelayed(runnableHolder[0], diagDelay);
     }
 }

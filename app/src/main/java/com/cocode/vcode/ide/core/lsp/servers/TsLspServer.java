@@ -183,8 +183,10 @@ public final class TsLspServer implements LspServer {
             return Collections.emptyList();
         }
         File file = new File(doc.uri);
-        List<Problem> problems = TsLinter.analyze(file, doc.text);
-        return problems != null ? problems : Collections.emptyList();
+        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+        List<Problem> tsProblems = TsLinter.analyze(file, doc.text);
+        if (tsProblems != null) problems.addAll(tsProblems);
+        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
     }
 
     @Override

@@ -183,16 +183,15 @@ public final class CssLspServer implements LspServer {
         // CssLinter occasionally reports line 0 (1-based) for selector-level checks
         // that haven't tracked the line correctly. Filter those out rather than rendering
         // a spurious squiggle at the top of the file.
+        List<Problem> filtered = new ArrayList<>();
         if (problems != null) {
-            List<Problem> filtered = new ArrayList<>();
             for (Problem p : problems) {
                 if (p != null && p.getLine() > 0) {
                     filtered.add(p);
                 }
             }
-            return filtered;
         }
-        return Collections.emptyList();
+        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, filtered);
     }
 
     @Override

@@ -447,8 +447,10 @@ public final class JsLspServer implements LspServer {
             return Collections.emptyList();
         }
         File file = new File(doc.uri);
-        List<Problem> problems = JsLinter.analyze(file, doc.text);
-        return problems != null ? problems : Collections.emptyList();
+        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+        List<Problem> jsProblems = JsLinter.analyze(file, doc.text);
+        if (jsProblems != null) problems.addAll(jsProblems);
+        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
     }
 
     // -------------------------------------------------------------------------

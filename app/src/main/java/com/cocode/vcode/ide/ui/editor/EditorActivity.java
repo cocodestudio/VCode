@@ -251,9 +251,23 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         binding.btnOverflow.setOnClickListener(v -> showOverflowMenu());
 
         binding.tabBar.setOnTabClickListener(index -> {
+            // Hide soft keyboard on tab switch
+            android.view.View currentFocus = getCurrentFocus();
+            if (currentFocus != null) {
+                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                        getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
+                currentFocus.clearFocus();
+            }
+            
+            // Dismiss signature help if showing
+            com.cocode.vcode.ide.views.CodeEditText activeEditor = getActiveCodeEditor();
+            if (activeEditor != null) activeEditor.dismissSignatureHint();
+
             // Flush active editor content into its EditorFile before switching.
             if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
                 ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+                viewModel.triggerAutoSave();
             }
             // Push ALL open files' latest content to ProjectIndex so cross-file LSP
             // features (completions, signature help, go-to-definition) see live data.
@@ -885,6 +899,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     protected void onStop() {
         super.onStop();
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
         saveCurrentEditorState();
         if (viewModel != null) viewModel.onStopSync();
     }
@@ -910,9 +927,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     @Override
-    public void reportDiagnosticLoading() {
+    public void reportDiagnosticLoading(File file) {
         if (viewModel != null) {
-            viewModel.setDiagnosticLoading();
+            viewModel.setDiagnosticLoading(file);
         }
     }
 

@@ -248,8 +248,10 @@ public final class HtmlLspServer implements LspServer {
         }
 
         File file = new File(doc.uri);
-        List<Problem> problems = HtmlLinter.analyze(file, doc.text);
-        return problems != null ? problems : Collections.emptyList();
+        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+        List<Problem> htmlProblems = HtmlLinter.analyze(file, doc.text);
+        if (htmlProblems != null) problems.addAll(htmlProblems);
+        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
     }
 
     @Override

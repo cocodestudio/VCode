@@ -8,6 +8,6 @@ import com.cocode.vcode.ide.core.model.Problem;
  */
 public interface IEditorCallback {
 
-    void reportDiagnosticLoading();
+    void reportDiagnosticLoading(java.io.File file);
     void reportProblems(java.io.File file, java.util.List<Problem> problems);
 }

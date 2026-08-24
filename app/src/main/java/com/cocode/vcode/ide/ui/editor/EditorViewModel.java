@@ -168,8 +168,15 @@ public class EditorViewModel extends ViewModel {
         activeFileDiagnostics.postValue(counts);
     }
 
-    public void setDiagnosticLoading() {
-        activeFileDiagnostics.postValue(null);
+    public void setDiagnosticLoading(File file) {
+        if (projectRoot == null || file == null) return;
+        List<EditorFile> openFiles = getOpenFilesList();
+        Integer activeIdx = getActiveTabIndexValue();
+        if (activeIdx != null && activeIdx >= 0 && activeIdx < openFiles.size()) {
+            if (openFiles.get(activeIdx).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+                activeFileDiagnostics.postValue(null);
+            }
+        }
     }
 
     public LiveData<AppSettings> getSettingsLiveData() {
@@ -270,7 +277,6 @@ public class EditorViewModel extends ViewModel {
                 if (isVirtual || (file.exists() && file.isFile())) {
                     try {
                         EditorFile ef = new EditorFile(UUID.randomUUID().toString(), file, "", fileType);
-                        ef.setCursorPosition(state.getCursorFor(relativePath));
                         ef.setScrollY(state.getScrollFor(relativePath));
                         if (isVirtual) ef.setVirtual(true);
                         ef.setContentLoaded(false);
@@ -648,10 +654,9 @@ public class EditorViewModel extends ViewModel {
                 newFile.markSaved();
                 newFile.setContentLoaded(true);
 
-                // Restore previous cursor/scroll if available in the state object
+                // Restore previous scroll if available in the state object
                 if (currentState != null) {
                     String relativePath = getRelativePath(file);
-                    newFile.setCursorPosition(currentState.getCursorFor(relativePath));
                     newFile.setScrollY(currentState.getScrollFor(relativePath));
                 }
 
@@ -698,7 +703,6 @@ public class EditorViewModel extends ViewModel {
             String relativePath = newFile.getRelativePath(projectRoot);
             String content = currentState.getVirtualFile(relativePath);
             newFile.setContent(content != null ? content : "");
-            newFile.setCursorPosition(currentState.getCursorFor(relativePath));
             newFile.setScrollY(currentState.getScrollFor(relativePath));
         }
         newFile.markSaved();
@@ -1065,7 +1069,6 @@ public class EditorViewModel extends ViewModel {
         for (EditorFile doc : docs) {
             String rel = getRelativePath(doc.getFile());
             paths.add(rel);
-            currentState.setCursorFor(rel, doc.getCursorPosition());
             currentState.setScrollFor(rel, doc.getScrollY());
         }
         currentState.setOpenFilePaths(paths);

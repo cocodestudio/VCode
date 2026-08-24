@@ -94,7 +94,7 @@ public final class LspEditorBridge {
         contentSyncPending = false;
         if (!attached || editor == null) return;
         mainHandler.removeCallbacks(diagnosticRunnable);
-        if (editorCallback != null) editorCallback.reportDiagnosticLoading();
+        if (editorCallback != null && currentFile != null) editorCallback.reportDiagnosticLoading(currentFile);
         mainHandler.post(diagnosticRunnable);
     };
 
@@ -133,7 +133,6 @@ public final class LspEditorBridge {
         docVersion.incrementAndGet();
         // Reschedule debounced diagnostics
         mainHandler.removeCallbacks(diagnosticRunnable);
-        if (editorCallback != null) editorCallback.reportDiagnosticLoading();
         mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
         // Reschedule debounced completion
         mainHandler.removeCallbacks(completionRunnable);
@@ -266,46 +265,15 @@ public final class LspEditorBridge {
         // detected via contentListener/OnContentChangeListener — setText() is a bulk load
         // that never triggers it (see contentSyncPending).
         mainHandler.removeCallbacks(diagnosticRunnable);
-        contentSyncPending = (file != null);
+        this.contentSyncPending = (file != null);
     }
 
-    /**
-     * Re-arms the content-sync guard so the NEXT {@link CodeEditText.OnTextLoadListener}
-     * "load complete" callback triggers the deferred diagnostic pass, superseding any earlier
-     * one that already cleared it.
-     *
-     * <p>Needed for callers like {@code CodeFileViewer} that show a placeholder
-     * {@code editor.setText("")} immediately after {@link #setFile(File)} (e.g. while the real
-     * content is still being read from disk on a background thread), then apply the real
-     * content in a later, separate {@code setText(realContent)} call. Since every
-     * {@code setText()} call — including one with an empty placeholder — is itself
-     * asynchronous and fires {@link CodeEditText.OnTextLoadListener}, the placeholder's
-     * completion would otherwise be mistaken by {@link #textLoadListener} for the real
-     * content's completion: it would clear {@link #contentSyncPending} and fire diagnostics
-     * against the empty placeholder, then ignore the real content's own completion callback
-     * because the guard was already cleared — leaving diagnostics stuck on stale/empty content
-     * until the user's next keystroke.
-     *
-     * <p>Call this immediately before any {@code setText(realContent)} call that follows a
-     * placeholder {@code setText()} for the same file switch, so the guard is armed again for
-     * the completion that actually matters.
-     */
-    public void markContentSyncPending() {
-        if (!attached) return;
-        contentSyncPending = true;
-        mainHandler.removeCallbacks(diagnosticRunnable);
-    }
 
-    /**
-     * Clears the content-sync guard immediately and triggers the deferred diagnostic pass.
-     * Needed when the editor's text already matches the file's text, so no async load
-     * is triggered to clear the guard automatically.
-     */
     public void clearContentSyncPending() {
         if (!attached || !contentSyncPending) return;
         contentSyncPending = false;
         mainHandler.removeCallbacks(diagnosticRunnable);
-        if (editorCallback != null) editorCallback.reportDiagnosticLoading();
+        if (editorCallback != null && currentFile != null) editorCallback.reportDiagnosticLoading(currentFile);
         mainHandler.post(diagnosticRunnable);
     }
 
@@ -454,6 +422,10 @@ public final class LspEditorBridge {
         LspDocument doc = buildSnapshot();
         if (doc == null) return;
         final int capturedVersion = doc.version;
+        
+        if (editorCallback != null && currentFile != null) {
+            editorCallback.reportDiagnosticLoading(currentFile);
+        }
 
         LspClientManager.getInstance().requestDiagnostics(doc, new LspCallback<List<Problem>>() {
             @Override

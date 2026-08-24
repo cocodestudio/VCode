@@ -46,6 +46,10 @@ public class DiagnosticEngine {
             problems.addAll(com.cocode.vcode.ide.core.language.md.MarkdownLinter.analyze(file, text));
         }
 
+        return deduplicateAndSort(file, problems);
+    }
+
+    public static List<Problem> deduplicateAndSort(File file, List<Problem> problems) {
         problems = deduplicate(problems);
 
         problems.sort(Comparator
