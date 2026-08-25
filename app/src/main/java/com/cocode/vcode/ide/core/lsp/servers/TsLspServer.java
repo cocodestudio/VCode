@@ -5,7 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -49,22 +49,6 @@ public final class TsLspServer implements LspServer {
     // LspServer contract
     // -------------------------------------------------------------------------
 
-    private static LspLocation resolveModulePath(String docUri, String importPath) {
-        File base = new File(docUri).getParentFile();
-        if (base == null) return null;
-        File target = new File(base, importPath);
-        if (target.exists() && target.isFile()) {
-            return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-        }
-        for (String ext : new String[]{".ts", ".tsx", ".js", ".mjs", ".cjs"}) {
-            File withExt = new File(base, importPath + ext);
-            if (withExt.exists()) {
-                return new LspLocation(withExt.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-            }
-        }
-        return null;
-    }
-
     private static String extractWord(String text, int offset) {
         if (text == null || offset < 0 || offset > text.length()) return "";
         int start = Math.min(offset, text.length() - 1);
@@ -103,17 +87,7 @@ public final class TsLspServer implements LspServer {
     // Completions
     // -------------------------------------------------------------------------
 
-    private static int mapSeverity(Problem.Severity severity) {
-        if (severity == null) return LspDiagnostic.SEVERITY_INFORMATION;
-        switch (severity) {
-            case ERROR:
-                return LspDiagnostic.SEVERITY_ERROR;
-            case WARNING:
-                return LspDiagnostic.SEVERITY_WARNING;
-            default:
-                return LspDiagnostic.SEVERITY_INFORMATION;
-        }
-    }
+
 
     // -------------------------------------------------------------------------
     // Diagnostics
@@ -172,7 +146,6 @@ public final class TsLspServer implements LspServer {
             if (curOffset < 0) {
                 int pipeIdx = insert.length() + curOffset;
                 if (pipeIdx >= 0) {
-                    insert.length();
                     insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
                 }
             }
@@ -189,27 +162,15 @@ public final class TsLspServer implements LspServer {
     }
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
         File file = new File(doc.uri);
-        List<Problem> problems = TsLinter.analyze(file, doc.text);
-
-        List<LspDiagnostic> diagnostics = new ArrayList<>(problems.size());
-        for (Problem p : problems) {
-            int startLine = Math.max(0, p.getLine() - 1);
-            int startChar = Math.max(0, p.getColumn());
-            int endChar = startChar + Math.max(1, p.getLength());
-            diagnostics.add(new LspDiagnostic(
-                    new LspRange(startLine, startChar, startLine, endChar),
-                    mapSeverity(p.getSeverity()),
-                    p.getMessage(),
-                    null,
-                    "typescript"
-            ));
-        }
-        return diagnostics;
+        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+        List<Problem> tsProblems = TsLinter.analyze(file, doc.text, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
+        if (tsProblems != null) problems.addAll(tsProblems);
+        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
     }
 
     @Override
@@ -221,8 +182,10 @@ public final class TsLspServer implements LspServer {
         while (m.find()) {
             if (pos.character >= m.start() && pos.character <= m.end()) {
                 String importPath = m.group(1);
-                LspLocation resolved = resolveModulePath(doc.uri, importPath);
-                if (resolved != null) return resolved;
+                if (importPath != null && !importPath.isEmpty()) {
+                    LspLocation resolved = com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(doc.uri, importPath);
+                    if (resolved != null) return resolved;
+                }
             }
         }
 
@@ -280,6 +243,6 @@ public final class TsLspServer implements LspServer {
 
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
-        return null;
+        return JsSignatureParser.parse(doc, pos);
     }
 }

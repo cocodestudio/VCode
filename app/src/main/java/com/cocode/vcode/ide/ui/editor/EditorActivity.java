@@ -251,7 +251,27 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         binding.btnOverflow.setOnClickListener(v -> showOverflowMenu());
 
         binding.tabBar.setOnTabClickListener(index -> {
-            saveCurrentEditorState();
+            // Hide soft keyboard on tab switch
+            android.view.View currentFocus = getCurrentFocus();
+            if (currentFocus != null) {
+                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                        getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
+                currentFocus.clearFocus();
+            }
+            
+            // Dismiss signature help if showing
+            com.cocode.vcode.ide.views.CodeEditText activeEditor = getActiveCodeEditor();
+            if (activeEditor != null) activeEditor.dismissSignatureHint();
+
+            // Flush active editor content into its EditorFile before switching.
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+                viewModel.triggerAutoSave();
+            }
+            // Push ALL open files' latest content to ProjectIndex so cross-file LSP
+            // features (completions, signature help, go-to-definition) see live data.
+            viewModel.syncAllOpenFilesToIndex();
             viewModel.setActiveTab(index);
         });
 
@@ -605,6 +625,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         Runnable doClose = () -> {
             viewerManager.destroyViewer(file.getId());
             viewModel.closeFile(index);
+            // Revert LSP index to disk state since the live editor buffer is gone
+            if (!file.isBinaryAsset() && file.getFile() != null) {
+                com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().revertToDisk(file.getFile());
+            }
         };
 
         if (file.isDirty() && confirm) {
@@ -685,33 +709,6 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             public boolean isReadOnly() {
                 return isReadOnly;
             }
-
-            @Override
-            public com.cocode.vcode.ide.core.lsp.LspEditorBridge getActiveLspBridge() {
-                if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-                    return ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).getLspBridge();
-                }
-                return null;
-            }
-
-            @Override
-            public void openFileAtLine(java.io.File file, int line) {
-                if (file == null || !file.exists()) {
-                    android.widget.Toast.makeText(EditorActivity.this,
-                            R.string.vcode_lsp_no_definition_found, android.widget.Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                // Open (or switch to) the target file, then jump to the given line
-                viewModel.openFile(file);
-                // After the tab is active, scroll to the requested line
-                binding.viewerContainer.postDelayed(() -> {
-                    com.cocode.vcode.ide.views.CodeEditText editor = getActiveCodeEditor();
-                    if (editor != null && line > 1) {
-                        editor.goToLine(line);
-                    }
-                }, 300);
-
-            }
         };
 
         String projectName = getIntent().getStringExtra(EXTRA_PROJECT_NAME);
@@ -766,6 +763,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     public void onFileSelected(FileNode fileNode) {
         binding.drawerLayout.closeDrawer(GravityCompat.START);
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
+        viewModel.syncAllOpenFilesToIndex();
         saveCurrentEditorState();
         viewModel.openFile(fileNode.getFile());
     }
@@ -773,6 +774,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     public void onFindInFile(FileNode fileNode) {
         binding.drawerLayout.closeDrawer(GravityCompat.START);
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
+        viewModel.syncAllOpenFilesToIndex();
         saveCurrentEditorState();
         viewModel.openFile(fileNode.getFile());
         
@@ -867,6 +872,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     protected void onStop() {
         super.onStop();
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
         saveCurrentEditorState();
         if (viewModel != null) viewModel.onStopSync();
     }
@@ -892,9 +900,83 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     @Override
+    public void reportDiagnosticLoading(File file) {
+        if (viewModel != null) {
+            viewModel.setDiagnosticLoading(file);
+        }
+    }
+
+    @Override
     public void reportProblems(File file, List<Problem> problems) {
         if (viewModel != null) {
             viewModel.reportProblems(file, problems);
+        }
+    }
+
+    @Override
+    public void navigateToLocation(com.cocode.vcode.ide.core.lsp.LspLocation result) {
+        if (result == null) {
+            Toast.makeText(this, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String path = result.uri;
+        if (path.startsWith("file://")) {
+            try {
+                path = new java.net.URI(result.uri).getPath();
+            } catch (Exception e) {
+                path = path.substring(7);
+            }
+        }
+        File target = new File(path);
+        int line = result.range != null ? result.range.start.line + 1 : 1;
+        
+        if (!target.exists()) {
+            Toast.makeText(this, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        viewModel.openFile(target);
+        binding.viewerContainer.postDelayed(() -> {
+            CodeEditText editor = getActiveCodeEditor();
+            if (editor != null && line > 1) {
+                editor.goToLine(line);
+            }
+        }, 300);
+    }
+
+    @Override
+    public void showReferences(List<com.cocode.vcode.ide.core.lsp.LspLocation> result) {
+        if (result == null || result.isEmpty()) {
+            Toast.makeText(this, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (result.size() == 1) {
+            navigateToLocation(result.get(0));
+        } else {
+            List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> refOptions = new java.util.ArrayList<>();
+            for (com.cocode.vcode.ide.core.lsp.LspLocation loc : result) {
+                String path = loc.uri;
+                if (path.startsWith("file://")) {
+                    try {
+                        path = new java.net.URI(loc.uri).getPath();
+                    } catch (Exception e) {
+                        path = path.substring(7);
+                    }
+                }
+                File f = new File(path);
+                int line = loc.range != null ? loc.range.start.line + 1 : 1;
+                String label = f.getName() + ":" + line;
+
+                String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
+                int iconResId = FileType.fromExtension(ext).getIconResId();
+
+                refOptions.add(new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option(
+                        iconResId, label,
+                        () -> navigateToLocation(loc)
+                ));
+            }
+            com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet refsSheet = new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet();
+            refsSheet.setOptions(refOptions);
+            refsSheet.show(getSupportFragmentManager(), getString(R.string.vcode_lsp_references_title));
         }
     }
 }

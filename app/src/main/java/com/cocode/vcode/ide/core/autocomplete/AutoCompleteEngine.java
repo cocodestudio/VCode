@@ -48,10 +48,8 @@ public abstract class AutoCompleteEngine {
      * Traces backward from the current cursor location to extract the current word fragment being typed.
      * Word characters: letters, digits, underscore, hyphen (for CSS), dollar sign (JS).
      *
-     * <p>CRITICAL: If the character directly before the cursor is NOT a word char (e.g. '.', ':', '(',
-     * '"', ' '), this returns an empty string — enabling trigger-character-based completion.
-     * Without this check, typing "Math." returns "Math." as the word, making dotCheckPos = -1
-     * and causing member completion to never trigger (the "Math.Math.PI" bug).
+     * <p>If the character directly before the cursor is not a word character (e.g. '.', ':', '(',
+     * '"', ' '), this returns an empty string to enable trigger-character-based completion.
      */
     protected String getWordBeforeCursor(String text, int pos) {
         if (text == null || pos <= 0 || pos > text.length()) return "";

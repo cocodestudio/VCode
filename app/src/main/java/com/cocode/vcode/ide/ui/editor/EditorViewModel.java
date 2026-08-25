@@ -168,8 +168,15 @@ public class EditorViewModel extends ViewModel {
         activeFileDiagnostics.postValue(counts);
     }
 
-    public void setDiagnosticLoading() {
-        activeFileDiagnostics.postValue(null);
+    public void setDiagnosticLoading(File file) {
+        if (projectRoot == null || file == null) return;
+        List<EditorFile> openFiles = getOpenFilesList();
+        Integer activeIdx = getActiveTabIndexValue();
+        if (activeIdx != null && activeIdx >= 0 && activeIdx < openFiles.size()) {
+            if (openFiles.get(activeIdx).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+                activeFileDiagnostics.postValue(null);
+            }
+        }
     }
 
     public LiveData<AppSettings> getSettingsLiveData() {
@@ -270,7 +277,6 @@ public class EditorViewModel extends ViewModel {
                 if (isVirtual || (file.exists() && file.isFile())) {
                     try {
                         EditorFile ef = new EditorFile(UUID.randomUUID().toString(), file, "", fileType);
-                        ef.setCursorPosition(state.getCursorFor(relativePath));
                         ef.setScrollY(state.getScrollFor(relativePath));
                         if (isVirtual) ef.setVirtual(true);
                         ef.setContentLoaded(false);
@@ -648,10 +654,9 @@ public class EditorViewModel extends ViewModel {
                 newFile.markSaved();
                 newFile.setContentLoaded(true);
 
-                // Restore previous cursor/scroll if available in the state object
+                // Restore previous scroll if available in the state object
                 if (currentState != null) {
                     String relativePath = getRelativePath(file);
-                    newFile.setCursorPosition(currentState.getCursorFor(relativePath));
                     newFile.setScrollY(currentState.getScrollFor(relativePath));
                 }
 
@@ -698,7 +703,6 @@ public class EditorViewModel extends ViewModel {
             String relativePath = newFile.getRelativePath(projectRoot);
             String content = currentState.getVirtualFile(relativePath);
             newFile.setContent(content != null ? content : "");
-            newFile.setCursorPosition(currentState.getCursorFor(relativePath));
             newFile.setScrollY(currentState.getScrollFor(relativePath));
         }
         newFile.markSaved();
@@ -781,6 +785,39 @@ public class EditorViewModel extends ViewModel {
 
     public void notifyFileDirtyStatusChanged() {
         openFilesLiveData.setValue(new ArrayList<>(getOpenFilesList()));
+    }
+
+    /**
+     * Pushes the latest in-memory content of every open {@link EditorFile} into
+     * {@link com.cocode.vcode.ide.core.lsp.ProjectIndex}.
+     *
+     * <p>Must be called on the <strong>main thread</strong> immediately before (or after)
+     * a tab switch, so the index always reflects what's in the editor buffers rather than
+     * what was last written to disk. This is critical when auto-save is disabled, because
+     * the disk may be many edits behind the editor's current state.
+     */
+    public void syncAllOpenFilesToIndex() {
+        Integer activeIndex = activeTabIndexLiveData.getValue();
+        List<EditorFile> docs = getOpenFilesList();
+        for (int i = 0; i < docs.size(); i++) {
+            EditorFile ef = docs.get(i);
+            // Skip the active file — it is already kept live by contentListener in LspEditorBridge
+            // with the real docVersion. Overwriting it here with version=1 would corrupt versioning.
+            if (activeIndex != null && i == activeIndex) continue;
+            if (ef.isBinaryAsset() || ef.getFile() == null) continue;
+            // Only push if content has actually been loaded into the editor buffer.
+            // A file restored from session state that was never activated has content
+            // loaded from disk by ProjectIndex already — skip it to avoid overwriting.
+            if (!ef.isContentLoaded()) continue;
+            String content = ef.getContent();
+            if (content == null || content.isEmpty()) continue;
+            String langId = ef.getFileType() != null ? ef.getFileType().getLspLanguageId() : "plaintext";
+            // Use version 1 so ProjectIndex.indexFile() knows this is a live editor snapshot
+            // and will not overwrite it with a disk-read (version 0) document.
+            com.cocode.vcode.ide.core.lsp.LspDocument doc =
+                    new com.cocode.vcode.ide.core.lsp.LspDocument(ef.getFile().getAbsolutePath(), content, langId, 1);
+            com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().updateDocument(doc);
+        }
     }
 
     public void triggerAutoSave() {
@@ -1032,7 +1069,6 @@ public class EditorViewModel extends ViewModel {
         for (EditorFile doc : docs) {
             String rel = getRelativePath(doc.getFile());
             paths.add(rel);
-            currentState.setCursorFor(rel, doc.getCursorPosition());
             currentState.setScrollFor(rel, doc.getScrollY());
         }
         currentState.setOpenFilePaths(paths);

@@ -13,7 +13,7 @@ public class EditorFile {
 
     private String id;
     private File file;
-    private String content;
+    private volatile String content;
     private String savedContent = "";
     private FileType fileType;
     private int cursorPosition;

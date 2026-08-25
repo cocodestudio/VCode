@@ -5,7 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.lsp.LspDiagnostic;
+
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -254,24 +254,6 @@ public final class JsLspServer implements LspServer {
     // LspServer contract
     // -------------------------------------------------------------------------
 
-    private static LspLocation resolveModulePath(String docUri, String importPath) {
-        File base = new File(docUri).getParentFile();
-        if (base == null) return null;
-        // Try exact path first
-        File target = new File(base, importPath);
-        if (target.exists() && target.isFile()) {
-            return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-        }
-        // Try common JS/TS extensions
-        for (String ext : new String[]{".js", ".ts", ".mjs", ".cjs", ".tsx"}) {
-            File withExt = new File(base, importPath + ext);
-            if (withExt.exists()) {
-                return new LspLocation(withExt.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-            }
-        }
-        return null;
-    }
-
     private static String extractWord(String text, int offset) {
         if (text == null || offset < 0 || offset > text.length()) return "";
         int start = Math.min(offset, text.length() - 1);
@@ -310,17 +292,7 @@ public final class JsLspServer implements LspServer {
     // Completions
     // -------------------------------------------------------------------------
 
-    private static int mapSeverity(Problem.Severity severity) {
-        if (severity == null) return LspDiagnostic.SEVERITY_INFORMATION;
-        switch (severity) {
-            case ERROR:
-                return LspDiagnostic.SEVERITY_ERROR;
-            case WARNING:
-                return LspDiagnostic.SEVERITY_WARNING;
-            default:
-                return LspDiagnostic.SEVERITY_INFORMATION;
-        }
-    }
+
 
     // -------------------------------------------------------------------------
     // Diagnostics
@@ -452,28 +424,15 @@ public final class JsLspServer implements LspServer {
     }
 
     @Override
-    public List<LspDiagnostic> diagnostics(LspDocument doc) {
+    public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
         File file = new File(doc.uri);
-        List<Problem> problems = JsLinter.analyze(file, doc.text);
-        if (problems == null) return Collections.emptyList();
-
-        List<LspDiagnostic> diagnostics = new ArrayList<>(problems.size());
-        for (Problem p : problems) {
-            int startLine = Math.max(0, p.getLine() - 1); // Problem is 1-based
-            int startChar = Math.max(0, p.getColumn());
-            int endChar = startChar + Math.max(1, p.getLength());
-            diagnostics.add(new LspDiagnostic(
-                    new LspRange(startLine, startChar, startLine, endChar),
-                    mapSeverity(p.getSeverity()),
-                    p.getMessage(),
-                    null,
-                    "javascript"
-            ));
-        }
-        return diagnostics;
+        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+        List<Problem> jsProblems = JsLinter.analyze(file, doc.text, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
+        if (jsProblems != null) problems.addAll(jsProblems);
+        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
     }
 
     // -------------------------------------------------------------------------
@@ -491,8 +450,10 @@ public final class JsLspServer implements LspServer {
             while (m.find()) {
                 if (pos.character >= m.start() && pos.character <= m.end()) {
                     String importPath = m.group(1);
-                    LspLocation resolved = resolveModulePath(doc.uri, importPath);
-                    if (resolved != null) return resolved;
+                    if (importPath != null && !importPath.isEmpty()) {
+                        LspLocation resolved = com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(doc.uri, importPath);
+                        if (resolved != null) return resolved;
+                    }
                 }
             }
         }
@@ -552,6 +513,6 @@ public final class JsLspServer implements LspServer {
 
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
-        return null; // Will be enhanced in a future phase
+        return JsSignatureParser.parse(doc, pos);
     }
 }

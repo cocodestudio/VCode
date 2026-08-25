@@ -30,15 +30,15 @@ public class ProjectFileRecovery {
             return;
         }
 
-        File metaFile = new File(new File(new File(projectRoot, ProjectRepository.VCODE_DIR), ProjectRepository.META_DIR), ProjectRepository.PROJECT_FILE);
+        File metaFile = com.cocode.vcode.ide.data.repository.ProjectRepository.getProjectMetaFile(projectRoot);
         if (!metaFile.exists()) {
-            metaFile.getParentFile().mkdirs();
+            if (metaFile.getParentFile() != null) metaFile.getParentFile().mkdirs();
             createDefaultProjectMeta(metaFile);
         }
 
-        File sessionFile = new File(new File(new File(projectRoot, ProjectRepository.VCODE_DIR), ProjectRepository.STATE_DIR), "session.json");
+        File sessionFile = com.cocode.vcode.ide.data.repository.ProjectRepository.getSessionStateFile(projectRoot);
         if (!sessionFile.exists()) {
-            sessionFile.getParentFile().mkdirs();
+            if (sessionFile.getParentFile() != null) sessionFile.getParentFile().mkdirs();
             createDefaultSession(sessionFile);
         }
     }

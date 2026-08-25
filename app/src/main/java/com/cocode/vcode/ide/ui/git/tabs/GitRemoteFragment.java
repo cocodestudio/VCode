@@ -268,17 +268,18 @@ public class GitRemoteFragment extends Fragment {
             binding.btnCreateOnGithub.setOnClickListener(v -> {
                 String name = "new-repo";
                 if (projectPath != null && !projectPath.isEmpty()) {
-                    java.io.File metaFile = new java.io.File(projectPath, "project_meta.json");
+                    java.io.File projectDir = new java.io.File(projectPath);
+                    java.io.File metaFile = com.cocode.vcode.ide.data.repository.ProjectRepository.getProjectMetaFile(projectDir);
                     if (metaFile.exists()) {
                         try {
                             String metaContent = com.cocode.vcode.ide.utils.FileUtils.readFile(metaFile);
                             org.json.JSONObject metaJson = new org.json.JSONObject(metaContent);
                             name = metaJson.optString("name", "new-repo");
                         } catch (Exception ignored) {
-                            name = new java.io.File(projectPath).getName();
+                            name = projectDir.getName();
                         }
                     } else {
-                        name = new java.io.File(projectPath).getName();
+                        name = projectDir.getName();
                     }
                     // GitHub repos typically don't have spaces, replace with dashes
                     name = name.replace(" ", "-");

@@ -4,6 +4,8 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
+import com.cocode.vcode.ide.core.model.Problem;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -98,20 +100,22 @@ public final class LspClientManager {
 
     /**
      * Requests diagnostics (errors / warnings) for the document.
+     * Runs on the dedicated diagnostic executor — isolated from disk I/O — so results
+     * arrive immediately without waiting for auto-saves or project indexing to complete.
      *
      * @param doc      current document snapshot
      * @param callback result delivered on the main thread
      */
     public void requestDiagnostics(LspDocument doc,
-                                   LspCallback<List<LspDiagnostic>> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+                                   LspCallback<List<Problem>> callback) {
+        ExecutorProvider.getInstance().runOnDiagnostic(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {
                     deliverResult(callback, Collections.emptyList());
                     return;
                 }
-                List<LspDiagnostic> diags = server.diagnostics(doc);
+                List<Problem> diags = server.diagnostics(doc);
                 deliverResult(callback, diags != null ? diags : Collections.emptyList());
             } catch (Exception e) {
                 deliverError(callback, e.getMessage());

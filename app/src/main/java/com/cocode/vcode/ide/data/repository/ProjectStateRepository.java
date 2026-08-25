@@ -134,17 +134,6 @@ public class ProjectStateRepository {
         }
         root.put("openFilePaths", pathsArray);
 
-        // Cursor positions
-        JSONObject cursors = new JSONObject();
-        Map<String, Integer> cursorMap = state.getCursorPositions();
-        if (cursorMap != null) {
-            for (Map.Entry<String, Integer> entry : cursorMap.entrySet()) {
-                if (entry.getKey() != null && entry.getValue() != null) {
-                    cursors.put(entry.getKey(), entry.getValue());
-                }
-            }
-        }
-        root.put("cursorPositions", cursors);
 
         // Scroll positions
         JSONObject scrolls = new JSONObject();
@@ -226,17 +215,6 @@ public class ProjectStateRepository {
         }
         state.setOpenFilePaths(paths);
 
-        // Restore editor carets
-        JSONObject cursors = root.optJSONObject("cursorPositions");
-        Map<String, Integer> cursorMap = new HashMap<>();
-        if (cursors != null) {
-            Iterator<String> keys = cursors.keys();
-            while (keys.hasNext()) {
-                String key = keys.next();
-                cursorMap.put(key, cursors.optInt(key, 0));
-            }
-        }
-        state.setCursorPositions(cursorMap);
 
         // Restore viewport rows
         JSONObject scrolls = root.optJSONObject("scrollPositions");

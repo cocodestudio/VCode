@@ -16,12 +16,17 @@ public class ExecutorProvider {
 
     private final ExecutorService ioExecutor;
     private final ExecutorService cpuExecutor;
+    private final ExecutorService diagnosticExecutor;
     private final Handler mainHandler;
 
     private ExecutorProvider() {
         // Single-threaded executor guarantees sequential, deterministic file operations
         ioExecutor = Executors.newSingleThreadExecutor();
         cpuExecutor = Executors.newFixedThreadPool(2);
+        // Dedicated single-threaded executor for CPU-bound diagnostic/linting work.
+        // Isolated from ioExecutor so diagnostics are never queued behind auto-saves,
+        // symbol extraction, or incremental project indexing.
+        diagnosticExecutor = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
     }
 
@@ -44,6 +49,15 @@ public class ExecutorProvider {
      */
     public void runOnIo(Runnable r) {
         if (r != null) ioExecutor.execute(r);
+    }
+
+    /**
+     * Executes a task on the dedicated single-threaded diagnostic executor.
+     * Use this for CPU-bound linting/diagnostic work to keep it isolated from
+     * disk I/O operations on {@link #ioExecutor}.
+     */
+    public void runOnDiagnostic(Runnable r) {
+        if (r != null) diagnosticExecutor.execute(r);
     }
 
     /**
@@ -70,5 +84,6 @@ public class ExecutorProvider {
     public void shutdown() {
         ioExecutor.shutdown();
         cpuExecutor.shutdown();
+        diagnosticExecutor.shutdown();
     }
 }

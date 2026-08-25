@@ -22,6 +22,10 @@ public class DiagnosticEngine {
     private static final int MAX_PROBLEMS = 60;
 
     public static List<Problem> analyze(File file, String text, FileType type) {
+        return analyze(file, text, type, null);
+    }
+
+    public static List<Problem> analyze(File file, String text, FileType type, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.isEmpty()) return new ArrayList<>();
 
         List<Problem> problems = new ArrayList<>();
@@ -39,13 +43,17 @@ public class DiagnosticEngine {
         } else if (type == FileType.CSS || type == FileType.SCSS) {
             problems.addAll(CssLinter.analyze(file, text));
         } else if (type == FileType.JAVASCRIPT) {
-            problems.addAll(JsLinter.analyze(file, text));
+            problems.addAll(JsLinter.analyze(file, text, index));
         } else if (type == FileType.TYPESCRIPT) {
-            problems.addAll(TsLinter.analyze(file, text));
+            problems.addAll(TsLinter.analyze(file, text, index));
         } else if (type == FileType.MARKDOWN) {
             problems.addAll(com.cocode.vcode.ide.core.language.md.MarkdownLinter.analyze(file, text));
         }
 
+        return deduplicateAndSort(file, problems);
+    }
+
+    public static List<Problem> deduplicateAndSort(File file, List<Problem> problems) {
         problems = deduplicate(problems);
 
         problems.sort(Comparator

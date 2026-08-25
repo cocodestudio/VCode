@@ -21,12 +21,16 @@ public final class SymbolExtractor {
 
     // JS / TS patterns
     private static final Pattern JS_FUNCTION = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:async\\s+)?function\\s+(\\w+)\\s*\\(", Pattern.MULTILINE);
+            "(?:^|\\s)(?:export\\s+)?(?:async\\s+)?function\\s+(\\w+)\\s*\\(([^)]*)\\)", Pattern.MULTILINE);
     private static final Pattern JS_CONST_ARROW = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|\\w+)\\s*=>",
+            "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*=\\s*(?:async\\s*)?(?:\\(([\\s\\S]*?)\\)|(\\w+))\\s*=>",
             Pattern.MULTILINE);
     private static final Pattern JS_CLASS = Pattern.compile(
             "(?:^|\\s)(?:export\\s+)?(?:abstract\\s+)?class\\s+(\\w+)", Pattern.MULTILINE);
+    private static final Pattern JS_CONSTRUCTOR = Pattern.compile(
+            "class\\s+(\\w+)(?:\\s+extends\\s+\\w+)?\\s*\\{(?:(?!\\bclass\\b)[\\s\\S])*?constructor\\s*\\(([^)]*)\\)", Pattern.DOTALL);
+    private static final Pattern JS_METHOD = Pattern.compile(
+            "(?:^|\\s)(?:static\\s+)?(?:async\\s+)?(?!(?:if|for|while|switch|catch|function|constructor)\\b)(\\w+)\\s*\\(([^)]*)\\)\\s*\\{", Pattern.MULTILINE);
     private static final Pattern JS_VAR = Pattern.compile(
             "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*[=;]", Pattern.MULTILINE);
 
@@ -78,9 +82,35 @@ public final class SymbolExtractor {
         List<SymbolEntry> results = new ArrayList<>();
         String text = doc.text;
 
-        findPattern(doc, text, JS_FUNCTION, SymbolEntry.KIND_FUNCTION, results);
-        findPattern(doc, text, JS_CONST_ARROW, SymbolEntry.KIND_FUNCTION, results);
-        findPattern(doc, text, JS_CLASS, SymbolEntry.KIND_CLASS, results);
+        findPatternWithDetail(doc, text, JS_FUNCTION, SymbolEntry.KIND_FUNCTION, results);
+        findPatternWithDetailArrow(doc, text, JS_CONST_ARROW, SymbolEntry.KIND_FUNCTION, results);
+        
+        // Find constructors first
+        findPatternWithDetail(doc, text, JS_CONSTRUCTOR, SymbolEntry.KIND_CLASS, results);
+        
+        // Find other classes that didn't have explicit constructors
+        Matcher classMatcher = JS_CLASS.matcher(text);
+        while (classMatcher.find()) {
+            String name = classMatcher.group(1);
+            if (name == null || name.isEmpty()) continue;
+            boolean alreadyHasConstructor = false;
+            for (SymbolEntry se : results) {
+                if (se.kind == SymbolEntry.KIND_CLASS && name.equals(se.name)) {
+                    alreadyHasConstructor = true;
+                    break;
+                }
+            }
+            if (!alreadyHasConstructor) {
+                LspPosition pos = offsetToPosition(text, classMatcher.start(1));
+                LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
+                results.add(new SymbolEntry(name, doc.uri, range, SymbolEntry.KIND_CLASS));
+            }
+        }
+        
+        // Methods
+        findPatternWithDetail(doc, text, JS_METHOD, SymbolEntry.KIND_FUNCTION, results);
+        
+        // Vars
         findPattern(doc, text, JS_VAR, SymbolEntry.KIND_VARIABLE, results);
 
         return results;
@@ -158,6 +188,35 @@ public final class SymbolExtractor {
             LspPosition pos = offsetToPosition(text, m.start(1));
             LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
             out.add(new SymbolEntry(name, doc.uri, range, kind));
+        }
+    }
+
+    private static void findPatternWithDetail(LspDocument doc, String text, Pattern pattern,
+                                    int kind, List<SymbolEntry> out) {
+        Matcher m = pattern.matcher(text);
+        while (m.find()) {
+            String name = m.group(1);
+            String detail = m.groupCount() >= 2 ? m.group(2) : null;
+            if (name == null || name.isEmpty()) continue;
+            LspPosition pos = offsetToPosition(text, m.start(1));
+            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
+            out.add(new SymbolEntry(name, doc.uri, range, kind, detail != null ? detail.trim() : null));
+        }
+    }
+
+    private static void findPatternWithDetailArrow(LspDocument doc, String text, Pattern pattern,
+                                    int kind, List<SymbolEntry> out) {
+        Matcher m = pattern.matcher(text);
+        while (m.find()) {
+            String name = m.group(1);
+            String detail = m.groupCount() >= 2 ? m.group(2) : null;
+            if (detail == null && m.groupCount() >= 3) {
+                detail = m.group(3);
+            }
+            if (name == null || name.isEmpty()) continue;
+            LspPosition pos = offsetToPosition(text, m.start(1));
+            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
+            out.add(new SymbolEntry(name, doc.uri, range, kind, detail != null ? detail.trim() : null));
         }
     }
 

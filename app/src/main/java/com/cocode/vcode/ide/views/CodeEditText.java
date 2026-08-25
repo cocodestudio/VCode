@@ -48,6 +48,7 @@ import com.cocode.vcode.ide.core.language.markdown.MarkdownSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsSyntaxHighlighter;
+import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -138,6 +139,12 @@ public class CodeEditText extends View {
     private ContentPosition selectionAnchor = null; // null == no selection
     private boolean cursorVisible = true;
     private OnSelectionChangeListener selectionChangeListener;
+    private OnCursorIdleListener cursorIdleListener;
+    private final Runnable cursorIdleRunnable = () -> {
+        if (cursorIdleListener != null) {
+            cursorIdleListener.onCursorIdle(getSelectionStart());
+        }
+    };
     private int activeDragHandle = HANDLE_DRAG_NONE;
     private Paint handlePaint;
 
@@ -154,10 +161,16 @@ public class CodeEditText extends View {
     private boolean isSettingText = false;
     private boolean isTypingText = false;
     private boolean isInsertingCompletion = false;
-    private OnTextLoadListener textLoadListener;
-
-    // Listeners and diagnostics
-    private final List<OnContentChangeListener> contentChangeListeners = new ArrayList<>();
+    /**
+     * Multiple listeners for text-load lifecycle (used e.g. by a "loading…" UI and by
+     * LspEditorBridge to know when a fresh file's content has actually landed in the
+     * editor, since {@link #setText(CharSequence)} does NOT fire {@link OnContentChangeListener}
+     * — see {@link #dispatchContentChanged()}, which is wired to discrete Content
+     * insert/delete edits, not to bulk loads).
+     */
+    private final List<OnTextLoadListener> textLoadListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<OnContentChangeListener> contentChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Runnable> cursorChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private List<Problem> currentProblems = new ArrayList<>();
     private float lastSquiggleConfigHash = 0;
 
@@ -166,6 +179,7 @@ public class CodeEditText extends View {
     private boolean autoIndent = true;
     private IndentationEngine indentEngine;
     private final AutoCompletePopup autoCompletePopup;
+    private final SignatureHintPopup signatureHintPopup;
     private boolean lspCompletionActive = false;
 
     // Highlighting buffers
@@ -202,18 +216,21 @@ public class CodeEditText extends View {
     public CodeEditText(Context context) {
         super(context);
         autoCompletePopup = new AutoCompletePopup(context);
+        signatureHintPopup = new SignatureHintPopup(context);
         init(context);
     }
 
     public CodeEditText(Context context, AttributeSet attrs) {
         super(context, attrs);
         autoCompletePopup = new AutoCompletePopup(context);
+        signatureHintPopup = new SignatureHintPopup(context);
         init(context);
     }
 
     public CodeEditText(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         autoCompletePopup = new AutoCompletePopup(context);
+        signatureHintPopup = new SignatureHintPopup(context);
         init(context);
     }
 
@@ -1181,6 +1198,11 @@ public class CodeEditText extends View {
 
         int beforeFlat = content.flatOffset(cursor);
         ContentPosition insertStart = cursor;
+        boolean mayHaveSideEffects = true;
+        if (mayHaveSideEffects) {
+            undoStack.beginAtomicGroup();
+        }
+
         content.insert(cursor.line, cursor.column, "\n");
         // Advance cursor past inserted text
         ContentPosition after = cursor;
@@ -1197,13 +1219,14 @@ public class CodeEditText extends View {
         cursor = after;
         selectionAnchor = null;
         // Side effects
-        if (!isAutoClosing) {
+        if (mayHaveSideEffects) {
             char typed = '\n';
             if (autoCloseBrackets) {
                 handleAutoClose(new ContentCharSequence(content), beforeFlat + 1, typed);
             }
             int indentTextEnd = Math.min(content.totalLength(), beforeFlat + 2);
             handleAutoIndent(content.getSubstring(0, indentTextEnd), beforeFlat);
+            mainHandler.post(undoStack::endAtomicGroup);
         }
         invalidate();
         cursorVisible = true;
@@ -1281,7 +1304,32 @@ public class CodeEditText extends View {
      * server returns an empty completion list for the current position.
      */
     public void dismissAutoCompletePopup() {
-        if (autoCompletePopup != null) autoCompletePopup.dismiss();
+        if (autoCompletePopup != null) {
+            autoCompletePopup.dismiss();
+        }
+    }
+
+    public void showSignatureHint(LspSignatureHelp help) {
+        if (help == null) {
+            signatureHintPopup.dismiss();
+            return;
+        }
+        int flatCursor = content.flatOffset(cursor);
+        signatureHintPopup.show(help, this, flatCursor);
+    }
+
+    public void dismissSignatureHint() {
+        if (signatureHintPopup != null) {
+            signatureHintPopup.dismiss();
+        }
+    }
+
+    public boolean isSignatureHintVisible() {
+        return signatureHintPopup != null && signatureHintPopup.isShowing();
+    }
+
+    public boolean isAutoCompleteVisible() {
+        return autoCompletePopup != null && autoCompletePopup.isShowing();
     }
 
     public void setSelection(int index) {
@@ -1439,6 +1487,16 @@ public class CodeEditText extends View {
         notifySelectionChanged();
     }
 
+    public void addCursorChangeListener(Runnable listener) {
+        if (!cursorChangeListeners.contains(listener)) {
+            cursorChangeListeners.add(listener);
+        }
+    }
+
+    public void removeCursorChangeListener(Runnable listener) {
+        cursorChangeListeners.remove(listener);
+    }
+
     /**
      * Notifies any registered selection-change observer (e.g. to show/hide the SelectionToolbar).
      * Called whenever the selection state changes.
@@ -1453,6 +1511,14 @@ public class CodeEditText extends View {
         if (selectionChangeListener != null && !isSettingSelectionFromIme) {
             selectionChangeListener.onSelectionChanged(selectionAnchor != null);
         }
+        for (Runnable listener : cursorChangeListeners) {
+            listener.run();
+        }
+        
+        mainHandler.removeCallbacks(cursorIdleRunnable);
+        if (selectionAnchor == null) {
+            mainHandler.postDelayed(cursorIdleRunnable, 400);
+        }
         mainHandler.removeCallbacks(bracketMatchRunnable);
         mainHandler.postDelayed(bracketMatchRunnable, 80);
 
@@ -1466,14 +1532,18 @@ public class CodeEditText extends View {
         this.selectionChangeListener = listener;
     }
 
+    public void setOnCursorIdleListener(OnCursorIdleListener listener) {
+        this.cursorIdleListener = listener;
+    }
+
     public void setText(CharSequence text, Object bufferType) {
         if (autoCompletePopup != null) autoCompletePopup.dismiss();
         final String textStr = text != null ? text.toString() : "";
         final long myToken = ++textLoadToken;
         isSettingText = true;
-        if (textLoadListener != null) {
+        if (!textLoadListeners.isEmpty()) {
             mainHandler.post(() -> {
-                if (textLoadListener != null) textLoadListener.onTextLoadStateChanged(true);
+                for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(true);
             });
         }
         ExecutorProvider.getInstance().runOnCpu(() -> {
@@ -1487,7 +1557,7 @@ public class CodeEditText extends View {
                 longestLineLength = loaded.longestLineLength;
                 longestLineDirty = false;
                 isSettingText = false;
-                if (textLoadListener != null) textLoadListener.onTextLoadStateChanged(false);
+                for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
                 dirtyTracker.reset();
                 dirtyTracker.addEdit(0, 0, content.totalLength());
                 rebuildVisualLayout();
@@ -1497,6 +1567,10 @@ public class CodeEditText extends View {
                 notifySelectionChanged();
             });
         });
+    }
+
+    public boolean isSettingText() {
+        return isSettingText;
     }
 
     public void setTextSize(float sizeSp) {
@@ -1522,8 +1596,19 @@ public class CodeEditText extends View {
         }
     }
 
-    public void setOnTextLoadListener(OnTextLoadListener listener) {
-        this.textLoadListener = listener;
+    /**
+     * Registers a listener for text-load lifecycle events (fired by {@link #setText(CharSequence, Object)}).
+     * Adds to an internal list rather than replacing — safe to call from multiple independent
+     * observers (e.g. a loading-state UI and {@code LspEditorBridge}) without one clobbering another.
+     */
+    public void addTextLoadListener(OnTextLoadListener listener) {
+        if (listener != null && !textLoadListeners.contains(listener)) {
+            textLoadListeners.add(listener);
+        }
+    }
+
+    public void removeTextLoadListener(OnTextLoadListener listener) {
+        textLoadListeners.remove(listener);
     }
 
     public void removeContentChangeListener(OnContentChangeListener listener) {
@@ -1929,6 +2014,7 @@ public class CodeEditText extends View {
         mainHandler.removeCallbacks(bracketMatchRunnable);
         mainHandler.removeCallbacksAndMessages(null);
         if (autoCompletePopup != null) autoCompletePopup.dismiss();
+        if (signatureHintPopup != null) signatureHintPopup.dismiss();
     }
 
     private void scheduleHighlight() {
@@ -2202,9 +2288,6 @@ public class CodeEditText extends View {
             return;
 
         final String toInsert = closing;
-        // Begin atomic group BEFORE posting so the closing char is bundled
-        // with the triggering keystroke in one undo step.
-        undoStack.beginAtomicGroup();
         mainHandler.post(() -> {
             isAutoClosing = true;
             // Insert closing char at cursor position (cursor was already advanced past typed char)
@@ -2215,7 +2298,6 @@ public class CodeEditText extends View {
             // cursor stays before the inserted closing char — don't advance
             UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
             undoStack.recordInsert(pos.line, pos.column, toInsert, snapBefore, snapAfter);
-            undoStack.endAtomicGroup();
             isAutoClosing = false;
             scheduleHighlight();
             invalidate();
@@ -2242,13 +2324,10 @@ public class CodeEditText extends View {
     }
 
     private void handleAutoCloseHtmlTag(int cursorAfterGt) {
-        // Begin atomic group so the closing tag is bundled with the '>' keystroke.
-        undoStack.beginAtomicGroup();
         mainHandler.post(() -> {
             String currentText = content.getSubstring(0, Math.min(content.totalLength(), cursorAfterGt));
             String tagName = htmlTagParser.getCurrentOpenTagName(currentText, cursorAfterGt - 1);
             if (tagName == null || tagName.isEmpty() || HtmlTagParser.isVoidElement(tagName)) {
-                undoStack.endAtomicGroup();
                 return;
             }
 
@@ -2259,7 +2338,6 @@ public class CodeEditText extends View {
             content.insert(insertPos.line, insertPos.column, closing);
             UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
             undoStack.recordInsert(insertPos.line, insertPos.column, closing, snapBefore, snapAfter);
-            undoStack.endAtomicGroup();
             isAutoClosing = false;
             scheduleHighlight();
             invalidate();
@@ -2305,8 +2383,6 @@ public class CodeEditText extends View {
         final int insertFlat = newlineIndex + 1;
 
         if (!finalInnerIndent.isEmpty() || finalSplit) {
-            // Begin atomic group so the auto-indent text is bundled with the \n keystroke.
-            undoStack.beginAtomicGroup();
             mainHandler.post(() -> {
                 isApplyingHighlight = true;
                 ContentPosition insertPos = content.positionAt(insertFlat);
@@ -2327,7 +2403,6 @@ public class CodeEditText extends View {
                     UndoStack.EditorSnapshot snapAfter = snapshotAt(cursor, null);
                     undoStack.recordInsert(insertPos.line, insertPos.column, finalInnerIndent, snapBefore, snapAfter);
                 }
-                undoStack.endAtomicGroup();
                 // Use setSelection only for scroll-sync, cursor already set above.
                 setSelection(content.flatOffset(cursor));
                 isApplyingHighlight = false;
@@ -2549,6 +2624,10 @@ public class CodeEditText extends View {
      */
     public interface OnSelectionChangeListener {
         void onSelectionChanged(boolean hasSelection);
+    }
+
+    public interface OnCursorIdleListener {
+        void onCursorIdle(int flatOffset);
     }
 
     public interface OnScrollChangeListener {
@@ -2876,6 +2955,14 @@ public class CodeEditText extends View {
             ContentPosition before = editor.cursor;
             int beforeFlat = editor.content.flatOffset(before);
 
+            // Group the keystroke and its async side effects (auto-close, auto-indent) 
+            // into a single undo step. Group is closed via a posted Runnable to ensure 
+            // it executes after the async handlers finish.
+            boolean mayHaveSideEffects = text.length() == 1 && !editor.isAutoClosing;
+            if (mayHaveSideEffects) {
+                editor.undoStack.beginAtomicGroup();
+            }
+
             editor.isTypingText = true;
             int beforeLineCount = editor.content.lineCount();
 
@@ -2901,7 +2988,7 @@ public class CodeEditText extends View {
             }
 
             // Side effects
-            if (text.length() == 1 && !editor.isAutoClosing) {
+            if (mayHaveSideEffects) {
                 char typed = text.charAt(0);
                 if (editor.autoCloseBrackets) {
                     editor.handleAutoClose(new ContentCharSequence(editor.content), beforeFlat + 1, typed);
@@ -2915,6 +3002,8 @@ public class CodeEditText extends View {
                     int indentTextEnd = Math.min(editor.content.totalLength(), beforeFlat + 2);
                     editor.handleAutoIndent(editor.content.getSubstring(0, indentTextEnd), beforeFlat);
                 }
+                // Close atomic group after all async handlers have posted their operations
+                editor.mainHandler.post(editor.undoStack::endAtomicGroup);
             }
 
             editor.post(editor::ensureCursorVisible);

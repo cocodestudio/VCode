@@ -16,6 +16,10 @@ public class JsLinter {
     // Patterns compiled once
     // Entry point
     public static List<Problem> analyze(File file, String text) {
+        return analyze(file, text, null);
+    }
+
+    public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
 
         List<Problem> problems = new ArrayList<>();
@@ -46,12 +50,16 @@ public class JsLinter {
         JsLinterStyleRules.checkUnclosedString(file, text, lines, mask, problems);
         JsLinterStyleRules.checkReturnOutsideFunction(file, text, mask, problems);
         JsLinterStyleRules.checkBreakContinue(file, text, mask, problems);
-        JsLinterStyleRules.checkUnusedVars(file, text, mask, problems);
+        JsLinterStyleRules.checkUnusedVars(file, text, mask, index, problems);
         JsLinterStyleRules.checkArrowSimplification(file, text, mask, problems);
         JsLinterStyleRules.checkStringConcat(file, text, mask, problems);
         JsLinterStyleRules.checkOptionalChaining(file, text, mask, problems);
         JsLinterStyleRules.checkNullishCoalescing(file, text, mask, problems);
         JsLinterStyleRules.checkStringConcatInLoop(file, text, mask, problems);
+
+        if (index != null) {
+            JsSemanticLinter.analyze(file, text, mask, index, problems);
+        }
 
         return problems;
     }
