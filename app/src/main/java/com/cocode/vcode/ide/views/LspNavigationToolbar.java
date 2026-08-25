@@ -90,7 +90,7 @@ public class LspNavigationToolbar {
             hide();
             return;
         }
-        if (flatOffset < 0 || flatOffset > editor.length() || !editor.hasFocus()) {
+        if (flatOffset < 0 || flatOffset > editor.length() || !editor.hasFocus() || editor.isSignatureHintVisible() || editor.isAutoCompleteVisible()) {
             hide();
             return;
         }

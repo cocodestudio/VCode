@@ -1324,6 +1324,14 @@ public class CodeEditText extends View {
         }
     }
 
+    public boolean isSignatureHintVisible() {
+        return signatureHintPopup != null && signatureHintPopup.isShowing();
+    }
+
+    public boolean isAutoCompleteVisible() {
+        return autoCompletePopup != null && autoCompletePopup.isShowing();
+    }
+
     public void setSelection(int index) {
         cursor = content.positionAt(Math.max(0, Math.min(index, content.totalLength())));
         selectionAnchor = null;
