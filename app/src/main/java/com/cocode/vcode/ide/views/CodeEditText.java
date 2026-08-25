@@ -139,6 +139,12 @@ public class CodeEditText extends View {
     private ContentPosition selectionAnchor = null; // null == no selection
     private boolean cursorVisible = true;
     private OnSelectionChangeListener selectionChangeListener;
+    private OnCursorIdleListener cursorIdleListener;
+    private final Runnable cursorIdleRunnable = () -> {
+        if (cursorIdleListener != null) {
+            cursorIdleListener.onCursorIdle(getSelectionStart());
+        }
+    };
     private int activeDragHandle = HANDLE_DRAG_NONE;
     private Paint handlePaint;
 
@@ -1500,6 +1506,11 @@ public class CodeEditText extends View {
         for (Runnable listener : cursorChangeListeners) {
             listener.run();
         }
+        
+        mainHandler.removeCallbacks(cursorIdleRunnable);
+        if (selectionAnchor == null) {
+            mainHandler.postDelayed(cursorIdleRunnable, 400);
+        }
         mainHandler.removeCallbacks(bracketMatchRunnable);
         mainHandler.postDelayed(bracketMatchRunnable, 80);
 
@@ -1511,6 +1522,10 @@ public class CodeEditText extends View {
 
     public void setOnSelectionChangeListener(OnSelectionChangeListener listener) {
         this.selectionChangeListener = listener;
+    }
+
+    public void setOnCursorIdleListener(OnCursorIdleListener listener) {
+        this.cursorIdleListener = listener;
     }
 
     public void setText(CharSequence text, Object bufferType) {
@@ -2601,6 +2616,10 @@ public class CodeEditText extends View {
      */
     public interface OnSelectionChangeListener {
         void onSelectionChanged(boolean hasSelection);
+    }
+
+    public interface OnCursorIdleListener {
+        void onCursorIdle(int flatOffset);
     }
 
     public interface OnScrollChangeListener {

@@ -77,13 +77,26 @@ public class CodeFileViewer implements IFileViewer {
                 }
             });
 
-            // Attach LSP bridge now that the editor view exists.
-            // setFile() will be called in bindFile() once a file is known.
-            lspBridge.attach(codeEditText);
-
             if (context instanceof IEditorCallback) {
                 editorCallback = (IEditorCallback) context;
                 lspBridge.setEditorCallback(editorCallback);
+            }
+            
+            // Attach LSP bridge now that the editor view exists.
+            // setFile() will be called in bindFile() once a file is known.
+            lspBridge.attach(codeEditText);
+            if (editorLayout.getLspNavigationToolbar() != null) {
+                editorLayout.getLspNavigationToolbar().bindBridge(lspBridge);
+                editorLayout.getLspNavigationToolbar().setNavigationListener(new com.cocode.vcode.ide.views.LspNavigationToolbar.NavigationListener() {
+                    @Override
+                    public void onNavigate(com.cocode.vcode.ide.core.lsp.LspLocation loc) {
+                        if (editorCallback != null) editorCallback.navigateToLocation(loc);
+                    }
+                    @Override
+                    public void onShowReferences(java.util.List<com.cocode.vcode.ide.core.lsp.LspLocation> refs) {
+                        if (editorCallback != null) editorCallback.showReferences(refs);
+                    }
+                });
             }
         }
         return viewContainer;
@@ -211,12 +224,18 @@ public class CodeFileViewer implements IFileViewer {
         if (editorLayout != null && editorLayout.getSelectionToolbar() != null) {
             editorLayout.getSelectionToolbar().hide();
         }
+        if (editorLayout != null && editorLayout.getLspNavigationToolbar() != null) {
+            editorLayout.getLspNavigationToolbar().hide();
+        }
     }
 
     @Override
     public void destroy() {
         onPause();
         lspBridge.detach();
+        if (editorLayout != null && editorLayout.getLspNavigationToolbar() != null) {
+            editorLayout.getLspNavigationToolbar().setNavigationListener(null);
+        }
         if (codeEditText != null) {
             // Nothing to remove for lambdas since we just clear the reference
         }

@@ -333,13 +333,7 @@ public final class LspEditorBridge {
             public void onResult(List<LspLocation> result) {
                 if (callback == null) return;
                 if (result != null) {
-                    List<LspLocation> filtered = new ArrayList<>();
-                    for (LspLocation loc : result) {
-                        if (!loc.uri.equals(doc.uri)) {
-                            filtered.add(loc);
-                        }
-                    }
-                    callback.onResult(filtered);
+                    callback.onResult(result);
                 } else {
                     callback.onResult(Collections.emptyList());
                 }

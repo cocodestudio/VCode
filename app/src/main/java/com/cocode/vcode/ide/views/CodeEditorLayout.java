@@ -20,6 +20,7 @@ public class CodeEditorLayout extends LinearLayout {
     private CodeEditText codeEditText;
     private final Runnable syncRunnable = this::syncLineNumberView;
     private SelectionToolbar selectionToolbar;
+    private LspNavigationToolbar lspNavigationToolbar;
 
     public CodeEditorLayout(Context context) {
         super(context);
@@ -61,9 +62,20 @@ public class CodeEditorLayout extends LinearLayout {
         selectionToolbar.bindEditor(codeEditText);
         selectionToolbar.hide();
 
+        lspNavigationToolbar = new LspNavigationToolbar(context);
+        lspNavigationToolbar.bindEditor(codeEditText);
+        lspNavigationToolbar.hide();
+
+        codeEditText.setOnCursorIdleListener(offset -> {
+            if (lspNavigationToolbar != null) {
+                lspNavigationToolbar.onCursorIdle(offset);
+            }
+        });
+
         codeEditText.setOnSelectionChangeListener(hasSelection -> {
             if (hasSelection) {
                 selectionToolbar.show();
+                if (lspNavigationToolbar != null) lspNavigationToolbar.hide();
             } else {
                 selectionToolbar.hide();
             }
@@ -75,10 +87,13 @@ public class CodeEditorLayout extends LinearLayout {
             if (selectionToolbar.isVisible()) {
                 selectionToolbar.show();
             }
+            if (lspNavigationToolbar.isVisible()) {
+                lspNavigationToolbar.updatePositionIfVisible();
+            }
         });
 
         codeEditText.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
-                syncLineNumberView());
+                lineNumberView.requestLayout());
 
         codeEditText.setOnClickListener(v -> syncLineNumberView());
 
@@ -114,6 +129,10 @@ public class CodeEditorLayout extends LinearLayout {
 
     public CodeEditText getCodeEditText() {
         return codeEditText;
+    }
+
+    public LspNavigationToolbar getLspNavigationToolbar() {
+        return lspNavigationToolbar;
     }
 
     public LineNumberView getLineNumberView() {

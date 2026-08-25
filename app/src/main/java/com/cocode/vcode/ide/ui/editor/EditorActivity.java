@@ -709,33 +709,6 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             public boolean isReadOnly() {
                 return isReadOnly;
             }
-
-            @Override
-            public com.cocode.vcode.ide.core.lsp.LspEditorBridge getActiveLspBridge() {
-                if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-                    return ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).getLspBridge();
-                }
-                return null;
-            }
-
-            @Override
-            public void openFileAtLine(java.io.File file, int line) {
-                if (file == null || !file.exists()) {
-                    android.widget.Toast.makeText(EditorActivity.this,
-                            R.string.vcode_lsp_no_definition_found, android.widget.Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                // Open (or switch to) the target file, then jump to the given line
-                viewModel.openFile(file);
-                // After the tab is active, scroll to the requested line
-                binding.viewerContainer.postDelayed(() -> {
-                    com.cocode.vcode.ide.views.CodeEditText editor = getActiveCodeEditor();
-                    if (editor != null && line > 1) {
-                        editor.goToLine(line);
-                    }
-                }, 300);
-
-            }
         };
 
         String projectName = getIntent().getStringExtra(EXTRA_PROJECT_NAME);
@@ -937,6 +910,57 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     public void reportProblems(File file, List<Problem> problems) {
         if (viewModel != null) {
             viewModel.reportProblems(file, problems);
+        }
+    }
+
+    @Override
+    public void navigateToLocation(com.cocode.vcode.ide.core.lsp.LspLocation result) {
+        if (result == null) {
+            Toast.makeText(this, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        File target = new File(result.uri);
+        int line = result.range != null ? result.range.start.line + 1 : 1;
+        
+        if (!target.exists()) {
+            Toast.makeText(this, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        viewModel.openFile(target);
+        binding.viewerContainer.postDelayed(() -> {
+            CodeEditText editor = getActiveCodeEditor();
+            if (editor != null && line > 1) {
+                editor.goToLine(line);
+            }
+        }, 300);
+    }
+
+    @Override
+    public void showReferences(List<com.cocode.vcode.ide.core.lsp.LspLocation> result) {
+        if (result == null || result.isEmpty()) {
+            Toast.makeText(this, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (result.size() == 1) {
+            navigateToLocation(result.get(0));
+        } else {
+            List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> refOptions = new java.util.ArrayList<>();
+            for (com.cocode.vcode.ide.core.lsp.LspLocation loc : result) {
+                File f = new File(loc.uri);
+                int line = loc.range != null ? loc.range.start.line + 1 : 1;
+                String label = f.getName() + ":" + line;
+
+                String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
+                int iconResId = FileType.fromExtension(ext).getIconResId();
+
+                refOptions.add(new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option(
+                        iconResId, label,
+                        () -> navigateToLocation(loc)
+                ));
+            }
+            com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet refsSheet = new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet();
+            refsSheet.setOptions(refOptions);
+            refsSheet.show(getSupportFragmentManager(), getString(R.string.vcode_lsp_references_title));
         }
     }
 }

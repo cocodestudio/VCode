@@ -6,9 +6,6 @@ import android.widget.Toast;
 import androidx.fragment.app.FragmentManager;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.core.lsp.LspCallback;
-import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
-import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.model.EditorFile;
@@ -65,72 +62,6 @@ public class EditorMenuHelper {
                     options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, "Extract CSS", () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE)));
                     options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, "Extract JS", () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.SCRIPT)));
                 }
-
-                // LSP navigation — only for supported text languages (not binary/virtual)
-                LspEditorBridge bridge = callbacks.getActiveLspBridge();
-                if (bridge != null) {
-                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_code, activity.getString(R.string.vcode_lsp_go_to_definition), () ->
-                            bridge.requestDefinition(new LspCallback<LspLocation>() {
-                                @Override
-                                public void onResult(LspLocation result) {
-                                    if (result == null) {
-                                        Toast.makeText(activity, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
-                                        return;
-                                    }
-                                    File target = new File(result.uri);
-                                    int line = result.range != null ? result.range.start.line + 1 : 1;
-                                    callbacks.openFileAtLine(target, line);
-                                }
-
-                                @Override
-                                public void onError(String errorMessage) {
-                                    Toast.makeText(activity, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
-                                }
-                            })
-                    ));
-
-                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_magnifying_glass, activity.getString(R.string.vcode_lsp_find_references), () ->
-                            bridge.requestReferences(new LspCallback<List<LspLocation>>() {
-                                @Override
-                                public void onResult(List<LspLocation> result) {
-                                    if (result == null || result.isEmpty()) {
-                                        Toast.makeText(activity, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
-                                        return;
-                                    }
-                                    if (result.size() == 1) {
-                                        // Single result — navigate directly
-                                        LspLocation loc = result.get(0);
-                                        int line = loc.range != null ? loc.range.start.line + 1 : 1;
-                                        callbacks.openFileAtLine(new File(loc.uri), line);
-                                    } else {
-                                        // Multiple results — show list as chooser options
-                                        List<EditorOptionsBottomSheet.Option> refOptions = new ArrayList<>();
-                                        for (LspLocation loc : result) {
-                                            File f = new File(loc.uri);
-                                            int line = loc.range != null ? loc.range.start.line + 1 : 1;
-                                            String label = f.getName() + ":" + line;
-
-                                            String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
-                                            int iconResId = FileType.fromExtension(ext).getIconResId();
-
-                                            refOptions.add(new EditorOptionsBottomSheet.Option(
-                                                    iconResId, label,
-                                                    () -> callbacks.openFileAtLine(f, line)
-                                            ));
-                                        }
-                                        EditorOptionsBottomSheet refsSheet = new EditorOptionsBottomSheet();
-                                        refsSheet.setOptions(refOptions);
-                                        refsSheet.show(fragmentManager, activity.getString(R.string.vcode_lsp_references_title));
-                                    }
-                                }
-
-                                @Override
-                                public void onError(String errorMessage) {
-                                    Toast.makeText(activity, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
-                                }
-                            })
-                    ));
-                }
             }
         }
 
@@ -183,15 +114,5 @@ public class EditorMenuHelper {
         void onNavigateWithUnsavedCheck(Runnable action);
 
         boolean isReadOnly();
-
-        /**
-         * Returns the LSP bridge for the currently active code viewer, or null if none.
-         */
-        LspEditorBridge getActiveLspBridge();
-
-        /**
-         * Opens a file at a specific line (1-based).
-         */
-        void openFileAtLine(File file, int line);
     }
 }
