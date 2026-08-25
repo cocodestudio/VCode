@@ -49,22 +49,6 @@ public final class TsLspServer implements LspServer {
     // LspServer contract
     // -------------------------------------------------------------------------
 
-    private static LspLocation resolveModulePath(String docUri, String importPath) {
-        File base = new File(docUri).getParentFile();
-        if (base == null) return null;
-        File target = new File(base, importPath);
-        if (target.exists() && target.isFile()) {
-            return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-        }
-        for (String ext : new String[]{".ts", ".tsx", ".js", ".mjs", ".cjs"}) {
-            File withExt = new File(base, importPath + ext);
-            if (withExt.exists()) {
-                return new LspLocation(withExt.getAbsolutePath(), new LspRange(0, 0, 0, 0));
-            }
-        }
-        return null;
-    }
-
     private static String extractWord(String text, int offset) {
         if (text == null || offset < 0 || offset > text.length()) return "";
         int start = Math.min(offset, text.length() - 1);
@@ -184,7 +168,7 @@ public final class TsLspServer implements LspServer {
         }
         File file = new File(doc.uri);
         List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
-        List<Problem> tsProblems = TsLinter.analyze(file, doc.text);
+        List<Problem> tsProblems = TsLinter.analyze(file, doc.text, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
         if (tsProblems != null) problems.addAll(tsProblems);
         return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
     }
@@ -198,8 +182,10 @@ public final class TsLspServer implements LspServer {
         while (m.find()) {
             if (pos.character >= m.start() && pos.character <= m.end()) {
                 String importPath = m.group(1);
-                LspLocation resolved = resolveModulePath(doc.uri, importPath);
-                if (resolved != null) return resolved;
+                if (importPath != null && !importPath.isEmpty()) {
+                    LspLocation resolved = com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(doc.uri, importPath);
+                    if (resolved != null) return resolved;
+                }
             }
         }
 

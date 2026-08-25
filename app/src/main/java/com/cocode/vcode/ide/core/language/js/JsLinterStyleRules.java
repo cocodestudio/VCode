@@ -297,7 +297,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkUnusedVars(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkUnusedVars(File file, String text, TokenMask mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index, List<Problem> out) {
         Matcher m = PAT_LET_CONST.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -314,6 +314,20 @@ public class JsLinterStyleRules {
                 if (um.start() >= declEnd) usages++;
             }
             if (usages == 0) {
+                // Cross-file unused-export suppression (Rule B5)
+                if (index != null && isExported(text, m.start())) {
+                    List<com.cocode.vcode.ide.core.lsp.LspLocation> fileUsages = index.findFileUsages(name);
+                    // Filter out usages in this file
+                    boolean usedElsewhere = false;
+                    for (com.cocode.vcode.ide.core.lsp.LspLocation loc : fileUsages) {
+                        if (!loc.uri.equals(file.getAbsolutePath())) {
+                            usedElsewhere = true;
+                            break;
+                        }
+                    }
+                    if (usedElsewhere) continue; // It's used in another file, suppress warning
+                }
+                
                 int nameStart = m.start(2);
                 int line = LinterUtils.getLine(text, nameStart);
                 int col = LinterUtils.getColumn(text, nameStart);
@@ -322,6 +336,21 @@ public class JsLinterStyleRules {
                         Problem.Severity.WARNING));
             }
         }
+    }
+    
+    private static boolean isExported(String text, int declStart) {
+        int i = declStart - 1;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i >= 5) {
+            String sub = text.substring(Math.max(0, i - 5), i + 1);
+            if (sub.equals("export")) {
+                int beforeExport = i - 6;
+                if (beforeExport < 0 || !Character.isLetterOrDigit(text.charAt(beforeExport))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public static void checkArrowSimplification(File file, String text, TokenMask mask, List<Problem> out) {

@@ -42,9 +42,13 @@ public class TsLinter {
 
     // Entry point
     public static List<Problem> analyze(File file, String text) {
+        return analyze(file, text, null);
+    }
+
+    public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.trim().isEmpty()) return Collections.emptyList();
 
-        List<Problem> problems = new ArrayList<>(JsLinter.analyze(file, text));
+        List<Problem> problems = new ArrayList<>(JsLinter.analyze(file, text, index));
 
         TokenMask mask = TokenMask.build(text, "ts");
         String[] lines = LinterUtils.splitLines(text);

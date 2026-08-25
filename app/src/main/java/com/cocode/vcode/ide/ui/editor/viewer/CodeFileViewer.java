@@ -327,7 +327,7 @@ public class CodeFileViewer implements IFileViewer {
             if (!lspBridge.isLspActive()) {
                 ExecutorProvider.getInstance().runOnDiagnostic(() -> {
                     java.util.List<Problem> problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(
-                            capturedFile.getFile(), textSnapshot, capturedFile.getFileType());
+                            capturedFile.getFile(), textSnapshot, capturedFile.getFileType(), com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
                     if (problems != null) {
                         final java.util.List<Problem> finalProblems = problems;
                         ExecutorProvider.getInstance().runOnMain(() -> {
