@@ -921,7 +921,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
         String path = result.uri;
         if (path.startsWith("file://")) {
-            path = path.substring(7);
+            try {
+                path = new java.net.URI(result.uri).getPath();
+            } catch (Exception e) {
+                path = path.substring(7);
+            }
         }
         File target = new File(path);
         int line = result.range != null ? result.range.start.line + 1 : 1;
@@ -952,7 +956,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             for (com.cocode.vcode.ide.core.lsp.LspLocation loc : result) {
                 String path = loc.uri;
                 if (path.startsWith("file://")) {
-                    path = path.substring(7);
+                    try {
+                        path = new java.net.URI(loc.uri).getPath();
+                    } catch (Exception e) {
+                        path = path.substring(7);
+                    }
                 }
                 File f = new File(path);
                 int line = loc.range != null ? loc.range.start.line + 1 : 1;
