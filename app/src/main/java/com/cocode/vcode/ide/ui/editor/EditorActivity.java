@@ -919,7 +919,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             Toast.makeText(this, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
             return;
         }
-        File target = new File(result.uri);
+        String path = result.uri;
+        if (path.startsWith("file://")) {
+            path = path.substring(7);
+        }
+        File target = new File(path);
         int line = result.range != null ? result.range.start.line + 1 : 1;
         
         if (!target.exists()) {
@@ -946,7 +950,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         } else {
             List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> refOptions = new java.util.ArrayList<>();
             for (com.cocode.vcode.ide.core.lsp.LspLocation loc : result) {
-                File f = new File(loc.uri);
+                String path = loc.uri;
+                if (path.startsWith("file://")) {
+                    path = path.substring(7);
+                }
+                File f = new File(path);
                 int line = loc.range != null ? loc.range.start.line + 1 : 1;
                 String label = f.getName() + ":" + line;
 

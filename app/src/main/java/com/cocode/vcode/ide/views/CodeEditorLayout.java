@@ -72,6 +72,13 @@ public class CodeEditorLayout extends LinearLayout {
             }
         });
 
+        codeEditText.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) {
+                if (selectionToolbar != null) selectionToolbar.hide();
+                if (lspNavigationToolbar != null) lspNavigationToolbar.hide();
+            }
+        });
+
         codeEditText.setOnSelectionChangeListener(hasSelection -> {
             if (hasSelection) {
                 selectionToolbar.show();

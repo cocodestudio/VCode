@@ -88,7 +88,7 @@ public class LspNavigationToolbar {
             hide();
             return;
         }
-        if (flatOffset < 0 || flatOffset > editor.length()) {
+        if (flatOffset < 0 || flatOffset > editor.length() || !editor.hasFocus()) {
             hide();
             return;
         }
@@ -210,7 +210,7 @@ public class LspNavigationToolbar {
         if (popupWidth > maxAllowedWidth) {
             popupWidth = maxAllowedWidth;
         }
-        int margin = (int) (8 * density);
+        int margin = (int) (4 * density);
         int graceH = (int) (24 * density);
         int graceV = (int) (16 * density);
 
@@ -254,6 +254,11 @@ public class LspNavigationToolbar {
             }
         });
 
+        binding.btnDefinition.setOnLongClickListener(v -> {
+            if (context != null) Toast.makeText(context, R.string.vcode_lsp_go_to_definition, Toast.LENGTH_SHORT).show();
+            return true;
+        });
+
         binding.btnReferences.setOnClickListener(v -> {
             List<LspLocation> refs = cachedReferences;
             hide();
@@ -264,6 +269,11 @@ public class LspNavigationToolbar {
                     Toast.makeText(context, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
                 }
             }
+        });
+
+        binding.btnReferences.setOnLongClickListener(v -> {
+            if (context != null) Toast.makeText(context, R.string.vcode_lsp_find_references, Toast.LENGTH_SHORT).show();
+            return true;
         });
     }
 }
