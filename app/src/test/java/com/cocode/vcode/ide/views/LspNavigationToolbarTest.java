@@ -56,6 +56,9 @@ public class LspNavigationToolbarTest {
         
         // Mock getCursorScreenCoords returning some arbitrary coordinates to avoid NPE in updatePosition
         when(mockEditor.getCursorScreenCoords(anyInt())).thenReturn(new int[]{100, 100, 120});
+        
+        // Mock hasFocus to true because toolbar now requires editor focus
+        when(mockEditor.hasFocus()).thenReturn(true);
     }
 
     @Test
