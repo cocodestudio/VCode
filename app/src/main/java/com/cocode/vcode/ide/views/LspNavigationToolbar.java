@@ -9,11 +9,13 @@ import android.view.ViewGroup;
 import android.widget.PopupWindow;
 import android.widget.Toast;
 
+import androidx.appcompat.widget.TooltipCompat;
+
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.lsp.LspCallback;
 import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
-import com.cocode.vcode.ide.databinding.VcodeViewLspNavigationToolbarBinding;
+import com.cocode.vcode.ide.databinding.ViewLspNavigationToolbarBinding;
 
 import java.util.List;
 
@@ -26,7 +28,7 @@ import java.util.List;
  */
 public class LspNavigationToolbar {
 
-    private final VcodeViewLspNavigationToolbarBinding binding;
+    private final ViewLspNavigationToolbarBinding binding;
     private final Context context;
     private final PopupWindow popupWindow;
     private CodeEditText editor;
@@ -48,7 +50,7 @@ public class LspNavigationToolbar {
 
     public LspNavigationToolbar(Context context) {
         this.context = context;
-        binding = VcodeViewLspNavigationToolbarBinding.inflate(LayoutInflater.from(context));
+        binding = ViewLspNavigationToolbarBinding.inflate(LayoutInflater.from(context));
 
         float density = context.getResources().getDisplayMetrics().density;
 
@@ -210,7 +212,7 @@ public class LspNavigationToolbar {
         if (popupWidth > maxAllowedWidth) {
             popupWidth = maxAllowedWidth;
         }
-        int margin = (int) (4 * density);
+        int margin = (int) (0.2 * density);
         int graceH = (int) (24 * density);
         int graceV = (int) (16 * density);
 
@@ -254,10 +256,9 @@ public class LspNavigationToolbar {
             }
         });
 
-        binding.btnDefinition.setOnLongClickListener(v -> {
-            if (context != null) Toast.makeText(context, R.string.vcode_lsp_go_to_definition, Toast.LENGTH_SHORT).show();
-            return true;
-        });
+        if (context != null) {
+            TooltipCompat.setTooltipText(binding.btnDefinition, context.getString(R.string.vcode_lsp_go_to_definition));
+        }
 
         binding.btnReferences.setOnClickListener(v -> {
             List<LspLocation> refs = cachedReferences;
@@ -271,9 +272,8 @@ public class LspNavigationToolbar {
             }
         });
 
-        binding.btnReferences.setOnLongClickListener(v -> {
-            if (context != null) Toast.makeText(context, R.string.vcode_lsp_find_references, Toast.LENGTH_SHORT).show();
-            return true;
-        });
+        if (context != null) {
+            TooltipCompat.setTooltipText(binding.btnReferences, context.getString(R.string.vcode_lsp_find_references));
+        }
     }
 }
