@@ -346,6 +346,35 @@ public final class LspEditorBridge {
         });
     }
 
+    /**
+     * Requests all locations of the symbol to be renamed.
+     *
+     * @param callback delivers the result list on the main thread
+     */
+    public void requestRename(LspCallback<List<LspLocation>> callback) {
+        LspDocument doc = buildSnapshot();
+        if (doc == null) {
+            if (callback != null) callback.onError("No document");
+            return;
+        }
+        LspClientManager.getInstance().requestRename(doc, cursorPosition(), new LspCallback<List<LspLocation>>() {
+            @Override
+            public void onResult(List<LspLocation> result) {
+                if (callback == null) return;
+                if (result != null) {
+                    callback.onResult(result);
+                } else {
+                    callback.onResult(Collections.emptyList());
+                }
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                if (callback != null) callback.onError(errorMessage);
+            }
+        });
+    }
+
     // -------------------------------------------------------------------------
     // Private — debounced operations
     // -------------------------------------------------------------------------

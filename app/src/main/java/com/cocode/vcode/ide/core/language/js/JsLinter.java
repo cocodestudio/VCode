@@ -1,7 +1,7 @@
 package com.cocode.vcode.ide.core.language.js;
 
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
-import com.cocode.vcode.ide.core.diagnostic.util.TokenMask;
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
@@ -23,46 +23,16 @@ public class JsLinter {
         if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
 
         List<Problem> problems = new ArrayList<>();
-        TokenMask mask = TokenMask.build(text, "js");
+        TokenStream mask = JsLexer.tokenize(text);
         String[] lines = LinterUtils.splitLines(text);
 
-        JsLinterCoreRules.checkVarUsage(file, text, mask, problems);
-        JsLinterCoreRules.checkConsole(file, text, mask, problems);
-        JsLinterCoreRules.checkDebugger(file, text, mask, problems);
-        JsLinterCoreRules.checkLooseEquality(file, text, mask, problems);
-        JsLinterCoreRules.checkEval(file, text, mask, problems);
-        JsLinterCoreRules.checkSetTimeoutString(file, text, mask, problems);
-        JsLinterCoreRules.checkNewObjectArray(file, text, mask, problems);
-        JsLinterCoreRules.checkWith(file, text, mask, problems);
-        JsLinterCoreRules.checkNaNComparison(file, text, mask, problems);
-        JsLinterCoreRules.checkEmptyCatch(file, text, mask, problems);
-        JsLinterCoreRules.checkInfiniteLoop(file, text, mask, problems);
-        JsLinterCoreRules.checkSwitchDefault(file, text, mask, problems);
-        JsLinterCoreRules.checkPromiseChain(file, text, mask, problems);
-        JsLinterCoreRules.checkMissingAwait(file, text, lines, mask, problems);
-        JsLinterCoreRules.checkAsyncNoAwait(file, text, mask, problems);
-        JsLinterStyleRules.checkTypeofComparison(file, text, mask, problems);
-        JsLinterStyleRules.checkTodoFixme(file, text, problems);
-        JsLinterStyleRules.checkFunctionParams(file, text, mask, problems);
-        JsLinterStyleRules.checkDivisionByZero(file, text, mask, problems);
-        JsLinterStyleRules.checkUnreachableCode(file, text, lines, mask, problems);
-        JsLinterStyleRules.checkConstReassign(file, text, mask, problems);
-        JsLinterStyleRules.checkUnclosedString(file, text, lines, mask, problems);
-        JsLinterStyleRules.checkReturnOutsideFunction(file, text, mask, problems);
-        JsLinterStyleRules.checkBreakContinue(file, text, mask, problems);
-        JsLinterStyleRules.checkUnusedVars(file, text, mask, index, problems);
-        JsLinterStyleRules.checkArrowSimplification(file, text, mask, problems);
-        JsLinterStyleRules.checkStringConcat(file, text, mask, problems);
-        JsLinterStyleRules.checkOptionalChaining(file, text, mask, problems);
-        JsLinterStyleRules.checkNullishCoalescing(file, text, mask, problems);
-        JsLinterStyleRules.checkStringConcatInLoop(file, text, mask, problems);
-
         if (index != null) {
-            JsSemanticLinter.analyze(file, text, mask, index, problems);
+            com.cocode.vcode.ide.core.language.js.ParseResult cached = index.getParseResult(file.getAbsolutePath());
+            JsSyntaxTree tree = (cached != null && cached.tree != null) ? cached.tree : JsParser.parseFull(text, mask);
+            ScopeTree scopeTree = (cached != null && cached.scopeTree != null) ? cached.scopeTree : ScopeTree.build(tree);
+            JsSemanticLinter.analyze(file, text, mask, tree, scopeTree, index, problems);
         }
 
         return problems;
     }
-
-    // Rule implementations
 }

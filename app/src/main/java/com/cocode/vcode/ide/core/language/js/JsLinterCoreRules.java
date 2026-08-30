@@ -1,7 +1,7 @@
 package com.cocode.vcode.ide.core.language.js;
 
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
-import com.cocode.vcode.ide.core.diagnostic.util.TokenMask;
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
@@ -29,7 +29,7 @@ public class JsLinterCoreRules {
     public static final Pattern PAT_SET_TIMEOUT_EVAL = Pattern.compile("\\b(setTimeout|setInterval)\\s*\\(\\s*['\"`]");
     public static final Pattern PAT_NEW_OBJ_ARR = Pattern.compile("\\bnew\\s+(Object|Array)\\s*\\(");
 
-    public static void checkVarUsage(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkVarUsage(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_VAR.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -41,7 +41,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkConsole(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkConsole(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_CONSOLE.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -53,7 +53,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkDebugger(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkDebugger(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_DEBUGGER.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -65,7 +65,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkLooseEquality(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkLooseEquality(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_LOOSE_EQ.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -88,7 +88,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkEval(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkEval(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_EVAL.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -100,7 +100,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkSetTimeoutString(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkSetTimeoutString(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_SET_TIMEOUT_EVAL.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -113,7 +113,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkNewObjectArray(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkNewObjectArray(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_NEW_OBJ_ARR.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -127,7 +127,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkWith(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkWith(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_WITH.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -139,7 +139,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkNaNComparison(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkNaNComparison(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_NAN_CMP.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -151,7 +151,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkEmptyCatch(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkEmptyCatch(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_EMPTY_CATCH.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -163,7 +163,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkInfiniteLoop(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkInfiniteLoop(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_INF_LOOP.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -193,7 +193,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkSwitchDefault(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkSwitchDefault(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_SWITCH.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -222,7 +222,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkPromiseChain(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkPromiseChain(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_THEN.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -244,7 +244,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkMissingAwait(File file, String text, String[] lines, TokenMask mask, List<Problem> out) {
+    public static void checkMissingAwait(File file, String text, String[] lines, TokenStream mask, List<Problem> out) {
         // Check fetch( without await on same line
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -261,7 +261,7 @@ public class JsLinterCoreRules {
         }
     }
 
-    public static void checkAsyncNoAwait(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkAsyncNoAwait(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_ASYNC_FN.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;

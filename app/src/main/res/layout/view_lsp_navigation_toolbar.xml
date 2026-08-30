@@ -55,6 +55,20 @@
                     app:tint="@color/vcode_text_primary"
                     android:contentDescription="@string/vcode_lsp_find_references" />
 
+                <!-- Rename -->
+                <ImageView
+                    android:id="@+id/btnRename"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp"
+                    android:src="@drawable/ic_pen"
+                    app:tint="@color/vcode_text_primary"
+                    android:contentDescription="@string/vcode_action_rename" />
+
             </LinearLayout>
         </HorizontalScrollView>
     </com.google.android.material.card.MaterialCardView>

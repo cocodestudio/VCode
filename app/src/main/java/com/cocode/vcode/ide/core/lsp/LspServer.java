@@ -81,6 +81,16 @@ public interface LspServer {
     List<LspLocation> references(LspDocument doc, LspPosition pos);
 
     /**
+     * Compute all reference locations for the symbol at the given position, specifically for renaming.
+     * Unlike references(), this only returns locations in the same scope chain.
+     *
+     * @param doc current document
+     * @param pos caret position
+     * @return list of locations to replace, never null
+     */
+    List<LspLocation> rename(LspDocument doc, LspPosition pos);
+
+    /**
      * Compute signature help (parameter hints) at the given position.
      * Typically triggered when the user types {@code (} or {@code ,}.
      *

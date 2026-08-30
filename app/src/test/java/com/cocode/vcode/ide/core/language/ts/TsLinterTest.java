@@ -16,21 +16,21 @@ public class TsLinterTest {
     @Test
     public void testAnalyze() {
         // Just verify it doesn't crash and delegates properly
-        String ts = "const x: number = 1 / 0;";
+        String ts = "const x: number = 'hello';";
 
         List<Problem> problems = TsLinter.analyze(mockFile, ts);
         
         assertFalse("Linter should find problems", problems.isEmpty());
         
-        boolean foundDivZero = false;
+        boolean foundMismatch = false;
 
         for (Problem p : problems) {
             String msg = p.getMessage().toLowerCase();
-            if (msg.contains("division by zero") || msg.contains("divide by zero")) {
-                foundDivZero = true;
+            if (msg.contains("type mismatch")) {
+                foundMismatch = true;
             }
         }
 
-        assertTrue("Should detect division by zero in TS", foundDivZero);
+        assertTrue("Should detect type mismatch in TS", foundMismatch);
     }
 }

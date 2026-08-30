@@ -822,6 +822,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return;
         }
 
+        String fileName = activeFile.getFile().getName().toLowerCase();
+        if (fileName.endsWith(".min.js") || fileName.endsWith(".min.css")) {
+            Toast.makeText(this, R.string.vcode_cannot_format_minified, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String rawCode = java.util.Objects.requireNonNull(codeEditText.getText()).toString();
         FileType lang = activeFile.getFileType();
         int originalCursor = codeEditText.getSelectionStart();

@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
-import com.cocode.vcode.ide.core.diagnostic.util.TokenMask;
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
@@ -33,7 +33,7 @@ public class JsLinterStyleRules {
     public static final Pattern PAT_STR_CONCAT_LOOP = Pattern.compile("\\w+\\s*\\+=\\s*['\"`]|['\"`][^'\"`]*['\"`]\\s*\\+");
 
     public static void checkTypeofComparison(File file, String text,
-                                             TokenMask mask, List<Problem> out) {
+                                             TokenStream mask, List<Problem> out) {
         Matcher m = PAT_TYPEOF_CMP.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -57,7 +57,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkFunctionParams(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkFunctionParams(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_FUNC_DECL.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -89,7 +89,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkDivisionByZero(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkDivisionByZero(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_DIV_ZERO.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -101,7 +101,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkUnreachableCode(File file, String text, String[] lines, TokenMask mask, List<Problem> out) {
+    public static void checkUnreachableCode(File file, String text, String[] lines, TokenStream mask, List<Problem> out) {
         Pattern terminators = Pattern.compile("\\b(return|throw|break|continue)\\b[^;{\\n]*(;|$)");
         Matcher m = terminators.matcher(text);
         while (m.find()) {
@@ -125,44 +125,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkConstReassign(File file, String text, TokenMask mask, List<Problem> out) {
-        // JS-E004: const with no initializer
-        Matcher m = PAT_CONST_INIT.matcher(text);
-        while (m.find()) {
-            if (mask.isMasked(m.start())) continue;
-            int nameStart = m.start(1);
-            int line = LinterUtils.getLine(text, nameStart);
-            int col = LinterUtils.getColumn(text, nameStart);
-            out.add(new Problem(file, line, col, Objects.requireNonNull(m.group(1)).length(),
-                    "'const " + m.group(1) + "' must be initialized at declaration",
-                    Problem.Severity.ERROR));
-        }
-        // JS-E005: const reassignment — collect all const names with their declaration lines
-        Map<String, Integer> constDecls = new LinkedHashMap<>();
-        Matcher decl = Pattern.compile("\\bconst\\s+([a-zA-Z_$][\\w$]*)\\s*=").matcher(text);
-        while (decl.find()) {
-            if (!mask.isMasked(decl.start()))
-                constDecls.put(decl.group(1), LinterUtils.getLine(text, decl.start()));
-        }
-        for (Map.Entry<String, Integer> e : constDecls.entrySet()) {
-            String name = e.getKey();
-            int declLine = e.getValue();
-            // find reassignment: name = (not ==, !=, <=, >=, =>, +=, -=, *=, /=)
-            Pattern reassign = Pattern.compile("\\b" + Pattern.quote(name) + "\\s*(?<![=!<>+\\-*/])=(?![=>])");
-            Matcher rm = reassign.matcher(text);
-            while (rm.find()) {
-                if (mask.isMasked(rm.start())) continue;
-                int rLine = LinterUtils.getLine(text, rm.start());
-                if (rLine == declLine) continue; // skip declaration itself
-                int col = LinterUtils.getColumn(text, rm.start());
-                out.add(new Problem(file, rLine, col, name.length(),
-                        "Cannot reassign 'const' variable '" + name + "' declared on line " + declLine,
-                        Problem.Severity.ERROR));
-            }
-        }
-    }
-
-    public static void checkUnclosedString(File file, String text, String[] lines, TokenMask mask, List<Problem> out) {
+    public static void checkUnclosedString(File file, String text, String[] lines, TokenStream mask, List<Problem> out) {
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
             int lineOff = LinterUtils.lineStartOffset(text, i + 1);
@@ -172,7 +135,7 @@ public class JsLinterStyleRules {
                 int absOff = lineOff + j;
                 char c = line.charAt(j);
                 if (openQuote == 0) {
-                    if ((c == '\'' || c == '"') && !mask.inComment[absOff]) {
+                    if ((c == '\'' || c == '"') && !mask.isMasked(absOff)) {
                         openQuote = c;
                         openPos = j;
                     }
@@ -187,7 +150,7 @@ public class JsLinterStyleRules {
                     }
                 }
             }
-            if (openQuote != 0 && !mask.inComment[lineOff]) {
+            if (openQuote != 0 && !mask.isMasked(lineOff)) {
                 out.add(new Problem(file, i + 1, openPos + 1, 1,
                         "Unclosed string literal: string opened with '" + openQuote + "' is not closed on this line",
                         Problem.Severity.ERROR));
@@ -195,7 +158,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkReturnOutsideFunction(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkReturnOutsideFunction(File file, String text, TokenStream mask, List<Problem> out) {
         // Track function depth via { }; return at depth 0 is outside any function
         int fnDepth = 0;
         int i = 0;
@@ -239,7 +202,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkBreakContinue(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkBreakContinue(File file, String text, TokenStream mask, List<Problem> out) {
         int loopDepth = 0;
         int i = 0;
         while (i < text.length()) {
@@ -297,7 +260,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkUnusedVars(File file, String text, TokenMask mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index, List<Problem> out) {
+    public static void checkUnusedVars(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index, List<Problem> out) {
         Matcher m = PAT_LET_CONST.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -353,7 +316,7 @@ public class JsLinterStyleRules {
         return false;
     }
 
-    public static void checkArrowSimplification(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkArrowSimplification(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_ARROW_SIMP.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -365,7 +328,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkStringConcat(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkStringConcat(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_STR_CONCAT.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -377,7 +340,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkOptionalChaining(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkOptionalChaining(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_OPT_CHAIN.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -389,7 +352,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkNullishCoalescing(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkNullishCoalescing(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_NULLISH.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -401,7 +364,7 @@ public class JsLinterStyleRules {
         }
     }
 
-    public static void checkStringConcatInLoop(File file, String text, TokenMask mask, List<Problem> out) {
+    public static void checkStringConcatInLoop(File file, String text, TokenStream mask, List<Problem> out) {
         // Find for/while loops and check body for string concatenation
         Pattern loopPat = Pattern.compile("\\b(for|while)\\s*\\(");
         Matcher m = loopPat.matcher(text);

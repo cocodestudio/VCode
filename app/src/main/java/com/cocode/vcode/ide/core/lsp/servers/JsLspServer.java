@@ -458,11 +458,49 @@ public final class JsLspServer implements LspServer {
             }
         }
 
-        // Fall back to project-wide symbol lookup
+        // Try local file resolution using ScopeTree
         int offset = doc.toOffset(pos);
         String word = extractWord(doc.text, offset >= 0 ? offset : 0);
         if (word.isEmpty()) return null;
 
+        com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(doc.text);
+        com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(doc.text, tokens);
+        com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree = com.cocode.vcode.ide.core.language.js.ScopeTree.build(tree);
+        
+        int scopeId = scopeTree.findScopeAt(offset, tree);
+        int[] resolved = scopeTree.lookupSymbol(word, scopeId);
+        
+        if (resolved != null) {
+            int declNodeId = resolved[1];
+            int declType = tree.nodeType[declNodeId];
+            int declNameOffset = -1;
+            
+            if (declType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
+                declNameOffset = tree.nodeStart[declNodeId];
+            } else {
+                for (int t = 0; t < tokens.types.length; t++) {
+                    if (tokens.tokenStart[t] < tree.nodeStart[declNodeId]) continue;
+                    if (tokens.tokenStart[t] >= tree.nodeEnd[declNodeId]) break;
+                    
+                    if (tokens.types[t] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER) {
+                        int tStart = tokens.tokenStart[t];
+                        int tEnd = tStart + word.length();
+                        if (tEnd <= doc.text.length() && doc.text.substring(tStart, tEnd).equals(word)) {
+                            declNameOffset = tStart;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (declNameOffset != -1) {
+                LspPosition start = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declNameOffset);
+                LspPosition end = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declNameOffset + word.length());
+                return new LspLocation(doc.uri, new LspRange(start, end));
+            }
+        }
+
+        // Fall back to project-wide symbol lookup
         List<LspLocation> defs = ProjectIndex.getInstance().findDefinitions(word);
         return (defs != null && !defs.isEmpty()) ? defs.get(0) : null;
     }
@@ -475,6 +513,80 @@ public final class JsLspServer implements LspServer {
         if (word.isEmpty()) return Collections.emptyList();
 
         return findUsagesInProject(word);
+    }
+
+    @Override
+    public List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return Collections.emptyList();
+        int offset = doc.toOffset(pos);
+        String word = extractWord(doc.text, offset >= 0 ? offset : 0);
+        if (word.isEmpty()) return Collections.emptyList();
+
+        com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(doc.text);
+        com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(doc.text, tokens);
+        com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree = com.cocode.vcode.ide.core.language.js.ScopeTree.build(tree);
+
+        int scopeId = scopeTree.findScopeAt(offset, tree);
+        if (scopeId == -1) return Collections.emptyList();
+
+        int[] entry = scopeTree.lookupSymbol(word, scopeId);
+        if (entry == null) return Collections.emptyList();
+        int declarationScopeId = entry[0];
+
+        int[] offsets = scopeTree.findAllReferences(word, declarationScopeId, tree);
+        List<LspLocation> result = new ArrayList<>();
+
+        // Always include the declaration site itself (N_VAR_DECL etc. are not N_IDENTIFIER,
+        // so findAllReferences never picks them up).
+        int declNodeId = entry[1];
+        int nameNodeId = -1;
+        
+        // The declaration node itself (e.g., N_VAR_DECL) points to the keyword (const, let).
+        // We scan the token stream forward to find the exact identifier.
+        int declType = tree.nodeType[declNodeId];
+        
+        if (declType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
+            nameNodeId = tree.nodeStart[declNodeId]; // For N_PARAM, nodeStart is the identifier
+        } else {
+            for (int t = 0; t < tokens.types.length; t++) {
+                if (tokens.tokenStart[t] < tree.nodeStart[declNodeId]) continue;
+                if (tokens.tokenStart[t] >= tree.nodeEnd[declNodeId]) break;
+                
+                if (tokens.types[t] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER) {
+                    int tStart = tokens.tokenStart[t];
+                    int tEnd = tStart + word.length();
+                    if (tEnd <= doc.text.length() && doc.text.substring(tStart, tEnd).equals(word)) {
+                        nameNodeId = tStart;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (nameNodeId != -1) {
+            int declCharOffset = nameNodeId;
+            LspPosition declP = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declCharOffset);
+            LspPosition declEndP = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declCharOffset + word.length());
+            result.add(new LspLocation(doc.uri, new LspRange(declP, declEndP)));
+        }
+
+        for (int nodeId : offsets) {
+            int charOffset = tree.nodeStart[nodeId];
+            LspPosition p = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, charOffset);
+            LspPosition endP = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, charOffset + word.length());
+            result.add(new LspLocation(doc.uri, new LspRange(p, endP)));
+        }
+        
+        // Deduplicate overlapping offsets to avoid double-replacement (Task 4.3.5 fix)
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        List<LspLocation> uniqueResult = new ArrayList<>();
+        for (LspLocation loc : result) {
+            String key = loc.range.start.line + ":" + loc.range.start.character;
+            if (seen.add(key)) {
+                uniqueResult.add(loc);
+            }
+        }
+        return uniqueResult;
     }
 
     private List<LspLocation> findUsagesInProject(String word) {

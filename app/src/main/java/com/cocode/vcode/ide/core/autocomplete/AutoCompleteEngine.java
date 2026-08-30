@@ -33,7 +33,7 @@ public abstract class AutoCompleteEngine {
 
     public AutoCompleteEngine(Context context) {
         // Guard against memory leaks by capturing the application-wide context reference
-        this.context = context.getApplicationContext();
+        this.context = context != null ? context.getApplicationContext() : null;
     }
 
     /**

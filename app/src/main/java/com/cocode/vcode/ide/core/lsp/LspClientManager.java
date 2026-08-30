@@ -172,6 +172,30 @@ public final class LspClientManager {
     }
 
     /**
+     * Requests all locations of the symbol to be renamed.
+     *
+     * @param doc      current document snapshot
+     * @param pos      caret position
+     * @param callback result delivered on the main thread
+     */
+    public void requestRename(LspDocument doc, LspPosition pos,
+                              LspCallback<List<LspLocation>> callback) {
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                LspServer server = getOrStartServer(doc.languageId);
+                if (server == null || !server.isReady()) {
+                    deliverError(callback, "Language server not ready");
+                    return;
+                }
+                List<LspLocation> refs = server.rename(doc, pos);
+                deliverResult(callback, refs != null ? refs : Collections.emptyList());
+            } catch (Exception e) {
+                deliverError(callback, e.getMessage());
+            }
+        });
+    }
+
+    /**
      * Requests signature help at the given position.
      *
      * @param doc      current document snapshot

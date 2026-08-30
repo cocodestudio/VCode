@@ -269,6 +269,8 @@ public final class CssLspServer implements LspServer {
         return null;
     }
 
-
+    @Override
+    public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        return java.util.Collections.emptyList();
+    }
 }
-

@@ -12,6 +12,13 @@ public class CompletionItem {
     private Type type;
     private int replaceLength = -1;
     private int sortScore = 0;
+    /**
+     * Absolute URI of the file this completion came from. Used by
+     * cross-file completion to remember the source
+     * of an export so the import-statement auto-insert can compute
+     * the relative path. {@code null} for non-cross-file completions.
+     */
+    private String sourceUri;
 
     public CompletionItem(String label, String insertText, String detail, Type type, int cursorOffset) {
         this.label = label;
@@ -19,6 +26,20 @@ public class CompletionItem {
         this.detail = detail;
         this.type = type;
         this.cursorOffset = cursorOffset;
+    }
+
+    /**
+     * Constructor with source-URI attached. Use for cross-file
+     * completions so the import-statement auto-insert
+     * can compute the relative path.
+     */
+    public CompletionItem(String label, String insertText, String detail, Type type, int cursorOffset, String sourceUri) {
+        this.label = label;
+        this.insertText = insertText;
+        this.detail = detail;
+        this.type = type;
+        this.cursorOffset = cursorOffset;
+        this.sourceUri = sourceUri;
     }
 
     /**
@@ -66,6 +87,24 @@ public class CompletionItem {
 
     public void setSortScore(int sortScore) {
         this.sortScore = sortScore;
+    }
+
+    /**
+     * Returns the absolute URI of the file this completion came
+     * from, or {@code null} for non-cross-file completions.
+     */
+    public String getSourceUri() {
+        return sourceUri;
+    }
+
+    /**
+     * Sets the absolute URI of the file this completion came from.
+     * Used by cross-file completion to remember the export's source
+     * so the import-statement auto-insert can compute
+     * the relative path.
+     */
+    public void setSourceUri(String sourceUri) {
+        this.sourceUri = sourceUri;
     }
 
     /**

@@ -100,6 +100,9 @@
     <string name="vcode_rename_branch">Rename Branch</string>
     <string name="branch_name">Branch Name</string>
     <string name="e_g_feature_branch">e.g., feature/login-flow</string>
+    <string name="vcode_rename_symbol">Rename Symbol</string>
+    <string name="symbol_name">SYMBOL NAME</string>
+    <string name="e_g_symbol">e.g., myVariable</string>
 
     <!--    Bottom Sheet: Create Folder-->
     <string name="vcode_create_folder">Create Folder</string>
@@ -397,6 +400,7 @@
     <string name="vcode_find_in_files">Find in Files</string>
     <string name="vcode_formatting">Formatting...</string>
     <string name="vcode_cannot_format_a_media_asset">Cannot format a media asset.</string>
+    <string name="vcode_cannot_format_minified">Cannot format minified files.</string>
     <string name="vcode_no_file_open_to_format">No file open to format</string>
     <string name="vcode_saving_all_files">Saving all files...</string>
     <string name="vcode_error_project_directory_not_loaded">Error: Project directory not loaded.</string>

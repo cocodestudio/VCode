@@ -68,6 +68,16 @@ public class CodeFileViewer implements IFileViewer {
                         currentFile.setDirty(true);
                         viewModel.notifyFileDirtyStatusChanged();
                     }
+                    if (currentFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT || 
+                        currentFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.TYPESCRIPT) {
+                        int cursorOffset = codeEditText.getSelectionStart();
+                        com.cocode.vcode.ide.core.language.js.JsParsePipeline.getInstance().onTextChanged(
+                            currentFile.getFile(), codeEditText.getTextAsString(), cursorOffset);
+                    } else if (currentFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.HTML) {
+                        int cursorOffset = codeEditText.getSelectionStart();
+                        com.cocode.vcode.ide.core.language.html.HtmlParsePipeline.getInstance().onTextChanged(
+                            currentFile.getFile(), codeEditText.getTextAsString(), cursorOffset);
+                    }
                     validateCodeIfRequired();
                 }
             });
@@ -95,6 +105,10 @@ public class CodeFileViewer implements IFileViewer {
                     @Override
                     public void onShowReferences(java.util.List<com.cocode.vcode.ide.core.lsp.LspLocation> refs) {
                         if (editorCallback != null) editorCallback.showReferences(refs);
+                    }
+                    @Override
+                    public void onRenameSymbol(String newName, java.util.List<com.cocode.vcode.ide.core.lsp.LspLocation> locations) {
+                        editorLayout.onRenameSymbol(newName, locations);
                     }
                 });
             }
@@ -331,15 +345,15 @@ public class CodeFileViewer implements IFileViewer {
                     if (problems != null) {
                         final java.util.List<Problem> finalProblems = problems;
                         ExecutorProvider.getInstance().runOnMain(() -> {
+                            if (capturedCallback != null) {
+                                capturedCallback.reportProblems(capturedFile.getFile(), finalProblems);
+                            }
                             if (editorLayout == null || editorLayout.getParent() == null
                                     || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
                                 return;
                             }
                             if (codeEditText != null) {
                                 codeEditText.applyDiagnostics(finalProblems);
-                            }
-                            if (capturedCallback != null) {
-                                capturedCallback.reportProblems(capturedFile.getFile(), finalProblems);
                             }
                         });
                     }

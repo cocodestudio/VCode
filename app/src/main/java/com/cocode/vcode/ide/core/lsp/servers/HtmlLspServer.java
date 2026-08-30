@@ -310,6 +310,11 @@ public final class HtmlLspServer implements LspServer {
         return null;
     }
 
+    @Override
+    public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        return java.util.Collections.emptyList();
+    }
+
     /**
      * Resolves src="..." or href="..." to an actual file in the project.
      */

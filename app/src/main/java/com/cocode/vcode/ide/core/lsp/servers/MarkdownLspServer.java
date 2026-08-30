@@ -260,4 +260,9 @@ public final class MarkdownLspServer implements LspServer {
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return null;
     }
+
+    @Override
+    public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        return java.util.Collections.emptyList();
+    }
 }

@@ -10,9 +10,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-public class JsLinterTest {
-
-    private final File mockFile = new File("test.js");
+public class JsLinterTest extends BaseJsAstTest {
 
     @Test
     public void testAnalyze() {
@@ -25,10 +23,11 @@ public class JsLinterTest {
                     "let x = 1 / 0;\n" +
                     "if (typeof y === undefined) {}";
 
-        List<Problem> problems = JsLinter.analyze(mockFile, js);
+        setupEngine(js);
+        List<Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
         
         // Ensure that rules are integrated correctly and returning problems
-        assertFalse("Linter should find problems", problems.isEmpty());
+        for(Problem p: problems) System.out.println("PROBLEM: " + p.getMessage()); assertFalse("Linter should find problems", problems.isEmpty());
         
         boolean foundConsole = false;
         boolean foundDivZero = false;

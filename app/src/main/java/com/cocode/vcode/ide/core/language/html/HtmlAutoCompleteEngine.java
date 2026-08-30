@@ -77,7 +77,16 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     private void loadTags() {
         try {
             String json = loadAssetJson("completions/html_tags.json");
-            JSONArray arr = new JSONArray(json);
+            // The asset is a top-level object with a "tags" array plus
+            // globalAttributes / globalAttributePrefixes keys. Older
+            // versions were a bare array; accept both for back-compat.
+            org.json.JSONArray arr;
+            if (json.trim().startsWith("[")) {
+                arr = new org.json.JSONArray(json);
+            } else {
+                org.json.JSONObject root = new org.json.JSONObject(json);
+                arr = root.getJSONArray("tags");
+            }
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject obj = arr.getJSONObject(i);
                 String tag = obj.optString("tag");
@@ -167,6 +176,24 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         }
 
     // 4. Embedded <style> / <script> block delegation
+        if (currentFile != null) {
+            com.cocode.vcode.ide.core.language.js.ParseResult cached = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getParseResult(currentFile.getAbsolutePath());
+            if (cached != null) {
+                for (com.cocode.vcode.ide.core.language.js.ParseResult.EmbeddedResult emb : cached.embeddedResults) {
+                    if (cursorPos >= emb.startOffset && cursorPos <= emb.endOffset) {
+                        String embeddedContent = fullText.substring(emb.startOffset, Math.min(emb.endOffset, fullText.length()));
+                        int embeddedCursor = cursorPos - emb.startOffset;
+                        if (emb.result.tree != null) {
+                            return jsEngine.getSuggestions(embeddedContent, embeddedCursor);
+                        } else if (emb.result.cssTree != null) {
+                            return cssEngine.getSuggestions(embeddedContent, embeddedCursor);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback for when ParseResult is not available or outside bounds
         if ("style".equals(ctx.unclosedTag)) {
             // Extract only the CSS content between <style> and cursor
             int styleStart = findBlockContentStart(fullText, cursorPos, "style");

@@ -47,6 +47,12 @@ public class CssLinter {
     public static List<Problem> analyze(File file, String text) {
         if (text == null || text.trim().isEmpty()) return new ArrayList<>();
         List<Problem> problems = new ArrayList<>();
+        
+        int mode = com.cocode.vcode.ide.core.language.base.ParseModeGate.selectByLineCount(text);
+        if (mode == com.cocode.vcode.ide.core.language.js.ParseResult.MODE_TOKENIZE_ONLY) {
+            return problems;
+        }
+        
         TokenMask mask = TokenMask.build(text, "css");
 
         Deque<Integer> braceStack = new ArrayDeque<>();

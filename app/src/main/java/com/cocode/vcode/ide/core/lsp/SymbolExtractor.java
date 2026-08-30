@@ -1,5 +1,10 @@
 package com.cocode.vcode.ide.core.lsp;
 
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
+import com.cocode.vcode.ide.core.language.js.JsLexer;
+import com.cocode.vcode.ide.core.language.js.JsParser;
+import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -19,20 +24,7 @@ import java.util.regex.Pattern;
  */
 public final class SymbolExtractor {
 
-    // JS / TS patterns
-    private static final Pattern JS_FUNCTION = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:async\\s+)?function\\s+(\\w+)\\s*\\(([^)]*)\\)", Pattern.MULTILINE);
-    private static final Pattern JS_CONST_ARROW = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*=\\s*(?:async\\s*)?(?:\\(([\\s\\S]*?)\\)|(\\w+))\\s*=>",
-            Pattern.MULTILINE);
-    private static final Pattern JS_CLASS = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:abstract\\s+)?class\\s+(\\w+)", Pattern.MULTILINE);
-    private static final Pattern JS_CONSTRUCTOR = Pattern.compile(
-            "class\\s+(\\w+)(?:\\s+extends\\s+\\w+)?\\s*\\{(?:(?!\\bclass\\b)[\\s\\S])*?constructor\\s*\\(([^)]*)\\)", Pattern.DOTALL);
-    private static final Pattern JS_METHOD = Pattern.compile(
-            "(?:^|\\s)(?:static\\s+)?(?:async\\s+)?(?!(?:if|for|while|switch|catch|function|constructor)\\b)(\\w+)\\s*\\(([^)]*)\\)\\s*\\{", Pattern.MULTILINE);
-    private static final Pattern JS_VAR = Pattern.compile(
-            "(?:^|\\s)(?:export\\s+)?(?:const|let|var)\\s+(\\w+)\\s*[=;]", Pattern.MULTILINE);
+    // JS/TS patterns replaced by AST in Phase 2
 
     // CSS patterns
     private static final Pattern CSS_CLASS_SELECTOR = Pattern.compile(
@@ -47,6 +39,22 @@ public final class SymbolExtractor {
             "\\bclass=[\"']([^\"']+)[\"']");
 
     private SymbolExtractor() {
+    }
+
+    /**
+     * Extracts the word at the given offset.
+     */
+    public static String extractWord(String text, int offset) {
+        if (text == null || offset < 0 || offset > text.length()) return "";
+        int start = offset;
+        while (start > 0 && (Character.isLetterOrDigit(text.charAt(start - 1)) || text.charAt(start - 1) == '_' || text.charAt(start - 1) == '$')) {
+            start--;
+        }
+        int end = offset;
+        while (end < text.length() && (Character.isLetterOrDigit(text.charAt(end)) || text.charAt(end) == '_' || text.charAt(end) == '$')) {
+            end++;
+        }
+        return text.substring(start, end);
     }
 
     /**
@@ -82,36 +90,43 @@ public final class SymbolExtractor {
         List<SymbolEntry> results = new ArrayList<>();
         String text = doc.text;
 
-        findPatternWithDetail(doc, text, JS_FUNCTION, SymbolEntry.KIND_FUNCTION, results);
-        findPatternWithDetailArrow(doc, text, JS_CONST_ARROW, SymbolEntry.KIND_FUNCTION, results);
-        
-        // Find constructors first
-        findPatternWithDetail(doc, text, JS_CONSTRUCTOR, SymbolEntry.KIND_CLASS, results);
-        
-        // Find other classes that didn't have explicit constructors
-        Matcher classMatcher = JS_CLASS.matcher(text);
-        while (classMatcher.find()) {
-            String name = classMatcher.group(1);
-            if (name == null || name.isEmpty()) continue;
-            boolean alreadyHasConstructor = false;
-            for (SymbolEntry se : results) {
-                if (se.kind == SymbolEntry.KIND_CLASS && name.equals(se.name)) {
-                    alreadyHasConstructor = true;
-                    break;
+        TokenStream stream = JsLexer.tokenize(text);
+        JsSyntaxTree tree = JsParser.parseTopLevel(text, stream);
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int type = tree.nodeType[i];
+            String name = tree.nodeName[i];
+            if (name == null || name.isEmpty() || "{destructure}".equals(name)) continue;
+
+            int kind = -1;
+            if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC || 
+                type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER) {
+                kind = SymbolEntry.KIND_FUNCTION;
+            } else if (type == JsSyntaxTree.N_CLASS_DECL) {
+                kind = SymbolEntry.KIND_CLASS;
+            } else if (type == JsSyntaxTree.N_VAR_DECL) {
+                // Promote variables with arrow functions or function expressions to KIND_FUNCTION
+                String stmt = text.substring(tree.nodeStart[i], tree.nodeEnd[i]);
+                if (stmt.contains("=>") || stmt.contains("function")) {
+                    kind = SymbolEntry.KIND_FUNCTION;
+                } else {
+                    kind = SymbolEntry.KIND_VARIABLE;
                 }
             }
-            if (!alreadyHasConstructor) {
-                LspPosition pos = offsetToPosition(text, classMatcher.start(1));
+            
+            if (kind != -1) {
+                // Find exact offset of the identifier
+                int nameStart = tree.nodeStart[i];
+                int nameIndex = text.indexOf(name, nameStart);
+                if (nameIndex != -1 && nameIndex < tree.nodeEnd[i]) {
+                    nameStart = nameIndex;
+                }
+
+                LspPosition pos = offsetToPosition(text, nameStart);
                 LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-                results.add(new SymbolEntry(name, doc.uri, range, SymbolEntry.KIND_CLASS));
+                results.add(new SymbolEntry(name, doc.uri, range, kind));
             }
         }
-        
-        // Methods
-        findPatternWithDetail(doc, text, JS_METHOD, SymbolEntry.KIND_FUNCTION, results);
-        
-        // Vars
-        findPattern(doc, text, JS_VAR, SymbolEntry.KIND_VARIABLE, results);
 
         return results;
     }

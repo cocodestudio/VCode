@@ -153,6 +153,50 @@ public class CodeEditorLayout extends LinearLayout {
         return selectionToolbar;
     }
 
+    /**
+     * Executes a global rename of a symbol across all provided locations within this editor.
+     * Starts an undo group to allow rolling back the entire rename operation at once.
+     * Locations are processed bottom-up to avoid offset shifting.
+     */
+    public void onRenameSymbol(String newName, java.util.List<com.cocode.vcode.ide.core.lsp.LspLocation> locations) {
+        if (codeEditText == null || locations == null || locations.isEmpty() || newName == null) return;
+        
+        com.cocode.vcode.ide.core.editor.text.Content content = codeEditText.getContent();
+        com.cocode.vcode.ide.core.editor.text.UndoStack undoStack = codeEditText.getUndoStack();
+        if (content == null || undoStack == null) return;
+
+        // Sort locations backwards (highest offset first) so earlier offsets aren't invalidated by length changes
+        java.util.Collections.sort(locations, (a, b) -> {
+            int offsetA = codeEditText.toOffset(a.range.start);
+            int offsetB = codeEditText.toOffset(b.range.start);
+            return Integer.compare(offsetB, offsetA);
+        });
+
+        undoStack.beginAtomicGroup();
+        for (com.cocode.vcode.ide.core.lsp.LspLocation loc : locations) {
+            // Only rename if it's the current file
+            if (!loc.uri.equals(codeEditText.getCurrentFile().getAbsolutePath())) continue;
+            
+            int startOff = codeEditText.toOffset(loc.range.start);
+            int endOff = codeEditText.toOffset(loc.range.end);
+            
+            if (startOff >= 0 && endOff > startOff) {
+                String oldText = content.getSubstring(startOff, endOff);
+                
+                com.cocode.vcode.ide.core.editor.text.ContentPosition startPos = content.positionAt(startOff);
+                com.cocode.vcode.ide.core.editor.text.ContentPosition endPos = content.positionAt(endOff);
+                
+                com.cocode.vcode.ide.core.editor.text.UndoStack.EditorSnapshot snap = new com.cocode.vcode.ide.core.editor.text.UndoStack.EditorSnapshot(startPos, null, codeEditText.getScrollX(), codeEditText.getScrollY());
+                undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column, oldText, newName, snap, snap);
+                content.replace(startPos.line, startPos.column, endPos.line, endPos.column, newName);
+            }
+        }
+        codeEditText.getHandler().post(undoStack::endAtomicGroup);
+        
+        // Notify the editor of the content change
+        codeEditText.invalidate();
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();

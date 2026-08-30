@@ -3150,4 +3150,21 @@ public class CodeEditText extends View {
             editor.scheduleAutoComplete();
         }
     }
+    
+    public Content getContent() {
+        return content;
+    }
+
+    public UndoStack getUndoStack() {
+        return undoStack;
+    }
+
+    public File getCurrentFile() {
+        return currentFile;
+    }
+
+    public int toOffset(com.cocode.vcode.ide.core.lsp.LspPosition pos) {
+        if (pos == null) return -1;
+        return content.flatOffset(new ContentPosition(pos.line, pos.character));
+    }
 }

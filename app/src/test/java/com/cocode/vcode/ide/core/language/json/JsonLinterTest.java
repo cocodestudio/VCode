@@ -7,34 +7,37 @@ import java.io.File;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class JsonLinterTest {
 
-    private final File mockFile = new File("test.json");
-
     @Test
-    public void testValidJson() {
-        String json = "{\n  \"key\": \"value\",\n  \"number\": 123\n}";
-        List<Problem> problems = JsonLinter.analyze(mockFile, json);
-        assertTrue("Valid JSON should have no problems", problems.isEmpty());
+    public void testValidJsonHasNoProblems() {
+        String source = "{ \"a\": 1, \"b\": 2 }";
+        List<Problem> problems = JsonLinter.analyze(new File("test.json"), source);
+        assertEquals(0, problems.size());
     }
 
     @Test
-    public void testMissingQuote() {
-        String json = "{ \"key: \"value\" }"; // missing closing quote on key
-        List<Problem> problems = JsonLinter.analyze(mockFile, json);
-        assertFalse("Invalid JSON should have problems", problems.isEmpty());
+    public void testDuplicateKeys() {
+        String source = "{ \"a\": 1, \"b\": 2, \"a\": 3 }";
+        List<Problem> problems = JsonLinter.analyze(new File("test.json"), source);
         
-        // Exact message depends on JsonValidator implementation, 
-        // but it should return an ERROR severity problem.
-        boolean hasError = false;
-        for (Problem p : problems) {
-            if (p.getSeverity() == Problem.Severity.ERROR) {
-                hasError = true;
-            }
-        }
-        assertTrue("Should report a syntax error", hasError);
+        assertEquals(1, problems.size());
+        Problem p = problems.get(0);
+        assertEquals(Problem.Severity.WARNING, p.getSeverity());
+        assertTrue(p.getMessage().contains("Duplicate"));
+        assertTrue(p.getMessage().contains("\"a\""));
+    }
+
+    @Test
+    public void testSyntaxErrors() {
+        String source = "{ \"a\" 1 }";
+        List<Problem> problems = JsonLinter.analyze(new File("test.json"), source);
+        
+        assertEquals(1, problems.size());
+        Problem p = problems.get(0);
+        assertEquals(Problem.Severity.ERROR, p.getSeverity());
+        assertEquals("Missing colon", p.getMessage());
     }
 }

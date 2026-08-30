@@ -1,7 +1,8 @@
 package com.cocode.vcode.ide.core.language.ts;
 
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
-import com.cocode.vcode.ide.core.diagnostic.util.TokenMask;
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
+import com.cocode.vcode.ide.core.language.js.JsLexer;
 import com.cocode.vcode.ide.core.language.js.JsLinter;
 import com.cocode.vcode.ide.core.model.Problem;
 
@@ -50,7 +51,7 @@ public class TsLinter {
 
         List<Problem> problems = new ArrayList<>(JsLinter.analyze(file, text, index));
 
-        TokenMask mask = TokenMask.build(text, "ts");
+        TokenStream mask = JsLexer.tokenize(text);
         String[] lines = LinterUtils.splitLines(text);
 
         checkTypeMismatch(file, text, mask, problems);
@@ -73,7 +74,7 @@ public class TsLinter {
     }
 
     // TS-specific rules
-    private static void checkTypeMismatch(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkTypeMismatch(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_TYPE_MISMATCH.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -103,7 +104,7 @@ public class TsLinter {
         return null;
     }
 
-    private static void checkReturnAny(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkReturnAny(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_RETURN_ANY.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -116,7 +117,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkNonNullOnNullable(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkNonNullOnNullable(File file, String text, TokenStream mask, List<Problem> out) {
         // Find variables typed as X | null or X | undefined, then check for ! usage on them
         Pattern nullableDecl = Pattern.compile("\\b(\\w+)\\s*:[^=\\n]*(\\|\\s*null|\\|\\s*undefined)");
         Matcher declM = nullableDecl.matcher(text);
@@ -138,7 +139,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkAnyType(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkAnyType(File file, String text, TokenStream mask, List<Problem> out) {
         // Skip return-type 'any' (already covered by checkReturnAny), flag param/var 'any'
         Pattern anyParam = Pattern.compile("\\b(\\w+)\\s*:\\s*any\\b");
         Matcher m = anyParam.matcher(text);
@@ -157,7 +158,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkAsAssertion(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkAsAssertion(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_AS_CAST.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -170,7 +171,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkExportedFnReturnType(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkExportedFnReturnType(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_EXPORT_FN.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -183,7 +184,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkOptionalBeforeRequired(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkOptionalBeforeRequired(File file, String text, TokenStream mask, List<Problem> out) {
         // Match function parameter lists
         Pattern fnParams = Pattern.compile("(?:function\\s+\\w+|=>|\\()\\s*\\(([^)]+)\\)");
         Matcher m = fnParams.matcher(text);
@@ -207,7 +208,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkNamespace(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkNamespace(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_NAMESPACE.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -219,7 +220,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkFunctionType(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkFunctionType(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_FUNCTION_TYPE.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -231,7 +232,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkEnum(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkEnum(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_ENUM.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -244,7 +245,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkRedundantType(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkRedundantType(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_REDUNDANT_TYPE.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -263,7 +264,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkHighNonNullAssertion(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkHighNonNullAssertion(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_NONNULL_COUNT.matcher(text);
         int count = 0;
         while (m.find()) {
@@ -276,7 +277,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkUnionUndefined(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkUnionUndefined(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_UNION_UNDEFINED.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -288,7 +289,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkReadonlyArray(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkReadonlyArray(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_READONLY_ARRAY.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
@@ -301,7 +302,7 @@ public class TsLinter {
         }
     }
 
-    private static void checkInlineObjectType(File file, String text, TokenMask mask, List<Problem> out) {
+    private static void checkInlineObjectType(File file, String text, TokenStream mask, List<Problem> out) {
         Matcher m = PAT_INLINE_OBJ_TYPE.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;

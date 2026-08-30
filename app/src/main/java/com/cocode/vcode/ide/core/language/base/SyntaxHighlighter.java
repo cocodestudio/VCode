@@ -33,6 +33,22 @@ public class SyntaxHighlighter {
         colorNumber = getColor(R.color.vcode_color_js_number);
     }
 
+    /**
+     * Test-only constructor: skips {@code getColor} resolution so
+     * unit tests can construct a highlighter without a real Android
+     * {@code Context}. The colour fields are left at {@code 0};
+     * callers that need actual colours must use the resolver-supplied
+     * overload of the method under test (e.g.
+     * {@code JsSyntaxHighlighter.highlightViewport(..., resolver)}).
+     */
+    protected SyntaxHighlighter(Void unusedForTest) {
+        this.context = null;
+        this.colorComment = 0;
+        this.colorString = 0;
+        this.colorKeyword = 0;
+        this.colorNumber = 0;
+    }
+
     public android.text.SpannableStringBuilder highlight(String code) {
         android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder(code);
         String[] lines = code.split("\n", -1);

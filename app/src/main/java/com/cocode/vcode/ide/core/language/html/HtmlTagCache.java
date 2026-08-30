@@ -88,6 +88,22 @@ public class HtmlTagCache {
     }
 
     /**
+     * If the JSON is a top-level object with a "tags" key, return
+     * the value of that key. Otherwise return the input unchanged
+     * (back-compat for the legacy bare-array shape).
+     */
+    private static String rootArray(String json) {
+        String trimmed = json.trim();
+        if (trimmed.startsWith("[")) return json;
+        try {
+            JSONObject root = new JSONObject(trimmed);
+            return root.getJSONArray("tags").toString();
+        } catch (Exception e) {
+            return json;
+        }
+    }
+
+    /**
      * Reads and parses tag properties from asset configuration files.
      * Synchronized block prevents concurrent read state collisions on application startup.
      */
@@ -99,7 +115,7 @@ public class HtmlTagCache {
             is.read(buffer);
             String jsonStr = new String(buffer, StandardCharsets.UTF_8);
 
-            JSONArray tags = new JSONArray(jsonStr);
+            JSONArray tags = new JSONArray(rootArray(jsonStr));
             VOID_ELEMENTS.clear();  // Wipe the hardcoded bootstrap records
             BLOCK_ELEMENTS.clear();
 

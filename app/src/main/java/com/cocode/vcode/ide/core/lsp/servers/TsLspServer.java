@@ -245,4 +245,9 @@ public final class TsLspServer implements LspServer {
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return JsSignatureParser.parse(doc, pos);
     }
+
+    @Override
+    public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        return java.util.Collections.emptyList();
+    }
 }
