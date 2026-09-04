@@ -94,7 +94,6 @@ public final class LspEditorBridge {
         contentSyncPending = false;
         if (!attached || editor == null) return;
         mainHandler.removeCallbacks(diagnosticRunnable);
-        if (editorCallback != null && currentFile != null) editorCallback.reportDiagnosticLoading(currentFile);
         mainHandler.post(diagnosticRunnable);
     };
 
@@ -243,7 +242,7 @@ public final class LspEditorBridge {
         }
 
         String languageId = this.fileType != null ? this.fileType.getLspLanguageId() : "plaintext";
-        hasLspServer = !"plaintext".equals(languageId);
+        hasLspServer = LspClientManager.getInstance().hasServerForLanguage(languageId);
         if (editor != null) {
             editor.suppressLegacyAutoComplete(hasLspServer);
         }
@@ -266,6 +265,16 @@ public final class LspEditorBridge {
         // that never triggers it (see contentSyncPending).
         mainHandler.removeCallbacks(diagnosticRunnable);
         this.contentSyncPending = (file != null);
+        if (contentSyncPending) {
+            // Watchdog fallback: if text loading finishes without a listener event or setText is skipped,
+            // ensure contentSyncPending is automatically cleared after 800ms.
+            mainHandler.postDelayed(() -> {
+                if (contentSyncPending && attached && editor != null && !editor.isSettingText()) {
+                    contentSyncPending = false;
+                    mainHandler.post(diagnosticRunnable);
+                }
+            }, 800L);
+        }
     }
 
 
@@ -273,7 +282,6 @@ public final class LspEditorBridge {
         if (!attached || !contentSyncPending) return;
         contentSyncPending = false;
         mainHandler.removeCallbacks(diagnosticRunnable);
-        if (editorCallback != null && currentFile != null) editorCallback.reportDiagnosticLoading(currentFile);
         mainHandler.post(diagnosticRunnable);
     }
 
@@ -438,12 +446,31 @@ public final class LspEditorBridge {
     private void performDiagnostics() {
         if (!attached || editor == null) return;
         // Defense in depth: if we're still waiting for the post-file-switch content sync
-        // (see contentSyncPending), editor.getText() may not correspond to currentFile yet.
-        // Bail rather than risk sending a mismatched (uri, text) pair — textLoadListener will
-        // re-trigger this once the real content lands.
-        if (contentSyncPending) return;
+        // (see contentSyncPending), check if editor is actually still setting text.
+        if (contentSyncPending) {
+            if (editor.isSettingText()) {
+                return;
+            }
+            contentSyncPending = false;
+        }
         LspDocument doc = buildSnapshot();
-        if (doc == null) return;
+        if (doc == null) {
+            if (editorCallback != null && currentFile != null) {
+                editorCallback.reportProblems(currentFile, Collections.emptyList());
+            }
+            return;
+        }
+
+        // Fast-path: empty documents have no diagnostics. Immediately report empty problems
+        // to clear any loading indicator and prevent unnecessary background work.
+        if (doc.text == null || doc.text.trim().isEmpty()) {
+            if (editor != null) editor.applyDiagnostics(Collections.emptyList());
+            if (editorCallback != null && currentFile != null) {
+                editorCallback.reportProblems(currentFile, Collections.emptyList());
+            }
+            return;
+        }
+
         final int capturedVersion = doc.version;
         
         if (editorCallback != null && currentFile != null) {
@@ -453,23 +480,32 @@ public final class LspEditorBridge {
         LspClientManager.getInstance().requestDiagnostics(doc, new LspCallback<List<Problem>>() {
             @Override
             public void onResult(List<Problem> result) {
-                // Discard stale result if the document has changed since the request
-                if (capturedVersion != docVersion.get()) return;
                 if (!attached || editor == null) return;
-                editor.applyDiagnostics(result);
+                List<Problem> finalResult = result != null ? result : Collections.emptyList();
+                // If the document has changed since this request was made, ensure another diagnostic pass runs
+                if (capturedVersion != docVersion.get()) {
+                    mainHandler.removeCallbacks(diagnosticRunnable);
+                    mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
+                    return;
+                }
+                editor.applyDiagnostics(finalResult);
                 if (editorCallback != null && currentFile != null) {
-                    editorCallback.reportProblems(currentFile, result);
+                    editorCallback.reportProblems(currentFile, finalResult);
                 }
             }
 
             @Override
             public void onError(String errorMessage) {
-                // Server not ready yet — clear any stale squiggles and clear the analyzing UI
-                if (attached && editor != null && capturedVersion == docVersion.get()) {
+                // Clear any stale squiggles and clear the analyzing UI
+                if (attached && editor != null) {
                     editor.applyDiagnostics(new ArrayList<>());
                     if (editorCallback != null && currentFile != null) {
                         editorCallback.reportProblems(currentFile, new ArrayList<>());
                     }
+                }
+                if (capturedVersion != docVersion.get()) {
+                    mainHandler.removeCallbacks(diagnosticRunnable);
+                    mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
                 }
             }
         });

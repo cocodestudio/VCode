@@ -29,6 +29,7 @@ public class VCodeApplication extends Application {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.setAppContext(this);
         KnownElements.init(this);
         HtmlTagCache.load(this);
 

@@ -168,4 +168,51 @@ public final class MdSyntaxTree {
 
         return id;
     }
+
+    public int findNodeAt(int offset) {
+        if (nodesByOffset == null || nodeCount <= 1) return 0;
+        int low = 1, high = nodeCount - 1;
+        int best = 0;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            int node = nodesByOffset[mid];
+            if (nodeStart[node] <= offset && offset <= nodeEnd[node]) {
+                best = node;
+                int child = nodeChild[node];
+                while (child != 0) {
+                    if (nodeStart[child] <= offset && offset <= nodeEnd[child]) {
+                        return getDeepestChild(child, offset);
+                    }
+                    child = nodeSibling[child];
+                }
+                return best;
+            } else if (nodeStart[node] > offset) {
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+        return best;
+    }
+
+    public int getEnclosingBlock(int offset, int blockType) {
+        int node = findNodeAt(offset);
+        while (node > 0) {
+            if (nodeType[node] == blockType) return node;
+            node = nodeParent[node];
+        }
+        return 0;
+    }
+
+    private int getDeepestChild(int node, int offset) {
+        int best = node;
+        int child = nodeChild[node];
+        while (child != 0) {
+            if (nodeStart[child] <= offset && offset <= nodeEnd[child]) {
+                return getDeepestChild(child, offset);
+            }
+            child = nodeSibling[child];
+        }
+        return best;
+    }
 }

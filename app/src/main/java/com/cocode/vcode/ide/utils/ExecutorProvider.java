@@ -23,10 +23,16 @@ public class ExecutorProvider {
         // Single-threaded executor guarantees sequential, deterministic file operations
         ioExecutor = Executors.newSingleThreadExecutor();
         cpuExecutor = Executors.newFixedThreadPool(2);
-        // Dedicated single-threaded executor for CPU-bound diagnostic/linting work.
-        // Isolated from ioExecutor so diagnostics are never queued behind auto-saves,
-        // symbol extraction, or incremental project indexing.
-        diagnosticExecutor = Executors.newSingleThreadExecutor();
+        // Dedicated bounded worker pool for CPU-bound diagnostic/linting work.
+        // Isolated from ioExecutor so diagnostics are never queued behind auto-saves.
+        // Threads run with lower priority so UI typing is never starved on low-end devices.
+        int diagThreads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        diagnosticExecutor = Executors.newFixedThreadPool(diagThreads, r -> {
+            Thread t = new Thread(r, "vcode-diagnostic-worker");
+            t.setPriority(Thread.NORM_PRIORITY - 1);
+            t.setDaemon(true);
+            return t;
+        });
         mainHandler = new Handler(Looper.getMainLooper());
     }
 

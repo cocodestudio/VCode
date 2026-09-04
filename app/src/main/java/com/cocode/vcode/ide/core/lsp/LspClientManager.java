@@ -117,8 +117,8 @@ public final class LspClientManager {
                 }
                 List<Problem> diags = server.diagnostics(doc);
                 deliverResult(callback, diags != null ? diags : Collections.emptyList());
-            } catch (Exception e) {
-                deliverError(callback, e.getMessage());
+            } catch (Throwable t) {
+                deliverError(callback, t.getMessage());
             }
         });
     }
@@ -277,6 +277,25 @@ public final class LspClientManager {
             // Initialise on the current IO thread
             newServer.initialize(ProjectIndex.getInstance());
             return newServer;
+        }
+    }
+
+    /**
+     * Checks if an LSP server is registered and supported for the given language id.
+     */
+    public boolean hasServerForLanguage(String languageId) {
+        if (languageId == null || "plaintext".equals(languageId)) return false;
+        switch (languageId) {
+            case "html":
+            case "css":
+            case "scss":
+            case "javascript":
+            case "typescript":
+            case "json":
+            case "markdown":
+                return true;
+            default:
+                return false;
         }
     }
 

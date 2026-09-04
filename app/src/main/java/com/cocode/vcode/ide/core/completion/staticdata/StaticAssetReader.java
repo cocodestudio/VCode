@@ -60,16 +60,32 @@ public final class StaticAssetReader {
         String ovr = overrides.get(assetPath);
         if (ovr != null) return ovr;
         Context ctx = appContext;
-        if (ctx == null) return "";
-        try (java.io.InputStream is = ctx.getAssets().open(assetPath);
-             java.io.BufferedReader reader = new java.io.BufferedReader(
-                     new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            return sb.toString();
-        } catch (Exception e) {
-            return "";
+        if (ctx != null) {
+            try (java.io.InputStream is = ctx.getAssets().open(assetPath);
+                 java.io.BufferedReader reader = new java.io.BufferedReader(
+                         new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } catch (Exception e) {
+                return "";
+            }
         }
+        // JVM Unit test fallback: read directly from assets directory on disk
+        java.io.File file = new java.io.File("app/src/main/assets/" + assetPath);
+        if (!file.exists()) {
+            file = new java.io.File("src/main/assets/" + assetPath);
+        }
+        if (file.exists()) {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } catch (Exception ignored) { }
+        }
+        return "";
     }
 }

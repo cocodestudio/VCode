@@ -109,7 +109,7 @@ public class HtmlTagCache {
      */
     public static synchronized void load(Context context) {
         if (isLoaded) return; // Prevent parsing multiple times if already cached
-        try (InputStream is = context.getAssets().open("html_tags.json")) {
+        try (InputStream is = context.getAssets().open("completions/html_tags.json")) {
             int size = is.available();
             byte[] buffer = new byte[size];
             is.read(buffer);

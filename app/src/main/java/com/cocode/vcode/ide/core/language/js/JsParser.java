@@ -1034,7 +1034,9 @@ public class JsParser {
             child = tree.nodeSibling[child];
         }
         if (!keys.isEmpty()) {
-            tree.shapeTable.put(parent, keys.toArray(new String[0]));
+            String[] keyArray = keys.toArray(new String[0]);
+            tree.shapeTable.put(parent, keyArray);
+            tree.shapeTable.put(objNode, keyArray);
         }
 
         
@@ -1165,15 +1167,15 @@ public class JsParser {
                     return i;
 
                 } else if (c == ':') {
-
-                    int propNode = tree.addNode(JsSyntaxTree.N_STATEMENT, nodeStart, 0, parent, name);
+                    int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, name);
+                    String inferredPropType = inferBaseType(source, stream, i);
+                    if (inferredPropType != null) {
+                        tree.nodeTypeAnn[propNode] = inferredPropType;
+                    }
 
                     i = skipToken(stream, i);
-
                     i = parseExpressionTokens(source, stream, tree, i, propNode, STOP_OBJ_PROP);
-
                     tree.nodeEnd[propNode] = getOffset(stream, source, i);
-
                     return i;
 
                 } else if (c == '[') {
@@ -1218,96 +1220,124 @@ public class JsParser {
 
         int importNode = tree.addNode(JsSyntaxTree.N_IMPORT, nodeStart, 0, parent, null);
 
-        
-
         int i = skipToken(stream, startIdx); // skip 'import'
 
-        
+        java.util.List<Integer> declNodes = new java.util.ArrayList<>();
+        java.util.List<String> importedSymbols = new java.util.ArrayList<>();
+        boolean insideBraces = false;
+        String pendingImportedName = null;
 
         while (i < stream.length) {
-
             i = skipWhitespaceAndComments(stream, i);
-
             if (i >= stream.length) break;
 
-            
-
             byte t = stream.types[i];
-
-            if (t == TokenStream.TK_KEYWORD && "from".equals(getWord(source, stream, i))) {
-
+            String word = (t == TokenStream.TK_KEYWORD || t == TokenStream.TK_IDENTIFIER) ? getWord(source, stream, i) : null;
+            if ("from".equals(word)) {
                 break;
-
             }
-
             if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ';') {
-
                 break;
-
             }
-
             if (t == TokenStream.TK_STRING) {
-
                 break; // e.g. import "module";
-
             }
 
-            
-
-            if (t == TokenStream.TK_IDENTIFIER || (t == TokenStream.TK_KEYWORD && "default".equals(getWord(source, stream, i)))) {
-
-                String name = getWord(source, stream, i);
-
-                int declNode = tree.addNode(JsSyntaxTree.N_VAR_DECL, stream.tokenStart[i], getOffset(stream, source, skipToken(stream, i)), importNode, name);
-
-                tree.nodeExtra[declNode] = JsSyntaxTree.FLAG_CONST;
-
+            if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
+                insideBraces = true;
                 i = skipToken(stream, i);
+                continue;
+            } else if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '}') {
+                insideBraces = false;
+                i = skipToken(stream, i);
+                continue;
+            } else if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ',') {
+                i = skipToken(stream, i);
+                continue;
+            }
 
-            } else if (t == TokenStream.TK_KEYWORD && "as".equals(getWord(source, stream, i))) {
+            if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '*') {
+                pendingImportedName = "*";
+                i = skipToken(stream, i);
+                continue;
+            }
 
+            if ("as".equals(word)) {
                 i = skipToken(stream, i); // skip 'as'
-
                 i = skipWhitespaceAndComments(stream, i);
-
                 if (i < stream.length && (stream.types[i] == TokenStream.TK_IDENTIFIER || stream.types[i] == TokenStream.TK_KEYWORD)) {
-
                     String localName = getWord(source, stream, i);
-
-                    int lastChild = tree.nodeLastChild[importNode];
-
-                    if (lastChild != 0 && tree.nodeType[lastChild] == JsSyntaxTree.N_VAR_DECL) {
-
-                        tree.nodeName[lastChild] = localName;
-
-                        tree.nodeEnd[lastChild] = getOffset(stream, source, skipToken(stream, i));
-
+                    if (!declNodes.isEmpty() && pendingImportedName == null) {
+                        int lastIdx = declNodes.size() - 1;
+                        int lastDeclNode = declNodes.get(lastIdx);
+                        String origExport = tree.nodeName[lastDeclNode];
+                        tree.nodeName[lastDeclNode] = localName;
+                        tree.nodeEnd[lastDeclNode] = getOffset(stream, source, skipToken(stream, i));
+                        importedSymbols.set(lastIdx, origExport);
                     } else {
-
                         int declNode = tree.addNode(JsSyntaxTree.N_VAR_DECL, stream.tokenStart[i], getOffset(stream, source, skipToken(stream, i)), importNode, localName);
-
                         tree.nodeExtra[declNode] = JsSyntaxTree.FLAG_CONST;
-
+                        declNodes.add(declNode);
+                        importedSymbols.add(pendingImportedName != null ? pendingImportedName : "*");
+                        pendingImportedName = null;
                     }
-
                     i = skipToken(stream, i);
-
                 }
-
-            } else {
-
-                i = skipToken(stream, i);
-
+                continue;
             }
 
+            if (t == TokenStream.TK_IDENTIFIER || (t == TokenStream.TK_KEYWORD && "default".equals(word))) {
+                String name = word;
+                int declNode = tree.addNode(JsSyntaxTree.N_VAR_DECL, stream.tokenStart[i], getOffset(stream, source, skipToken(stream, i)), importNode, name);
+                tree.nodeExtra[declNode] = JsSyntaxTree.FLAG_CONST;
+                declNodes.add(declNode);
+                if (!insideBraces) {
+                    importedSymbols.add("default");
+                } else {
+                    importedSymbols.add(name);
+                }
+                i = skipToken(stream, i);
+                continue;
+            }
+
+            i = skipToken(stream, i);
         }
 
-        
+        i = skipWhitespaceAndComments(stream, i);
+        String modulePath = null;
+        if (i < stream.length) {
+            byte ft = stream.types[i];
+            String fword = (ft == TokenStream.TK_KEYWORD || ft == TokenStream.TK_IDENTIFIER) ? getWord(source, stream, i) : null;
+            if ("from".equals(fword)) {
+                i = skipToken(stream, i); // skip 'from'
+                i = skipWhitespaceAndComments(stream, i);
+                if (i < stream.length && stream.types[i] == TokenStream.TK_STRING) {
+                    String raw = getWord(source, stream, i);
+                    if (raw != null && raw.length() >= 2) {
+                        modulePath = raw.substring(1, raw.length() - 1);
+                    }
+                    i = skipToken(stream, i);
+                }
+            } else if (ft == TokenStream.TK_STRING) {
+                String raw = getWord(source, stream, i);
+                if (raw != null && raw.length() >= 2) {
+                    modulePath = raw.substring(1, raw.length() - 1);
+                }
+                i = skipToken(stream, i);
+            }
+        }
+
+        if (modulePath != null) {
+            tree.nodeName[importNode] = modulePath;
+            for (int k = 0; k < declNodes.size(); k++) {
+                int dNode = declNodes.get(k);
+                String sym = importedSymbols.get(k);
+                tree.nodeTypeAnn[dNode] = "@IMPORT:" + modulePath + ":" + sym;
+            }
+        }
 
         int endIdx = skipToNextStatement(source, stream, tree, i, importNode);
-
         tree.nodeEnd[importNode] = getOffset(stream, source, endIdx);
-
         return endIdx;
 
     }
@@ -1357,13 +1387,35 @@ public class JsParser {
                 return i;
 
             } else if ("default".equals(kw)) {
-
+                tree.nodeName[exportNode] = "default";
+                i = skipToken(stream, i); // skip 'default'
+                i = skipWhitespaceAndComments(stream, i);
+                if (i < stream.length) {
+                    byte dt = stream.types[i];
+                    if (dt == TokenStream.TK_KEYWORD) {
+                        String dkw = getWord(source, stream, i);
+                        if ("function".equals(dkw) || "async".equals(dkw)) {
+                            i = parseFunction(source, stream, tree, i, exportNode);
+                            tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+                            return i;
+                        } else if ("class".equals(dkw)) {
+                            i = parseClass(source, stream, tree, i, exportNode);
+                            tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+                            return i;
+                        }
+                    } else if (dt == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
+                        i = parseObjectLiteral(source, stream, tree, i, exportNode);
+                        tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+                        return i;
+                    } else if (dt == TokenStream.TK_IDENTIFIER) {
+                        String idName = getWord(source, stream, i);
+                        tree.addNode(JsSyntaxTree.N_IDENTIFIER, stream.tokenStart[i], getOffset(stream, source, skipToken(stream, i)), exportNode, idName);
+                        i = skipToken(stream, i);
+                    }
+                }
                 i = skipToNextStatement(source, stream, tree, i, exportNode);
-
                 tree.nodeEnd[exportNode] = getOffset(stream, source, i);
-
                 return i;
-
             }
 
         } else if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
@@ -2147,6 +2199,16 @@ public class JsParser {
                     String inferredType = inferBaseType(source, stream, nextTok);
                     if (inferredType != null && tree.nodeTypeAnn[declNode] == null) {
                         tree.nodeTypeAnn[declNode] = inferredType;
+                        if (inferredType.startsWith("@REQUIRE:")) {
+                            String reqMod = inferredType.substring(9);
+                            int cChild = tree.nodeChild[declNode];
+                            while (cChild > 0) {
+                                if (tree.nodeType[cChild] == JsSyntaxTree.N_VAR_DECL && tree.nodeName[cChild] != null) {
+                                    tree.nodeTypeAnn[cChild] = "@REQUIRE_PROP:" + reqMod + ":" + tree.nodeName[cChild];
+                                }
+                                cChild = tree.nodeSibling[cChild];
+                            }
+                        }
                     }
 
                     i = parseExpressionTokens(source, stream, tree, nextTok, declNode, STOP_VAR_DECL);
@@ -2473,6 +2535,10 @@ public class JsParser {
                     if (!keys.isEmpty()) {
                         return "@ARRAY_OF_INLINE_SHAPE:" + String.join(",", keys);
                     }
+                } else if (next < stream.length && stream.types[next] == TokenStream.TK_NUMBER) {
+                    return "@ARRAY_OF_NUMBER";
+                } else if (next < stream.length && stream.types[next] == TokenStream.TK_STRING) {
+                    return "@ARRAY_OF_STRING";
                 }
                 return "@ARRAY";
             }
@@ -2490,9 +2556,26 @@ public class JsParser {
                     if ("Map".equals(className)) return "@MAP";
                     if ("Set".equals(className)) return "@SET";
                     if ("Promise".equals(className)) return "@PROMISE";
+                    return className;
                 }
             } else if ("async".equals(kw)) {
                 return "@PROMISE";
+            } else if ("true".equals(kw) || "false".equals(kw)) {
+                return "@BOOLEAN";
+            }
+        } else if (t == TokenStream.TK_IDENTIFIER) {
+            String id = getWord(source, stream, i);
+            if ("require".equals(id)) {
+                int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '(') {
+                    int arg = skipWhitespaceAndComments(stream, skipToken(stream, next));
+                    if (arg < stream.length && stream.types[arg] == TokenStream.TK_STRING) {
+                        String raw = getWord(source, stream, arg);
+                        if (raw != null && raw.length() >= 2) {
+                            return "@REQUIRE:" + raw.substring(1, raw.length() - 1);
+                        }
+                    }
+                }
             }
         }
         return null;

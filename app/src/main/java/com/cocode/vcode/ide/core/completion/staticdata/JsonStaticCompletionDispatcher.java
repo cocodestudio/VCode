@@ -54,38 +54,59 @@ public final class JsonStaticCompletionDispatcher {
             if (!Character.isWhitespace(source.charAt(i))) { allWs = false; break; }
         }
         if (allWs) return Position.FILE_EMPTY;
-        // Walk backward from cursor to find the most recent
-        // structural token.
+
+        // Skip current word or string literal being typed
         int i = cursor - 1;
+        int quoteCount = 0;
+        for (int k = 0; k < cursor; k++) {
+            if (source.charAt(k) == '"' && (k == 0 || source.charAt(k - 1) != '\\')) {
+                quoteCount++;
+            }
+        }
+        boolean inQuotes = (quoteCount % 2 != 0);
+
+        if (inQuotes) {
+            while (i >= 0) {
+                if (source.charAt(i) == '"' && (i == 0 || source.charAt(i - 1) != '\\')) {
+                    i--;
+                    break;
+                }
+                i--;
+            }
+        } else {
+            while (i >= 0 && (Character.isLetterOrDigit(source.charAt(i)) || source.charAt(i) == '_' || source.charAt(i) == '-')) {
+                i--;
+            }
+        }
+
         while (i >= 0 && Character.isWhitespace(source.charAt(i))) i--;
         if (i < 0) return Position.KEY; // start of file → key
         char c = source.charAt(i);
         if (c == ':') return Position.VALUE;
+        if (c == '[') return Position.VALUE;
+        if (c == '{') return Position.KEY;
         if (c == ',') {
-            // Distinguish object-key position (',' between key:value
-            // pairs) from array-value position (',' between values).
-            // Walk back past the value to find the matching '[' or
-            // '{'. If we find a '[' before '{', we're in an array.
             int depth = 0;
-            int arrDepth = 0, objDepth = 0;
             for (int j = i - 1; j >= 0; j--) {
                 char cj = source.charAt(j);
-                if (cj == ']') { depth--; arrDepth--; }
-                else if (cj == '}') { depth--; objDepth--; }
+                if (cj == '"' && (j == 0 || source.charAt(j - 1) != '\\')) {
+                    j--;
+                    while (j >= 0 && (source.charAt(j) != '"' || (j > 0 && source.charAt(j - 1) == '\\'))) {
+                        j--;
+                    }
+                    continue;
+                }
+                if (cj == ']' || cj == '}') { depth--; }
                 else if (cj == '[') {
                     if (depth == 0) return Position.VALUE;
                     depth++;
-                    arrDepth++;
                 } else if (cj == '{') {
                     if (depth == 0) return Position.KEY;
                     depth++;
-                    objDepth++;
                 }
             }
-            return Position.VALUE;
+            return Position.KEY;
         }
-        if (c == '{') return Position.KEY;
-        if (c == '[') return Position.VALUE;
         return Position.NONE;
     }
 

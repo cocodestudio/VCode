@@ -72,18 +72,20 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         }
         
         if (baseDir != null && baseDir.exists() && baseDir.isDirectory()) {
-            File[] files = baseDir.listFiles();
+            List<File> files = VFSManager.getInstance().listCachedFiles(baseDir);
             if (files != null) {
                 for (File f : files) {
+                    if (f.getName().startsWith(".")) continue;
                     CompletionItem.Type type = f.isDirectory() ? CompletionItem.Type.FOLDER : CompletionItem.Type.FILE;
+                    String completion = f.getName() + (f.isDirectory() ? "/" : "");
                     CompletionItem item = new CompletionItem(
-                            f.getName() + (f.isDirectory() ? "/" : ""),
-                            f.getName() + (f.isDirectory() ? "/" : ""),
-                            "Path",
+                            completion,
+                            completion,
+                            f.isDirectory() ? "Directory" : "File",
                             type,
                             0
                     );
-                    
+                    item.setReplaceLength(filterPrefix.length());
                     suggestions.add(item);
                 }
             }

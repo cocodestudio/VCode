@@ -217,6 +217,40 @@ public final class ProjectIndex {
     }
 
     /**
+     * Retrieves the ParseResult for the given JS/TS file, or parses it on demand if not
+     * yet cached. If the file is open in the editor, its live document snapshot is used.
+     *
+     * @param file the file to get or parse
+     * @return the ParseResult, or null if file cannot be read
+     */
+    public com.cocode.vcode.ide.core.language.js.ParseResult getOrParseJsFile(File file) {
+        if (file == null) return null;
+        String uri = file.getAbsolutePath();
+        com.cocode.vcode.ide.core.language.js.ParseResult cached = getParseResult(uri);
+        if (cached != null && cached.tree != null) {
+            return cached;
+        }
+
+        try {
+            LspDocument doc = getDocument(uri);
+            String content = (doc != null && doc.text != null) ? doc.text : com.cocode.vcode.ide.utils.FileUtils.readFile(file);
+            if (content != null) {
+                com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(content);
+                com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(content, tokens);
+                if (tree != null) {
+                    tree.buildNodesByOffset();
+                }
+                com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree = com.cocode.vcode.ide.core.language.js.ScopeTree.build(tree);
+                com.cocode.vcode.ide.core.language.js.ParseResult pr = new com.cocode.vcode.ide.core.language.js.ParseResult(
+                        file, content, tokens, tree, scopeTree, com.cocode.vcode.ide.core.language.js.ParseResult.MODE_FULL);
+                updateParseResult(uri, pr);
+                return pr;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /**
      * Returns the export table for a single file, or null if the
      * file's parse result has not been published yet.
      */
@@ -481,6 +515,16 @@ public final class ProjectIndex {
             documents.put(uri, doc);
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
             fileSymbols.put(uri, symbols);
+
+            if ("javascript".equals(languageId) || "typescript".equals(languageId)) {
+                try {
+                    com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(text);
+                    com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseTopLevel(text, tokens);
+                    com.cocode.vcode.ide.core.language.js.ParseResult pr = new com.cocode.vcode.ide.core.language.js.ParseResult(file, text, tokens, tree, null, com.cocode.vcode.ide.core.language.js.ParseResult.MODE_FULL);
+                    updateParseResult(uri, pr);
+                } catch (Exception ignored) {
+                }
+            }
         } catch (Exception ignored) {
             // Skip files that cannot be read
         }

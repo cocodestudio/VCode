@@ -139,10 +139,38 @@ public class JsonSyntaxTree {
         return bestMatch;
     }
 
+    public int findNodeAt(int offset) {
+        return getNodeAtOffset(offset);
+    }
+
+    public int getEnclosingObject(int offset) {
+        int node = findNodeAt(offset);
+        while (node > 0) {
+            if (nodeType[node] == N_OBJECT) return node;
+            node = nodeParent[node];
+        }
+        return 0;
+    }
+
+    public int getEnclosingArray(int offset) {
+        int node = findNodeAt(offset);
+        while (node > 0) {
+            if (nodeType[node] == N_ARRAY) return node;
+            node = nodeParent[node];
+        }
+        return 0;
+    }
+
+    public String getKeyName(int nodeId) {
+        if (nodeId <= 0 || nodeId >= nodeCount) return null;
+        if (nodeType[nodeId] == N_KEY) return nodeName[nodeId];
+        return null;
+    }
+
     private int getDeepestNode(int node, int offset) {
         int best = node;
         int child = nodeChild[node];
-        while (child != -1) {
+        while (child != -1 && child != 0) {
             if (offset >= nodeStart[child] && offset <= nodeEnd[child]) {
                 return getDeepestNode(child, offset);
             }

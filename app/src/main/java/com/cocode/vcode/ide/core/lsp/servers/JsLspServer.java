@@ -373,30 +373,6 @@ public final class JsLspServer implements LspServer {
         int offset = doc.toOffset(pos);
         if (offset < 0) offset = doc.text.length();
 
-        // Member access completions (detect patterns like 'document.', 'console.', 'arr.')
-        String lineBeforeCursor = getLineBeforeCursor(doc.text, offset);
-        int dotIdx = lineBeforeCursor.lastIndexOf('.');
-        if (dotIdx > 0) {
-            String objectName = extractWordBefore(lineBeforeCursor, dotIdx);
-            String prefix = lineBeforeCursor.substring(dotIdx + 1);
-            List<LspCompletionItem> members = MEMBER_MAP.get(objectName);
-            if (members == null) {
-                // Type inference: 'const arr = []' → array methods
-                String inferred = inferType(objectName, doc.text);
-                if (inferred != null) members = MEMBER_MAP.get(inferred);
-            }
-            if (members != null) {
-                List<LspCompletionItem> filtered = new ArrayList<>();
-                for (LspCompletionItem item : members) {
-                    if (prefix.isEmpty() || item.label.startsWith(prefix)) {
-                        filtered.add(item);
-                    }
-                }
-                if (!filtered.isEmpty()) return filtered;
-            }
-        }
-
-        // --- Fall back to legacy engine for general keyword/scope completions ---
         autoCompleteEngine.setCurrentFile(new File(doc.uri));
         List<CompletionItem> suggestions = autoCompleteEngine.getSuggestions(doc.text, offset);
         if (suggestions == null) return Collections.emptyList();
@@ -428,11 +404,15 @@ public final class JsLspServer implements LspServer {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
-        File file = new File(doc.uri);
-        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
-        List<Problem> jsProblems = JsLinter.analyze(file, doc.text, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
-        if (jsProblems != null) problems.addAll(jsProblems);
-        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
+        try {
+            File file = new File(doc.uri);
+            List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+            List<Problem> jsProblems = JsLinter.analyze(file, doc.text, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
+            if (jsProblems != null) problems.addAll(jsProblems);
+            return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -591,17 +571,21 @@ public final class JsLspServer implements LspServer {
 
     private List<LspLocation> findUsagesInProject(String word) {
         List<LspLocation> result = new ArrayList<>();
+        if (word == null || word.trim().isEmpty()) return result;
+        String trimmed = word.trim();
         ProjectIndex projectIndex = ProjectIndex.getInstance();
-        List<LspLocation> defs = projectIndex.findDefinitions(word);
+        List<LspLocation> defs = projectIndex.findDefinitions(trimmed);
         
+        final int MAX_REFS = 100;
         for (String uri : projectIndex.getAllUris()) {
+            if (result.size() >= MAX_REFS) break;
             LspDocument d = projectIndex.getDocument(uri);
             if (d == null || d.text == null) continue;
 
             if (uri.endsWith(".js") || uri.endsWith(".ts") || uri.endsWith(".jsx") || uri.endsWith(".tsx")) {
-                Pattern p = Pattern.compile("\\b" + Pattern.quote(word) + "\\b");
+                Pattern p = Pattern.compile("\\b" + Pattern.quote(trimmed) + "\\b");
                 Matcher m = p.matcher(d.text);
-                while (m.find()) {
+                while (m.find() && result.size() < MAX_REFS) {
                     LspPosition start = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, m.start());
                     LspPosition end = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, m.end());
                     LspRange range = new LspRange(start, end);

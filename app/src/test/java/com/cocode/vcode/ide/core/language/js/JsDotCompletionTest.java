@@ -134,4 +134,64 @@ public class JsDotCompletionTest extends BaseJsAstTest {
         assertTrue("Expected Array methods like 'push' after filter()", hasPush);
         assertTrue("Expected Array methods like 'join' after filter()", hasJoin);
     }
+
+    @Test
+    public void testLiteralStringDotCompletion() {
+        String code = "\"Hello\".";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        
+        boolean hasToUpperCase = false, hasSlice = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+            if ("slice".equals(item.getLabel())) hasSlice = true;
+        }
+        
+        assertTrue("Expected 'toUpperCase' on string literal", hasToUpperCase);
+        assertTrue("Expected 'slice' on string literal", hasSlice);
+    }
+
+    @Test
+    public void testLiteralArrayDotCompletion() {
+        String code = "[1, 2, 3].";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        
+        boolean hasMap = false, hasFilter = false;
+        for (CompletionItem item : comps) {
+            if ("map".equals(item.getLabel())) hasMap = true;
+            if ("filter".equals(item.getLabel())) hasFilter = true;
+        }
+        
+        assertTrue("Expected 'map' on array literal", hasMap);
+        assertTrue("Expected 'filter' on array literal", hasFilter);
+    }
+
+    @Test
+    public void testNestedObjectAndMethodReturnChaining() {
+        String code = "const user = { profile: { address: '123 Main' } }; user.profile.address.toUpperCase().";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        
+        boolean hasToLowerCase = false, hasTrim = false;
+        for (CompletionItem item : comps) {
+            if ("toLowerCase".equals(item.getLabel())) hasToLowerCase = true;
+            if ("trim".equals(item.getLabel())) hasTrim = true;
+        }
+        
+        assertTrue("Expected 'toLowerCase' on chained string method return", hasToLowerCase);
+        assertTrue("Expected 'trim' on chained string method return", hasTrim);
+    }
+
+    @Test
+    public void testNestedObjectPropertyCompletion() {
+        String code = "const user = { address: { city: 'NYC', zip: 10001 } }; user.address.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        
+        boolean hasCity = false, hasZip = false;
+        for (CompletionItem item : comps) {
+            if ("city".equals(item.getLabel())) hasCity = true;
+            if ("zip".equals(item.getLabel())) hasZip = true;
+        }
+        
+        assertTrue("Expected 'city' on nested object", hasCity);
+        assertTrue("Expected 'zip' on nested object", hasZip);
+    }
 }

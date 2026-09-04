@@ -93,8 +93,53 @@ public class HtmlLexerTest {
     public void testMalformedTag() {
         String source = "< div >";
         HtmlTokenStream stream = HtmlLexer.tokenize(source);
-        // < space div > -> should fall back to text? 
-        // Based on my implementation: '<', then ' ' -> invalid tag, back to text.
         assertTrue(stream.isText(1));
+    }
+
+    @Test
+    public void testScriptWithLessThanComparison() {
+        String source = "<script>for (let i = 0; i < len; i++) {}</script>";
+        HtmlTokenStream stream = HtmlLexer.tokenize(source);
+        
+        // <script>
+        assertEquals(HtmlTokenStream.TK_TAG_OPEN, stream.types[0]);
+        assertTrue(stream.isTagName(1));
+        assertEquals(HtmlTokenStream.TK_TAG_CLOSE, stream.types[7]);
+        
+        // Inner script content with '<' must be TK_TEXT
+        int ltPos = source.indexOf('<', 8);
+        int closingScriptPos = source.indexOf("</script");
+        assertTrue("Found '<' in for loop", ltPos < closingScriptPos);
+        assertTrue("Inner '<' is text", stream.isText(ltPos));
+        
+        // </script>
+        assertEquals(HtmlTokenStream.TK_TAG_OPEN, stream.types[closingScriptPos]);
+        assertEquals(HtmlTokenStream.TK_TAG_OPEN, stream.types[closingScriptPos + 1]);
+        assertTrue(stream.isTagName(closingScriptPos + 2));
+    }
+
+    @Test
+    public void testStyleContent() {
+        String source = "<style>div > p { color: red; }</style>";
+        HtmlTokenStream stream = HtmlLexer.tokenize(source);
+        
+        int closingStylePos = source.indexOf("</style");
+        for (int i = 7; i < closingStylePos; i++) {
+            assertTrue("Style body char " + i + " must be text", stream.isText(i));
+        }
+        assertEquals(HtmlTokenStream.TK_TAG_OPEN, stream.types[closingStylePos]);
+    }
+
+    @Test
+    public void testUnquotedAttributeWithSlash() {
+        String source = "<a href=/test/page/index.html>link</a>";
+        HtmlTokenStream stream = HtmlLexer.tokenize(source);
+        
+        int pathStart = source.indexOf("/test");
+        int pathEnd = source.indexOf(">link");
+        for (int i = pathStart; i < pathEnd; i++) {
+            assertTrue("Path char " + i + " must be attr value", stream.isAttrValue(i));
+        }
+        assertEquals(HtmlTokenStream.TK_TAG_CLOSE, stream.types[pathEnd]);
     }
 }

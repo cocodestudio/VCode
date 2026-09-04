@@ -8,6 +8,7 @@ import com.cocode.vcode.ide.core.autocomplete.FastTrie;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 
+import com.cocode.vcode.ide.core.completion.staticdata.CssStaticCompletionDispatcher;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -16,8 +17,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Contextual suggestion engine for CSS — mirrors VS Code's CSS language server.
@@ -133,14 +132,33 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         lastTextHash = hash;
         cachedCustomProps.clear();
 
-        Matcher m = Pattern.compile("(--[a-zA-Z][\\w-]*)\\s*:").matcher(text);
-        int limit = Math.min(text.length(), 200_000);
+        // Zero-regex scan for custom properties: --identifier:
+        int len = Math.min(text.length(), 200_000);
         java.util.Set<String> seen = new java.util.HashSet<>();
-        while (m.find() && m.start() < limit) {
-            String prop = m.group(1);
-            if (seen.add(prop)) {
-                cachedCustomProps.add(new CompletionItem(prop, prop, "Custom property",
-                        CompletionItem.Type.CSS_PROPERTY, 0));
+        int i = 0;
+        while (i < len - 2) {
+            if (text.charAt(i) == '-' && text.charAt(i + 1) == '-') {
+                int start = i;
+                i += 2;
+                while (i < len) {
+                    char c = text.charAt(i);
+                    if (Character.isLetterOrDigit(c) || c == '-' || c == '_') {
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                int end = i;
+                while (i < len && Character.isWhitespace(text.charAt(i))) i++;
+                if (i < len && text.charAt(i) == ':' && end > start + 2) {
+                    String prop = text.substring(start, end);
+                    if (seen.add(prop)) {
+                        cachedCustomProps.add(new CompletionItem(prop, prop, "Custom property",
+                                CompletionItem.Type.CSS_PROPERTY, 0));
+                    }
+                }
+            } else {
+                i++;
             }
         }
     }
@@ -152,9 +170,9 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos, boolean isInlineStyle) {
-        if (fullText == null || cursorPos < 0) return new ArrayList<>();
+        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length()) return new ArrayList<>();
 
-        if (isInsideStringLiteral(fullText, cursorPos)) {
+        if (isInsideComment(fullText, cursorPos) || isInsideStringLiteral(fullText, cursorPos)) {
             return new ArrayList<>();
         }
 
@@ -165,57 +183,69 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         String word = getWordBeforeCursor(fullText, cursorPos);
 
         // Prevent showing all suggestions immediately after typing { or }
-        // We only want to show suggestions when the user hits Enter (trimmed will be empty)
-        // or actually starts typing a word.
         if (word.isEmpty()) {
             if (trimmed.endsWith("{") || trimmed.endsWith("}")) {
                 return new ArrayList<>();
             }
             if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '(') {
-                // Return empty instead of showing global suggestions inside functions
-                // E.g. calc(|
                 return new ArrayList<>();
             }
         }
 
-    // 1. @media/@supports/@container CONDITION completions
-        // Only triggers when writing the condition BEFORE the opening brace.
+        // 1. If inside inline style:
+        if (isInlineStyle) {
+            Zone declZone = detectDeclarationZone(fullText, cursorPos);
+            if (declZone == Zone.VALUE) {
+                String propName = extractPropertyBeforeColon(line);
+                return getValueSuggestions(propName, word, fullText);
+            } else {
+                return getPropertySuggestions(word, fullText, cursorPos);
+            }
+        }
+
+        // 2. @media/@supports/@container CONDITION completions
         if (isInsideAtRuleCondition(fullText, cursorPos)) {
             return getMediaSuggestions(fullText, cursorPos, word);
         }
 
-    // 2. At-rule completions — triggered when line starts with "@"
-        // Only at top-level (depth 0) or inside an at-rule body (depth 1 from @media etc.)
+        // 3. At-rule completions when line starts with "@"
         if (trimmed.startsWith("@")) {
             String atWord = "@" + word;
             return fuzzyFilter(CssDefinitions.AT_RULE_ITEMS, atWord);
         }
 
-    // 3. Pseudo-class / pseudo-element completions
+        // 4. AST / Dispatcher Position Check
+        CssStaticCompletionDispatcher.Position pos =
+                CssStaticCompletionDispatcher.detectPosition(fullText, null, null, cursorPos);
+
+        if (pos == CssStaticCompletionDispatcher.Position.PROPERTY_VALUE) {
+            String propName = CssStaticCompletionDispatcher.resolvePropertyName(fullText, null, cursorPos);
+            if (propName == null || propName.isEmpty()) {
+                propName = extractPropertyBeforeColon(line);
+            }
+            return getValueSuggestions(propName, word, fullText);
+        }
+
+        if (pos == CssStaticCompletionDispatcher.Position.PROPERTY_NAME) {
+            // If user explicitly typed a nested selector prefix (e.g. &, ., #, :)
+            if (word.startsWith("&") || word.startsWith(".") || word.startsWith("#") || word.startsWith(":")) {
+                return getNestedSuggestions(word, trimmed, fullText, cursorPos);
+            }
+            return getPropertySuggestions(word, fullText, cursorPos);
+        }
+
+        // pos == NONE: We are in selector position (outside any declaration block)
         int wordStartPos = cursorPos - word.length();
         boolean directlyAfterColon = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == ':';
         boolean cursorRightAfterColon = word.isEmpty() && cursorPos > 0
                 && fullText.charAt(cursorPos - 1) == ':';
 
-        if (directlyAfterColon || cursorRightAfterColon) {
-            return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, word);
+        if (directlyAfterColon || cursorRightAfterColon || word.startsWith(":")) {
+            String pseudoQuery = word.startsWith(":") ? word.substring(1) : word;
+            return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, pseudoQuery);
         }
 
-    // 4. Intelligent context detection with nesting awareness
-        CssContext ctx = detectContext(fullText, cursorPos, isInlineStyle);
-
-        switch (ctx.zone) {
-            case VALUE:
-                return getValueSuggestions(ctx.propertyName, word, fullText);
-            case PROPERTY:
-                return getPropertySuggestions(word, fullText, cursorPos);
-            case NESTED_SELECTOR:
-                // Inside a CSS nesting block — show BOTH selectors and properties
-                return getNestedSuggestions(word, trimmed, fullText, cursorPos);
-            case SELECTOR:
-            default:
-                return getSelectorSuggestions(word, trimmed);
-        }
+        return getSelectorSuggestions(word, trimmed);
     }
 
     // Context detection
@@ -306,19 +336,23 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
      * (@media, @supports, @container, @layer, @keyframes, @font-face).
      */
     private boolean isAtRuleBraceAt(String text, int bracePos) {
-        // Walk backward from the brace to find the most recent @ symbol
         int searchStart = Math.max(0, bracePos - 200);
-        String before = text.substring(searchStart, bracePos);
-        // Find last unmatched at-rule (no { between it and our brace)
-        int lastAt = before.lastIndexOf('@');
-        if (lastAt < 0) return false;
-        // Check there's no other { between the @rule and this brace
-        String between = before.substring(lastAt);
-        if (between.indexOf('{') >= 0) return false;
-        // Verify it's actually an at-rule keyword
-        Matcher m = Pattern.compile("@(media|supports|container|layer|keyframes|font-face|property|counter-style)\\b")
-                .matcher(between);
-        return m.find();
+        int lastAt = text.lastIndexOf('@', bracePos);
+        if (lastAt < searchStart) return false;
+        // Check there is no other { between the @rule and this brace
+        for (int i = lastAt; i < bracePos; i++) {
+            if (text.charAt(i) == '{') return false;
+        }
+        // Match at-rule keyword: media, supports, container, layer, keyframes, font-face...
+        int kwStart = lastAt + 1;
+        int kwEnd = kwStart;
+        while (kwEnd < bracePos && (Character.isLetter(text.charAt(kwEnd)) || text.charAt(kwEnd) == '-')) {
+            kwEnd++;
+        }
+        String kw = text.substring(kwStart, kwEnd);
+        return kw.equals("media") || kw.equals("supports") || kw.equals("container")
+                || kw.equals("layer") || kw.equals("keyframes") || kw.equals("font-face")
+                || kw.equals("property") || kw.equals("counter-style");
     }
 
     /**
@@ -452,12 +486,12 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             return res;
         }
 
-        // Combine properties + selectors (properties listed first for relevance)
         List<CompletionItem> all = new ArrayList<>(propertyItems);
         all.addAll(cachedCustomProps);
-        all.addAll(htmlTagItems);
-        if (word.startsWith(".") || word.startsWith("#")) {
+        if (word.startsWith(".") || word.startsWith("#") || word.startsWith("&")) {
             addCrossFileSelectors(all);
+        } else if (word.startsWith(":")) {
+            all.addAll(CssDefinitions.PSEUDO_ITEMS);
         }
         return fuzzyFilter(all, word);
     }
@@ -501,36 +535,14 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         List<CompletionItem> items = new ArrayList<>();
 
         if (!inParens) {
-            String[] keywords = {"screen", "print", "all", "and", "not", "only"};
-            for (String kw : keywords) {
+            for (String kw : CssDefinitions.MEDIA_KEYWORDS) {
                 items.add(new CompletionItem(kw, kw + " ", "Media type/keyword", CompletionItem.Type.KEYWORD, 0));
             }
         }
 
-        String[][] features = {
-                {"max-width", "max-width: |"},
-                {"min-width", "min-width: |"},
-                {"max-height", "max-height: |"},
-                {"min-height", "min-height: |"},
-                {"width", "width: |"},
-                {"height", "height: |"},
-                {"orientation: portrait", "orientation: portrait"},
-                {"orientation: landscape", "orientation: landscape"},
-                {"prefers-color-scheme: dark", "prefers-color-scheme: dark"},
-                {"prefers-color-scheme: light", "prefers-color-scheme: light"},
-                {"prefers-reduced-motion", "prefers-reduced-motion: reduce"},
-                {"hover: hover", "hover: hover"},
-                {"hover: none", "hover: none"},
-                {"pointer: fine", "pointer: fine"},
-                {"pointer: coarse", "pointer: coarse"},
-                {"display-mode: standalone", "display-mode: standalone"},
-                {"aspect-ratio", "aspect-ratio: |"},
-                {"resolution", "resolution: |"}
-        };
-
-        for (String[] f : features) {
-            String label = f[0];
-            String insertText = f[1];
+        for (CssDefinitions.MediaFeatureEntry f : CssDefinitions.MEDIA_FEATURES) {
+            String label = f.label;
+            String insertText = f.insertText;
 
             if (!inParens) {
                 insertText = "(" + insertText + ")";

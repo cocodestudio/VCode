@@ -72,4 +72,64 @@ public class HtmlLinterTest {
         }
         assertTrue("Should detect table without th", found);
     }
+
+    @Test
+    public void testInvalidElement() {
+        String html = "<div><fakeelement>Hello</fakeelement></div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        
+        boolean found = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("not a valid HTML5 element") && p.getSeverity() == Problem.Severity.ERROR) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue("Should detect invalid HTML element", found);
+    }
+
+    @Test
+    public void testDeprecatedElement() {
+        String html = "<div><center>Centered</center></div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        
+        boolean found = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("deprecated") && p.getSeverity() == Problem.Severity.WARNING) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue("Should detect deprecated element", found);
+    }
+
+    @Test
+    public void testDuplicateId() {
+        String html = "<div id=\"main\"></div><div id=\"main\"></div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        
+        boolean found = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Duplicate id") && p.getSeverity() == Problem.Severity.ERROR) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue("Should detect duplicate id", found);
+    }
+
+    @Test
+    public void testImgMissingAltAndSrc() {
+        String html = "<div><img></div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        
+        boolean missingSrc = false;
+        boolean missingAlt = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("missing required attribute 'src'")) missingSrc = true;
+            if (p.getMessage().contains("missing 'alt' attribute")) missingAlt = true;
+        }
+        assertTrue("Should detect missing src on img", missingSrc);
+        assertTrue("Should detect missing alt on img", missingAlt);
+    }
 }

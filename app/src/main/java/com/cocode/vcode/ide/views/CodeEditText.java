@@ -44,7 +44,9 @@ import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.json.JsonSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.markdown.MarkdownAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.markdown.MarkdownSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.svg.SvgAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsSyntaxHighlighter;
@@ -1547,24 +1549,38 @@ public class CodeEditText extends View {
             });
         }
         ExecutorProvider.getInstance().runOnCpu(() -> {
-            Content.LoadedLines loaded = Content.prepareLoad(textStr);
+            Content.LoadedLines loaded;
+            try {
+                loaded = Content.prepareLoad(textStr);
+            } catch (Throwable t) {
+                mainHandler.post(() -> {
+                    if (myToken == textLoadToken) {
+                        isSettingText = false;
+                        for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
+                    }
+                });
+                return;
+            }
             mainHandler.post(() -> {
                 if (myToken != textLoadToken) return;
-                content.applyLoaded(loaded);
-                cursor = ContentPosition.ZERO;
-                selectionAnchor = null;
-                undoStack.reset();
-                longestLineLength = loaded.longestLineLength;
-                longestLineDirty = false;
-                isSettingText = false;
-                for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
-                dirtyTracker.reset();
-                dirtyTracker.addEdit(0, 0, content.totalLength());
-                rebuildVisualLayout();
-                requestLayout();
-                invalidate();
-                scheduleHighlight();
-                notifySelectionChanged();
+                try {
+                    content.applyLoaded(loaded);
+                    cursor = ContentPosition.ZERO;
+                    selectionAnchor = null;
+                    undoStack.reset();
+                    longestLineLength = loaded.longestLineLength;
+                    longestLineDirty = false;
+                    dirtyTracker.reset();
+                    dirtyTracker.addEdit(0, 0, content.totalLength());
+                    rebuildVisualLayout();
+                    requestLayout();
+                    invalidate();
+                    scheduleHighlight();
+                    notifySelectionChanged();
+                } finally {
+                    isSettingText = false;
+                    for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
+                }
             });
         });
     }
@@ -1746,7 +1762,9 @@ public class CodeEditText extends View {
                     break;
                 case MARKDOWN:
                     this.syntaxHighlighter = new MarkdownSyntaxHighlighter(ctx);
-                    this.autoCompleteEngine = null;
+                    MarkdownAutoCompleteEngine mdEngine = new MarkdownAutoCompleteEngine(ctx);
+                    if (currentFile != null) mdEngine.setCurrentFile(currentFile);
+                    this.autoCompleteEngine = mdEngine;
                     break;
                 case GITIGNORE:
                     this.syntaxHighlighter = null; // Assuming no syntax highlighter for gitignore
@@ -1756,7 +1774,9 @@ public class CodeEditText extends View {
                     break;
                 case SVG:
                     this.syntaxHighlighter = new SvgSyntaxHighlighter(ctx);
-                    this.autoCompleteEngine = null;
+                    SvgAutoCompleteEngine svgEngine = new SvgAutoCompleteEngine(ctx);
+                    if (currentFile != null) svgEngine.setCurrentFile(currentFile);
+                    this.autoCompleteEngine = svgEngine;
                     break;
                 default:
                     this.syntaxHighlighter = null;
@@ -1771,16 +1791,8 @@ public class CodeEditText extends View {
 
     public void setCurrentFile(File file) {
         this.currentFile = file;
-        if (autoCompleteEngine instanceof HtmlAutoCompleteEngine) {
-            ((HtmlAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof JsAutoCompleteEngine) {
-            ((JsAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof JsonAutoCompleteEngine) {
-            ((JsonAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof CssAutoCompleteEngine) {
-            ((CssAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine) {
-            ((com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
+        if (autoCompleteEngine != null) {
+            autoCompleteEngine.setCurrentFile(file);
         }
     }
 
@@ -2117,19 +2129,19 @@ public class CodeEditText extends View {
         if (lspCompletionActive) return;
 
         int flatCursor = content.flatOffset(cursor);
-        String text = content.getSubstring(0, flatCursor);
+        String fullText = content.getText();
 
-        if (flatCursor <= 0 || flatCursor > text.length()) {
+        if (flatCursor <= 0 || flatCursor > fullText.length()) {
             autoCompletePopup.dismiss();
             return;
         }
 
-        if (isCursorInComment(text, flatCursor)) {
+        if (isCursorInComment(fullText, flatCursor)) {
             autoCompletePopup.dismiss();
             return;
         }
 
-        char lastChar = text.charAt(flatCursor - 1);
+        char lastChar = fullText.charAt(flatCursor - 1);
 
         if (Character.isWhitespace(lastChar)) {
             autoCompletePopup.dismiss();
@@ -2147,7 +2159,7 @@ public class CodeEditText extends View {
         }
 
         final int capturedCursor = flatCursor;
-        final String capturedText = text;
+        final String capturedText = fullText;
 
         ExecutorProvider.getInstance().runOnCpu(() -> {
             List<CompletionItem> items = autoCompleteEngine.getSuggestions(capturedText, capturedCursor);

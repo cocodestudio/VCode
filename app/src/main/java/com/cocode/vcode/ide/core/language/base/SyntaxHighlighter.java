@@ -23,6 +23,7 @@ public class SyntaxHighlighter {
     protected final int colorString;
     protected final int colorKeyword;
     protected final int colorNumber;
+    protected final int colorOperator;
     protected int lastLineState = 0;
 
     public SyntaxHighlighter(Context context) {
@@ -31,6 +32,7 @@ public class SyntaxHighlighter {
         colorString = getColor(R.color.vcode_color_js_string);
         colorKeyword = getColor(R.color.vcode_color_js_keyword);
         colorNumber = getColor(R.color.vcode_color_js_number);
+        colorOperator = getColor(R.color.vcode_color_js_operator);
     }
 
     /**
@@ -47,6 +49,16 @@ public class SyntaxHighlighter {
         this.colorString = 0;
         this.colorKeyword = 0;
         this.colorNumber = 0;
+        this.colorOperator = 0;
+    }
+
+    protected SyntaxHighlighter(int comment, int string, int keyword, int number, int operator) {
+        this.context = null;
+        this.colorComment = comment;
+        this.colorString = string;
+        this.colorKeyword = keyword;
+        this.colorNumber = number;
+        this.colorOperator = operator;
     }
 
     public android.text.SpannableStringBuilder highlight(String code) {
@@ -200,6 +212,9 @@ public class SyntaxHighlighter {
             if (Character.isDigit(c)) {
                 int j = i;
                 while (j < len && (Character.isLetterOrDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '.')) {
+                    if (lineStr.charAt(j) == '.' && (j + 1 >= len || !Character.isDigit(lineStr.charAt(j + 1)))) {
+                        break;
+                    }
                     j++;
                 }
                 tokens.add(new HighlightToken(lineIndex, i, j, colorNumber, false));
@@ -376,6 +391,12 @@ public class SyntaxHighlighter {
             case "false":
             case "null":
             case "undefined":
+            case "static":
+            case "get":
+            case "set":
+            case "as":
+            case "from":
+            case "debugger":
                 return true;
         }
         return false;

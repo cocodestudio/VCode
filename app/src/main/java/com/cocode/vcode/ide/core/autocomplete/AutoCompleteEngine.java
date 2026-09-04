@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.core.model.CompletionItem;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,10 +31,15 @@ public abstract class AutoCompleteEngine {
     protected static final int MAX_SUGGESTIONS = 20;
 
     protected final Context context;
+    protected File currentFile;
 
     public AutoCompleteEngine(Context context) {
         // Guard against memory leaks by capturing the application-wide context reference
         this.context = context != null ? context.getApplicationContext() : null;
+    }
+
+    public void setCurrentFile(File file) {
+        this.currentFile = file;
     }
 
     /**
@@ -211,6 +217,53 @@ public abstract class AutoCompleteEngine {
     }
 
     /**
+     * Checks if the cursor is inside a line comment or block comment.
+     * Supports //, /* ... * / and <!-- ... --> without regex.
+     */
+    protected boolean isInsideComment(String fullText, int cursorPos) {
+        if (fullText == null || cursorPos <= 0) return false;
+        int limit = Math.min(cursorPos, fullText.length());
+
+        // 1. Check single-line comment // on current line
+        String line = getLineBeforeCursor(fullText, limit);
+        boolean inStr = false;
+        char quote = 0;
+        for (int i = 0; i < line.length() - 1; i++) {
+            char c = line.charAt(i);
+            if (inStr) {
+                if (c == quote && (i == 0 || line.charAt(i - 1) != '\\')) inStr = false;
+                continue;
+            }
+            if (c == '"' || c == '\'' || c == '`') {
+                inStr = true;
+                quote = c;
+                continue;
+            }
+            if (c == '/' && line.charAt(i + 1) == '/') return true;
+        }
+
+        // 2. Check block comment /* ... */
+        int scanStart = Math.max(0, limit - 50000);
+        for (int i = limit - 2; i >= scanStart; i--) {
+            if (fullText.charAt(i) == '/' && fullText.charAt(i + 1) == '*') return true;
+            if (fullText.charAt(i) == '*' && fullText.charAt(i + 1) == '/') break;
+        }
+
+        // 3. Check HTML comment <!-- ... -->
+        for (int i = limit - 4; i >= scanStart; i--) {
+            if (fullText.charAt(i) == '<' && fullText.charAt(i + 1) == '!'
+                    && fullText.charAt(i + 2) == '-' && fullText.charAt(i + 3) == '-') {
+                return true;
+            }
+            if (fullText.charAt(i) == '-' && fullText.charAt(i + 1) == '-' && fullText.charAt(i + 2) == '>') {
+                break;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Performs VS Code-style fuzzy matching and score-based ranking against a candidate list.
      *
      * <p>Scoring tiers (higher = better):
@@ -344,16 +397,35 @@ public abstract class AutoCompleteEngine {
      * Standard utility to extract and parse string configuration data out of local JSON asset documents.
      */
     protected String loadAssetJson(String assetPath) {
-        try (java.io.InputStream is = context.getAssets().open(assetPath);
-             java.io.BufferedReader reader = new java.io.BufferedReader(
-                     new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            return sb.toString();
-        } catch (Exception e) {
-            return "[]";
+        String data = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset(assetPath);
+        if (data != null && !data.isEmpty()) {
+            return data;
         }
+        if (context != null) {
+            try (java.io.InputStream is = context.getAssets().open(assetPath);
+                 java.io.BufferedReader reader = new java.io.BufferedReader(
+                         new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } catch (Exception ignored) { }
+        }
+        // JVM Unit test fallback: read directly from assets directory on disk
+        java.io.File file = new java.io.File("app/src/main/assets/" + assetPath);
+        if (!file.exists()) {
+            file = new java.io.File("src/main/assets/" + assetPath);
+        }
+        if (file.exists()) {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } catch (Exception ignored) { }
+        }
+        return "[]";
     }
 
     /**

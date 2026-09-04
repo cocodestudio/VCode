@@ -151,7 +151,20 @@ public class EditorViewModel extends ViewModel {
         }
     }
 
+    private final Runnable diagnosticWatchdogRunnable = () -> {
+        if (activeFileDiagnostics.getValue() == null) {
+            int activeIndex = getActiveTabIndexValue();
+            if (activeIndex >= 0 && activeIndex < getOpenFilesList().size()) {
+                EditorFile activeFile = getOpenFilesList().get(activeIndex);
+                recalculateActiveDiagnostics(activeFile.getFile().getAbsolutePath());
+            } else {
+                activeFileDiagnostics.postValue(new int[]{0, 0, 0});
+            }
+        }
+    };
+
     private void recalculateActiveDiagnostics(String path) {
+        ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
         List<Problem> problems = fileProblemsMap.get(path);
         int[] counts = new int[]{0, 0, 0};
         if (problems != null) {
@@ -175,6 +188,8 @@ public class EditorViewModel extends ViewModel {
         if (activeIdx != null && activeIdx >= 0 && activeIdx < openFiles.size()) {
             if (openFiles.get(activeIdx).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
                 activeFileDiagnostics.postValue(null);
+                ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
+                ExecutorProvider.getInstance().getMainHandler().postDelayed(diagnosticWatchdogRunnable, 4000L);
             }
         }
     }
@@ -1118,5 +1133,11 @@ public class EditorViewModel extends ViewModel {
             return currentState.hasExplicitPreviewState(relativePath);
         }
         return false;
+    }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
     }
 }

@@ -64,16 +64,24 @@ public class FastTrie {
             current = current.children[c];
         }
 
-        // 2. Perform DFS to gather all end-of-word items from this node
-        gatherItems(current, results, maxResults);
+        // 2. Perform DFS to gather candidates from this subtree (bounded search)
+        gatherItems(current, results, Math.max(maxResults * 4, 128));
 
-        // 3. Sort by priority
-        Collections.sort(results, (a, b) -> b.getTypePriority() - a.getTypePriority());
+        // 3. Sort by priority descending, then alphabetical
+        Collections.sort(results, (a, b) -> {
+            int pDiff = b.getTypePriority() - a.getTypePriority();
+            if (pDiff != 0) return pDiff;
+            return a.getLabel().compareToIgnoreCase(b.getLabel());
+        });
+
+        if (results.size() > maxResults) {
+            return new ArrayList<>(results.subList(0, maxResults));
+        }
         return results;
     }
 
-    private void gatherItems(TrieNode node, List<CompletionItem> results, int maxResults) {
-        if (results.size() >= maxResults) return;
+    private void gatherItems(TrieNode node, List<CompletionItem> results, int maxCandidates) {
+        if (results.size() >= maxCandidates) return;
 
         if (node.isEndOfWord && node.item != null) {
             results.add(node.item);
@@ -81,7 +89,7 @@ public class FastTrie {
 
         for (int i = 0; i < 128; i++) {
             if (node.children[i] != null) {
-                gatherItems(node.children[i], results, maxResults);
+                gatherItems(node.children[i], results, maxCandidates);
             }
         }
     }

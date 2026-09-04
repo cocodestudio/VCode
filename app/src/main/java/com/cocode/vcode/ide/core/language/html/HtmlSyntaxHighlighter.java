@@ -49,6 +49,36 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         jsHighlighter = new JsSyntaxHighlighter(context);
     }
 
+    public static HtmlSyntaxHighlighter forTest() {
+        return new HtmlSyntaxHighlighter((Void) null);
+    }
+
+    public static HtmlSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment) {
+        return new HtmlSyntaxHighlighter(tag, attribute, value, bracket, comment);
+    }
+
+    protected HtmlSyntaxHighlighter(Void unusedForTest) {
+        super((Void) null);
+        this.colorTag = 0;
+        this.colorAttribute = 0;
+        this.colorValue = 0;
+        this.colorBracket = 0;
+        this.colorHtmlComment = 0;
+        this.cssHighlighter = CssSyntaxHighlighter.forTest();
+        this.jsHighlighter = JsSyntaxHighlighter.forTest();
+    }
+
+    protected HtmlSyntaxHighlighter(int tag, int attribute, int value, int bracket, int comment) {
+        super(comment, value, 0, value, 0);
+        this.colorTag = tag;
+        this.colorAttribute = attribute;
+        this.colorValue = value;
+        this.colorBracket = bracket;
+        this.colorHtmlComment = comment;
+        this.cssHighlighter = CssSyntaxHighlighter.forTestWithColors(comment, tag, attribute, value, tag, bracket);
+        this.jsHighlighter = JsSyntaxHighlighter.forTestWithColors(comment, value, tag, value, attribute, tag, bracket);
+    }
+
     private static int outerState(int combined) {
         return combined & 0xF;
     }
@@ -205,6 +235,12 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                             tokens.add(new HighlightToken(lineIndex, i, len, colorHtmlComment, false));
                             i = len;
                         }
+                    } else if (i + 1 < len && lineStr.charAt(i + 1) == '?') {
+                        outer = STATE_TAG;
+                        isFirstWord = true;
+                        isClosingTag = false;
+                        tokens.add(new HighlightToken(lineIndex, i, i + 2, colorBracket, false));
+                        i += 2;
                     } else {
                         outer = STATE_TAG;
                         isFirstWord = true;
@@ -218,6 +254,24 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                             i++;
                         }
                     }
+                } else if (c == '&') {
+                    int semi = lineStr.indexOf(';', i + 1);
+                    if (semi != -1 && semi - i <= 10 && semi - i >= 2) {
+                        boolean validEntity = true;
+                        for (int k = i + 1; k < semi; k++) {
+                            char ec = lineStr.charAt(k);
+                            if (!Character.isLetterOrDigit(ec) && ec != '#') {
+                                validEntity = false;
+                                break;
+                            }
+                        }
+                        if (validEntity) {
+                            tokens.add(new HighlightToken(lineIndex, i, semi + 1, colorValue, false));
+                            i = semi + 1;
+                            continue;
+                        }
+                    }
+                    i++;
                 } else {
                     i++;
                 }
@@ -240,6 +294,12 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                         outer = STATE_NORMAL;
                     }
                     i++;
+                    continue;
+                }
+                if (c == '?' && i + 1 < len && lineStr.charAt(i + 1) == '>') {
+                    tokens.add(new HighlightToken(lineIndex, i, i + 2, colorBracket, false));
+                    outer = STATE_NORMAL;
+                    i += 2;
                     continue;
                 }
                 if (c == '/' && i + 1 < len && lineStr.charAt(i + 1) == '>') {
@@ -271,6 +331,21 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                 if (c == '=') {
                     tokens.add(new HighlightToken(lineIndex, i, i + 1, colorBracket, false));
                     i++;
+                    // Check for unquoted attribute value
+                    int nextNonWhite = i;
+                    while (nextNonWhite < len && Character.isWhitespace(lineStr.charAt(nextNonWhite))) nextNonWhite++;
+                    if (nextNonWhite < len) {
+                        char nc = lineStr.charAt(nextNonWhite);
+                        if (nc != '"' && nc != '\'' && nc != '>' && nc != '/') {
+                            int j = nextNonWhite;
+                            while (j < len && !Character.isWhitespace(lineStr.charAt(j)) && lineStr.charAt(j) != '>' && lineStr.charAt(j) != '/') {
+                                j++;
+                            }
+                            tokens.add(new HighlightToken(lineIndex, nextNonWhite, j, colorValue, false));
+                            i = j;
+                            continue;
+                        }
+                    }
                     continue;
                 }
                 if (Character.isLetter(c) || c == '!' || c == '-' || c == '_' || c == ':' || Character.isDigit(c)) {
@@ -396,6 +471,12 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                             i = len;
                         }
                         continue;
+                    } else if (i + 1 < len && line.charAt(i + 1) == '?') {
+                        outer = STATE_TAG;
+                        isFirstWord = true;
+                        isClosingTag = false;
+                        i += 2;
+                        continue;
                     } else {
                         outer = STATE_TAG;
                         isFirstWord = true;
@@ -429,6 +510,11 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                         outer = STATE_NORMAL;
                     }
                     i++;
+                    continue;
+                }
+                if (c == '?' && i + 1 < len && line.charAt(i + 1) == '>') {
+                    outer = STATE_NORMAL;
+                    i += 2;
                     continue;
                 }
                 if (c == '/' && i + 1 < len && line.charAt(i + 1) == '>') {

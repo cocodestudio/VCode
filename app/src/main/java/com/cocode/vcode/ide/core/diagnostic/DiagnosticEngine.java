@@ -30,47 +30,57 @@ public class DiagnosticEngine {
 
         List<Problem> problems = new ArrayList<>();
 
-        // BracketLinter handles () [] {} — skip for CSS/SCSS since CssLinter owns {} there
-        if (type != null && type.isTextBased()
-                && type != FileType.CSS && type != FileType.SCSS) {
-            problems.addAll(BracketLinter.analyze(file, text));
-        }
-
         try {
+            // BracketLinter handles () [] {} — skip for CSS/SCSS since CssLinter owns {} there
+            if (type != null && type.isTextBased()
+                    && type != FileType.CSS && type != FileType.SCSS) {
+                problems.addAll(BracketLinter.analyze(file, text));
+            }
+
             if (type == FileType.JSON) {
                 problems.addAll(JsonLinter.analyze(file, text));
             } else if (type == FileType.HTML) {
-                problems.addAll(HtmlLinter.analyze(file, text));
-                
-                if (index != null) {
-                    com.cocode.vcode.ide.core.language.js.ParseResult parseResult = index.getParseResult(file.getAbsolutePath());
-                    if (parseResult != null && parseResult.embeddedResults != null) {
-                        for (com.cocode.vcode.ide.core.language.js.ParseResult.EmbeddedResult emb : parseResult.embeddedResults) {
-                            String embeddedText = text.substring(emb.startOffset, Math.min(emb.endOffset, text.length()));
-                            List<Problem> sub = new ArrayList<>();
-                            
-                            if (emb.result.tree != null) {
-                                sub = JsLinter.analyze(file, embeddedText, null);
-                            } else if (emb.result.cssTree != null) {
-                                sub = CssLinter.analyze(file, embeddedText);
-                            }
-                            
-                            for (Problem p : sub) {
-                                int pOffset = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.lineStartOffset(embeddedText, p.getLine()) + p.getColumn() - 1;
-                                int absoluteOffset = emb.startOffset + pOffset;
-                                int absLine = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.getLine(text, absoluteOffset);
-                                int absCol = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.getColumn(text, absoluteOffset);
-                                problems.add(new Problem(p.getFile(), absLine, absCol, p.getLength(), p.getMessage(), p.getSeverity()));
-                            }
+                com.cocode.vcode.ide.core.language.js.ParseResult parseResult = (index != null && file != null)
+                        ? index.getParseResult(file.getAbsolutePath()) : null;
+                if (parseResult != null && parseResult.htmlTree != null && parseResult.htmlTokens != null) {
+                    problems.addAll(HtmlLinter.analyze(file, text, parseResult.htmlTree, parseResult.htmlTokens));
+                } else {
+                    problems.addAll(HtmlLinter.analyze(file, text));
+                }
+                if (parseResult != null && parseResult.embeddedResults != null) {
+                    for (com.cocode.vcode.ide.core.language.js.ParseResult.EmbeddedResult emb : parseResult.embeddedResults) {
+                        String embeddedText = text.substring(emb.startOffset, Math.min(emb.endOffset, text.length()));
+                        List<Problem> sub = new ArrayList<>();
+                        
+                        if (emb.result.tree != null) {
+                            sub = JsLinter.analyze(file, embeddedText, null);
+                        } else if (emb.result.cssTree != null) {
+                            sub = CssLinter.analyze(file, embeddedText);
+                        }
+                        
+                        for (Problem p : sub) {
+                            int pOffset = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.lineStartOffset(embeddedText, p.getLine()) + p.getColumn() - 1;
+                            int absoluteOffset = emb.startOffset + pOffset;
+                            int absLine = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.getLine(text, absoluteOffset);
+                            int absCol = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.getColumn(text, absoluteOffset);
+                            problems.add(new Problem(p.getFile(), absLine, absCol, p.getLength(), p.getMessage(), p.getSeverity()));
                         }
                     }
                 }
             } else if (type == FileType.CSS || type == FileType.SCSS) {
-                problems.addAll(CssLinter.analyze(file, text));
+                com.cocode.vcode.ide.core.language.js.ParseResult parseResult = (index != null && file != null)
+                        ? index.getParseResult(file.getAbsolutePath()) : null;
+                if (parseResult != null && parseResult.cssTree != null && parseResult.cssTokens != null) {
+                    problems.addAll(CssLinter.analyze(file, text, parseResult.cssTree, parseResult.cssTokens));
+                } else {
+                    problems.addAll(CssLinter.analyze(file, text));
+                }
             } else if (type == FileType.JAVASCRIPT) {
                 problems.addAll(JsLinter.analyze(file, text, index));
             } else if (type == FileType.TYPESCRIPT) {
                 problems.addAll(TsLinter.analyze(file, text, index));
+            } else if (type == FileType.JSON) {
+                problems.addAll(com.cocode.vcode.ide.core.language.json.JsonLinter.analyze(file, text));
             } else if (type == FileType.MARKDOWN) {
                 problems.addAll(com.cocode.vcode.ide.core.language.md.MarkdownLinter.analyze(file, text));
             }

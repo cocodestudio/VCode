@@ -47,9 +47,14 @@ public class CssParser {
                         currentParent = ruleNode;
                         p = nextP + 1;
                     } else if (punct == ';') {
-                        int nodeType = isAtRule ? CssSyntaxTree.N_AT_RULE : CssSyntaxTree.N_RULE;
-                        int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, null, null);
-                        tree.addNode(CssSyntaxTree.N_SELECTOR, startP, endP, ruleNode, selectorText, null);
+                        if (isAtRule || currentParent == root) {
+                            int nodeType = isAtRule ? CssSyntaxTree.N_AT_RULE : CssSyntaxTree.N_RULE;
+                            int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, null, null);
+                            tree.addNode(CssSyntaxTree.N_SELECTOR, startP, endP, ruleNode, selectorText, null);
+                        } else {
+                            // Malformed declaration inside a rule (e.g. "color red;")
+                            tree.addNode(CssSyntaxTree.N_ERROR, startP, nextP + 1, currentParent, "Missing ':' in CSS declaration — property and value must be separated by ':'", null);
+                        }
                         p = nextP + 1;
                     } else if (punct == '}') {
                         // Malformed: selector directly followed by }
@@ -82,7 +87,7 @@ public class CssParser {
                             currentParent = root;
                         }
                     } else {
-                        tree.addNode(CssSyntaxTree.N_ERROR, p, p + 1, currentParent, "Stray '}'", null);
+                        tree.addNode(CssSyntaxTree.N_ERROR, p, p + 1, currentParent, "Unexpected '}' with no matching '{'", null);
                     }
                     p++;
                 } else {
@@ -96,6 +101,7 @@ public class CssParser {
         
         while (currentParent != root) {
             tree.nodeEnd[currentParent] = stream.length;
+            tree.addNode(CssSyntaxTree.N_ERROR, tree.nodeStart[currentParent], Math.min(tree.nodeStart[currentParent] + 1, stream.length), currentParent, "Unclosed CSS block '{'", null);
             if (depth > 0) {
                 depth--;
                 currentParent = parentStack[depth];

@@ -214,23 +214,27 @@ public final class JsonLspServer implements LspServer {
             return Collections.emptyList();
         }
 
-        ValidationReport report = validator.validate(doc.text);
-        List<JsonError> errors = report.getErrors();
-        if (errors == null || errors.isEmpty()) return Collections.emptyList();
+        try {
+            ValidationReport report = validator.validate(doc.text);
+            List<JsonError> errors = report.getErrors();
+            if (errors == null || errors.isEmpty()) return Collections.emptyList();
 
-        List<Problem> result = new ArrayList<>(errors.size());
-        File docFile = new File(doc.uri);
-        for (JsonError err : errors) {
-            int col = Math.max(0, err.column - 1);
-            int tokenLen = getTokenLength(doc.text, err.line, err.column);
+            List<Problem> result = new ArrayList<>(errors.size());
+            File docFile = new File(doc.uri);
+            for (JsonError err : errors) {
+                int col = Math.max(0, err.column - 1);
+                int tokenLen = getTokenLength(doc.text, err.line, err.column);
 
-            Problem.Severity severity = "WARNING".equalsIgnoreCase(err.severity)
-                    ? Problem.Severity.WARNING
-                    : Problem.Severity.ERROR;
+                Problem.Severity severity = "WARNING".equalsIgnoreCase(err.severity)
+                        ? Problem.Severity.WARNING
+                        : Problem.Severity.ERROR;
 
-            result.add(new Problem(docFile, err.line, col, tokenLen, err.message, severity));
+                result.add(new Problem(docFile, err.line, col, tokenLen, err.message, severity));
+            }
+            return result;
+        } catch (Throwable t) {
+            return Collections.emptyList();
         }
-        return result;
     }
 
     @Override

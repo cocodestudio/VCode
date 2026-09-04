@@ -274,7 +274,14 @@ public final class KnownElements {
     private static void loadHtmlTags(Context context) {
         try {
             String json = readAsset(context, "completions/html_tags.json");
-            JSONArray arr = new JSONArray(json);
+            JSONArray arr;
+            String trimmed = json.trim();
+            if (trimmed.startsWith("[")) {
+                arr = new JSONArray(trimmed);
+            } else {
+                JSONObject root = new JSONObject(trimmed);
+                arr = root.getJSONArray("tags");
+            }
             Set<String> tags = new HashSet<>();
             Set<String> voids = new HashSet<>();
             for (int i = 0; i < arr.length(); i++) {

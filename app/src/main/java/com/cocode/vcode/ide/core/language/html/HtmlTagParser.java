@@ -27,7 +27,7 @@ public class HtmlTagParser {
      * Performs a blazing-fast O(N) forward scan using a lexical state machine.
      * Extracts exactly where the cursor is, and what the closest unclosed tag is.
      */
-    public HtmlContext parseContext(String text, int cursorPos) {
+    public static HtmlContext parseContext(String text, int cursorPos) {
         HtmlContext ctx = new HtmlContext();
         if (text == null || cursorPos <= 0) return ctx;
 
@@ -214,10 +214,14 @@ public class HtmlTagParser {
 
         ctx.unclosedTag = openTags.isEmpty() ? null : openTags.peek();
 
-        // If the state at the cursor is inside a tag
-        if (state != State.TEXT && state != State.COMMENT && state != State.DOCTYPE
-                && state != State.CLOSE_TAG_OPEN && state != State.CLOSE_TAG_NAME) {
-
+        if (state == State.COMMENT) {
+            ctx.isInsideComment = true;
+        } else if (state == State.CLOSE_TAG_OPEN || state == State.CLOSE_TAG_NAME) {
+            ctx.isInsideCloseTag = true;
+            ctx.currentTagName = currentTag.toString().toLowerCase();
+        } else if (state == State.TEXT) {
+            ctx.isInsideText = true;
+        } else if (state != State.DOCTYPE) {
             ctx.isInsideOpenTag = true;
             ctx.currentTagName = currentTag.toString().toLowerCase();
 
@@ -256,6 +260,9 @@ public class HtmlTagParser {
     public static class HtmlContext {
         public boolean isInsideOpenTag = false;
         public boolean isTypingTagName = false;
+        public boolean isInsideComment = false;
+        public boolean isInsideCloseTag = false;
+        public boolean isInsideText = false;
         public String currentTagName = null;
         public String currentAttributeName = null;
         public boolean isInsideAttributeValue = false;

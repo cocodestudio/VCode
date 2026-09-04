@@ -23,6 +23,7 @@ import com.cocode.vcode.ide.views.CodeEditorLayout;
 public class CodeFileViewer implements IFileViewer {
 
     private final Handler jsonValidationHandler = new Handler(Looper.getMainLooper());
+    private final java.util.concurrent.atomic.AtomicLong diagnosticVersion = new java.util.concurrent.atomic.AtomicLong(0);
     private final LspEditorBridge lspBridge = new LspEditorBridge();
     private FrameLayout viewContainer;
     private CodeEditorLayout editorLayout;
@@ -177,10 +178,10 @@ public class CodeFileViewer implements IFileViewer {
                                         capturedEditor.removeTextLoadListener(this);
                                         if (currentFile != capturedFile) return;
                                         capturedEditor.scrollTo(0, capturedFile.getScrollY());
+                                        validateCodeIfRequired();
                                     }
                                 }
                             });
-                            validateCodeIfRequired();
                         }
                     });
                 } catch (Exception ignored) {
@@ -305,6 +306,18 @@ public class CodeFileViewer implements IFileViewer {
             // text-load listener gated on capturedFile, so this only ever re-fires once
             // loading has genuinely finished for the bind that's actually current.
             if (codeEditText != null && codeEditText.isSettingText()) {
+                final CodeEditText ed = codeEditText;
+                ed.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
+                    @Override
+                    public void onTextLoadStateChanged(boolean isLoading) {
+                        if (!isLoading) {
+                            ed.removeTextLoadListener(this);
+                            if (currentFile == capturedFile) {
+                                validateCodeIfRequired();
+                            }
+                        }
+                    }
+                });
                 return;
             }
 
@@ -339,24 +352,34 @@ public class CodeFileViewer implements IFileViewer {
             //    or project-indexing tasks. LSP diagnostics are handled independently by
             //    LspEditorBridge via LspClientManager.requestDiagnostics().
             if (!lspBridge.isLspActive()) {
+                final long taskVersion = diagnosticVersion.incrementAndGet();
                 ExecutorProvider.getInstance().runOnDiagnostic(() -> {
-                    java.util.List<Problem> problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(
-                            capturedFile.getFile(), textSnapshot, capturedFile.getFileType(), com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
-                    if (problems != null) {
-                        final java.util.List<Problem> finalProblems = problems;
-                        ExecutorProvider.getInstance().runOnMain(() -> {
-                            if (capturedCallback != null) {
-                                capturedCallback.reportProblems(capturedFile.getFile(), finalProblems);
-                            }
-                            if (editorLayout == null || editorLayout.getParent() == null
-                                    || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
-                                return;
-                            }
-                            if (codeEditText != null) {
-                                codeEditText.applyDiagnostics(finalProblems);
-                            }
-                        });
+                    if (taskVersion != diagnosticVersion.get()) {
+                        return;
                     }
+                    java.util.List<Problem> problems = null;
+                    try {
+                        problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(
+                                capturedFile.getFile(), textSnapshot, capturedFile.getFileType(), com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
+                    } catch (Throwable t) {
+                        problems = new java.util.ArrayList<>();
+                    }
+                    final java.util.List<Problem> finalProblems = (problems != null) ? problems : new java.util.ArrayList<>();
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        if (taskVersion != diagnosticVersion.get()) {
+                            return;
+                        }
+                        if (capturedCallback != null) {
+                            capturedCallback.reportProblems(capturedFile.getFile(), finalProblems);
+                        }
+                        if (editorLayout == null || editorLayout.getParent() == null
+                                || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
+                            return;
+                        }
+                        if (codeEditText != null) {
+                            codeEditText.applyDiagnostics(finalProblems);
+                        }
+                    });
                 });
             }
             // When LSP IS active: LspEditorBridge.contentListener has already scheduled

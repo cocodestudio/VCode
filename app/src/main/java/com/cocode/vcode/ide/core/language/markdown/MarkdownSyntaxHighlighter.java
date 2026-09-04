@@ -42,6 +42,40 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
         htmlHighlighter = new HtmlSyntaxHighlighter(context);
     }
 
+    public static MarkdownSyntaxHighlighter forTest() {
+        return new MarkdownSyntaxHighlighter((Void) null);
+    }
+
+    public static MarkdownSyntaxHighlighter forTestWithColors(int header, int bold, int italic, int code, int quote, int list, int link, int strikethrough) {
+        return new MarkdownSyntaxHighlighter(header, bold, italic, code, quote, list, link, strikethrough);
+    }
+
+    MarkdownSyntaxHighlighter(Void unusedForTest) {
+        super((Void) null);
+        this.colorHeader = 0;
+        this.colorBold = 0;
+        this.colorItalic = 0;
+        this.colorCode = 0;
+        this.colorQuote = 0;
+        this.colorList = 0;
+        this.colorLink = 0;
+        this.colorStrikethrough = 0;
+        this.htmlHighlighter = HtmlSyntaxHighlighter.forTest();
+    }
+
+    MarkdownSyntaxHighlighter(int header, int bold, int italic, int code, int quote, int list, int link, int strikethrough) {
+        super(quote, code, header, bold, link);
+        this.colorHeader = header;
+        this.colorBold = bold;
+        this.colorItalic = italic;
+        this.colorCode = code;
+        this.colorQuote = quote;
+        this.colorList = list;
+        this.colorLink = link;
+        this.colorStrikethrough = strikethrough;
+        this.htmlHighlighter = HtmlSyntaxHighlighter.forTestWithColors(header, bold, italic, code, quote);
+    }
+
     @Override
     public List<HighlightToken> tokenizeLine(String lineStr, int lineIndex, int startState) {
         List<HighlightToken> tokens = new ArrayList<>();
@@ -58,7 +92,12 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
 
     // Opening fence
         if (len >= 3 && lineStr.charAt(0) == '`' && lineStr.charAt(1) == '`' && lineStr.charAt(2) == '`') {
-            tokens.add(new HighlightToken(lineIndex, 0, len, colorCode, false));
+            int b = 0;
+            while (b < len && lineStr.charAt(b) == '`') b++;
+            tokens.add(new HighlightToken(lineIndex, 0, b, colorCode, false));
+            if (b < len) {
+                tokens.add(new HighlightToken(lineIndex, b, len, colorHeader, false));
+            }
             lastLineState = STATE_FENCE;
             return tokens;
         }
@@ -114,6 +153,12 @@ public class MarkdownSyntaxHighlighter extends SyntaxHighlighter {
     // Inline scanning
         while (i < len) {
             char delim = lineStr.charAt(i);
+
+            // Escape next character
+            if (delim == '\\' && i + 1 < len) {
+                i += 2;
+                continue;
+            }
 
             // Inline code: `...`
             if (delim == '`') {

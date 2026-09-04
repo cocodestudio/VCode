@@ -147,6 +147,9 @@ public final class MdParser {
                 
                 int cbId = tree.addNode(MdSyntaxTree.N_CODE_BLOCK, blockStart, blockEnd, currentParent, lang);
                 tree.addNode(MdSyntaxTree.N_NONE, startOfInner, endOfInner, cbId, null);
+                if (i >= stream.lineCount) {
+                    tree.addNode(MdSyntaxTree.N_ERROR, blockStart, Math.min(blockStart + 3, len), cbId, "Unclosed code block");
+                }
                 
                 updateParentBounds(tree, stackIds, stackSize, blockEnd);
                 

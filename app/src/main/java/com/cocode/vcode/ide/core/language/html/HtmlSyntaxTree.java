@@ -220,4 +220,96 @@ public final class HtmlSyntaxTree {
 
         return id;
     }
+
+    /**
+     * Finds the narrowest/deepest AST node covering the given offset.
+     * Returns 0 if no node covers the offset.
+     */
+    public int findNodeAt(int offset) {
+        if (nodesByOffset == null || nodeCount <= 1) {
+            int best = 0;
+            int bestLen = Integer.MAX_VALUE;
+            for (int i = 1; i < nodeCount; i++) {
+                if (offset >= nodeStart[i] && offset <= nodeEnd[i]) {
+                    int len = nodeEnd[i] - nodeStart[i];
+                    if (len <= bestLen) {
+                        best = i;
+                        bestLen = len;
+                    }
+                }
+            }
+            return best;
+        }
+
+        int low = 1, high = nodeCount - 1;
+        int candidateIdx = -1;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            int id = nodesByOffset[mid];
+            if (nodeStart[id] <= offset) {
+                candidateIdx = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        int best = 0;
+        int bestLen = Integer.MAX_VALUE;
+        for (int i = candidateIdx; i >= 1; i--) {
+            int id = nodesByOffset[i];
+            if (offset >= nodeStart[id] && offset <= nodeEnd[id]) {
+                int len = nodeEnd[id] - nodeStart[id];
+                if (len < bestLen) {
+                    best = id;
+                    bestLen = len;
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Resolves the nearest enclosing N_ELEMENT node at or before the given offset.
+     */
+    public int getEnclosingElement(int offset) {
+        int node = findNodeAt(offset);
+        while (node != 0) {
+            if (nodeType[node] == N_ELEMENT) {
+                return node;
+            }
+            node = nodeParent[node];
+        }
+        return 0;
+    }
+
+    /**
+     * Checks if the given element has an attribute with the specified name.
+     */
+    public boolean hasAttribute(int elemId, String attrName) {
+        if (elemId <= 0 || elemId >= nodeCount || attrName == null) return false;
+        int child = nodeChild[elemId];
+        while (child != 0) {
+            if (nodeType[child] == N_ATTRIBUTE && attrName.equalsIgnoreCase(nodeName[child])) {
+                return true;
+            }
+            child = nodeSibling[child];
+        }
+        return false;
+    }
+
+    /**
+     * Gets the value of the named attribute on the given element, or null if absent.
+     */
+    public String getAttributeValue(int elemId, String attrName) {
+        if (elemId <= 0 || elemId >= nodeCount || attrName == null) return null;
+        int child = nodeChild[elemId];
+        while (child != 0) {
+            if (nodeType[child] == N_ATTRIBUTE && attrName.equalsIgnoreCase(nodeName[child])) {
+                return nodeValue[child];
+            }
+            child = nodeSibling[child];
+        }
+        return null;
+    }
 }

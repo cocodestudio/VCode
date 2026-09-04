@@ -116,31 +116,37 @@ public class JsonLexer {
                 continue;
             }
 
-            // Keywords (true, false, null) - strict zero-allocation matching
+            // Keywords (true, false, null) - strict zero-allocation matching with identifier boundary checks
             if (c == 't' && i + 3 < regionEnd && source.charAt(i + 1) == 'r' && source.charAt(i + 2) == 'u' && source.charAt(i + 3) == 'e') {
-                int start = i;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                continue;
+                if (i + 4 >= regionEnd || !isIdentPart(source.charAt(i + 4))) {
+                    int start = i;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    continue;
+                }
             }
             if (c == 'f' && i + 4 < regionEnd && source.charAt(i + 1) == 'a' && source.charAt(i + 2) == 'l' && source.charAt(i + 3) == 's' && source.charAt(i + 4) == 'e') {
-                int start = i;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                continue;
+                if (i + 5 >= regionEnd || !isIdentPart(source.charAt(i + 5))) {
+                    int start = i;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    continue;
+                }
             }
             if (c == 'n' && i + 3 < regionEnd && source.charAt(i + 1) == 'u' && source.charAt(i + 2) == 'l' && source.charAt(i + 3) == 'l') {
-                int start = i;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                continue;
+                if (i + 4 >= regionEnd || !isIdentPart(source.charAt(i + 4))) {
+                    int start = i;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    continue;
+                }
             }
 
             // Error (Unrecognized character)
@@ -152,7 +158,7 @@ public class JsonLexer {
                 char curr = source.charAt(i);
                 if (Character.isWhitespace(curr) || curr == '{' || curr == '}' || curr == '[' || curr == ']' || 
                     curr == ':' || curr == ',' || curr == '"' || curr == '/' || curr == '-' || 
-                    (curr >= '0' && curr <= '9') || curr == 't' || curr == 'f' || curr == 'n') {
+                    (curr >= '0' && curr <= '9')) {
                     break;
                 }
                 types[i] = JsonTokenStream.TK_ERROR;
@@ -162,5 +168,9 @@ public class JsonLexer {
         }
 
         return new JsonTokenStream(types, starts);
+    }
+
+    private static boolean isIdentPart(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$';
     }
 }

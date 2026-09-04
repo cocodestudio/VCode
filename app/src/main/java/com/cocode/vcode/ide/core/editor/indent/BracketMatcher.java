@@ -115,6 +115,7 @@ public class BracketMatcher {
     private static boolean isInStringOrComment(CharSequence text, int pos) {
         boolean inSingle = false, inDouble = false, inTemplate = false;
         boolean inLineComment = false, inBlockComment = false;
+        int templateBraceDepth = 0;
 
         for (int i = 0; i < pos && i < text.length(); i++) {
             char c = text.charAt(i);
@@ -131,7 +132,7 @@ public class BracketMatcher {
                 }
                 continue;
             }
-            if (!inSingle && !inDouble && !inTemplate) {
+            if (!inSingle && !inDouble && (!inTemplate || templateBraceDepth > 0)) {
                 if (c == '/' && n == '/') {
                     inLineComment = true;
                     i++;
@@ -147,20 +148,37 @@ public class BracketMatcher {
                 i++;
                 continue;
             } // skip escaped chars
-            if (c == '\'' && !inDouble && !inTemplate) inSingle = !inSingle;
-            else if (c == '"' && !inSingle && !inTemplate) inDouble = !inDouble;
-            else if (c == '`' && !inSingle && !inDouble) inTemplate = !inTemplate;
+            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
+            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;
+            else if (!inSingle && !inDouble) {
+                if (!inTemplate) {
+                    if (c == '`') inTemplate = true;
+                } else {
+                    if (templateBraceDepth == 0) {
+                        if (c == '$' && n == '{') {
+                            templateBraceDepth = 1;
+                            i++;
+                        } else if (c == '`') {
+                            inTemplate = false;
+                        }
+                    } else {
+                        if (c == '{') templateBraceDepth++;
+                        else if (c == '}') templateBraceDepth--;
+                    }
+                }
+            }
         }
-        return inSingle || inDouble || inTemplate || inLineComment || inBlockComment;
+        return inSingle || inDouble || inLineComment || inBlockComment || (inTemplate && templateBraceDepth == 0);
     }
 
     private static boolean[] computeStringCommentMask(CharSequence text, int from, int to) {
         boolean[] mask = new boolean[to - from];
         boolean inSingle = false, inDouble = false, inTemplate = false;
         boolean inLineComment = false, inBlockComment = false;
+        int templateBraceDepth = 0;
 
         for (int i = from; i < to; i++) {
-            mask[i - from] = inSingle || inDouble || inTemplate || inLineComment || inBlockComment;
+            mask[i - from] = inSingle || inDouble || inLineComment || inBlockComment || (inTemplate && templateBraceDepth == 0);
 
             char c = text.charAt(i);
             char n = (i + 1 < text.length()) ? text.charAt(i + 1) : '\0';
@@ -176,7 +194,7 @@ public class BracketMatcher {
                 }
                 continue;
             }
-            if (!inSingle && !inDouble && !inTemplate) {
+            if (!inSingle && !inDouble && (!inTemplate || templateBraceDepth > 0)) {
                 if (c == '/' && n == '/') {
                     inLineComment = true;
                     i++;
@@ -192,9 +210,25 @@ public class BracketMatcher {
                 i++;
                 continue;
             }
-            if (c == '\'' && !inDouble && !inTemplate) inSingle = !inSingle;
-            else if (c == '"' && !inSingle && !inTemplate) inDouble = !inDouble;
-            else if (c == '`' && !inSingle && !inDouble) inTemplate = !inTemplate;
+            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
+            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;
+            else if (!inSingle && !inDouble) {
+                if (!inTemplate) {
+                    if (c == '`') inTemplate = true;
+                } else {
+                    if (templateBraceDepth == 0) {
+                        if (c == '$' && n == '{') {
+                            templateBraceDepth = 1;
+                            i++;
+                        } else if (c == '`') {
+                            inTemplate = false;
+                        }
+                    } else {
+                        if (c == '{') templateBraceDepth++;
+                        else if (c == '}') templateBraceDepth--;
+                    }
+                }
+            }
         }
         return mask;
     }

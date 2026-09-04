@@ -5,7 +5,6 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.css.CssLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -112,8 +111,6 @@ public final class CssLspServer implements LspServer {
         }
     }
 
-
-
     // -------------------------------------------------------------------------
     // Completions
     // -------------------------------------------------------------------------
@@ -167,31 +164,29 @@ public final class CssLspServer implements LspServer {
         return convertCompletions(legacy);
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
     @Override
     public List<Problem> diagnostics(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.trim().isEmpty()) {
             return Collections.emptyList();
         }
 
-        File file = new File(doc.uri);
-        List<Problem> problems = CssLinter.analyze(file, doc.text);
-        
-        // CssLinter occasionally reports line 0 (1-based) for selector-level checks
-        // that haven't tracked the line correctly. Filter those out rather than rendering
-        // a spurious squiggle at the top of the file.
-        List<Problem> filtered = new ArrayList<>();
-        if (problems != null) {
-            for (Problem p : problems) {
-                if (p != null && p.getLine() > 0) {
-                    filtered.add(p);
+        try {
+            File file = new File(doc.uri);
+            List<Problem> problems = CssLinter.analyze(file, doc.text);
+            
+            // Filter out invalid lines
+            List<Problem> filtered = new ArrayList<>();
+            if (problems != null) {
+                for (Problem p : problems) {
+                    if (p != null && p.getLine() > 0) {
+                        filtered.add(p);
+                    }
                 }
             }
+            return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, filtered);
+        } catch (Throwable t) {
+            return Collections.emptyList();
         }
-        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, filtered);
     }
 
     @Override
@@ -236,28 +231,36 @@ public final class CssLspServer implements LspServer {
         // Strip leading . or # for plain name lookup
         String plainName = selector.startsWith(".") || selector.startsWith("#")
                 ? selector.substring(1) : selector;
+        plainName = plainName.trim();
+        if (plainName.isEmpty()) return Collections.emptyList();
         boolean isId = selector.startsWith("#");
 
+        final int MAX_REFS = 100;
         List<LspLocation> result = new ArrayList<>();
         for (String uri : projectIndex.getAllUris()) {
+            if (result.size() >= MAX_REFS) break;
             LspDocument htmlDoc = projectIndex.getDocument(uri);
             if (htmlDoc == null || htmlDoc.text == null) continue;
 
             if (uri.endsWith(".html") || uri.endsWith(".htm")) {
                 String searchTerm = isId ? "id=\"" + plainName + "\"" : plainName;
+                if (searchTerm.isEmpty()) continue;
+                int step = Math.max(1, searchTerm.length());
                 int idx = htmlDoc.text.indexOf(searchTerm);
-                while (idx >= 0) {
+                while (idx >= 0 && result.size() < MAX_REFS) {
                     LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(htmlDoc.text, idx);
                     result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
-                    idx = htmlDoc.text.indexOf(searchTerm, idx + searchTerm.length());
+                    idx = htmlDoc.text.indexOf(searchTerm, idx + step);
                 }
             } else if (uri.endsWith(".js") || uri.endsWith(".ts")) {
                 String searchTerm = isId ? plainName : "." + plainName;
+                if (searchTerm.isEmpty()) continue;
+                int step = Math.max(1, searchTerm.length());
                 int idx = htmlDoc.text.indexOf(searchTerm);
-                while (idx >= 0) {
+                while (idx >= 0 && result.size() < MAX_REFS) {
                     LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(htmlDoc.text, idx);
                     result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
-                    idx = htmlDoc.text.indexOf(searchTerm, idx + searchTerm.length());
+                    idx = htmlDoc.text.indexOf(searchTerm, idx + step);
                 }
             }
         }

@@ -1,0 +1,140 @@
+[
+  {
+    "label": "# Heading 1",
+    "insertText": "# ",
+    "detail": "H1 header",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "## Heading 2",
+    "insertText": "## ",
+    "detail": "H2 header",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "### Heading 3",
+    "insertText": "### ",
+    "detail": "H3 header",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "#### Heading 4",
+    "insertText": "#### ",
+    "detail": "H4 header",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "##### Heading 5",
+    "insertText": "##### ",
+    "detail": "H5 header",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "###### Heading 6",
+    "insertText": "###### ",
+    "detail": "H6 header",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "- Bullet List",
+    "insertText": "- ",
+    "detail": "Unordered list item",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "1. Numbered List",
+    "insertText": "1. ",
+    "detail": "Ordered list item",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "- [ ] Task List",
+    "insertText": "- [ ] ",
+    "detail": "Task checkbox item",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "> Blockquote",
+    "insertText": "> ",
+    "detail": "Blockquote section",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "--- Horizontal Rule",
+    "insertText": "---\n",
+    "detail": "Horizontal dividing line",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "``` Code Block",
+    "insertText": "```\n\n```",
+    "detail": "Fenced code block",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "```js JavaScript Block",
+    "insertText": "```javascript\n\n```",
+    "detail": "JavaScript fenced code block",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "```html HTML Block",
+    "insertText": "```html\n\n```",
+    "detail": "HTML fenced code block",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "```css CSS Block",
+    "insertText": "```css\n\n```",
+    "detail": "CSS fenced code block",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "```json JSON Block",
+    "insertText": "```json\n\n```",
+    "detail": "JSON fenced code block",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "[link](url)",
+    "insertText": "[]()",
+    "detail": "Markdown hyperlink",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "![image](url)",
+    "insertText": "![]()",
+    "detail": "Markdown image link",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "**bold**",
+    "insertText": "****",
+    "detail": "Bold text",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "*italic*",
+    "insertText": "**",
+    "detail": "Italic text",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "`inline code`",
+    "insertText": "``",
+    "detail": "Inline code span",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "~~strikethrough~~",
+    "insertText": "~~~~",
+    "detail": "Strikethrough text",
+    "type": "SNIPPET"
+  },
+  {
+    "label": "| Table",
+    "insertText": "| Column 1 | Column 2 |\n| -------- | -------- |\n| Item 1   | Item 2   |\n",
+    "detail": "Markdown table grid",
+    "type": "SNIPPET"
+  }
+]

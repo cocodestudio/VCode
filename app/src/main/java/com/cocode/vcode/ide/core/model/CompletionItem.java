@@ -49,6 +49,10 @@ public class CompletionItem {
         return (insertText != null && !insertText.isEmpty()) ? insertText : label;
     }
 
+    public String getInsertText() {
+        return insertText;
+    }
+
     public String getLabel() {
         return label;
     }

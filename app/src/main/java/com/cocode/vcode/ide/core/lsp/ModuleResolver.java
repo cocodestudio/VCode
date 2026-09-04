@@ -27,18 +27,32 @@ public class ModuleResolver {
     public static LspLocation resolveModulePath(String docUri, String importPath) {
         File base = new File(docUri).getParentFile();
         if (base == null) return null;
+
+        ProjectIndex index = ProjectIndex.getInstance();
         
         // Try exact path first (e.g. for .js, .json)
         File target = new File(base, importPath);
-        if (existsCaseSensitive(target.getParentFile(), target.getName()) && target.isFile()) {
+        if (target.getParentFile() != null && existsCaseSensitive(target.getParentFile(), target.getName()) && target.isFile()) {
             return new LspLocation(normalize(target), new LspRange(0, 0, 0, 0));
+        }
+        if (index != null) {
+            String targetNorm = normalize(target);
+            if (index.getParseResult(targetNorm) != null || index.getDocument(targetNorm) != null) {
+                return new LspLocation(targetNorm, new LspRange(0, 0, 0, 0));
+            }
         }
         
         // Try common JS/TS extensions if extension was omitted
         for (String ext : new String[]{".js", ".ts", ".mjs", ".cjs", ".tsx", ".jsx"}) {
             File extTarget = new File(base, importPath + ext);
-            if (existsCaseSensitive(extTarget.getParentFile(), extTarget.getName())) {
+            if (extTarget.getParentFile() != null && existsCaseSensitive(extTarget.getParentFile(), extTarget.getName())) {
                 return new LspLocation(normalize(extTarget), new LspRange(0, 0, 0, 0));
+            }
+            if (index != null) {
+                String extNorm = normalize(extTarget);
+                if (index.getParseResult(extNorm) != null || index.getDocument(extNorm) != null) {
+                    return new LspLocation(extNorm, new LspRange(0, 0, 0, 0));
+                }
             }
         }
         
@@ -49,6 +63,15 @@ public class ModuleResolver {
                      return new LspLocation(normalize(new File(target, ext)), new LspRange(0, 0, 0, 0));
                  }
              }
+        }
+        if (index != null) {
+            for (String ext : new String[]{"index.js", "index.ts", "index.mjs", "index.cjs", "index.tsx", "index.jsx"}) {
+                File idxTarget = new File(target, ext);
+                String idxNorm = normalize(idxTarget);
+                if (index.getParseResult(idxNorm) != null || index.getDocument(idxNorm) != null) {
+                    return new LspLocation(idxNorm, new LspRange(0, 0, 0, 0));
+                }
+            }
         }
         
         return null;

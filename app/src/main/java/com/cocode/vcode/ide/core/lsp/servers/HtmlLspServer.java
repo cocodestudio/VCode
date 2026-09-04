@@ -141,7 +141,8 @@ public final class HtmlLspServer implements LspServer {
         Matcher m = p.matcher(line);
         while (m.find()) {
             if (cursorChar >= m.start() && cursorChar <= m.end()) {
-                return m.group(1);
+                String val = m.group(1).trim();
+                return val.isEmpty() ? null : val;
             }
         }
         return null;
@@ -158,8 +159,16 @@ public final class HtmlLspServer implements LspServer {
         Matcher m = CLASS_ATTR.matcher(line);
         while (m.find()) {
             if (cursorChar >= m.start() && cursorChar <= m.end()) {
-                String[] classes = m.group(1).split("\\s+");
-                return classes.length > 0 ? classes[0] : null;
+                String val = m.group(1).trim();
+                if (val.isEmpty()) return null;
+                String[] classes = val.split("\\s+");
+                for (String cls : classes) {
+                    String trimmed = cls.trim();
+                    if (!trimmed.isEmpty()) {
+                        return trimmed;
+                    }
+                }
+                return null;
             }
         }
         return null;
@@ -247,11 +256,15 @@ public final class HtmlLspServer implements LspServer {
             return Collections.emptyList();
         }
 
-        File file = new File(doc.uri);
-        List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
-        List<Problem> htmlProblems = HtmlLinter.analyze(file, doc.text);
-        if (htmlProblems != null) problems.addAll(htmlProblems);
-        return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
+        try {
+            File file = new File(doc.uri);
+            List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+            List<Problem> htmlProblems = HtmlLinter.analyze(file, doc.text);
+            if (htmlProblems != null) problems.addAll(htmlProblems);
+            return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
     }
 
     @Override
@@ -341,7 +354,9 @@ public final class HtmlLspServer implements LspServer {
      */
     private LspLocation findIdUsageInJs(String idValue) {
         if (projectIndex == null || idValue == null) return null;
-        String pattern = "getElementById(\"" + idValue + "\")";
+        String trimmed = idValue.trim();
+        if (trimmed.isEmpty()) return null;
+        String pattern = "getElementById(\"" + trimmed + "\")";
         for (String uri : projectIndex.getAllUris()) {
             if (!uri.endsWith(".js") && !uri.endsWith(".ts")) continue;
             
@@ -361,7 +376,9 @@ public final class HtmlLspServer implements LspServer {
      */
     private LspLocation findCssRule(String className) {
         if (projectIndex == null || className == null) return null;
-        String cssSelector = "." + className;
+        String trimmed = className.trim();
+        if (trimmed.isEmpty()) return null;
+        String cssSelector = "." + trimmed;
         for (SymbolEntry sym : projectIndex.findSymbolsByPrefix(cssSelector)) {
             if (sym.kind == SymbolEntry.KIND_CSS_CLASS && sym.name.equals(cssSelector)) {
                 return new LspLocation(sym.uri, sym.range);
@@ -375,25 +392,34 @@ public final class HtmlLspServer implements LspServer {
     private List<LspLocation> findUsagesInProject(String name, boolean isId) {
         List<LspLocation> result = new ArrayList<>();
         if (projectIndex == null || name == null) return result;
+        String trimmedName = name.trim();
+        if (trimmedName.isEmpty()) return result;
+
+        final int MAX_REFS = 100;
         for (String uri : projectIndex.getAllUris()) {
+            if (result.size() >= MAX_REFS) break;
             com.cocode.vcode.ide.core.lsp.LspDocument d = projectIndex.getDocument(uri);
             if (d == null || d.text == null) continue;
 
             if (uri.endsWith(".html") || uri.endsWith(".htm")) {
-                String searchTerm = isId ? "id=\"" + name + "\"" : name;
+                String searchTerm = isId ? "id=\"" + trimmedName + "\"" : trimmedName;
+                if (searchTerm.isEmpty()) continue;
+                int step = Math.max(1, searchTerm.length());
                 int idx = d.text.indexOf(searchTerm);
-                while (idx >= 0) {
+                while (idx >= 0 && result.size() < MAX_REFS) {
                     LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, idx);
                     result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
-                    idx = d.text.indexOf(searchTerm, idx + searchTerm.length());
+                    idx = d.text.indexOf(searchTerm, idx + step);
                 }
             } else if (uri.endsWith(".js") || uri.endsWith(".ts")) {
-                String searchTerm = isId ? name : "." + name;
+                String searchTerm = isId ? trimmedName : "." + trimmedName;
+                if (searchTerm.isEmpty()) continue;
+                int step = Math.max(1, searchTerm.length());
                 int idx = d.text.indexOf(searchTerm);
-                while (idx >= 0) {
+                while (idx >= 0 && result.size() < MAX_REFS) {
                     LspPosition refPos = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, idx);
                     result.add(new LspLocation(uri, new LspRange(refPos, new LspPosition(refPos.line, refPos.character + searchTerm.length()))));
-                    idx = d.text.indexOf(searchTerm, idx + searchTerm.length());
+                    idx = d.text.indexOf(searchTerm, idx + step);
                 }
             }
         }

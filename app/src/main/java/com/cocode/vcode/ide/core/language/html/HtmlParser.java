@@ -101,10 +101,13 @@ public class HtmlParser {
                         }
 
                         if (matchDepth != -1) {
-                            // Close all up to matchDepth
-                            for (int i = depth - 1; i >= matchDepth; i--) {
-                                tree.nodeEnd[parentStack[i]] = closeTagEndOffset;
+                            for (int i = depth - 1; i > matchDepth; i--) {
+                                int unclosedId = parentStack[i];
+                                String unclosedName = tagStack[i];
+                                tree.nodeEnd[unclosedId] = start;
+                                tree.addNode(HtmlSyntaxTree.N_ERROR, tree.nodeStart[unclosedId], tree.nodeStart[unclosedId] + (unclosedName != null ? unclosedName.length() + 2 : 1), unclosedId, unclosedName, "Unclosed");
                             }
+                            tree.nodeEnd[parentStack[matchDepth]] = closeTagEndOffset;
                             depth = matchDepth;
                             currentParent = depth > 0 ? parentStack[depth - 1] : 0;
                         } else {
@@ -203,7 +206,10 @@ public class HtmlParser {
         
         // Close unclosed tags at EOF
         for (int i = 0; i < depth; i++) {
-            tree.nodeEnd[parentStack[i]] = stream.length;
+            int unclosedId = parentStack[i];
+            String unclosedName = tagStack[i];
+            tree.nodeEnd[unclosedId] = stream.length;
+            tree.addNode(HtmlSyntaxTree.N_ERROR, tree.nodeStart[unclosedId], tree.nodeStart[unclosedId] + (unclosedName != null ? unclosedName.length() + 2 : 1), unclosedId, unclosedName, "Unclosed");
         }
 
         tree.buildNodesByOffset();

@@ -1,6 +1,5 @@
 package com.cocode.vcode.ide.utils;
 
-import android.graphics.Color;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -192,25 +191,30 @@ public class ColorParser {
         return null;
     }
 
+    private static int argb(int a, int r, int g, int b) {
+        return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+    }
+
     private static Integer parseHex(String hex) {
         try {
             if (hex.length() == 4) { // #RGB
                 int r = Integer.parseInt(hex.substring(1, 2), 16);
                 int g = Integer.parseInt(hex.substring(2, 3), 16);
                 int b = Integer.parseInt(hex.substring(3, 4), 16);
-                return Color.argb(255, r | (r << 4), g | (g << 4), b | (b << 4));
+                return argb(255, r | (r << 4), g | (g << 4), b | (b << 4));
             } else if (hex.length() == 5) { // #RGBA
                 int r = Integer.parseInt(hex.substring(1, 2), 16);
                 int g = Integer.parseInt(hex.substring(2, 3), 16);
                 int b = Integer.parseInt(hex.substring(3, 4), 16);
                 int a = Integer.parseInt(hex.substring(4, 5), 16);
-                return Color.argb(a | (a << 4), r | (r << 4), g | (g << 4), b | (b << 4));
+                return argb(a | (a << 4), r | (r << 4), g | (g << 4), b | (b << 4));
             } else if (hex.length() == 7) { // #RRGGBB
-                return Color.parseColor(hex);
+                long val = Long.parseLong(hex.substring(1), 16);
+                return (int) (0xFF000000L | val);
             } else if (hex.length() == 9) { // #RRGGBBAA
-                String a = hex.substring(7, 9);
-                String rgb = hex.substring(1, 7);
-                return Color.parseColor("#" + a + rgb);
+                long rgb = Long.parseLong(hex.substring(1, 7), 16);
+                long a = Long.parseLong(hex.substring(7, 9), 16);
+                return (int) ((a << 24) | rgb);
             }
         } catch (IllegalArgumentException e) {
             // Ignore
@@ -229,7 +233,7 @@ public class ColorParser {
                 if (matcher.group(7) != null) {
                     a = parseAlpha(matcher.group(7), "%".equals(matcher.group(8)));
                 }
-                return Color.argb((int) a, (int) r, (int) g, (int) b);
+                return argb((int) a, (int) r, (int) g, (int) b);
             } catch (Exception e) {
                 // Ignore
             }
@@ -280,7 +284,7 @@ public class ColorParser {
                     b = x;
                 }
 
-                return Color.argb((int) a, (int) ((r + m) * 255), (int) ((g + m) * 255), (int) ((b + m) * 255));
+                return argb((int) a, (int) ((r + m) * 255), (int) ((g + m) * 255), (int) ((b + m) * 255));
             } catch (Exception e) {
                 // Ignore
             }

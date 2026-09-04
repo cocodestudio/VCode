@@ -110,6 +110,7 @@ public class JsStandardLibrary {
                 "repeat", "valueOf", "toString", "length", "isWellFormed", "toWellFormed", "localeCompare"
         });
         PROTOTYPE_METHODS.put("number", new String[]{"toFixed", "toPrecision", "toExponential", "toString", "valueOf", "toLocaleString"});
+        PROTOTYPE_METHODS.put("boolean", new String[]{"toString", "valueOf"});
         PROTOTYPE_METHODS.put("promise", new String[]{"then", "catch", "finally"});
         PROTOTYPE_METHODS.put("map", new String[]{"set", "get", "has", "delete", "clear", "forEach", "keys", "values", "entries", "size"});
         PROTOTYPE_METHODS.put("set", new String[]{"add", "has", "delete", "clear", "forEach", "values", "keys", "entries", "size", "union", "intersection", "difference", "symmetricDifference", "isSubsetOf", "isSupersetOf"});

@@ -36,6 +36,38 @@ public class JsonSyntaxHighlighter extends SyntaxHighlighter {
         colorComma = getColor(R.color.vcode_color_json_comma);
     }
 
+    public static JsonSyntaxHighlighter forTest() {
+        return new JsonSyntaxHighlighter((Void) null);
+    }
+
+    public static JsonSyntaxHighlighter forTestWithColors(int key, int string, int number, int booleanCol, int nullCol, int bracket, int colon, int comma) {
+        return new JsonSyntaxHighlighter(key, string, number, booleanCol, nullCol, bracket, colon, comma);
+    }
+
+    JsonSyntaxHighlighter(Void unusedForTest) {
+        super((Void) null);
+        this.colorKey = 0;
+        this.colorStringValue = 0;
+        this.colorNumberValue = 0;
+        this.colorBoolean = 0;
+        this.colorNull = 0;
+        this.colorBracket = 0;
+        this.colorColon = 0;
+        this.colorComma = 0;
+    }
+
+    JsonSyntaxHighlighter(int key, int string, int number, int booleanCol, int nullCol, int bracket, int colon, int comma) {
+        super(0, string, 0, number, 0);
+        this.colorKey = key;
+        this.colorStringValue = string;
+        this.colorNumberValue = number;
+        this.colorBoolean = booleanCol;
+        this.colorNull = nullCol;
+        this.colorBracket = bracket;
+        this.colorColon = colon;
+        this.colorComma = comma;
+    }
+
     @Override
     public List<HighlightToken> tokenizeLine(String lineStr, int lineIndex, int startState) {
         List<HighlightToken> tokens = new ArrayList<>();
@@ -130,7 +162,7 @@ public class JsonSyntaxHighlighter extends SyntaxHighlighter {
                 continue;
             }
 
-            if (c == '-' || Character.isDigit(c)) {
+            if (c == '-' || c == '+' || Character.isDigit(c)) {
                 int j = i + 1;
                 while (j < len && (Character.isDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '.' || lineStr.charAt(j) == 'e' || lineStr.charAt(j) == 'E' || lineStr.charAt(j) == '+' || lineStr.charAt(j) == '-')) {
                     j++;

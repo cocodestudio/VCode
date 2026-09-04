@@ -95,13 +95,12 @@ public class CssParserTest {
         
         // 1: N_RULE (.class)
         // 2: N_SELECTOR (.class)
-        // 3: N_RULE (color red) - due to missing colon, it's parsed as a blockless selector
-        // 4: N_SELECTOR (color red)
-        // 5: N_DECLARATION (margin: 0;)
-        // 6: N_PROPERTY (margin)
-        // 7: N_VALUE (0)
+        // 3: N_ERROR (color red;)
+        // 4: N_DECLARATION (margin: 0;)
+        // 5: N_PROPERTY (margin)
+        // 6: N_VALUE (0)
         
-        assertEquals(8, tree.nodeCount);
+        assertEquals(7, tree.nodeCount);
         
         int rule = 1;
         assertEquals(CssSyntaxTree.N_RULE, tree.nodeType[rule]);
@@ -110,12 +109,11 @@ public class CssParserTest {
         assertEquals(CssSyntaxTree.N_SELECTOR, tree.nodeType[sel]);
         assertEquals(".class", tree.nodeName[sel]);
         
-        int badRule = tree.nodeSibling[sel];
-        assertEquals(CssSyntaxTree.N_RULE, tree.nodeType[badRule]);
-        int badSel = tree.nodeChild[badRule];
-        assertEquals("color red", tree.nodeName[badSel]);
+        int errNode = tree.nodeSibling[sel];
+        assertEquals(CssSyntaxTree.N_ERROR, tree.nodeType[errNode]);
+        assertTrue(tree.nodeName[errNode].contains("Missing ':'"));
         
-        int goodDecl = tree.nodeSibling[badRule];
+        int goodDecl = tree.nodeSibling[errNode];
         assertEquals(CssSyntaxTree.N_DECLARATION, tree.nodeType[goodDecl]);
         
         int prop = tree.nodeChild[goodDecl];
