@@ -1,0 +1,137 @@
+{
+  "deprecatedElements": {
+    "font": "CSS font-* properties",
+    "center": "CSS text-align: center",
+    "marquee": "CSS animations",
+    "blink": "CSS animations",
+    "frameset": "<iframe> or modern layout",
+    "frame": "<iframe>",
+    "noframes": "N/A — remove",
+    "acronym": "<abbr>",
+    "applet": "<object> or <embed>",
+    "basefont": "CSS font-* on body",
+    "big": "CSS font-size",
+    "strike": "<del> or CSS text-decoration",
+    "tt": "<code> or <kbd>"
+  },
+  "deprecatedAttributes": {
+    "*:bgcolor": "CSS background-color",
+    "*:align": "CSS text-align or flexbox",
+    "table:border": "CSS border",
+    "table:cellpadding": "CSS padding",
+    "table:cellspacing": "CSS border-spacing",
+    "img:border": "CSS border",
+    "body:link": "CSS a:link",
+    "body:vlink": "CSS a:visited",
+    "body:alink": "CSS a:active",
+    "body:text": "CSS color on body",
+    "hr:noshade": "CSS border style",
+    "*:language": "remove — obsolete"
+  },
+  "requiredParents": {
+    "li": ["ul", "ol", "menu"],
+    "td": ["tr"],
+    "th": ["tr"],
+    "tr": ["table", "thead", "tbody", "tfoot"],
+    "caption": ["table"],
+    "colgroup": ["table"],
+    "col": ["colgroup"],
+    "thead": ["table"],
+    "tbody": ["table"],
+    "tfoot": ["table"],
+    "option": ["select", "datalist", "optgroup"],
+    "optgroup": ["select"],
+    "dt": ["dl"],
+    "dd": ["dl"],
+    "source": ["picture", "video", "audio"],
+    "track": ["video", "audio"],
+    "summary": ["details"]
+  },
+  "requiredAttributes": {
+    "img": ["src", "alt"],
+    "input": ["type"],
+    "a": ["href"],
+    "iframe": ["src"],
+    "video": ["src"],
+    "audio": ["src"],
+    "track": ["src", "kind"],
+    "area": ["alt"],
+    "th": ["scope"],
+    "label": ["for"],
+    "form": ["action"],
+    "meta": ["content"],
+    "link": ["href", "rel"],
+    "script": ["src"],
+    "button": ["type"]
+  },
+  "semanticSuggestions": {
+    "header": "<header>",
+    "nav": "<nav>",
+    "footer": "<footer>",
+    "main": "<main>",
+    "sidebar": "<aside>",
+    "article": "<article>",
+    "section": "<section>",
+    "aside": "<aside>"
+  },
+  "vendorPrefixes": {
+    "user-select": "-webkit-user-select",
+    "appearance": "-webkit-appearance",
+    "backdrop-filter": "-webkit-backdrop-filter",
+    "text-stroke": "-webkit-text-stroke",
+    "mask-image": "-webkit-mask-image",
+    "clip-path": "-webkit-clip-path",
+    "box-decoration-break": "-webkit-box-decoration-break"
+  },
+  "cssShorthands": {
+    "background": [
+      "background-color", "background-image", "background-position", "background-size",
+      "background-repeat", "background-attachment", "background-clip", "background-origin"
+    ],
+    "border": [
+      "border-color", "border-width", "border-style"
+    ],
+    "border-top": [
+      "border-top-color", "border-top-width", "border-top-style"
+    ],
+    "border-right": [
+      "border-right-color", "border-right-width", "border-right-style"
+    ],
+    "border-bottom": [
+      "border-bottom-color", "border-bottom-width", "border-bottom-style"
+    ],
+    "border-left": [
+      "border-left-color", "border-left-width", "border-left-style"
+    ],
+    "margin": [
+      "margin-top", "margin-right", "margin-bottom", "margin-left"
+    ],
+    "padding": [
+      "padding-top", "padding-right", "padding-bottom", "padding-left"
+    ],
+    "font": [
+      "font-family", "font-size", "font-weight", "font-style", "font-variant",
+      "font-stretch", "line-height"
+    ],
+    "transition": [
+      "transition-property", "transition-duration", "transition-timing-function", "transition-delay"
+    ],
+    "animation": [
+      "animation-name", "animation-duration", "animation-timing-function", "animation-delay",
+      "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state"
+    ],
+    "grid": [
+      "grid-template-rows", "grid-template-columns", "grid-template-areas",
+      "grid-auto-rows", "grid-auto-columns", "grid-auto-flow"
+    ],
+    "flex": [
+      "flex-grow", "flex-shrink", "flex-basis"
+    ],
+    "list-style": [
+      "list-style-type", "list-style-position", "list-style-image"
+    ],
+    "outline": [
+      "outline-color", "outline-width", "outline-style"
+    ]
+  }
+}

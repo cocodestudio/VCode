@@ -1,0 +1,50 @@
+{
+  "fileTemplates": [
+    {
+      "extension": ".html",
+      "templateFile": "template_blank.html",
+      "title": "HTML",
+      "fileType": "HTML"
+    },
+    {
+      "extension": ".css",
+      "templateFile": "template_blank.css",
+      "title": "CSS",
+      "fileType": "CSS"
+    },
+    {
+      "extension": ".js",
+      "templateFile": "template_blank.js",
+      "title": "JS",
+      "fileType": "JAVASCRIPT"
+    },
+    {
+      "extension": ".json",
+      "templateFile": "template_blank.json",
+      "title": "JSON",
+      "fileType": "JSON"
+    },
+    {
+      "extension": ".md",
+      "templateFile": "template_markdown.md",
+      "title": "MD",
+      "fileType": "MARKDOWN"
+    },
+    {
+      "extension": ".txt",
+      "templateFile": "",
+      "title": "TEXT",
+      "fileType": "TEXT"
+    }
+  ],
+  "projectTemplates": {
+    "HTML+CSS+JS": [
+      { "targetFile": "{mainFile}", "template": "template_html_css_js.html" },
+      { "targetFile": "style.css", "template": "template_blank.css" },
+      { "targetFile": "app.js", "template": "template_blank.js" }
+    ],
+    "HTML": [
+      { "targetFile": "{mainFile}", "template": "template_blank.html" }
+    ]
+  }
+}

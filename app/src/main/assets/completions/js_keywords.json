@@ -18,6 +18,7 @@
   {"label": "continue", "insertText": "continue;", "detail": "Keyword", "type": "KEYWORD"},
   {"label": "class", "insertText": "class | {\n  constructor() {\n    \n  }\n}", "detail": "Keyword", "type": "KEYWORD"},
   {"label": "extends", "insertText": "extends ", "detail": "Keyword", "type": "KEYWORD"},
+  {"label": "enum", "insertText": "enum ", "detail": "Keyword", "type": "KEYWORD"},
   {"label": "import", "insertText": "import { | } from '';", "detail": "Keyword", "type": "KEYWORD"},
   {"label": "import default", "insertText": "import | from '';", "detail": "Keyword", "type": "SNIPPET"},
   {"label": "import *", "insertText": "import * as | from '';", "detail": "Keyword", "type": "SNIPPET"},

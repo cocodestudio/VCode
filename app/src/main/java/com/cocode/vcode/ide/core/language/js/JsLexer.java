@@ -14,13 +14,7 @@ import java.util.Set;
  */
 public class JsLexer {
 
-    private static final Set<String> JS_KEYWORDS = new HashSet<>(Arrays.asList(
-            "await", "break", "case", "catch", "class", "const", "continue", "debugger",
-            "default", "delete", "do", "else", "enum", "export", "extends", "false",
-            "finally", "for", "function", "if", "import", "in", "instanceof", "new",
-            "null", "return", "super", "switch", "this", "throw", "true", "try",
-            "typeof", "var", "void", "while", "with", "yield", "let", "static", "async"
-    ));
+    private static final Set<String> JS_KEYWORDS = JsKeywords.JS_KEYWORDS;
 
     public static TokenStream tokenize(String source) {
         return tokenize(source, null);
@@ -233,7 +227,6 @@ public class JsLexer {
             if (quote == '`') {
                 int start = i;
                 i++;
-                int braceDepth = 0;
                 while (i < endOffset) {
                     char tc = source.charAt(i);
                     if (tc == '\\') {
@@ -241,11 +234,15 @@ public class JsLexer {
                         continue;
                     }
                     if (tc == '$' && i + 1 < endOffset && source.charAt(i + 1) == '{') {
-                        for (int k = start; k <= i && k < endOffset; k++) {
+                        for (int k = start; k < i && k < endOffset; k++) {
                             if (k < types.length) {
                                 types[k] = TokenStream.TK_TEMPLATE;
                                 tokenStart[k] = start;
                             }
+                        }
+                        if (i < types.length) {
+                            types[i] = TokenStream.TK_PUNCT;
+                            tokenStart[i] = i;
                         }
                         if (i + 1 < types.length) {
                             types[i + 1] = TokenStream.TK_PUNCT;
@@ -253,7 +250,7 @@ public class JsLexer {
                         }
                         i += 2;
                         int exprStart = i;
-                        braceDepth = 1;
+                        int braceDepth = 1;
                         while (i < endOffset && braceDepth > 0) {
                             char q2 = source.charAt(i);
                             if (q2 == '{') {
@@ -272,11 +269,19 @@ public class JsLexer {
                                 }
                                 i++;
                             } else if (q2 == '\'' || q2 == '"') {
+                                char sq = q2;
+                                int sStart = i;
                                 i++;
                                 while (i < endOffset) {
                                     if (source.charAt(i) == '\\') { i += 2; continue; }
-                                    if (source.charAt(i) == q2) { i++; break; }
+                                    if (source.charAt(i) == sq) { i++; break; }
                                     i++;
+                                }
+                                for (int k = sStart; k < Math.min(i, endOffset); k++) {
+                                    if (k < types.length) {
+                                        types[k] = TokenStream.TK_STRING;
+                                        tokenStart[k] = sStart;
+                                    }
                                 }
                             } else if (q2 == '`') {
                                 i++;
@@ -311,7 +316,10 @@ public class JsLexer {
                             }
                         }
                         if (braceDepth > 0) {
+                            lexRegion(source, types, tokenStart, exprStart, Math.min(i, endOffset), 0);
                         }
+                        start = i;
+                        continue;
                     }
                     if (tc == '`') {
                         int currentChunkStart = -1;
@@ -325,12 +333,13 @@ public class JsLexer {
                             }
                         }
                         i++;
+                        start = i;
                         break;
                     }
                     i++;
                 }
-                
-                if (i >= endOffset) {
+
+                if (i >= endOffset && start < endOffset) {
                     int currentChunkStart = -1;
                     for (int k = start; k < Math.min(i, endOffset); k++) {
                         if (k < types.length && types[k] == TokenStream.TK_NONE) {

@@ -24,6 +24,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.card.MaterialCardView;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,12 +39,8 @@ import java.nio.charset.StandardCharsets;
  */
 public class NewFileBottomSheet extends BaseBottomSheetDialogFragment {
 
-    private final String[] extensions = {".html", ".css", ".js", ".json", ".md", ".txt"};
-
-    /**
-     * Asset filenames for the initial boilerplate content.
-     */
-    private final String[] templateFiles = {
+    private static final String[] DEFAULT_EXTENSIONS = {".html", ".css", ".js", ".json", ".md", ".txt"};
+    private static final String[] DEFAULT_TEMPLATE_FILES = {
             "template_blank.html",
             "template_blank.css",
             "template_blank.js",
@@ -49,6 +48,10 @@ public class NewFileBottomSheet extends BaseBottomSheetDialogFragment {
             "template_markdown.md",
             ""
     };
+
+    private static String[] extensions = DEFAULT_EXTENSIONS;
+    private static String[] templateFiles = DEFAULT_TEMPLATE_FILES;
+    private static volatile boolean configLoaded = false;
 
     private BottomSheetCreateNewFileBinding binding;
     private NewFileListener listener;
@@ -98,9 +101,34 @@ public class NewFileBottomSheet extends BaseBottomSheetDialogFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        loadConfigIfNeeded();
         designUI();
         setupTemplates();
         setupListeners();
+    }
+
+    private void loadConfigIfNeeded() {
+        if (configLoaded) return;
+        try {
+            String configJson = readTemplateFromAssets("templates_config.json");
+            if (configJson != null && !configJson.isEmpty()) {
+                JSONObject root = new JSONObject(configJson);
+                if (root.has("fileTemplates")) {
+                    JSONArray arr = root.getJSONArray("fileTemplates");
+                    String[] exts = new String[arr.length()];
+                    String[] tpls = new String[arr.length()];
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject item = arr.getJSONObject(i);
+                        exts[i] = item.getString("extension");
+                        tpls[i] = item.getString("templateFile");
+                    }
+                    extensions = exts;
+                    templateFiles = tpls;
+                    configLoaded = true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**

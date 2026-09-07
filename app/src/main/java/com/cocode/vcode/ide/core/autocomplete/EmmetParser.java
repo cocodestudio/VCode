@@ -2,7 +2,12 @@ package com.cocode.vcode.ide.core.autocomplete;
 
 import androidx.annotation.NonNull;
 
+import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
 import com.cocode.vcode.ide.core.language.css.EmmetCssDefinitions;
+import com.cocode.vcode.ide.core.language.html.HtmlTagCache;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,9 +58,7 @@ public class EmmetParser {
 
         if (abbr.equals("!")) {
             if (boilerplate != null && !boilerplate.isEmpty()) return boilerplate;
-            return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n" +
-                    "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-                    "    <title>Document</title>\n</head>\n<body>\n    |\n</body>\n</html>";
+            return getDefaultBoilerplate();
         }
 
         if (!PAT_ABBR.matcher(abbr).matches()) return null;
@@ -78,7 +81,12 @@ public class EmmetParser {
         }
     }
 
-    private static final String[] LOREM_WORDS = {
+    private static final Object lock = new Object();
+    private static volatile boolean loaded = false;
+    private static String defaultBoilerplate;
+    private static String[] loremWords;
+
+    private static final String[] FALLBACK_LOREM = {
             "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do",
             "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore", "magna", "aliqua", "enim",
             "ad", "minim", "veniam", "quis", "nostrud", "exercitation", "ullamco", "laboris", "nisi", "ut",
@@ -88,11 +96,52 @@ public class EmmetParser {
             "qui", "officia", "deserunt", "mollit", "anim", "id", "est", "laborum"
     };
 
+    private static void ensureLoaded() {
+        if (loaded) return;
+        synchronized (lock) {
+            if (loaded) return;
+            loadFromAssets();
+            loaded = true;
+        }
+    }
+
+    private static void loadFromAssets() {
+        String jsonStr = StaticAssetReader.readAsset("completions/emmet_definitions.json");
+        if (jsonStr == null || jsonStr.trim().isEmpty()) {
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(jsonStr);
+            if (root.has("htmlBoilerplate")) {
+                defaultBoilerplate = root.getString("htmlBoilerplate");
+            }
+            if (root.has("loremWords")) {
+                JSONArray arr = root.getJSONArray("loremWords");
+                String[] words = new String[arr.length()];
+                for (int i = 0; i < arr.length(); i++) {
+                    words[i] = arr.getString(i);
+                }
+                loremWords = words;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String getDefaultBoilerplate() {
+        ensureLoaded();
+        if (defaultBoilerplate != null) return defaultBoilerplate;
+        return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n" +
+                "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+                "    <title>Document</title>\n</head>\n<body>\n    |\n</body>\n</html>";
+    }
+
     private static String generateLorem(int count) {
         if (count <= 0) return "";
+        ensureLoaded();
+        String[] words = (loremWords != null && loremWords.length > 0) ? loremWords : FALLBACK_LOREM;
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < count; i++) {
-            String word = LOREM_WORDS[i % LOREM_WORDS.length];
+            String word = words[i % words.length];
             if (i == 0) {
                 sb.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
             } else {
@@ -458,24 +507,7 @@ public class EmmetParser {
     }
 
     private static boolean isVoidElement(String tag) {
-        switch (tag) {
-            case "img":
-            case "input":
-            case "br":
-            case "hr":
-            case "meta":
-            case "link":
-            case "area":
-            case "base":
-            case "col":
-            case "embed":
-            case "source":
-            case "track":
-            case "wbr":
-                return true;
-            default:
-                return false;
-        }
+        return HtmlTagCache.isVoidElement(tag);
     }
 
     private static String getIndent(int levels) {

@@ -7,12 +7,15 @@ import com.cocode.vcode.ide.core.autocomplete.FastTrie;
 import com.cocode.vcode.ide.core.completion.staticdata.JsonStaticCompletionDispatcher;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 
+import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -53,126 +56,41 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         BOOL_NULL_ITEMS.add(new CompletionItem("false", "false", "Boolean", CompletionItem.Type.VALUE, 0));
         BOOL_NULL_ITEMS.add(new CompletionItem("null", "null", "Null", CompletionItem.Type.VALUE, 0));
 
-    // package.json keys
-        List<CompletionItem> pkgKeys = new ArrayList<>();
-        String[][] pkgEntries = {
-                {"name", "\"name\": \"|\"", "Package name"},
-                {"version", "\"version\": \"|1.0.0\"", "Semver version"},
-                {"description", "\"description\": \"|\"", "Package description"},
-                {"main", "\"main\": \"|index.js\"", "Entry point"},
-                {"module", "\"module\": \"|index.mjs\"", "ES module entry"},
-                {"type", "\"type\": \"|module\"", "Package type"},
-                {"types", "\"types\": \"|index.d.ts\"", "TypeScript types"},
-                {"exports", "\"exports\": {\n  \".\": \"|\" \n}", "Package exports"},
-                {"scripts", "\"scripts\": {\n  |\n}", "NPM scripts"},
-                {"dependencies", "\"dependencies\": {\n  |\n}", "Runtime dependencies"},
-                {"devDependencies", "\"devDependencies\": {\n  |\n}", "Dev dependencies"},
-                {"peerDependencies", "\"peerDependencies\": {\n  |\n}", "Peer dependencies"},
-                {"keywords", "\"keywords\": [|\"\"]", "Search keywords"},
-                {"author", "\"author\": \"|\"", "Package author"},
-                {"license", "\"license\": \"|MIT\"", "License identifier"},
-                {"repository", "\"repository\": {\n  \"type\": \"git\",\n  \"url\": \"|\"\n}", "Source repository"},
-                {"bugs", "\"bugs\": {\n  \"url\": \"|\"\n}", "Bug tracker URL"},
-                {"homepage", "\"homepage\": \"|\"", "Project homepage"},
-                {"private", "\"private\": |true", "Prevent publishing"},
-                {"engines", "\"engines\": {\n  \"node\": \"|>=18\"\n}", "Engine constraints"},
-                {"files", "\"files\": [|\"\"]", "Files to publish"},
-                {"bin", "\"bin\": {\n  |\n}", "CLI executables"},
-                {"browserslist", "\"browserslist\": [\"|> 0.5%\", \"not dead\"]", "Browser targets"},
-                {"workspaces", "\"workspaces\": [|\"packages/*\"]", "Monorepo workspaces"},
-                {"sideEffects", "\"sideEffects\": |false", "Tree-shaking hint"},
-                {"publishConfig", "\"publishConfig\": {\n  \"access\": \"|public\"\n}", "Publish settings"},
-        };
-        for (String[] e : pkgEntries) {
-            pkgKeys.add(new CompletionItem(e[0], e[1], e[2], CompletionItem.Type.JSON_KEY, 0));
-        }
-        SCHEMA_KEYS.put("package.json", pkgKeys);
+    }
 
-    // tsconfig.json keys
-        List<CompletionItem> tsKeys = new ArrayList<>();
-        String[][] tsEntries = {
-                {"compilerOptions", "\"compilerOptions\": {\n  |\n}", "Compiler settings"},
-                {"include", "\"include\": [|\"src\"]", "Files to include"},
-                {"exclude", "\"exclude\": [|\"node_modules\"]", "Files to exclude"},
-                {"extends", "\"extends\": \"|\"", "Extends base config"},
-                {"files", "\"files\": [|\"\"]", "Explicit file list"},
-                {"references", "\"references\": [{\n  \"path\": \"|\"\n}]", "Project references"},
-        };
-        for (String[] e : tsEntries) {
-            tsKeys.add(new CompletionItem(e[0], e[1], e[2], CompletionItem.Type.JSON_KEY, 0));
-        }
-        SCHEMA_KEYS.put("tsconfig.json", tsKeys);
+    private static final Object lock = new Object();
+    private static volatile boolean schemasLoaded = false;
 
-    // tsconfig compilerOptions keys
-        List<CompletionItem> tsCompilerKeys = new ArrayList<>();
-        String[][] tsCompilerEntries = {
-                {"target", "\"target\": \"|ES2020\"", "ECMAScript target"},
-                {"module", "\"module\": \"|ESNext\"", "Module system"},
-                {"moduleResolution", "\"moduleResolution\": \"|bundler\"", "Resolution strategy"},
-                {"lib", "\"lib\": [|\"ES2020\", \"DOM\"]", "Library files"},
-                {"strict", "\"strict\": |true", "Enable strict mode"},
-                {"esModuleInterop", "\"esModuleInterop\": |true", "ES module compat"},
-                {"skipLibCheck", "\"skipLibCheck\": |true", "Skip .d.ts checking"},
-                {"outDir", "\"outDir\": \"|./dist\"", "Output directory"},
-                {"rootDir", "\"rootDir\": \"|./src\"", "Root directory"},
-                {"declaration", "\"declaration\": |true", "Generate .d.ts"},
-                {"sourceMap", "\"sourceMap\": |true", "Generate source maps"},
-                {"jsx", "\"jsx\": \"|react-jsx\"", "JSX handling"},
-                {"baseUrl", "\"baseUrl\": \".|\"", "Base path for modules"},
-                {"paths", "\"paths\": {\n  \"|@/*\": [\"./src/*\"]\n}", "Path aliases"},
-                {"resolveJsonModule", "\"resolveJsonModule\": |true", "Import .json files"},
-                {"allowJs", "\"allowJs\": |true", "Allow JavaScript"},
-                {"noEmit", "\"noEmit\": |true", "Don't emit output"},
-                {"isolatedModules", "\"isolatedModules\": |true", "Single-file transpile"},
-                {"forceConsistentCasingInFileNames", "\"forceConsistentCasingInFileNames\": |true", "Case sensitivity"},
-                {"noUnusedLocals", "\"noUnusedLocals\": |true", "Warn unused locals"},
-                {"noUnusedParameters", "\"noUnusedParameters\": |true", "Warn unused params"},
-                {"noFallthroughCasesInSwitch", "\"noFallthroughCasesInSwitch\": |true", "Switch fallthrough"},
-        };
-        for (String[] e : tsCompilerEntries) {
-            tsCompilerKeys.add(new CompletionItem(e[0], e[1], e[2], CompletionItem.Type.JSON_KEY, 0));
+    private static void ensureSchemasLoaded() {
+        if (schemasLoaded) return;
+        synchronized (lock) {
+            if (schemasLoaded) return;
+            loadSchemasFromAssets();
+            schemasLoaded = true;
         }
-        SCHEMA_KEYS.put("tsconfig_compilerOptions", tsCompilerKeys);
+    }
 
-    // .eslintrc.json keys
-        List<CompletionItem> eslintKeys = new ArrayList<>();
-        String[][] eslintEntries = {
-                {"env", "\"env\": {\n  \"browser\": true,\n  \"es2021\": true,\n  \"node\": true\n}|", "Environments"},
-                {"extends", "\"extends\": [|\"eslint:recommended\"]", "Base configs"},
-                {"plugins", "\"plugins\": [|\"\"]", "Plugins"},
-                {"rules", "\"rules\": {\n  |\n}", "Rule overrides"},
-                {"parserOptions", "\"parserOptions\": {\n  \"ecmaVersion\": \"latest\",\n  \"sourceType\": \"|module\"\n}", "Parser settings"},
-                {"parser", "\"parser\": \"|\"", "Custom parser"},
-                {"globals", "\"globals\": {\n  |\n}", "Global variables"},
-                {"overrides", "\"overrides\": [{\n  \"files\": [\"|\"],\n  \"rules\": {}\n}]", "File-specific rules"},
-                {"ignorePatterns", "\"ignorePatterns\": [|\"node_modules\"]", "Ignored files"},
-                {"root", "\"root\": |true", "Root config marker"},
-        };
-        for (String[] e : eslintEntries) {
-            eslintKeys.add(new CompletionItem(e[0], e[1], e[2], CompletionItem.Type.JSON_KEY, 0));
+    private static void loadSchemasFromAssets() {
+        String jsonStr = StaticAssetReader.readAsset("completions/json_schemas.json");
+        if (jsonStr == null || jsonStr.trim().isEmpty()) return;
+        try {
+            JSONObject root = new JSONObject(jsonStr);
+            Iterator<String> keys = root.keys();
+            while (keys.hasNext()) {
+                String schemaName = keys.next();
+                JSONArray arr = root.getJSONArray(schemaName);
+                List<CompletionItem> items = new ArrayList<>(arr.length());
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONArray entry = arr.getJSONArray(i);
+                    String label = entry.getString(0);
+                    String insertText = entry.getString(1);
+                    String detail = entry.getString(2);
+                    items.add(new CompletionItem(label, insertText, detail, CompletionItem.Type.JSON_KEY, 0));
+                }
+                SCHEMA_KEYS.put(schemaName, items);
+            }
+        } catch (Exception ignored) {
         }
-        SCHEMA_KEYS.put(".eslintrc.json", eslintKeys);
-
-    // manifest.json (PWA) keys
-        List<CompletionItem> manifestKeys = new ArrayList<>();
-        String[][] manifestEntries = {
-                {"name", "\"name\": \"|\"", "App name"},
-                {"short_name", "\"short_name\": \"|\"", "Short name"},
-                {"description", "\"description\": \"|\"", "Description"},
-                {"start_url", "\"start_url\": \"|\"/\"", "Start URL"},
-                {"display", "\"display\": \"|standalone\"", "Display mode"},
-                {"background_color", "\"background_color\": \"|#ffffff\"", "Background color"},
-                {"theme_color", "\"theme_color\": \"|#000000\"", "Theme color"},
-                {"icons", "\"icons\": [{\n  \"src\": \"|\",\n  \"sizes\": \"192x192\",\n  \"type\": \"image/png\"\n}]", "App icons"},
-                {"scope", "\"scope\": \"|\"/\"", "Navigation scope"},
-                {"orientation", "\"orientation\": \"|portrait\"", "Orientation"},
-                {"lang", "\"lang\": \"|en\"", "Language"},
-                {"categories", "\"categories\": [|\"\"]", "App categories"},
-        };
-        for (String[] e : manifestEntries) {
-            manifestKeys.add(new CompletionItem(e[0], e[1], e[2], CompletionItem.Type.JSON_KEY, 0));
-        }
-        SCHEMA_KEYS.put("manifest.json", manifestKeys);
     }
 
     private final List<CompletionItem> snippetItems = new ArrayList<>();
@@ -332,6 +250,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
 
         // Schema-aware key suggestions based on file name
         if (fileName != null) {
+            ensureSchemasLoaded();
             List<CompletionItem> schemaKeys = SCHEMA_KEYS.get(fileName);
 
             // For tsconfig.json, detect if we're inside compilerOptions block

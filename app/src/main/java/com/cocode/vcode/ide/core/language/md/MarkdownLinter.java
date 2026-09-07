@@ -17,16 +17,9 @@ public class MarkdownLinter {
     private static final Pattern EMPTY_LINK_TEXT = Pattern.compile("\\[\\s*\\]\\([^)]*\\)");
     private static final Pattern EMPTY_IMAGE_ALT = Pattern.compile("!\\[\\s*\\]\\([^)]*\\)");
     private static final Pattern USELESS_IMAGE_ALT = Pattern.compile("!\\[(image|picture|logo|photo|img|pic)\\]\\([^)]*\\)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern EMPTY_BLOCKQUOTE = Pattern.compile("^>\\s*$", Pattern.MULTILINE);
     private static final Pattern RAW_URL = Pattern.compile("(?<![\\(\\[<])(http[s]?://[^\\s<>()]+)(?![\\)\\]>])");
     private static final Pattern TRAILING_WHITESPACE = Pattern.compile("[ \\t]+$", Pattern.MULTILINE);
     private static final Pattern HARD_TAB = Pattern.compile("\\t");
-    
-    // For headings
-    private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(.*)$", Pattern.MULTILINE);
-
-    // For lists
-    private static final Pattern UNORDERED_LIST = Pattern.compile("^\\s*([*\\-+])\\s+", Pattern.MULTILINE);
 
     public static List<Problem> analyze(File file, String text) {
         if (text == null || text.trim().isEmpty()) return new ArrayList<>();

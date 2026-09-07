@@ -108,29 +108,31 @@ public class HtmlTagCache {
      * Synchronized block prevents concurrent read state collisions on application startup.
      */
     public static synchronized void load(Context context) {
+        ensureLoaded();
+    }
+
+    public static synchronized void ensureLoaded() {
         if (isLoaded) return; // Prevent parsing multiple times if already cached
-        try (InputStream is = context.getAssets().open("completions/html_tags.json")) {
-            int size = is.available();
-            byte[] buffer = new byte[size];
-            is.read(buffer);
-            String jsonStr = new String(buffer, StandardCharsets.UTF_8);
+        try {
+            String jsonStr = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("completions/html_tags.json");
+            if (jsonStr != null && !jsonStr.isEmpty()) {
+                JSONArray tags = new JSONArray(rootArray(jsonStr));
+                VOID_ELEMENTS.clear();  // Wipe the hardcoded bootstrap records
+                BLOCK_ELEMENTS.clear();
 
-            JSONArray tags = new JSONArray(rootArray(jsonStr));
-            VOID_ELEMENTS.clear();  // Wipe the hardcoded bootstrap records
-            BLOCK_ELEMENTS.clear();
+                for (int i = 0; i < tags.length(); i++) {
+                    JSONObject tagObj = tags.getJSONObject(i);
+                    String tagName = tagObj.getString("tag").toLowerCase();
+                    boolean isSelfClosing = tagObj.getBoolean("selfClosing");
 
-            for (int i = 0; i < tags.length(); i++) {
-                JSONObject tagObj = tags.getJSONObject(i);
-                String tagName = tagObj.getString("tag").toLowerCase();
-                boolean isSelfClosing = tagObj.getBoolean("selfClosing");
-
-                if (isSelfClosing) {
-                    VOID_ELEMENTS.add(tagName);
-                } else {
-                    // If it is not self-closing and not inline, we treat it as a block tag for indentation
-                    String detail = tagObj.optString("detail", "").toLowerCase();
-                    if (!detail.contains("inline") && !detail.contains("text")) {
-                        BLOCK_ELEMENTS.add(tagName);
+                    if (isSelfClosing) {
+                        VOID_ELEMENTS.add(tagName);
+                    } else {
+                        // If it is not self-closing and not inline, we treat it as a block tag for indentation
+                        String detail = tagObj.optString("detail", "").toLowerCase();
+                        if (!detail.contains("inline") && !detail.contains("text")) {
+                            BLOCK_ELEMENTS.add(tagName);
+                        }
                     }
                 }
             }
@@ -144,6 +146,7 @@ public class HtmlTagCache {
      * Determines if a tag is a self-closing void element that cannot contain internal children.
      */
     public static boolean isVoidElement(String tag) {
+        if (!isLoaded) ensureLoaded();
         return tag != null && VOID_ELEMENTS.contains(tag.toLowerCase());
     }
 
@@ -151,6 +154,7 @@ public class HtmlTagCache {
      * Determines if a tag behaves as structural block-level markup demanding dedicated indentation lines.
      */
     public static boolean isBlockElement(String tag) {
+        if (!isLoaded) ensureLoaded();
         return tag != null && BLOCK_ELEMENTS.contains(tag.toLowerCase());
     }
 }

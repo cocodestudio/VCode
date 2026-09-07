@@ -15,12 +15,15 @@ import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
 
+import com.cocode.vcode.ide.core.language.css.CssLexer;
+import com.cocode.vcode.ide.core.language.css.CssParser;
+import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
+import com.cocode.vcode.ide.core.language.css.CssTokenStream;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * In-process Language Server for CSS / SCSS files.
@@ -40,10 +43,6 @@ import java.util.regex.Pattern;
  */
 public final class CssLspServer implements LspServer {
 
-    private static final Pattern SELECTOR_AT_CURSOR =
-            Pattern.compile("([.#][\\w-]+)");
-    private static final Pattern IMPORT_PATTERN =
-            Pattern.compile("@import\\s+[\"']([^\"']+)[\"']");
     private final CssAutoCompleteEngine completeEngine;
     private volatile boolean ready = false;
     private ProjectIndex projectIndex;
@@ -60,15 +59,7 @@ public final class CssLspServer implements LspServer {
     // LspServer contract
     // -------------------------------------------------------------------------
 
-    private static String extractSelectorAtCursor(String line, int cursorChar) {
-        Matcher m = SELECTOR_AT_CURSOR.matcher(line);
-        while (m.find()) {
-            if (cursorChar >= m.start() && cursorChar <= m.end()) {
-                return m.group(1);
-            }
-        }
-        return null;
-    }
+
 
     private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
         if (legacy == null || legacy.isEmpty()) return Collections.emptyList();
@@ -193,23 +184,39 @@ public final class CssLspServer implements LspServer {
     public LspLocation definition(LspDocument doc, LspPosition pos) {
         if (doc == null || doc.text == null || pos == null) return null;
 
-        String lineText = doc.getLine(pos.line);
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
 
-        // @import "..." → resolve imported CSS file
-        Matcher importMatcher = IMPORT_PATTERN.matcher(lineText);
-        while (importMatcher.find()) {
-            if (pos.character >= importMatcher.start() && pos.character <= importMatcher.end()) {
-                String importPath = importMatcher.group(1);
-                File base = new File(doc.uri).getParentFile();
-                File target = new File(base, importPath);
-                if (target.exists()) {
-                    return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
+        // 1. Check for @import via AST
+        CssTokenStream stream = CssLexer.tokenize(doc.text);
+        CssSyntaxTree tree = CssParser.parse(stream, doc.text);
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == CssSyntaxTree.N_AT_RULE) {
+                if (offset >= tree.nodeStart[i] && offset <= tree.nodeEnd[i]) {
+                    int child = tree.nodeChild[i];
+                    while (child != 0) {
+                        if (tree.nodeType[child] == CssSyntaxTree.N_SELECTOR) {
+                            String selText = tree.nodeName[child];
+                            if (selText != null && selText.startsWith("@import")) {
+                                String importPath = extractQuotedString(selText);
+                                if (importPath != null) {
+                                    File base = new File(doc.uri).getParentFile();
+                                    File target = new File(base, importPath);
+                                    if (target.exists()) {
+                                        return new LspLocation(target.getAbsolutePath(), new LspRange(0, 0, 0, 0));
+                                    }
+                                }
+                            }
+                        }
+                        child = tree.nodeSibling[child];
+                    }
                 }
             }
         }
 
-        // .class or #id selector → find its definition
-        String selector = extractSelectorAtCursor(lineText, pos.character);
+        // 2. .class or #id selector → find its definition in HTML
+        String selector = extractSelectorAtOffset(doc.text, offset);
         if (selector != null && projectIndex != null) {
             List<LspLocation> defs = projectIndex.findDefinitions(selector);
             if (!defs.isEmpty()) {
@@ -224,8 +231,10 @@ public final class CssLspServer implements LspServer {
     public List<LspLocation> references(LspDocument doc, LspPosition pos) {
         if (doc == null || doc.text == null || pos == null) return Collections.emptyList();
 
-        String lineText = doc.getLine(pos.line);
-        String selector = extractSelectorAtCursor(lineText, pos.character);
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return Collections.emptyList();
+
+        String selector = extractSelectorAtOffset(doc.text, offset);
         if (selector == null || projectIndex == null) return Collections.emptyList();
 
         // Strip leading . or # for plain name lookup
@@ -275,5 +284,58 @@ public final class CssLspServer implements LspServer {
     @Override
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
         return java.util.Collections.emptyList();
+    }
+
+    private static String extractSelectorAtOffset(String text, int offset) {
+        if (text == null || offset < 0 || offset > text.length()) return null;
+        int start = offset;
+        while (start > 0) {
+            char c = text.charAt(start - 1);
+            if (c == '.' || c == '#') {
+                start--;
+                break;
+            } else if (c == '-' || c == '_' || Character.isLetterOrDigit(c)) {
+                start--;
+            } else {
+                break;
+            }
+        }
+        if (start >= text.length() || (text.charAt(start) != '.' && text.charAt(start) != '#')) {
+            return null;
+        }
+        int end = start + 1;
+        while (end < text.length()) {
+            char c = text.charAt(end);
+            if (c == '-' || c == '_' || Character.isLetterOrDigit(c)) {
+                end++;
+            } else {
+                break;
+            }
+        }
+        if (end > start + 1) {
+            return text.substring(start, end);
+        }
+        return null;
+    }
+
+    private static String extractQuotedString(String str) {
+        if (str == null) return null;
+        int firstQuote = -1;
+        char quoteChar = 0;
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == '"' || c == '\'') {
+                firstQuote = i;
+                quoteChar = c;
+                break;
+            }
+        }
+        if (firstQuote != -1) {
+            int secondQuote = str.indexOf(quoteChar, firstQuote + 1);
+            if (secondQuote != -1) {
+                return str.substring(firstQuote + 1, secondQuote);
+            }
+        }
+        return null;
     }
 }

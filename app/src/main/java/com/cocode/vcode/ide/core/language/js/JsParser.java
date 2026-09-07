@@ -1113,14 +1113,17 @@ public class JsParser {
 
                     }
 
-                } else if ("async".equals(word) && name == null) {
-
-                    // skip modifier
-
+                } else if (name == null && ("async".equals(word) || "function".equals(word))) {
+                    int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER 
+                            || stream.types[next] == TokenStream.TK_KEYWORD
+                            || (stream.types[next] == TokenStream.TK_OPERATOR && (source.charAt(stream.tokenStart[next]) == '*' || source.charAt(stream.tokenStart[next]) == '#')))) {
+                        // skip modifier
+                    } else {
+                        name = word;
+                    }
                 } else if (name == null) {
-
                     name = word;
-
                 }
 
                 i = skipToken(stream, i);
@@ -1805,9 +1808,10 @@ public class JsParser {
                     if (tree.nodeType[child] == JsSyntaxTree.N_METHOD || tree.nodeType[child] == JsSyntaxTree.N_PROPERTY) {
                         String childName = tree.nodeName[child];
                         if (childName != null && !childName.isEmpty()) {
-                            keys.add(childName);
                             if ("constructor".equals(childName)) {
                                 scanConstructorForThisAssignments(tree, child, keys);
+                            } else if (!"prototype".equals(childName) && !isClassMemberModifierOrDecl(childName)) {
+                                keys.add(childName);
                             }
                         }
                     }
@@ -2015,94 +2019,77 @@ public class JsParser {
             byte t = stream.types[i];
 
             if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) {
+                if (name != null) {
+                    if (!isClassMemberModifierOrDecl(name)) {
+                        int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, name);
+                        tree.nodeEnd[propNode] = stream.tokenStart[i];
+                    }
+                    return i;
+                }
 
                 String word = getWord(source, stream, i);
 
                 if ("get".equals(word) && name == null) {
-
                     int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-
                     if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '(') {
-
                         name = "get"; 
-
                     } else {
-
                         nodeType = JsSyntaxTree.N_GETTER;
-
                     }
-
                 } else if ("set".equals(word) && name == null) {
-
                     int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-
                     if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '(') {
-
                         name = "set";
-
                     } else {
-
                         nodeType = JsSyntaxTree.N_SETTER;
-
                     }
-
-                } else if ("static".equals(word) || "async".equals(word)) {
-
-                    // skip modifiers
-
+                } else if (name == null && isClassMemberModifierOrDecl(word)) {
+                    int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER 
+                            || stream.types[next] == TokenStream.TK_KEYWORD
+                            || (stream.types[next] == TokenStream.TK_OPERATOR && (source.charAt(stream.tokenStart[next]) == '*' || source.charAt(stream.tokenStart[next]) == '#')))) {
+                        // skip modifier / declaration keyword
+                    } else {
+                        name = word;
+                    }
                 } else if (name == null) {
-
                     name = word;
-
                 }
-
                 i = skipToken(stream, i);
-
             } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '*') {
-
                 i = skipToken(stream, i);
-
             } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '<') {
-
                 i = skipGenericArguments(source, stream, i);
-
+            } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '=') {
+                int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, name);
+                i = skipToNextStatement(source, stream, tree, i, propNode);
+                tree.nodeEnd[propNode] = getOffset(stream, source, i);
+                return i;
             } else if (t == TokenStream.TK_PUNCT) {
-
                 char c = source.charAt(stream.tokenStart[i]);
-
-                if (c == '(') {
-
-                    int methodNode = tree.addNode(nodeType, nodeStart, 0, parent, name);
-
-                    i = parseParams(source, stream, tree, i, methodNode);
-
-                    
-
-                    while (i < stream.length) {
-
-                        i = skipWhitespaceAndComments(stream, i);
-
-                        if (i >= stream.length) break;
-
-                        if (stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
-
-                            i = parseBlock(source, stream, tree, i, methodNode);
-
-                            break;
-
-                        }
-
-                        i = skipToken(stream, i);
-
+                if (c == '}') {
+                    if (name != null && !isClassMemberModifierOrDecl(name)) {
+                        int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, name);
+                        tree.nodeEnd[propNode] = getOffset(stream, source, i);
                     }
-
-                    tree.nodeEnd[methodNode] = getOffset(stream, source, i);
-
                     return i;
-
+                }
+                if (c == '(') {
+                    int methodNode = tree.addNode(nodeType, nodeStart, 0, parent, name);
+                    i = parseParams(source, stream, tree, i, methodNode);
+                    while (i < stream.length) {
+                        i = skipWhitespaceAndComments(stream, i);
+                        if (i >= stream.length) break;
+                        if (stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
+                            i = parseBlock(source, stream, tree, i, methodNode);
+                            break;
+                        }
+                        i = skipToken(stream, i);
+                    }
+                    tree.nodeEnd[methodNode] = getOffset(stream, source, i);
+                    return i;
                 } else if (c == '=' || c == ';' || c == ':') {
                     int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, name);
-                    
                     if (c == ':') {
                         int typeStart = i + 1;
                         i = skipTypeAnnotation(source, stream, typeStart);
@@ -2110,25 +2097,26 @@ public class JsParser {
                             tree.nodeTypeAnn[propNode] = source.substring(stream.tokenStart[typeStart], stream.tokenStart[i]).trim();
                         }
                     }
-                    
                     i = skipToNextStatement(source, stream, tree, i, propNode);
                     tree.nodeEnd[propNode] = getOffset(stream, source, i);
                     return i;
                 } else {
                     i = skipToken(stream, i);
-
                 }
-
             } else {
-
                 i = skipToken(stream, i);
-
             }
-
         }
-
         return i;
+    }
 
+    private static boolean isClassMemberModifierOrDecl(String word) {
+        return "static".equals(word) || "async".equals(word)
+                || "public".equals(word) || "private".equals(word) || "protected".equals(word)
+                || "readonly".equals(word) || "override".equals(word) || "declare".equals(word)
+                || "abstract".equals(word) || "accessor".equals(word)
+                || "const".equals(word) || "let".equals(word) || "var".equals(word)
+                || "function".equals(word);
     }
 
 

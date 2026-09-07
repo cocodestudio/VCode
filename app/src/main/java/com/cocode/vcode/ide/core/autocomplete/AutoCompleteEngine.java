@@ -194,6 +194,7 @@ public abstract class AutoCompleteEngine {
         boolean inDouble = false;
         boolean inSingle = false;
         boolean inBacktick = false;
+        int templateBraceDepth = 0;
 
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
@@ -207,13 +208,30 @@ public abstract class AutoCompleteEngine {
             }
 
             if (!escaped) {
-                if (c == '"' && !inSingle && !inBacktick) inDouble = !inDouble;
-                else if (c == '\'' && !inDouble && !inBacktick) inSingle = !inSingle;
-                else if (c == '`' && !inDouble && !inSingle) inBacktick = !inBacktick;
+                if (c == '"' && !inSingle && (!inBacktick || templateBraceDepth > 0)) inDouble = !inDouble;
+                else if (c == '\'' && !inDouble && (!inBacktick || templateBraceDepth > 0)) inSingle = !inSingle;
+                else if (c == '`' && !inDouble && !inSingle) {
+                    if (!inBacktick) {
+                        inBacktick = true;
+                        templateBraceDepth = 0;
+                    } else if (templateBraceDepth == 0) {
+                        inBacktick = false;
+                    }
+                } else if (inBacktick && !inSingle && !inDouble) {
+                    if (templateBraceDepth == 0) {
+                        if (c == '$' && i + 1 < line.length() && line.charAt(i + 1) == '{') {
+                            templateBraceDepth = 1;
+                            i++;
+                        }
+                    } else {
+                        if (c == '{') templateBraceDepth++;
+                        else if (c == '}') templateBraceDepth--;
+                    }
+                }
             }
         }
 
-        return inDouble || inSingle || inBacktick;
+        return inDouble || inSingle || (inBacktick && templateBraceDepth == 0);
     }
 
     /**

@@ -5,38 +5,26 @@ import com.cocode.vcode.ide.core.language.js.JsLexer;
 import com.cocode.vcode.ide.core.language.js.JsParser;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
 
+import com.cocode.vcode.ide.core.language.css.CssLexer;
+import com.cocode.vcode.ide.core.language.css.CssParser;
+import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
+import com.cocode.vcode.ide.core.language.css.CssTokenStream;
+import com.cocode.vcode.ide.core.language.html.HtmlLexer;
+import com.cocode.vcode.ide.core.language.html.HtmlParser;
+import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
+import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
+import com.cocode.vcode.ide.core.language.js.ParseResult;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Lightweight, language-aware symbol extractor.
+ * AST-driven, language-aware symbol extractor.
  * <p>
  * Parses a {@link LspDocument} and returns a list of {@link SymbolEntry} objects
- * representing the top-level declarations found in the file. This is intentionally
- * kept fast and simple — it does NOT perform full AST parsing. Pattern-based heuristics
- * are sufficient for populating the project index with completion candidates and
- * definition targets.
- * <p>
- * Language-specific servers can build richer scope trees on top of this baseline.
+ * representing the declarations found in the file using AST engines.
  */
 public final class SymbolExtractor {
-
-    // JS/TS patterns replaced by AST in Phase 2
-
-    // CSS patterns
-    private static final Pattern CSS_CLASS_SELECTOR = Pattern.compile(
-            "\\.([-\\w]+)\\s*(?:\\{|,)", Pattern.MULTILINE);
-    private static final Pattern CSS_ID_SELECTOR = Pattern.compile(
-            "#([-\\w]+)\\s*(?:\\{|,)", Pattern.MULTILINE);
-
-    // HTML id / class attribute patterns
-    private static final Pattern HTML_ID = Pattern.compile(
-            "\\bid=[\"']([^\"']+)[\"']");
-    private static final Pattern HTML_CLASS = Pattern.compile(
-            "\\bclass=[\"']([^\"']+)[\"']");
 
     private SymbolExtractor() {
     }
@@ -139,18 +127,43 @@ public final class SymbolExtractor {
         List<SymbolEntry> results = new ArrayList<>();
         String text = doc.text;
 
-        Matcher m = CSS_CLASS_SELECTOR.matcher(text);
-        while (m.find()) {
-            LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + Objects.requireNonNull(m.group(1)).length()));
-            results.add(new SymbolEntry("." + m.group(1), doc.uri, range, SymbolEntry.KIND_CSS_CLASS));
-        }
+        CssTokenStream stream = CssLexer.tokenize(text);
+        CssSyntaxTree tree = CssParser.parse(stream, text);
 
-        m = CSS_ID_SELECTOR.matcher(text);
-        while (m.find()) {
-            LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + Objects.requireNonNull(m.group(1)).length()));
-            results.add(new SymbolEntry("#" + m.group(1), doc.uri, range, SymbolEntry.KIND_CSS_ID));
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
+                String sel = tree.nodeName[i];
+                int selStart = tree.nodeStart[i];
+                if (sel == null || sel.isEmpty()) continue;
+                int len = sel.length();
+                int j = 0;
+                while (j < len) {
+                    char c = sel.charAt(j);
+                    if (c == '.' || c == '#') {
+                        boolean isClass = (c == '.');
+                        int symStartInSel = j;
+                        j++;
+                        int nameStartInSel = j;
+                        while (j < len) {
+                            char ch = sel.charAt(j);
+                            if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
+                                j++;
+                            } else {
+                                break;
+                            }
+                        }
+                        if (j > nameStartInSel) {
+                            String name = sel.substring(symStartInSel, j);
+                            int absStart = selStart + symStartInSel;
+                            LspPosition pos = offsetToPosition(text, absStart);
+                            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
+                            results.add(new SymbolEntry(name, doc.uri, range, isClass ? SymbolEntry.KIND_CSS_CLASS : SymbolEntry.KIND_CSS_ID));
+                        }
+                    } else {
+                        j++;
+                    }
+                }
+            }
         }
 
         return results;
@@ -164,75 +177,66 @@ public final class SymbolExtractor {
         List<SymbolEntry> results = new ArrayList<>();
         String text = doc.text;
 
-        Matcher m = HTML_ID.matcher(text);
-        while (m.find()) {
-            LspPosition pos = offsetToPosition(text, m.start(1));
-            String id = m.group(1);
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + Objects.requireNonNull(id).length()));
-            results.add(new SymbolEntry(id, doc.uri, range, SymbolEntry.KIND_HTML_ID));
-        }
+        HtmlTokenStream stream = HtmlLexer.tokenize(text);
+        ParseResult result = HtmlParser.parse(text, stream);
+        HtmlSyntaxTree tree = result != null ? result.htmlTree : null;
+        if (tree == null) return results;
 
-        m = HTML_CLASS.matcher(text);
-        while (m.find()) {
-            // A class attribute may have multiple space-separated class names
-            String[] classes = Objects.requireNonNull(m.group(1)).split("\\s+");
-            int offset = m.start(1);
-            for (String cls : classes) {
-                if (!cls.isEmpty()) {
-                    LspPosition pos = offsetToPosition(text, offset);
-                    LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + cls.length()));
-                    results.add(new SymbolEntry(cls, doc.uri, range, SymbolEntry.KIND_CSS_CLASS));
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == HtmlSyntaxTree.N_ATTRIBUTE) {
+                String attrName = tree.nodeName[i];
+                String rawVal = tree.nodeValue[i];
+                if (attrName == null || rawVal == null) continue;
+
+                int attrStart = tree.nodeStart[i];
+                int attrEnd = tree.nodeEnd[i];
+                int equalsIdx = text.indexOf('=', attrStart);
+                if (equalsIdx == -1 || equalsIdx >= attrEnd) continue;
+
+                if ("id".equalsIgnoreCase(attrName)) {
+                    String id = stripQuotes(rawVal).trim();
+                    if (!id.isEmpty()) {
+                        int valOffset = text.indexOf(id, equalsIdx);
+                        if (valOffset != -1 && valOffset < attrEnd) {
+                            LspPosition pos = offsetToPosition(text, valOffset);
+                            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + id.length()));
+                            results.add(new SymbolEntry(id, doc.uri, range, SymbolEntry.KIND_HTML_ID));
+                        }
+                    }
+                } else if ("class".equalsIgnoreCase(attrName)) {
+                    String unquoted = stripQuotes(rawVal);
+                    int quoteOffset = text.indexOf(unquoted, equalsIdx);
+                    if (quoteOffset == -1) quoteOffset = equalsIdx + 1;
+
+                    int vLen = unquoted.length();
+                    int start = 0;
+                    for (int j = 0; j <= vLen; j++) {
+                        if (j == vLen || Character.isWhitespace(unquoted.charAt(j))) {
+                            if (j > start) {
+                                String cls = unquoted.substring(start, j);
+                                int clsOffset = quoteOffset + start;
+                                LspPosition pos = offsetToPosition(text, clsOffset);
+                                LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + cls.length()));
+                                results.add(new SymbolEntry(cls, doc.uri, range, SymbolEntry.KIND_CSS_CLASS));
+                            }
+                            start = j + 1;
+                        }
+                    }
                 }
-                offset += cls.length() + 1; // +1 for space
             }
         }
 
         return results;
     }
 
-    // -------------------------------------------------------------------------
-    // Shared helpers
-    // -------------------------------------------------------------------------
-
-    private static void findPattern(LspDocument doc, String text, Pattern pattern,
-                                    int kind, List<SymbolEntry> out) {
-        Matcher m = pattern.matcher(text);
-        while (m.find()) {
-            String name = m.group(1);
-            if (name == null || name.isEmpty()) continue;
-            LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-            out.add(new SymbolEntry(name, doc.uri, range, kind));
+    private static String stripQuotes(String str) {
+        if (str == null || str.length() < 2) return str != null ? str : "";
+        char first = str.charAt(0);
+        char last = str.charAt(str.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return str.substring(1, str.length() - 1);
         }
-    }
-
-    private static void findPatternWithDetail(LspDocument doc, String text, Pattern pattern,
-                                    int kind, List<SymbolEntry> out) {
-        Matcher m = pattern.matcher(text);
-        while (m.find()) {
-            String name = m.group(1);
-            String detail = m.groupCount() >= 2 ? m.group(2) : null;
-            if (name == null || name.isEmpty()) continue;
-            LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-            out.add(new SymbolEntry(name, doc.uri, range, kind, detail != null ? detail.trim() : null));
-        }
-    }
-
-    private static void findPatternWithDetailArrow(LspDocument doc, String text, Pattern pattern,
-                                    int kind, List<SymbolEntry> out) {
-        Matcher m = pattern.matcher(text);
-        while (m.find()) {
-            String name = m.group(1);
-            String detail = m.groupCount() >= 2 ? m.group(2) : null;
-            if (detail == null && m.groupCount() >= 3) {
-                detail = m.group(3);
-            }
-            if (name == null || name.isEmpty()) continue;
-            LspPosition pos = offsetToPosition(text, m.start(1));
-            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-            out.add(new SymbolEntry(name, doc.uri, range, kind, detail != null ? detail.trim() : null));
-        }
+        return str;
     }
 
     /**

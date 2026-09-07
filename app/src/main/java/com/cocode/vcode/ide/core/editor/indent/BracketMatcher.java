@@ -20,9 +20,17 @@ public class BracketMatcher {
     private boolean hasCache = false;
 
     public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth) {
+        applyRainbowBrackets(tokens, text, colors, initialDepth, 0, 0);
+    }
+
+    public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState) {
+        applyRainbowBrackets(tokens, text, colors, initialDepth, startState, 0);
+    }
+
+    public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState, int lineIndex) {
         if (text == null || colors == null || colors.length == 0 || tokens == null) return;
 
-        boolean[] mask = computeStringCommentMask(text, 0, text.length());
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
         int depth = initialDepth;
 
         for (int i = 0; i < text.length(); i++) {
@@ -34,20 +42,24 @@ public class BracketMatcher {
             if (!isOpen && !isClose) continue;
 
             if (isOpen) {
-                int colorIdx = depth % colors.length;
-                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(0, i, i + 1, colors[colorIdx], false));
+                int colorIdx = Math.abs(depth) % colors.length;
+                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
                 depth++;
             } else {
                 depth = Math.max(0, depth - 1);
-                int colorIdx = depth % colors.length;
-                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(0, i, i + 1, colors[colorIdx], false));
+                int colorIdx = Math.abs(depth) % colors.length;
+                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
             }
         }
     }
 
     public static int computeBracketDepth(String text, int initialDepth) {
+        return computeBracketDepth(text, initialDepth, 0);
+    }
+
+    public static int computeBracketDepth(String text, int initialDepth, int startState) {
         if (text == null) return initialDepth;
-        boolean[] mask = computeStringCommentMask(text, 0, text.length());
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
         int depth = initialDepth;
         for (int i = 0; i < text.length(); i++) {
             if (mask[i]) continue;
@@ -158,6 +170,7 @@ public class BracketMatcher {
                         if (c == '$' && n == '{') {
                             templateBraceDepth = 1;
                             i++;
+                            continue;
                         } else if (c == '`') {
                             inTemplate = false;
                         }
@@ -172,10 +185,21 @@ public class BracketMatcher {
     }
 
     private static boolean[] computeStringCommentMask(CharSequence text, int from, int to) {
+        return computeStringCommentMask(text, from, to, 0);
+    }
+
+    private static boolean[] computeStringCommentMask(CharSequence text, int from, int to, int startState) {
         boolean[] mask = new boolean[to - from];
-        boolean inSingle = false, inDouble = false, inTemplate = false;
-        boolean inLineComment = false, inBlockComment = false;
-        int templateBraceDepth = 0;
+        int mode = startState & 0x7;
+        int templateDepth = (startState >>> 3) & 0x7;
+        int braceDepth = (startState >>> 6) & 0x3FF;
+
+        boolean inSingle = (mode == 3);
+        boolean inDouble = (mode == 2);
+        boolean inBlockComment = (mode == 1);
+        boolean inTemplate = (mode == 4 || mode == 5 || templateDepth > 0);
+        boolean inLineComment = false;
+        int templateBraceDepth = (mode == 5) ? Math.max(1, braceDepth) : 0;
 
         for (int i = from; i < to; i++) {
             mask[i - from] = inSingle || inDouble || inLineComment || inBlockComment || (inTemplate && templateBraceDepth == 0);
@@ -219,7 +243,12 @@ public class BracketMatcher {
                     if (templateBraceDepth == 0) {
                         if (c == '$' && n == '{') {
                             templateBraceDepth = 1;
+                            mask[i - from] = true;
+                            if (i + 1 < to) {
+                                mask[i + 1 - from] = false;
+                            }
                             i++;
+                            continue;
                         } else if (c == '`') {
                             inTemplate = false;
                         }

@@ -12,6 +12,7 @@ import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -165,6 +166,48 @@ public class ProjectRepository {
         return sb.toString();
     }
 
+    private void applyProjectTemplate(File projectDir, String templateChoice, String resolvedMainFile) throws Exception {
+        boolean applied = false;
+        try {
+            String configJson = readTemplateFromAssets("templates_config.json");
+            if (configJson != null && !configJson.isEmpty()) {
+                JSONObject root = new JSONObject(configJson);
+                if (root.has("projectTemplates")) {
+                    JSONObject templates = root.getJSONObject("projectTemplates");
+                    if (templates.has(templateChoice)) {
+                        JSONArray files = templates.getJSONArray(templateChoice);
+                        for (int i = 0; i < files.length(); i++) {
+                            JSONObject fileObj = files.getJSONObject(i);
+                            String targetName = fileObj.getString("targetFile");
+                            if ("{mainFile}".equals(targetName)) {
+                                targetName = resolvedMainFile;
+                            }
+                            String tplName = fileObj.getString("template");
+                            String content = readTemplateFromAssets(tplName);
+                            FileUtils.writeFile(new File(projectDir, targetName), content);
+                        }
+                        applied = true;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (!applied) {
+            if ("HTML+CSS+JS".equals(templateChoice)) {
+                String htmlContent = readTemplateFromAssets("template_html_css_js.html");
+                String cssContent = readTemplateFromAssets("template_blank.css");
+                String jsContent = readTemplateFromAssets("template_blank.js");
+                FileUtils.writeFile(new File(projectDir, resolvedMainFile), htmlContent);
+                FileUtils.writeFile(new File(projectDir, "style.css"), cssContent);
+                FileUtils.writeFile(new File(projectDir, "app.js"), jsContent);
+            } else if ("HTML".equals(templateChoice)) {
+                String htmlContent = readTemplateFromAssets("template_blank.html");
+                FileUtils.writeFile(new File(projectDir, resolvedMainFile), htmlContent);
+            }
+        }
+    }
+
     /**
      * Creates a new project with the given template, optionally initializing a Git repository.
      */
@@ -188,18 +231,7 @@ public class ProjectRepository {
 
                 Project project = new Project(id, name.trim(), now, now, resolvedMainFile, 0);
 
-                if ("HTML+CSS+JS".equals(templateChoice)) {
-                    String htmlContent = readTemplateFromAssets("template_html_css_js.html");
-                    String cssContent = readTemplateFromAssets("template_blank.css");
-                    String jsContent = readTemplateFromAssets("template_blank.js");
-
-                    FileUtils.writeFile(new File(projectDir, resolvedMainFile), htmlContent);
-                    FileUtils.writeFile(new File(projectDir, "style.css"), cssContent);
-                    FileUtils.writeFile(new File(projectDir, "app.js"), jsContent);
-                } else if ("HTML".equals(templateChoice)) {
-                    String htmlContent = readTemplateFromAssets("template_blank.html");
-                    FileUtils.writeFile(new File(projectDir, resolvedMainFile), htmlContent);
-                }
+                applyProjectTemplate(projectDir, templateChoice, resolvedMainFile);
 
                 if (initGit) {
                     GitRepository git = new GitRepository();

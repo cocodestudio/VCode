@@ -262,18 +262,142 @@ public final class KnownElements {
 
     // Asset loader — call once from Application.onCreate()
 
-    private KnownElements() {
+    private static volatile boolean isLoaded = false;
+    private static final Object lock = new Object();
+
+    static {
+        ensureLoaded();
     }
 
     public static void init(Context context) {
-        loadHtmlTags(context);
-        loadCssProperties(context);
-        loadCssColors(context);
+        ensureLoaded();
     }
 
-    private static void loadHtmlTags(Context context) {
+    public static void ensureLoaded() {
+        if (isLoaded) return;
+        synchronized (lock) {
+            if (isLoaded) return;
+            loadLinterRules();
+            loadJsGlobals();
+            loadHtmlTags();
+            loadCssProperties();
+            loadCssColors();
+            isLoaded = true;
+        }
+    }
+
+    private static void loadLinterRules() {
+        String json = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("diagnostic/linter_rules.json");
+        if (json == null || json.isEmpty()) return;
         try {
-            String json = readAsset(context, "completions/html_tags.json");
+            JSONObject root = new JSONObject(json);
+            if (root.has("deprecatedElements")) {
+                JSONObject depElem = root.getJSONObject("deprecatedElements");
+                DEPRECATED_ELEMENTS.clear();
+                java.util.Iterator<String> it = depElem.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    DEPRECATED_ELEMENTS.put(k, depElem.getString(k));
+                }
+            }
+            if (root.has("deprecatedAttributes")) {
+                JSONObject depAttr = root.getJSONObject("deprecatedAttributes");
+                DEPRECATED_ATTRIBUTES.clear();
+                java.util.Iterator<String> it = depAttr.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    DEPRECATED_ATTRIBUTES.put(k, depAttr.getString(k));
+                }
+            }
+            if (root.has("requiredParents")) {
+                JSONObject reqParents = root.getJSONObject("requiredParents");
+                REQUIRED_PARENTS.clear();
+                java.util.Iterator<String> it = reqParents.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    JSONArray arr = reqParents.getJSONArray(k);
+                    Set<String> set = new HashSet<>();
+                    for (int i = 0; i < arr.length(); i++) set.add(arr.getString(i));
+                    REQUIRED_PARENTS.put(k, set);
+                }
+            }
+            if (root.has("requiredAttributes")) {
+                JSONObject reqAttrs = root.getJSONObject("requiredAttributes");
+                REQUIRED_ATTRIBUTES.clear();
+                java.util.Iterator<String> it = reqAttrs.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    JSONArray arr = reqAttrs.getJSONArray(k);
+                    Set<String> set = new HashSet<>();
+                    for (int i = 0; i < arr.length(); i++) set.add(arr.getString(i));
+                    REQUIRED_ATTRIBUTES.put(k, set);
+                }
+            }
+            if (root.has("semanticSuggestions")) {
+                JSONObject semSugg = root.getJSONObject("semanticSuggestions");
+                SEMANTIC_SUGGESTIONS.clear();
+                java.util.Iterator<String> it = semSugg.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    SEMANTIC_SUGGESTIONS.put(k, semSugg.getString(k));
+                }
+            }
+            if (root.has("vendorPrefixes")) {
+                JSONObject vp = root.getJSONObject("vendorPrefixes");
+                VENDOR_PREFIX_NEEDED.clear();
+                java.util.Iterator<String> it = vp.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    VENDOR_PREFIX_NEEDED.put(k, vp.getString(k));
+                }
+            }
+            if (root.has("cssShorthands")) {
+                JSONObject shorthands = root.getJSONObject("cssShorthands");
+                CSS_SHORTHAND_LONGHANDS.clear();
+                java.util.Iterator<String> it = shorthands.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    JSONArray arr = shorthands.getJSONArray(k);
+                    Set<String> set = new HashSet<>();
+                    for (int i = 0; i < arr.length(); i++) set.add(arr.getString(i));
+                    CSS_SHORTHAND_LONGHANDS.put(k, set);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void loadJsGlobals() {
+        String json = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("types/js_globals.json");
+        if (json == null || json.isEmpty()) return;
+        try {
+            JSONObject root = new JSONObject(json);
+            if (root.has("globals")) {
+                JSONArray arr = root.getJSONArray("globals");
+                Set<String> globals = new HashSet<>();
+                for (int i = 0; i < arr.length(); i++) globals.add(arr.getString(i));
+                if (!globals.isEmpty()) {
+                    JS_GLOBALS.clear();
+                    JS_GLOBALS.addAll(globals);
+                }
+            }
+            if (root.has("asyncApis")) {
+                JSONArray arr = root.getJSONArray("asyncApis");
+                Set<String> asyncs = new HashSet<>();
+                for (int i = 0; i < arr.length(); i++) asyncs.add(arr.getString(i));
+                if (!asyncs.isEmpty()) {
+                    ASYNC_APIS.clear();
+                    ASYNC_APIS.addAll(asyncs);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void loadHtmlTags() {
+        try {
+            String json = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("completions/html_tags.json");
+            if (json == null || json.isEmpty()) return;
             JSONArray arr;
             String trimmed = json.trim();
             if (trimmed.startsWith("[")) {
@@ -297,9 +421,10 @@ public final class KnownElements {
         }
     }
 
-    private static void loadCssProperties(Context context) {
+    private static void loadCssProperties() {
         try {
-            String json = readAsset(context, "completions/css_properties.json");
+            String json = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("completions/css_properties.json");
+            if (json == null || json.isEmpty()) return;
             JSONArray arr = new JSONArray(json);
             Set<String> props = new HashSet<>();
             for (int i = 0; i < arr.length(); i++) {
@@ -311,9 +436,10 @@ public final class KnownElements {
         }
     }
 
-    private static void loadCssColors(Context context) {
+    private static void loadCssColors() {
         try {
-            String json = readAsset(context, "completions/css_colors.json");
+            String json = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("completions/css_colors.json");
+            if (json == null || json.isEmpty()) return;
             JSONObject obj = new JSONObject(json);
             JSONArray colors = obj.optJSONArray("colors");
             if (colors == null) return;
@@ -324,16 +450,6 @@ public final class KnownElements {
             }
             if (!set.isEmpty()) CSS_NAMED_COLORS = set;
         } catch (Exception ignored) {
-        }
-    }
-
-    private static String readAsset(Context context, String path) throws Exception {
-        try (InputStream is = context.getAssets().open(path);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            return sb.toString();
         }
     }
 }

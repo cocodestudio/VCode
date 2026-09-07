@@ -76,7 +76,7 @@ public class CodeEditText extends View {
 
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
-    private static final String TRIGGER_CHARS = ".</:'\"@#!(";
+    private static final String TRIGGER_CHARS = ".</:'\"@#!({";
 
     // Selection handle drag states
     private static final int HANDLE_DRAG_NONE = 0;
@@ -508,7 +508,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 contentLine.tokens = syntaxHighlighter.tokenizeLine(contentLine.toLineString(), line, internalState);
-                BracketMatcher.applyRainbowBrackets(contentLine.tokens, contentLine.toLineString(), rainbowColors, depth);
+                BracketMatcher.applyRainbowBrackets(contentLine.tokens, contentLine.toLineString(), rainbowColors, depth, internalState, line);
             }
             List<HighlightToken> lineTokens = contentLine.tokens;
 
@@ -2062,7 +2062,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth);
+                int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth, internalState);
                 int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
                 line.setTokenizerEndState(newState);
@@ -2090,7 +2090,7 @@ public class CodeEditText extends View {
                             int depth = (bgState >>> 16) & 0xFFFF;
 
                             int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                            int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth);
+                            int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth, internalState);
 
                             int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
@@ -2148,7 +2148,8 @@ public class CodeEditText extends View {
             return;
         }
 
-        boolean isTriggerChar = TRIGGER_CHARS.indexOf(lastChar) >= 0;
+        boolean isTriggerChar = TRIGGER_CHARS.indexOf(lastChar) >= 0
+                || (lastChar == '{' && flatCursor >= 2 && fullText.charAt(flatCursor - 2) == '$');
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$'
                 || (lastChar == '-' && (fileType == FileType.CSS || fileType == FileType.HTML));

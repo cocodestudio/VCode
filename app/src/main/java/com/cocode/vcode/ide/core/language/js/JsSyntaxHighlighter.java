@@ -27,23 +27,13 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
     public static final int STATE_TEMPLATE_LITERAL = 4;
     public static final int STATE_TEMPLATE_EXPR = 5;
 
-    private static final Set<String> JS_KEYWORDS = new HashSet<>(Arrays.asList(
-            "var", "let", "const", "function", "return",
-            "if", "else", "for", "while", "do",
-            "switch", "case", "break", "continue", "new",
-            "delete", "typeof", "instanceof", "in", "of",
-            "class", "extends", "import", "export", "default",
-            "async", "await", "try", "catch", "finally",
-            "throw", "void", "yield", "this", "super",
-            "static", "get", "set", "as", "from", "debugger",
-            // Built-in objects
-            "console", "window", "document", "Math", "JSON", "Promise",
-            "Object", "Array", "String", "Number", "Boolean", "RegExp",
-            "Date", "Error", "Map", "Set", "Symbol", "globalThis"
-    ));
-    private static final Set<String> JS_BOOLEANS = new HashSet<>(Arrays.asList(
-            "true", "false", "null", "undefined"
-    ));
+    private static final Set<String> JS_KEYWORDS = new HashSet<>();
+    private static final Set<String> JS_BOOLEANS = JsKeywords.JS_BOOLEANS;
+
+    static {
+        JS_KEYWORDS.addAll(JsKeywords.JS_KEYWORDS);
+        JS_KEYWORDS.addAll(JsKeywords.JS_BUILTINS);
+    }
     protected final int colorFunction;
     protected final int colorBoolean;
 

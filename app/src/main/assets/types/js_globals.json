@@ -1,0 +1,30 @@
+{
+  "globals": [
+    "window", "document", "console", "Math", "JSON", "Date", "Array", "Object",
+    "String", "Number", "Boolean", "Promise", "fetch", "setTimeout", "setInterval",
+    "clearTimeout", "clearInterval", "parseInt", "parseFloat", "isNaN", "isFinite",
+    "encodeURIComponent", "decodeURIComponent", "decodeURI", "encodeURI",
+    "localStorage", "sessionStorage", "location", "navigator", "history",
+    "alert", "confirm", "prompt", "Error", "TypeError", "RangeError", "SyntaxError",
+    "ReferenceError", "URIError", "EvalError", "undefined", "null", "NaN",
+    "Infinity", "globalThis", "self", "queueMicrotask", "requestAnimationFrame",
+    "cancelAnimationFrame", "URL", "URLSearchParams", "FormData", "XMLHttpRequest",
+    "EventSource", "WebSocket", "MutationObserver", "IntersectionObserver",
+    "ResizeObserver", "performance", "crypto", "Intl", "Symbol", "Map", "Set",
+    "WeakMap", "WeakSet", "WeakRef", "Proxy", "Reflect", "Generator", "RegExp",
+    "ArrayBuffer", "DataView", "Int8Array", "Uint8Array", "Int16Array", "Uint16Array",
+    "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt", "BigInt64Array",
+    "BigUint64Array", "SharedArrayBuffer", "Atomics", "TextEncoder", "TextDecoder",
+    "structuredClone", "addEventListener", "removeEventListener", "dispatchEvent",
+    "atob", "btoa", "getComputedStyle", "matchMedia", "open", "close", "focus", "blur", "print",
+    "escape", "unescape", "eval", "arguments", "this", "super", "require", "exports",
+    "module", "__dirname", "__filename", "process", "Buffer", "global", "$", "jQuery",
+    "React", "Vue", "Angular", "define"
+  ],
+  "asyncApis": [
+    "fetch", "json", "text", "arrayBuffer", "blob", "formData",
+    "then", "catch", "finally", "all", "allSettled", "race", "any",
+    "resolve", "reject", "waitUntil", "respondWith", "openDB", "getAll",
+    "get", "put", "delete", "add", "clear", "openCursor", "transaction"
+  ]
+}

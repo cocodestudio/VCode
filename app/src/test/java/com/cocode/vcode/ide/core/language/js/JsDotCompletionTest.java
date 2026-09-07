@@ -194,4 +194,118 @@ public class JsDotCompletionTest extends BaseJsAstTest {
         assertTrue("Expected 'city' on nested object", hasCity);
         assertTrue("Expected 'zip' on nested object", hasZip);
     }
+
+    @Test
+    public void testClassMemberDotCompletion_UserScenario() {
+        String code = "class MyClass {\n" +
+                "  const x = 1;\n" +
+                "  constructor() {\n" +
+                "    this.x = 1;\n" +
+                "  }\n" +
+                "  \n" +
+                "  getVal() {\n" +
+                "    return x;\n" +
+                "  }\n" +
+                "}\n" +
+                "\n" +
+                "const myClass = new MyClass();\n" +
+                "myClass.";
+
+        List<CompletionItem> comps = getCompletions(code, code.length());
+
+        int getValCount = 0;
+        int xCount = 0;
+        boolean hasConst = false;
+        boolean hasConstructor = false;
+        CompletionItem getValItem = null;
+        CompletionItem xItem = null;
+
+        for (CompletionItem item : comps) {
+            String label = item.getLabel();
+            if ("getVal".equals(label)) {
+                getValCount++;
+                getValItem = item;
+            } else if ("x".equals(label)) {
+                xCount++;
+                xItem = item;
+            } else if ("const".equals(label)) {
+                hasConst = true;
+            } else if ("constructor".equals(label)) {
+                hasConstructor = true;
+            }
+        }
+
+        assertEquals("getVal should appear exactly once", 1, getValCount);
+        org.junit.Assert.assertNotNull("getVal item should exist", getValItem);
+        assertEquals("getVal detail should be 'MyClass method'", "MyClass method", getValItem.getDetail());
+        assertEquals("getVal type should be FUNCTION", CompletionItem.Type.FUNCTION, getValItem.getType());
+
+        assertEquals("x should appear exactly once", 1, xCount);
+        org.junit.Assert.assertNotNull("x item should exist", xItem);
+        assertEquals("x detail should be 'MyClass property'", "MyClass property", xItem.getDetail());
+        assertEquals("x type should be VALUE", CompletionItem.Type.VALUE, xItem.getType());
+
+        org.junit.Assert.assertFalse("'const' should NOT appear in completions", hasConst);
+        org.junit.Assert.assertFalse("'constructor' should NOT appear in completions", hasConstructor);
+    }
+
+    @Test
+    public void testClassMemberDotCompletion_FunctionKeywordMethod() {
+        String code = "class MyClass {\n" +
+                "  const x = 1;\n" +
+                "  constructor() {\n" +
+                "    this.x = 1;\n" +
+                "  }\n" +
+                "  \n" +
+                " function getVal() {\n" +
+                "    return x;\n" +
+                "  }\n" +
+                "\n" +
+                "}\n" +
+                "\n" +
+                "const myClass = new MyClass();\n" +
+                "\n" +
+                "myClass.";
+
+        List<CompletionItem> comps = getCompletions(code, code.length());
+
+        int getValCount = 0;
+        int xCount = 0;
+        boolean hasFunction = false;
+        boolean hasConst = false;
+        boolean hasConstructor = false;
+        CompletionItem getValItem = null;
+        CompletionItem xItem = null;
+
+        for (CompletionItem item : comps) {
+            String label = item.getLabel();
+            if ("getVal".equals(label)) {
+                getValCount++;
+                getValItem = item;
+            } else if ("x".equals(label)) {
+                xCount++;
+                xItem = item;
+            } else if ("function".equals(label)) {
+                hasFunction = true;
+            } else if ("const".equals(label)) {
+                hasConst = true;
+            } else if ("constructor".equals(label)) {
+                hasConstructor = true;
+            }
+        }
+
+        org.junit.Assert.assertFalse("'function' should NOT appear in completions", hasFunction);
+        org.junit.Assert.assertFalse("'const' should NOT appear in completions", hasConst);
+        org.junit.Assert.assertFalse("'constructor' should NOT appear in completions", hasConstructor);
+
+        assertEquals("getVal should appear exactly once", 1, getValCount);
+        org.junit.Assert.assertNotNull("getVal item should exist", getValItem);
+        assertEquals("getVal detail should be 'MyClass method'", "MyClass method", getValItem.getDetail());
+        assertEquals("getVal type should be FUNCTION", CompletionItem.Type.FUNCTION, getValItem.getType());
+
+        assertEquals("x should appear exactly once", 1, xCount);
+        org.junit.Assert.assertNotNull("x item should exist", xItem);
+        assertEquals("x detail should be 'MyClass property'", "MyClass property", xItem.getDetail());
+        assertEquals("x type should be VALUE", CompletionItem.Type.VALUE, xItem.getType());
+    }
 }

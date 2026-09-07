@@ -40,6 +40,12 @@ public class TsLinter {
             "(?:interface|type)[^{]*\\{[^}]*\\b(\\w+)\\s*:\\s*([\\w<>]+)\\[]");
     private static final Pattern PAT_INLINE_OBJ_TYPE = Pattern.compile(
             ":\\s*\\{([^}]+)\\}");
+    private static final Pattern PAT_NULLABLE_DECL = Pattern.compile(
+            "\\b(\\w+)\\s*:[^=\\n]*(\\|\\s*null|\\|\\s*undefined)");
+    private static final Pattern PAT_ANY_PARAM = Pattern.compile(
+            "\\b(\\w+)\\s*:\\s*any\\b");
+    private static final Pattern PAT_FN_PARAMS = Pattern.compile(
+            "(?:function\\s+\\w+|=>|\\()\\s*\\(([^)]+)\\)");
 
     // Entry point
     public static List<Problem> analyze(File file, String text) {
@@ -119,30 +125,42 @@ public class TsLinter {
 
     private static void checkNonNullOnNullable(File file, String text, TokenStream mask, List<Problem> out) {
         // Find variables typed as X | null or X | undefined, then check for ! usage on them
-        Pattern nullableDecl = Pattern.compile("\\b(\\w+)\\s*:[^=\\n]*(\\|\\s*null|\\|\\s*undefined)");
-        Matcher declM = nullableDecl.matcher(text);
+        Matcher declM = PAT_NULLABLE_DECL.matcher(text);
         List<String> nullableVars = new ArrayList<>();
         while (declM.find()) {
             if (!mask.isMasked(declM.start())) nullableVars.add(declM.group(1));
         }
         for (String varName : nullableVars) {
-            Pattern assertPat = Pattern.compile("\\b" + Pattern.quote(varName) + "\\s*!");
-            Matcher am = assertPat.matcher(text);
-            while (am.find()) {
-                if (mask.isMasked(am.start())) continue;
-                int line = LinterUtils.getLine(text, am.start());
-                int col = LinterUtils.getColumn(text, am.start());
-                out.add(new Problem(file, line, col, am.group().length(),
-                        "Non-null assertion '!' used on a possibly-null value: ensure this cannot be null",
-                        Problem.Severity.ERROR));
+            int vLen = varName.length();
+            int idx = text.indexOf(varName);
+            while (idx >= 0) {
+                if (!mask.isMasked(idx)) {
+                    boolean isWordBoundaryBefore = (idx == 0 || !Character.isLetterOrDigit(text.charAt(idx - 1)) && text.charAt(idx - 1) != '_' && text.charAt(idx - 1) != '$');
+                    int afterIdx = idx + vLen;
+                    boolean isWordBoundaryAfter = (afterIdx >= text.length() || !Character.isLetterOrDigit(text.charAt(afterIdx)) && text.charAt(afterIdx) != '_' && text.charAt(afterIdx) != '$');
+                    if (isWordBoundaryBefore && isWordBoundaryAfter) {
+                        int p = afterIdx;
+                        while (p < text.length() && (text.charAt(p) == ' ' || text.charAt(p) == '\t')) p++;
+                        if (p < text.length() && text.charAt(p) == '!') {
+                            boolean isNotEquals = (p + 1 < text.length() && text.charAt(p + 1) == '=');
+                            if (!isNotEquals) {
+                                int line = LinterUtils.getLine(text, idx);
+                                int col = LinterUtils.getColumn(text, idx);
+                                out.add(new Problem(file, line, col, (p + 1) - idx,
+                                        "Non-null assertion '!' used on a possibly-null value: ensure this cannot be null",
+                                        Problem.Severity.ERROR));
+                            }
+                        }
+                    }
+                }
+                idx = text.indexOf(varName, idx + vLen);
             }
         }
     }
 
     private static void checkAnyType(File file, String text, TokenStream mask, List<Problem> out) {
         // Skip return-type 'any' (already covered by checkReturnAny), flag param/var 'any'
-        Pattern anyParam = Pattern.compile("\\b(\\w+)\\s*:\\s*any\\b");
-        Matcher m = anyParam.matcher(text);
+        Matcher m = PAT_ANY_PARAM.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
             // skip if preceded by ')' (return type position handled separately)
@@ -186,8 +204,7 @@ public class TsLinter {
 
     private static void checkOptionalBeforeRequired(File file, String text, TokenStream mask, List<Problem> out) {
         // Match function parameter lists
-        Pattern fnParams = Pattern.compile("(?:function\\s+\\w+|=>|\\()\\s*\\(([^)]+)\\)");
-        Matcher m = fnParams.matcher(text);
+        Matcher m = PAT_FN_PARAMS.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
             String[] params = Objects.requireNonNull(m.group(1)).split(",");

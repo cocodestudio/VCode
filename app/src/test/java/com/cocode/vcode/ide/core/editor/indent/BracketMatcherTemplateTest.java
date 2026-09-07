@@ -38,4 +38,42 @@ public class BracketMatcherTemplateTest {
         int unclosedDepth = BracketMatcher.computeBracketDepth(unclosedCode, 0);
         assertTrue("Unclosed brackets inside ${ should be counted", unclosedDepth >= 1);
     }
+
+    @Test
+    public void testMultilineTemplateLiteralRainbowBracketsWithStartState() {
+        int[] rainbowColors = new int[]{10, 20, 30};
+        // startState with mode = 4 (STATE_TEMPLATE_LITERAL), templateDepth = 1, braceDepth = 0
+        int templateLiteralState = 4 | (1 << 3);
+
+        // Line 2 starts inside template literal and contains expression: "  ${foo}  "
+        String line2Expr = "  ${foo}  ";
+        List<HighlightToken> tokens2 = new ArrayList<>();
+        BracketMatcher.applyRainbowBrackets(tokens2, line2Expr, rainbowColors, 0, templateLiteralState);
+
+        assertEquals("Should have 2 rainbow tokens for { and }", 2, tokens2.size());
+        assertEquals("Opening brace { should be at index 3", 3, tokens2.get(0).startCol);
+        assertEquals("Closing brace } should be at index 7", 7, tokens2.get(1).startCol);
+
+        // Line with plain text in multiline template literal: "  some (text with parens)  "
+        String linePlain = "  some (text with parens)  ";
+        List<HighlightToken> tokensPlain = new ArrayList<>();
+        BracketMatcher.applyRainbowBrackets(tokensPlain, linePlain, rainbowColors, 0, templateLiteralState);
+        assertTrue("Parens inside multiline template literal text should be masked", tokensPlain.isEmpty());
+    }
+
+    @Test
+    public void testMultipleInterpolationsOnSingleLine() {
+        String code = "`hello ${a} and ${b}`";
+        int[] rainbowColors = new int[]{10, 20, 30};
+        List<HighlightToken> tokens = new ArrayList<>();
+        BracketMatcher.applyRainbowBrackets(tokens, code, rainbowColors, 0);
+
+        assertEquals("Should have 4 rainbow bracket tokens for 2 sets of braces", 4, tokens.size());
+        // ${a} braces
+        assertEquals(8, tokens.get(0).startCol); // { of ${a}
+        assertEquals(10, tokens.get(1).startCol); // } of ${a}
+        // ${b} braces
+        assertEquals(17, tokens.get(2).startCol); // { of ${b}
+        assertEquals(19, tokens.get(3).startCol); // } of ${b}
+    }
 }

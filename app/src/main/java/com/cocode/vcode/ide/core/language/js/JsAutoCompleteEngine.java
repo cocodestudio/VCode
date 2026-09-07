@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -220,7 +221,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_COMMENT ||
                 type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
                 type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
-                if (cursorPos != cachedTokens.tokenStart[cursorPos]) {
+                if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE && isInsideTemplateExpression(fullText, cursorPos)) {
+                    // Inside ${...} template interpolation: allow completions!
+                } else if (cursorPos != cachedTokens.tokenStart[cursorPos]) {
                     return new ArrayList<>();
                 }
             }
@@ -363,9 +366,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             while (j >= 0 && Character.isWhitespace(fullText.charAt(j))) j--;
             if (j >= 0) {
                 char beforeBrace = fullText.charAt(j);
-                // Code block indicators
-                if (beforeBrace == ')' || beforeBrace == '>')
-                    return null; // arrow function body or if/for
+                // Code block indicators or template expression indicators
+                if (beforeBrace == ')' || beforeBrace == '>' || beforeBrace == '$')
+                    return null; // arrow function body, if/for, or template expression ${
                 // Check for keywords that indicate code blocks
                 String context = fullText.substring(Math.max(0, j - 10), j + 1).trim();
                 if (context.endsWith("else") || context.endsWith("try") || context.endsWith("catch")
@@ -418,6 +421,31 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         if (items.isEmpty()) return null; // Not enough context to suggest
         return fuzzyFilter(items, word);
+    }
+
+    private boolean isInsideTemplateExpression(String text, int cursorPos) {
+        if (text == null || cursorPos <= 0) return false;
+        int braceDepth = 0;
+        int limit = Math.max(0, cursorPos - 4000);
+        for (int i = cursorPos - 1; i >= limit; i--) {
+            char c = text.charAt(i);
+            if (c == '}') {
+                braceDepth++;
+            } else if (c == '{') {
+                if (braceDepth > 0) {
+                    braceDepth--;
+                } else if (i > 0 && text.charAt(i - 1) == '$') {
+                    return true;
+                }
+            } else if (c == '`') {
+                int slashes = 0;
+                for (int j = i - 1; j >= 0 && text.charAt(j) == '\\'; j--) slashes++;
+                if (slashes % 2 == 0 && braceDepth == 0) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -764,6 +792,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             int[] resolved = cachedScopeTree.lookupSymbol(objectToken, currentScope, dotPos, cachedTree);
             if (resolved != null) {
                 int declNodeId = resolved[1];
+                if (cachedTree.nodeType[declNodeId] == JsSyntaxTree.N_CLASS_DECL) {
+                    String className = cachedTree.nodeName[declNodeId];
+                    if (className == null || className.isEmpty()) className = objectToken;
+                    List<CompletionItem> classMembers = buildClassMemberItems(cachedTree, declNodeId, className);
+                    if (!classMembers.isEmpty()) return fuzzyFilter(classMembers, word);
+                }
                 String[] shape = cachedTree.shapeTable.get(declNodeId);
                 if (shape != null) {
                     List<CompletionItem> shapeMembers = new ArrayList<>();
@@ -951,15 +985,13 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (member.startsWith("!THEN:")) {
                     String args = member.substring(6);
                     if (inferredType != null && inferredType.startsWith("@PROMISE_INLINE_SHAPE:")) {
-                        if (args.matches(".*?=>\\s*[a-zA-Z_$][\\w$]*\\s*")) {
+                        if (isArrowIdentity(args)) {
                             // identity
                         } else if (args.contains("=>")) {
                             String afterArrow = args.substring(args.indexOf("=>") + 2).trim();
                             if (afterArrow.startsWith("(") && afterArrow.endsWith(")")) afterArrow = afterArrow.substring(1, afterArrow.length() - 1).trim();
                             if (afterArrow.startsWith("{")) {
-                                Matcher m = Pattern.compile("([a-zA-Z_$][\\w$]*)\\s*[:=]").matcher(afterArrow);
-                                List<String> keys = new ArrayList<>();
-                                while (m.find()) keys.add(m.group(1));
+                                List<String> keys = extractObjectKeys(afterArrow, true);
                                 inferredType = "@PROMISE_INLINE_SHAPE:" + String.join(",", keys);
                             } else inferredType = "@PROMISE";
                         } else inferredType = "@PROMISE";
@@ -1140,8 +1172,23 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 // Check if it's a class name — return class members
                 List<CompletionItem> classMembers = ProjectSymbolIndex.getInstance().getClassMembers(inferredType);
                 List<CompletionItem> localMembers = getLocalClassMembers(inferredType);
-                if (!localMembers.isEmpty()) classMembers.addAll(localMembers);
-                if (!classMembers.isEmpty()) return fuzzyFilter(classMembers, word);
+                if (!classMembers.isEmpty() || !localMembers.isEmpty()) {
+                    Map<String, CompletionItem> merged = new LinkedHashMap<>();
+                    for (CompletionItem item : localMembers) {
+                        String key = getBaseMemberName(item.getLabel());
+                        if (!key.isEmpty()) {
+                            merged.put(key, item);
+                        }
+                    }
+                    for (CompletionItem item : classMembers) {
+                        String key = getBaseMemberName(item.getLabel());
+                        if (!key.isEmpty() && !merged.containsKey(key)) {
+                            merged.put(key, item);
+                        }
+                    }
+                    List<CompletionItem> result = new ArrayList<>(merged.values());
+                    return fuzzyFilter(result, word);
+                }
                 
                 // Check if it's an interface in activeTree
                 if (activeTree != null) {
@@ -1257,12 +1304,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                         depth--;
                         if (depth == 0) {
                             String inner = text.substring(i + 1, endBrace).trim();
-                            Matcher m = Pattern.compile("([a-zA-Z_$][\\w$]*)\\s*:").matcher(inner);
-                            List<String> keys = new ArrayList<>();
-                            while (m.find()) {
-                                String k = m.group(1);
-                                if (!keys.contains(k)) keys.add(k);
-                            }
+                            List<String> keys = extractObjectKeys(inner, false);
                             chain.add(0, "@OBJECT_LITERAL:" + String.join(",", keys));
                             i--;
                             break;
@@ -1690,6 +1732,15 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
     private List<CompletionItem> getMembersForNode(JsSyntaxTree tree, int nodeId, String word) {
         if (tree == null || nodeId <= 0) return new ArrayList<>();
+        if (tree.nodeType[nodeId] == JsSyntaxTree.N_CLASS_DECL) {
+            String className = tree.nodeName[nodeId];
+            if (className == null || className.isEmpty()) className = "Class";
+            List<CompletionItem> classMembers = buildClassMemberItems(tree, nodeId, className);
+            if (word != null && !word.isEmpty()) {
+                for (CompletionItem ci : classMembers) ci.setReplaceLength(word.length());
+            }
+            return classMembers;
+        }
         List<CompletionItem> items = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 
@@ -1800,15 +1851,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         int current = nodeId;
         while (current > 0) {
             if (cachedTree.nodeType[current] == JsSyntaxTree.N_CLASS_DECL) {
-                String[] shape = cachedTree.shapeTable.get(current);
-                if (shape != null) {
-                    List<CompletionItem> members = new ArrayList<>();
-                    for (String key : shape) {
-                        members.add(new CompletionItem(key, key, "Property", CompletionItem.Type.VALUE, 0));
-                    }
-                    return members;
-                }
-                break;
+                String className = cachedTree.nodeName[current];
+                if (className == null || className.isEmpty()) className = "this";
+                return buildClassMemberItems(cachedTree, current, className);
             }
             current = cachedTree.nodeParent[current];
         }
@@ -1816,24 +1861,78 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     /**
-     * Parses class members (methods + this.prop assignments) directly from the document text.
+     * Resolves class members directly from the AST and shape table for a named class.
      */
     private List<CompletionItem> getLocalClassMembers(String className) {
         if (cachedTree == null) return new ArrayList<>();
         for (int i = 1; i < cachedTree.nodeCount; i++) {
             if (cachedTree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL && className.equals(cachedTree.nodeName[i])) {
-                String[] shape = cachedTree.shapeTable.get(i);
-                if (shape != null) {
-                    List<CompletionItem> members = new ArrayList<>();
-                    for (String key : shape) {
-                        members.add(new CompletionItem(key, key, "Property", CompletionItem.Type.VALUE, 0));
-                    }
-                    return members;
-                }
-                break;
+                return buildClassMemberItems(cachedTree, i, className);
             }
         }
         return new ArrayList<>();
+    }
+
+    private List<CompletionItem> buildClassMemberItems(JsSyntaxTree tree, int classNodeId, String className) {
+        List<CompletionItem> items = new ArrayList<>();
+        if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) return items;
+
+        Set<String> seen = new HashSet<>();
+        collectClassMembers(tree, classNodeId, className, seen, items, 0);
+
+        // Also check shapeTable for any this.prop assignments or dynamic properties
+        String[] shape = tree.shapeTable.get(classNodeId);
+        if (shape != null) {
+            for (String key : shape) {
+                if (key != null && !key.isEmpty() && !isIgnoredClassMember(key) && seen.add(key)) {
+                    items.add(new CompletionItem(key, key, className + " property", CompletionItem.Type.VALUE, 0));
+                }
+            }
+        }
+        return items;
+    }
+
+    private void collectClassMembers(JsSyntaxTree tree, int classNodeId, String targetClassName,
+                                     Set<String> seen, List<CompletionItem> items, int depth) {
+        if (depth > 10 || classNodeId <= 0 || classNodeId >= tree.nodeCount) return;
+
+        // 1. Direct children of this class
+        int child = tree.nodeChild[classNodeId];
+        while (child > 0 && child < tree.nodeCount) {
+            int type = tree.nodeType[child];
+            String name = tree.nodeName[child];
+            if (name != null && !name.isEmpty() && !seen.contains(name) && !isIgnoredClassMember(name)) {
+                if (type == JsSyntaxTree.N_METHOD) {
+                    seen.add(name);
+                    items.add(new CompletionItem(name, name + "(|)", targetClassName + " method", CompletionItem.Type.FUNCTION, 0));
+                } else if (type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER) {
+                    seen.add(name);
+                    items.add(new CompletionItem(name, name, targetClassName + " property", CompletionItem.Type.VALUE, 0));
+                }
+            }
+            child = tree.nodeSibling[child];
+        }
+
+        // 2. If this class extends another class, resolve base class and collect inherited members
+        String superName = tree.nodeTypeAnn[classNodeId];
+        if (superName != null && !superName.isEmpty()) {
+            for (int i = 1; i < tree.nodeCount; i++) {
+                if (tree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL && superName.equals(tree.nodeName[i])) {
+                    collectClassMembers(tree, i, targetClassName, seen, items, depth + 1);
+                    break;
+                }
+            }
+        }
+    }
+
+    private static String getBaseMemberName(String label) {
+        if (label == null) return "";
+        int paren = label.indexOf('(');
+        return (paren >= 0 ? label.substring(0, paren) : label).trim();
+    }
+
+    private static boolean isIgnoredClassMember(String name) {
+        return "constructor".equals(name) || "prototype".equals(name) || "function".equals(name);
     }
 
 
@@ -1990,7 +2089,63 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             else if (snippet.contains(".split(")) varTypeMap.put(varName, "array");
             else if (snippet.contains(".toString(") || snippet.contains(".trim(") || snippet.contains(".replace("))
                 varTypeMap.put(varName, "string");
-            else if (snippet.matches("^\\d.*")) varTypeMap.put(varName, "number");
+            else if (!snippet.isEmpty() && Character.isDigit(snippet.charAt(0))) varTypeMap.put(varName, "number");
         }
+    }
+
+    private static boolean isArrowIdentity(String args) {
+        if (args == null) return false;
+        int arrowIdx = args.indexOf("=>");
+        if (arrowIdx == -1) return false;
+        String after = args.substring(arrowIdx + 2).trim();
+        if (after.isEmpty()) return false;
+        for (int i = 0; i < after.length(); i++) {
+            char c = after.charAt(i);
+            if (i == 0) {
+                if (!Character.isLetter(c) && c != '_' && c != '$') return false;
+            } else {
+                if (!Character.isLetterOrDigit(c) && c != '_' && c != '$') return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<String> extractObjectKeys(String text, boolean allowEquals) {
+        List<String> keys = new ArrayList<>();
+        if (text == null || text.isEmpty()) return keys;
+        int len = text.length();
+        int i = 0;
+        while (i < len) {
+            char c = text.charAt(i);
+            if (Character.isLetter(c) || c == '_' || c == '$') {
+                int start = i;
+                while (i < len && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_' || text.charAt(i) == '$')) {
+                    i++;
+                }
+                String id = text.substring(start, i);
+                while (i < len && Character.isWhitespace(text.charAt(i))) {
+                    i++;
+                }
+                if (i < len) {
+                    char next = text.charAt(i);
+                    if (next == ':' || (allowEquals && next == '=')) {
+                        if (!keys.contains(id)) {
+                            keys.add(id);
+                        }
+                    }
+                }
+            } else if (c == '"' || c == '\'' || c == '`') {
+                char quote = c;
+                i++;
+                while (i < len && text.charAt(i) != quote) {
+                    if (text.charAt(i) == '\\' && i + 1 < len) i++;
+                    i++;
+                }
+                if (i < len) i++;
+            } else {
+                i++;
+            }
+        }
+        return keys;
     }
 }

@@ -14,90 +14,15 @@ import java.io.File;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class JsSemanticLinter {
 
-    // Regex for import statements: import { foo, bar as b } from './utils' or import * as NS from './utils' or import Default from './utils'
-    private static final Pattern PAT_IMPORT = Pattern.compile("(?m)^\\s*import\\s+(?:\\*\\s+as\\s+([a-zA-Z_$][\\w$]*)|\\{([^}]+)\\}|([a-zA-Z_$][\\w$]*))\\s+from\\s+['\"]([^'\"]+)['\"]");
-    // Simple function call extraction: identifier(args...)
-    private static final Pattern PAT_FUNCTION_CALL = Pattern.compile("\\b([a-zA-Z_$][\\w$]*)\\s*\\(");
-    // Find bare identifiers
-    private static final Pattern PAT_IDENTIFIER = Pattern.compile("\\b([a-zA-Z_$][\\w$]*)\\b");
     // Find JS keywords
-    private static final Set<String> JS_KEYWORDS = new HashSet<>(java.util.Arrays.asList(
-            "await", "break", "case", "catch", "class", "const", "continue", "debugger",
-            "default", "delete", "do", "else", "enum", "export", "extends", "false",
-            "finally", "for", "function", "if", "import", "in", "instanceof", "new",
-            "null", "return", "super", "switch", "this", "throw", "true", "try",
-            "typeof", "var", "void", "while", "with", "yield", "let", "static", "async",
-            // TS Keywords
-            "interface", "type", "namespace", "public", "private", "protected", "readonly", 
-            "abstract", "declare", "implements", "keyof", "as", "is", "infer", 
-            "any", "unknown", "never", "string", "number", "boolean", "symbol"
-    ));
-    
-    // Pattern to grab declared functions, classes, and variables (simplified from SymbolExtractor)
-    private static final Pattern PAT_DECL = Pattern.compile("\\b(?:function|class|let|const|var)\\s+([a-zA-Z_$][\\w$]*)");
-    // Pattern to grab function parameters
-    private static final Pattern PAT_FUNC_PARAMS = Pattern.compile("function\\s*\\w*\\s*\\(([^)]*)\\)|([a-zA-Z_$][\\w$]*)\\s*=>|\\(([^)]*)\\)\\s*=>");
-
+    private static final Set<String> JS_KEYWORDS = JsKeywords.ALL_JS_TS_KEYWORDS;
 
     public static void analyze(File file, String text, TokenStream mask, JsSyntaxTree tree, ScopeTree scopeTree, ProjectIndex index, List<Problem> problems) {
         if (index == null || text == null || text.trim().isEmpty()) return;
 
-        // Note: For unused-variable checking and arity checking, we still rely on the old regex passes in this phase.
-        // Task 3.6 only requested replacing the undefined-variable check logic.
-        Set<String> inScope = new HashSet<>(KnownElements.JS_GLOBALS);
-        inScope.addAll(JS_KEYWORDS);
-        
-        // 1. Parse locally declared symbols (kept for old checks)
-        Matcher declMatcher = PAT_DECL.matcher(text);
-        while (declMatcher.find()) {
-            if (!mask.isMasked(declMatcher.start(1))) {
-                inScope.add(declMatcher.group(1));
-            }
-        }
-        
-        // Add function parameters to scope (kept for old checks)
-        Matcher paramMatcher = PAT_FUNC_PARAMS.matcher(text);
-        while (paramMatcher.find()) {
-            if (!mask.isMasked(paramMatcher.start())) {
-                String paramsStr = paramMatcher.group(1);
-                if (paramsStr == null) paramsStr = paramMatcher.group(2);
-                if (paramsStr == null) paramsStr = paramMatcher.group(3);
-                if (paramsStr != null) {
-                    for (String p : paramsStr.split(",")) {
-                        String clean = p.replaceAll("[={].*|\\.\\.\\.", "").trim();
-                        if (!clean.isEmpty() && PAT_IDENTIFIER.matcher(clean).matches()) {
-                            inScope.add(clean);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Resolve imports (kept for old checks)
-        Matcher importMatcher = PAT_IMPORT.matcher(text);
-        while (importMatcher.find()) {
-            if (mask.isMasked(importMatcher.start())) continue;
-            
-            String namespaceAlias = importMatcher.group(1);
-            String namedImports = importMatcher.group(2);
-            String defaultImport = importMatcher.group(3);
-            
-            if (namespaceAlias != null) inScope.add(namespaceAlias);
-            if (defaultImport != null) inScope.add(defaultImport);
-            if (namedImports != null) {
-                for (String named : namedImports.split(",")) {
-                    String[] parts = named.split("\\s+as\\s+");
-                    String alias = parts.length > 1 ? parts[1].trim() : parts[0].trim();
-                    if (!alias.isEmpty()) inScope.add(alias);
-                }
-            }
-        }
-        
         // AST-based checks for Phase 3
         checkDuplicateDeclarations(file, text, scopeTree, tree, problems);
         checkConstReassignment(file, text, mask, scopeTree, tree, problems);
@@ -347,14 +272,20 @@ public class JsSemanticLinter {
             }
         }
         
-        Matcher idMatcher = PAT_IDENTIFIER.matcher(text);
-        while (idMatcher.find()) {
-            if (mask.isMasked(idMatcher.start())) continue;
-            
-            String id = idMatcher.group(1);
-            
+        for (int t = 0; t < mask.length; t++) {
+            if (mask.types[t] != TokenStream.TK_IDENTIFIER) continue;
+            int offset = mask.tokenStart[t];
+            if (mask.isMasked(offset)) continue;
+
+            int nextOffset = (t + 1 < mask.length) ? mask.tokenStart[t + 1] : text.length();
+            int idEnd = offset;
+            while (idEnd < nextOffset && (Character.isLetterOrDigit(text.charAt(idEnd)) || text.charAt(idEnd) == '_' || text.charAt(idEnd) == '$')) {
+                idEnd++;
+            }
+            if (idEnd <= offset) continue;
+            String id = text.substring(offset, idEnd);
+
             // Skip identifiers that are part of import or export statements (Task 4.3.5 fix)
-            int offset = idMatcher.start();
             boolean isInsideImportExport = false;
             for (int k = 0; k < ieCount; k++) {
                 if (offset >= ieStart[k] && offset < ieEnd[k]) {
@@ -363,20 +294,20 @@ public class JsSemanticLinter {
                 }
             }
             if (isInsideImportExport) continue;
-            
+
             // Check preceding char to see if it's a property access
-            int preIndex = idMatcher.start() - 1;
+            int preIndex = offset - 1;
             while (preIndex >= 0 && Character.isWhitespace(text.charAt(preIndex))) preIndex--;
             if (preIndex >= 0 && text.charAt(preIndex) == '.') continue;
-            
+
             // Check preceding tokens to see if it's a declaration (only if AST is missing)
-            if (tree.nodesByOffset == null && isDeclarationSite(text, idMatcher.start())) continue;
-            
+            if (tree.nodesByOffset == null && isDeclarationSite(text, offset)) continue;
+
             // Allow object keys in object literals: { key: value }
-            int postIndex = idMatcher.end();
+            int postIndex = idEnd;
             while (postIndex < text.length() && Character.isWhitespace(text.charAt(postIndex))) postIndex++;
             if (postIndex < text.length() && text.charAt(postIndex) == ':') {
-                int preTok = idMatcher.start() - 1;
+                int preTok = offset - 1;
                 while (preTok >= 0 && (mask.types[preTok] == TokenStream.TK_WHITESPACE || mask.types[preTok] == TokenStream.TK_COMMENT)) {
                     preTok--;
                 }
@@ -387,11 +318,11 @@ public class JsSemanticLinter {
                     }
                 }
             }
-            
+
             // Verify this is a real identifier node in the AST
             boolean isAstIdentifier = false;
             boolean isAstDeclaration = false;
-            int astOffset = idMatcher.start();
+            int astOffset = offset;
             if (tree.nodesByOffset != null) {
                 int low = 1, high = tree.nodeCount - 1;
                 while (low <= high) {
@@ -428,17 +359,17 @@ public class JsSemanticLinter {
             } else {
                 isAstIdentifier = true; // Fallback
             }
-            
+
             if (isAstDeclaration) continue; // Skip declarations
             if (!isAstIdentifier) continue;
 
             // Find lexical scope of this identifier and resolve symbol
-            int scopeId = scopeTree.findScopeAt(idMatcher.start(), tree);
-            int[] resolved = scopeTree.lookupSymbol(id, scopeId, idMatcher.start(), tree);
-            
+            int scopeId = scopeTree.findScopeAt(offset, tree);
+            int[] resolved = scopeTree.lookupSymbol(id, scopeId, offset, tree);
+
             if (resolved == null && !KnownElements.JS_GLOBALS.contains(id) && !JS_KEYWORDS.contains(id)) {
-                int line = LinterUtils.getLine(text, idMatcher.start());
-                int col = LinterUtils.getColumn(text, idMatcher.start());
+                int line = LinterUtils.getLine(text, offset);
+                int col = LinterUtils.getColumn(text, offset);
                 problems.add(new Problem(file, line, col, id.length(),
                         "'" + id + "' is not defined",
                         Problem.Severity.ERROR));

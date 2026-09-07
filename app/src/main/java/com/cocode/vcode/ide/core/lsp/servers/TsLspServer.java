@@ -20,8 +20,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * In-process Language Server for TypeScript files.
@@ -32,8 +30,6 @@ import java.util.regex.Pattern;
  */
 public final class TsLspServer implements LspServer {
 
-    private static final Pattern IMPORT_FROM =
-            Pattern.compile("import\\s+.*?from\\s+['\"]([^'\"]+)['\"]");
     private final TsAutoCompleteEngine autoCompleteEngine;
     private volatile boolean ready = false;
 
@@ -181,20 +177,25 @@ public final class TsLspServer implements LspServer {
     public LspLocation definition(LspDocument doc, LspPosition pos) {
         if (doc == null || doc.text == null || pos == null) return null;
 
-        String lineText = doc.getLine(pos.line);
-        Matcher m = IMPORT_FROM.matcher(lineText);
-        while (m.find()) {
-            if (pos.character >= m.start() && pos.character <= m.end()) {
-                String importPath = m.group(1);
-                if (importPath != null && !importPath.isEmpty()) {
-                    LspLocation resolved = com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(doc.uri, importPath);
-                    if (resolved != null) return resolved;
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
+
+        com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(doc.text);
+        com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(doc.text, tokens);
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_IMPORT) {
+                if (offset >= tree.nodeStart[i] && offset <= tree.nodeEnd[i]) {
+                    String importPath = tree.nodeName[i];
+                    if (importPath != null && !importPath.isEmpty()) {
+                        LspLocation resolved = com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(doc.uri, importPath);
+                        if (resolved != null) return resolved;
+                    }
                 }
             }
         }
 
-        int offset = doc.toOffset(pos);
-        String word = extractWord(doc.text, Math.max(offset, 0));
+        String word = extractWord(doc.text, offset);
         if (word.isEmpty()) return null;
 
         List<LspLocation> defs = ProjectIndex.getInstance().findDefinitions(word);
@@ -225,23 +226,36 @@ public final class TsLspServer implements LspServer {
             if (d == null || d.text == null) continue;
 
             if (uri.endsWith(".js") || uri.endsWith(".ts") || uri.endsWith(".jsx") || uri.endsWith(".tsx")) {
-                Pattern p = Pattern.compile("\\b" + Pattern.quote(trimmed) + "\\b");
-                Matcher m = p.matcher(d.text);
-                while (m.find() && result.size() < MAX_REFS) {
-                    LspPosition start = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, m.start());
-                    LspPosition end = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, m.end());
-                    LspRange range = new LspRange(start, end);
-                    LspLocation loc = new LspLocation(uri, range);
-                    
-                    boolean isDef = false;
-                    for (LspLocation def : defs) {
-                        if (def.uri.equals(uri) && def.range.start.line == range.start.line && def.range.start.character == range.start.character) {
-                            isDef = true;
-                            break;
+                com.cocode.vcode.ide.core.diagnostic.util.TokenStream ts = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(d.text);
+                int tLen = trimmed.length();
+                for (int i = 0; i < ts.length && result.size() < MAX_REFS; ) {
+                    if (ts.types[i] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER) {
+                        int start = ts.tokenStart[i];
+                        int end = start;
+                        while (end < ts.length && ts.types[end] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER && ts.tokenStart[end] == start) {
+                            end++;
                         }
-                    }
-                    if (!isDef) {
-                        result.add(loc);
+                        int idLen = end - start;
+                        if (idLen == tLen && d.text.regionMatches(start, trimmed, 0, tLen)) {
+                            LspPosition posStart = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, start);
+                            LspPosition posEnd = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(d.text, end);
+                            LspRange range = new LspRange(posStart, posEnd);
+                            LspLocation loc = new LspLocation(uri, range);
+
+                            boolean isDef = false;
+                            for (LspLocation def : defs) {
+                                if (def.uri.equals(uri) && def.range.start.line == range.start.line && def.range.start.character == range.start.character) {
+                                    isDef = true;
+                                    break;
+                                }
+                            }
+                            if (!isDef) {
+                                result.add(loc);
+                            }
+                        }
+                        i = end;
+                    } else {
+                        i++;
                     }
                 }
             }

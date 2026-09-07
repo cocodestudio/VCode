@@ -6,8 +6,6 @@ import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class JsSignatureParser {
 
