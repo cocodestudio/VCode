@@ -46,6 +46,7 @@ public class HtmlParsePipeline {
 
         debounceHandler.postDelayed(() -> {
             ExecutorProvider.getInstance().runOnDiagnostic(() -> {
+                if (myRequestId != requestId.get()) return;
                 ParseResult cached = null;
                 if (file != null) {
                     cached = ProjectIndex.getInstance().getParseResult(file.getAbsolutePath());

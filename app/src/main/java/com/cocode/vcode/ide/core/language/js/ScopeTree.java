@@ -53,13 +53,21 @@ public final class ScopeTree {
         nodeToScope = null;
     }
 
+    public static final int MAX_SCOPES = 32_768;
+
     /**
      * Manually inserts a new scope and handles array resizing if capacity is exceeded.
      * Returns the assigned scope ID.
      */
     public int addScope(int parent, int nodeId) {
+        if (scopeCount >= MAX_SCOPES) {
+            return 0;
+        }
         if (scopeCount >= scopeParent.length) {
-            int newCap = scopeParent.length * 2;
+            int newCap = Math.min(MAX_SCOPES, scopeParent.length * 2);
+            if (newCap <= scopeParent.length) {
+                return 0;
+            }
             scopeParent = Arrays.copyOf(scopeParent, newCap);
             scopeNode = Arrays.copyOf(scopeNode, newCap);
         }
@@ -90,74 +98,158 @@ public final class ScopeTree {
 
     /**
      * Iteratively builds a ScopeTree from a populated JsSyntaxTree.
-     * Guaranteed O(N) single-pass.
+     * Guaranteed O(N) single-pass without recursion or stack exhaustion.
      */
     public static ScopeTree build(JsSyntaxTree tree) {
+        if (tree == null || tree.nodeCount <= 1) {
+            ScopeTree emptyTree = new ScopeTree(16);
+            emptyTree.nodeToScope = new int[Math.max(1, tree != null ? tree.nodeCount : 0)];
+            return emptyTree;
+        }
+
         ScopeTree scopeTree = new ScopeTree(Math.max(256, tree.nodeCount / 4));
         scopeTree.nodeToScope = new int[tree.nodeCount];
         scopeTree.nodeToScope[0] = 0; // Root node belongs to global scope 0
-        
-        int child = tree.nodeChild[0];
-        while (child != 0) {
-            traverseDFS(tree, scopeTree, child, 0);
-            child = tree.nodeSibling[child];
-        }
-        
-        return scopeTree;
-    }
 
-    private static void traverseDFS(JsSyntaxTree tree, ScopeTree scopeTree, int nodeId, int parentScope) {
-        int type = tree.nodeType[nodeId];
-        
-        int myScope = parentScope;
-        if (isScopeCreator(type)) {
-            boolean isFunctionBody = false;
-            if (type == JsSyntaxTree.N_BLOCK) {
-                int parentNode = tree.nodeParent[nodeId];
-                if (parentNode != 0) {
-                    int pType = tree.nodeType[parentNode];
-                    if (pType == JsSyntaxTree.N_FUNC_DECL || pType == JsSyntaxTree.N_ARROW_FUNC || pType == JsSyntaxTree.N_METHOD || pType == JsSyntaxTree.N_GETTER || pType == JsSyntaxTree.N_SETTER) {
-                        isFunctionBody = true;
-                    }
-                }
+        int maxNodes = tree.nodeCount;
+        int[] nodeStack = new int[256];
+        int[] scopeStack = new int[256];
+        boolean[] visited = new boolean[maxNodes];
+        int top = 0;
+
+        // Push root's immediate children in reverse sibling order
+        // so that the first child is popped and processed first
+        int child = tree.nodeChild[0];
+        int firstChildCount = 0;
+        int temp = child;
+        int loopGuard = 0;
+        while (temp > 0 && temp < maxNodes && ++loopGuard <= maxNodes) {
+            firstChildCount++;
+            temp = tree.nodeSibling[temp];
+        }
+
+        if (firstChildCount > 0) {
+            int[] rootChildren = new int[firstChildCount];
+            temp = child;
+            for (int k = 0; k < firstChildCount && temp > 0 && temp < maxNodes; k++) {
+                rootChildren[k] = temp;
+                temp = tree.nodeSibling[temp];
             }
-            if (!isFunctionBody) {
-                myScope = scopeTree.addScope(parentScope, nodeId);
+            for (int k = firstChildCount - 1; k >= 0; k--) {
+                if (top >= nodeStack.length) {
+                    nodeStack = Arrays.copyOf(nodeStack, nodeStack.length * 2);
+                    scopeStack = Arrays.copyOf(scopeStack, scopeStack.length * 2);
+                }
+                nodeStack[top] = rootChildren[k];
+                scopeStack[top] = 0;
+                top++;
             }
         }
-        scopeTree.nodeToScope[nodeId] = myScope;
-        
-        String name = tree.nodeName[nodeId];
-        if (name != null && !name.isEmpty() && !"{destructure}".equals(name)) {
-            if (isDeclaration(type)) {
-                int targetScope = isScopeCreator(type) ? parentScope : myScope;
-                
-                if (type == JsSyntaxTree.N_VAR_DECL && tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_VAR) {
-                    while (targetScope > 0) {
-                        int scopeCreatorNode = scopeTree.scopeNode[targetScope];
-                        int creatorType = tree.nodeType[scopeCreatorNode];
-                        if (creatorType == JsSyntaxTree.N_FUNC_DECL || 
-                            creatorType == JsSyntaxTree.N_ARROW_FUNC || 
-                            creatorType == JsSyntaxTree.N_METHOD || 
-                            creatorType == JsSyntaxTree.N_GETTER || 
-                            creatorType == JsSyntaxTree.N_SETTER ||
-                            creatorType == JsSyntaxTree.N_CLASS_DECL) {
-                            break;
-                        } else {
-                            targetScope = scopeTree.scopeParent[targetScope];
+
+        // Iterative traversal
+        while (top > 0) {
+            top--;
+            int nodeId = nodeStack[top];
+            int parentScope = scopeStack[top];
+
+            if (nodeId <= 0 || nodeId >= maxNodes || visited[nodeId]) {
+                continue;
+            }
+            visited[nodeId] = true;
+
+            int type = tree.nodeType[nodeId];
+            int myScope = parentScope;
+
+            if (isScopeCreator(type)) {
+                boolean isFunctionBody = false;
+                if (type == JsSyntaxTree.N_BLOCK) {
+                    int parentNode = tree.nodeParent[nodeId];
+                    if (parentNode > 0 && parentNode < maxNodes) {
+                        int pType = tree.nodeType[parentNode];
+                        if (pType == JsSyntaxTree.N_FUNC_DECL || pType == JsSyntaxTree.N_ARROW_FUNC || pType == JsSyntaxTree.N_METHOD || pType == JsSyntaxTree.N_GETTER || pType == JsSyntaxTree.N_SETTER) {
+                            isFunctionBody = true;
                         }
                     }
                 }
-                
-                scopeTree.addSymbol(name, targetScope, nodeId, type);
+                if (!isFunctionBody) {
+                    myScope = scopeTree.addScope(parentScope, nodeId);
+                }
+            }
+
+            if (nodeId < scopeTree.nodeToScope.length) {
+                scopeTree.nodeToScope[nodeId] = myScope;
+            }
+
+            String name = tree.nodeName[nodeId];
+            if (name != null && !name.isEmpty() && !"{destructure}".equals(name)) {
+                if (isDeclaration(type)) {
+                    int targetScope = isScopeCreator(type) ? parentScope : myScope;
+
+                    if (type == JsSyntaxTree.N_VAR_DECL && tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_VAR) {
+                        int varLoop = 0;
+                        while (targetScope > 0 && targetScope < scopeTree.scopeCount && ++varLoop <= scopeTree.scopeCount) {
+                            int scopeCreatorNode = scopeTree.scopeNode[targetScope];
+                            if (scopeCreatorNode <= 0 || scopeCreatorNode >= maxNodes) {
+                                break;
+                            }
+                            int creatorType = tree.nodeType[scopeCreatorNode];
+                            if (creatorType == JsSyntaxTree.N_FUNC_DECL || 
+                                creatorType == JsSyntaxTree.N_ARROW_FUNC || 
+                                creatorType == JsSyntaxTree.N_METHOD || 
+                                creatorType == JsSyntaxTree.N_GETTER || 
+                                creatorType == JsSyntaxTree.N_SETTER ||
+                                creatorType == JsSyntaxTree.N_CLASS_DECL) {
+                                break;
+                            } else {
+                                targetScope = scopeTree.scopeParent[targetScope];
+                            }
+                        }
+                    }
+
+                    scopeTree.addSymbol(name, targetScope, nodeId, type);
+                }
+            }
+
+            // Collect children of nodeId and push in reverse order
+            int currChild = tree.nodeChild[nodeId];
+            if (currChild > 0 && currChild < maxNodes) {
+                int childCount = 0;
+                int cTemp = currChild;
+                int cGuard = 0;
+                while (cTemp > 0 && cTemp < maxNodes && ++cGuard <= maxNodes) {
+                    childCount++;
+                    cTemp = tree.nodeSibling[cTemp];
+                }
+
+                if (childCount == 1) {
+                    if (top >= nodeStack.length) {
+                        nodeStack = Arrays.copyOf(nodeStack, nodeStack.length * 2);
+                        scopeStack = Arrays.copyOf(scopeStack, scopeStack.length * 2);
+                    }
+                    nodeStack[top] = currChild;
+                    scopeStack[top] = myScope;
+                    top++;
+                } else if (childCount > 1) {
+                    int[] childList = new int[childCount];
+                    cTemp = currChild;
+                    for (int k = 0; k < childCount && cTemp > 0 && cTemp < maxNodes; k++) {
+                        childList[k] = cTemp;
+                        cTemp = tree.nodeSibling[cTemp];
+                    }
+                    for (int k = childCount - 1; k >= 0; k--) {
+                        if (top >= nodeStack.length) {
+                            nodeStack = Arrays.copyOf(nodeStack, nodeStack.length * 2);
+                            scopeStack = Arrays.copyOf(scopeStack, scopeStack.length * 2);
+                        }
+                        nodeStack[top] = childList[k];
+                        scopeStack[top] = myScope;
+                        top++;
+                    }
+                }
             }
         }
-        
-        int child = tree.nodeChild[nodeId];
-        while (child != 0) {
-            traverseDFS(tree, scopeTree, child, myScope);
-            child = tree.nodeSibling[child];
-        }
+
+        return scopeTree;
     }
 
     private static boolean isScopeCreator(int type) {
@@ -201,12 +293,13 @@ public final class ScopeTree {
         if (tuples == null) return null;
 
         int currentScope = atScopeId;
-        while (currentScope >= 0) {
+        int scopeLoop = 0;
+        while (currentScope >= 0 && currentScope < scopeCount && ++scopeLoop <= scopeCount) {
             // Scan the tuple array backward to return the latest declaration in the currentScope
             for (int i = tuples.length - 3; i >= 0; i -= 3) {
                 if (tuples[i] == currentScope) {
                     int declNodeId = tuples[i+1];
-                    if (currentScope == atScopeId && tree != null && tree.nodeStart[declNodeId] > usageOffset) {
+                    if (currentScope == atScopeId && tree != null && declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeStart[declNodeId] > usageOffset) {
                         int kind = tuples[i+2];
                         boolean isHoisted = kind == JsSyntaxTree.N_FUNC_DECL || kind == JsSyntaxTree.N_IMPORT ||
                                           (kind == JsSyntaxTree.N_VAR_DECL && (tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR);
@@ -226,7 +319,7 @@ public final class ScopeTree {
      * Finds the deepest scope containing the given source offset.
      */
     public int findScopeAt(int offset, JsSyntaxTree tree) {
-        if (nodeToScope == null || tree.nodesByOffset == null) return 0;
+        if (nodeToScope == null || tree.nodesByOffset == null || tree.nodeCount <= 1) return 0;
         
         int deepest = 0;
         int minLen = Integer.MAX_VALUE;
@@ -241,7 +334,7 @@ public final class ScopeTree {
         while (low <= high) {
             int mid = (low + high) >>> 1;
             int midNodeId = tree.nodesByOffset[mid];
-            if (tree.nodeStart[midNodeId] <= offset) {
+            if (midNodeId > 0 && midNodeId < tree.nodeCount && tree.nodeStart[midNodeId] <= offset) {
                 searchIdx = mid;
                 low = mid + 1;
             } else {
@@ -251,7 +344,7 @@ public final class ScopeTree {
 
         for (int j = searchIdx; j >= 1; j--) {
             int i = tree.nodesByOffset[j];
-            if (offset >= tree.nodeStart[i] && offset < tree.nodeEnd[i]) {
+            if (i > 0 && i < tree.nodeCount && offset >= tree.nodeStart[i] && offset < tree.nodeEnd[i]) {
                 int len = tree.nodeEnd[i] - tree.nodeStart[i];
                 if (len < minLen) {
                     minLen = len;
@@ -260,7 +353,7 @@ public final class ScopeTree {
             }
         }
         
-        return deepest == 0 ? 0 : nodeToScope[deepest];
+        return (deepest > 0 && deepest < nodeToScope.length) ? nodeToScope[deepest] : 0;
     }
 
     /**
@@ -273,7 +366,7 @@ public final class ScopeTree {
      */
     public int[] findAllReferences(String name, int atScopeId, JsSyntaxTree tree) {
         int[] decl = lookupSymbol(name, atScopeId, Integer.MAX_VALUE, tree);
-        if (decl == null || nodeToScope == null) {
+        if (decl == null || nodeToScope == null || tree == null) {
             return new int[0];
         }
 
@@ -281,7 +374,7 @@ public final class ScopeTree {
         int[] refs = new int[16];
         int count = 0;
 
-        for (int i = 1; i < tree.nodeCount; i++) {
+        for (int i = 1; i < tree.nodeCount && i < nodeToScope.length; i++) {
             boolean matches = false;
             if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR) {
                 matches = name.equals(tree.nodeName[i]);

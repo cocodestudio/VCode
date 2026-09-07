@@ -261,15 +261,16 @@ public class JsSemanticLinter {
                     int declNodeId = resolved[1];
                     int targetNodeId = declNodeId;
                     
-                    if (tree.nodeType[declNodeId] == JsSyntaxTree.N_VAR_DECL) {
+                    if (declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeType[declNodeId] == JsSyntaxTree.N_VAR_DECL) {
                         int child = tree.nodeChild[declNodeId];
-                        if (child != 0 && (tree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC || tree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL)) {
+                        if (child > 0 && child < tree.nodeCount && (tree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC || tree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL)) {
                             targetNodeId = child;
                         }
                     }
                     
-                    int child = tree.nodeChild[targetNodeId];
-                    while (child != 0) {
+                    int child = (targetNodeId > 0 && targetNodeId < tree.nodeCount) ? tree.nodeChild[targetNodeId] : 0;
+                    int childLoop = 0;
+                    while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                         if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
                             totalParams++;
                         }
@@ -305,7 +306,8 @@ public class JsSemanticLinter {
                 
                 int actualArgs = 0;
                 int child = tree.nodeChild[i];
-                while (child != 0) {
+                int argLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++argLoop <= tree.nodeCount) {
                     if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
                         actualArgs++;
                     }

@@ -1,0 +1,113 @@
+{
+  "@STRING": {
+    "toLowerCase": "@STRING",
+    "toUpperCase": "@STRING",
+    "trim": "@STRING",
+    "trimStart": "@STRING",
+    "trimEnd": "@STRING",
+    "slice": "@STRING",
+    "substring": "@STRING",
+    "substr": "@STRING",
+    "charAt": "@STRING",
+    "charCodeAt": "@NUMBER",
+    "codePointAt": "@NUMBER",
+    "indexOf": "@NUMBER",
+    "lastIndexOf": "@NUMBER",
+    "includes": "@BOOLEAN",
+    "startsWith": "@BOOLEAN",
+    "endsWith": "@BOOLEAN",
+    "repeat": "@STRING",
+    "replace": "@STRING",
+    "replaceAll": "@STRING",
+    "padStart": "@STRING",
+    "padEnd": "@STRING",
+    "concat": "@STRING",
+    "split": "@ARRAY",
+    "match": "@ARRAY",
+    "search": "@NUMBER",
+    "at": "@STRING",
+    "length": "@NUMBER"
+  },
+  "@ARRAY": {
+    "map": "@ARRAY",
+    "filter": "@ARRAY",
+    "slice": "@ARRAY",
+    "concat": "@ARRAY",
+    "flat": "@ARRAY",
+    "flatMap": "@ARRAY",
+    "reverse": "@ARRAY",
+    "sort": "@ARRAY",
+    "join": "@STRING",
+    "find": "@ANY",
+    "findIndex": "@NUMBER",
+    "findLast": "@ANY",
+    "findLastIndex": "@NUMBER",
+    "indexOf": "@NUMBER",
+    "lastIndexOf": "@NUMBER",
+    "includes": "@BOOLEAN",
+    "some": "@BOOLEAN",
+    "every": "@BOOLEAN",
+    "push": "@NUMBER",
+    "pop": "@ANY",
+    "shift": "@ANY",
+    "unshift": "@NUMBER",
+    "splice": "@ARRAY",
+    "fill": "@ARRAY",
+    "copyWithin": "@ARRAY",
+    "at": "@ANY",
+    "forEach": "@UNDEFINED",
+    "reduce": "@ANY",
+    "reduceRight": "@ANY",
+    "length": "@NUMBER"
+  },
+  "@NUMBER": {
+    "toFixed": "@STRING",
+    "toString": "@STRING",
+    "toPrecision": "@STRING",
+    "toExponential": "@STRING",
+    "toLocaleString": "@STRING"
+  },
+  "@PROMISE": {
+    "then": "@PROMISE",
+    "catch": "@PROMISE",
+    "finally": "@PROMISE"
+  },
+  "@BOOLEAN": {
+    "toString": "@STRING",
+    "valueOf": "@BOOLEAN"
+  },
+  "@DATE": {
+    "getTime": "@NUMBER",
+    "getFullYear": "@NUMBER",
+    "getMonth": "@NUMBER",
+    "getDate": "@NUMBER",
+    "getDay": "@NUMBER",
+    "getHours": "@NUMBER",
+    "getMinutes": "@NUMBER",
+    "getSeconds": "@NUMBER",
+    "toISOString": "@STRING",
+    "toLocaleDateString": "@STRING",
+    "toLocaleTimeString": "@STRING",
+    "toLocaleString": "@STRING",
+    "toString": "@STRING"
+  },
+  "@MAP": {
+    "get": "@ANY",
+    "has": "@BOOLEAN",
+    "size": "@NUMBER",
+    "delete": "@BOOLEAN",
+    "clear": "@UNDEFINED"
+  },
+  "@SET": {
+    "has": "@BOOLEAN",
+    "size": "@NUMBER",
+    "delete": "@BOOLEAN",
+    "clear": "@UNDEFINED"
+  },
+  "@REGEXP": {
+    "test": "@BOOLEAN",
+    "exec": "@ARRAY",
+    "source": "@STRING",
+    "flags": "@STRING"
+  }
+}

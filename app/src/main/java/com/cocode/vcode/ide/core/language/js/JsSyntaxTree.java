@@ -12,6 +12,8 @@ public final class JsSyntaxTree {
 
     public static final int N_NONE         = 0;
     public static final int N_IMPORT       = 1;
+    public static final int MAX_NODES      = 100_000;
+
     public static final int N_FUNC_DECL    = 2;
     public static final int N_ARROW_FUNC   = 3;
     public static final int N_CLASS_DECL   = 4;
@@ -106,61 +108,154 @@ public final class JsSyntaxTree {
         for (int i = 1; i < nodeCount; i++) {
             nodesByOffset[i] = i;
         }
-        sortNodesByOffset(1, nodeCount - 1);
-    }
-
-    private void sortNodesByOffset(int low, int high) {
-        if (low < high) {
-            int pi = partitionNodesByOffset(low, high);
-            sortNodesByOffset(low, pi - 1);
-            sortNodesByOffset(pi + 1, high);
+        if (nodeCount > 2) {
+            sortNodesByOffsetIterative(1, nodeCount - 1);
         }
     }
 
-    private int partitionNodesByOffset(int low, int high) {
-        int mid = (low + high) >>> 1;
-        int temp = nodesByOffset[mid];
-        nodesByOffset[mid] = nodesByOffset[high];
-        nodesByOffset[high] = temp;
-        
-        int pivotId = nodesByOffset[high];
-        int pivotStart = nodeStart[pivotId];
-        int i = (low - 1);
-        for (int j = low; j < high; j++) {
-            int currentId = nodesByOffset[j];
-            if (nodeStart[currentId] < pivotStart) {
-                i++;
-                temp = nodesByOffset[i];
-                nodesByOffset[i] = nodesByOffset[j];
-                nodesByOffset[j] = temp;
+    private void sortNodesByOffsetIterative(int initialLow, int initialHigh) {
+        int[] stack = new int[64];
+        int top = 0;
+        stack[top++] = initialLow;
+        stack[top++] = initialHigh;
+
+        while (top > 0) {
+            int high = stack[--top];
+            int low = stack[--top];
+
+            while (low < high) {
+                int len = high - low + 1;
+                if (len <= 16) {
+                    insertionSortNodesByOffset(low, high);
+                    break;
+                }
+
+                int mid = (low + high) >>> 1;
+                medianOfThree(low, mid, high);
+
+                int pivotId = nodesByOffset[mid];
+                int pivotStart = nodeStart[pivotId];
+
+                int lt = low;
+                int gt = high;
+                int i = low;
+
+                while (i <= gt) {
+                    int currId = nodesByOffset[i];
+                    int currStart = nodeStart[currId];
+                    if (currStart < pivotStart) {
+                        int temp = nodesByOffset[lt];
+                        nodesByOffset[lt] = nodesByOffset[i];
+                        nodesByOffset[i] = temp;
+                        lt++;
+                        i++;
+                    } else if (currStart > pivotStart) {
+                        int temp = nodesByOffset[i];
+                        nodesByOffset[i] = nodesByOffset[gt];
+                        nodesByOffset[gt] = temp;
+                        gt--;
+                    } else {
+                        i++;
+                    }
+                }
+
+                int leftLen = lt - low;
+                int rightLen = high - gt;
+
+                if (leftLen > rightLen) {
+                    if (leftLen > 1) {
+                        stack[top++] = low;
+                        stack[top++] = lt - 1;
+                    }
+                    low = gt + 1;
+                } else {
+                    if (rightLen > 1) {
+                        stack[top++] = gt + 1;
+                        stack[top++] = high;
+                    }
+                    high = lt - 1;
+                }
             }
         }
-        temp = nodesByOffset[i + 1];
-        nodesByOffset[i + 1] = nodesByOffset[high];
-        nodesByOffset[high] = temp;
-        return i + 1;
+    }
+
+    private void medianOfThree(int a, int b, int c) {
+        if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
+            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+        }
+        if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
+            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
+                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+            }
+        }
+    }
+
+    private void insertionSortNodesByOffset(int low, int high) {
+        for (int i = low + 1; i <= high; i++) {
+            int key = nodesByOffset[i];
+            int keyStart = nodeStart[key];
+            int j = i - 1;
+            while (j >= low && nodeStart[nodesByOffset[j]] > keyStart) {
+                nodesByOffset[j + 1] = nodesByOffset[j];
+                j--;
+            }
+            nodesByOffset[j + 1] = key;
+        }
     }
 
     /**
      * Resets the tree for re-use without re-allocating the arrays.
-     * Clears the previous String references in nodeName to avoid soft-leaks
-     * across rapid re-parses, and zeros nodeExtra so flags do not bleed
-     * between generations.
+     * Clears all node state so no stale parent/child/sibling links or names
+     * bleed across rapid re-parses.
      */
     public void reset() {
         reset(0);
     }
 
     public void reset(int estimatedNodes) {
-        if (nodeCount > 1) {
-            java.util.Arrays.fill(nodeName, 1, nodeCount, null);
-            java.util.Arrays.fill(nodeTypeAnn, 1, nodeCount, null);
-            java.util.Arrays.fill(nodeExtra, 1, nodeCount, 0);
+        shapeTable.clear();
+        int clearLimit = Math.min(nodeCount, nodeType.length);
+        if (clearLimit > 1) {
+            Arrays.fill(nodeType, 1, clearLimit, 0);
+            Arrays.fill(nodeStart, 1, clearLimit, 0);
+            Arrays.fill(nodeEnd, 1, clearLimit, 0);
+            Arrays.fill(nodeParent, 1, clearLimit, 0);
+            Arrays.fill(nodeChild, 1, clearLimit, 0);
+            Arrays.fill(nodeSibling, 1, clearLimit, 0);
+            Arrays.fill(nodeLastChild, 1, clearLimit, 0);
+            Arrays.fill(nodeName, 1, Math.min(nodeCount, nodeName.length), null);
+            Arrays.fill(nodeTypeAnn, 1, Math.min(nodeCount, nodeTypeAnn.length), null);
+            Arrays.fill(nodeExtra, 1, Math.min(nodeCount, nodeExtra.length), 0);
         }
+        // Always reset root node 0 pointers
+        nodeChild[0] = 0;
+        nodeLastChild[0] = 0;
+        nodeSibling[0] = 0;
+        nodeParent[0] = 0;
+        nodeStart[0] = 0;
+        nodeEnd[0] = 0;
+        nodeType[0] = 0;
         nodeCount = 1;
 
-        if (estimatedNodes > nodeType.length) {
-            int newCap = Math.max(nodeType.length * 2, estimatedNodes);
+        if (nodeType.length > 32768) {
+            int resetCap = Math.max(4096, Math.min(estimatedNodes, 32768));
+            nodeType = new int[resetCap];
+            nodeStart = new int[resetCap];
+            nodeEnd = new int[resetCap];
+            nodeParent = new int[resetCap];
+            nodeChild = new int[resetCap];
+            nodeSibling = new int[resetCap];
+            nodeLastChild = new int[resetCap];
+            nodeName = new String[resetCap];
+            nodeTypeAnn = new String[resetCap];
+            nodeExtra = new int[resetCap];
+            nodesByOffset = null;
+            return;
+        }
+
+        if (estimatedNodes > nodeType.length && estimatedNodes <= MAX_NODES) {
+            int newCap = Math.min(MAX_NODES, Math.max(nodeType.length * 2, estimatedNodes));
             nodeType = Arrays.copyOf(nodeType, newCap);
             nodeStart = Arrays.copyOf(nodeStart, newCap);
             nodeEnd = Arrays.copyOf(nodeEnd, newCap);
@@ -179,8 +274,14 @@ public final class JsSyntaxTree {
      * Returns the assigned node ID.
      */
     public int addNode(int type, int start, int end, int parent, String name) {
+        if (nodeCount >= MAX_NODES) {
+            return 0;
+        }
         if (nodeCount >= nodeType.length) {
-            int newCap = nodeType.length * 2;
+            int newCap = Math.min(MAX_NODES, nodeType.length * 2);
+            if (newCap <= nodeType.length) {
+                return 0;
+            }
             nodeType = Arrays.copyOf(nodeType, newCap);
             nodeStart = Arrays.copyOf(nodeStart, newCap);
             nodeEnd = Arrays.copyOf(nodeEnd, newCap);
@@ -204,8 +305,12 @@ public final class JsSyntaxTree {
         nodeName[id] = name;
         nodeExtra[id] = 0;
 
+        if (parent < 0 || parent >= id) {
+            parent = 0;
+        }
+
         int prevLast = nodeLastChild[parent];
-        if (prevLast == 0) {
+        if (prevLast <= 0 || prevLast >= id) {
             nodeChild[parent] = id;
         } else {
             nodeSibling[prevLast] = id;

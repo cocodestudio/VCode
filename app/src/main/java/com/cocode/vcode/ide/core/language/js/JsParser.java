@@ -185,49 +185,34 @@ public class JsParser {
 
 
     private static int findDeepestBlock(JsSyntaxTree tree, int nodeId, int editStart, int editEnd, int best) {
+        if (tree == null || tree.nodeCount <= 1) return 0;
+        if (nodeId < 0 || nodeId >= tree.nodeCount) return best;
 
         if (nodeId == 0 && best != 0) nodeId = tree.nodeChild[0]; 
 
         if (nodeId == 0 && best == 0) {
-
             int child = tree.nodeChild[0];
-
-            while (child != 0) {
-
+            int loop = 0;
+            while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
                 best = findDeepestBlock(tree, child, editStart, editEnd, best);
-
                 child = tree.nodeSibling[child];
-
             }
-
             return best;
-
         }
 
-
-
         if (tree.nodeStart[nodeId] <= editStart && tree.nodeEnd[nodeId] >= editEnd) {
-
             if (tree.nodeType[nodeId] == JsSyntaxTree.N_BLOCK) {
-
                 best = nodeId;
-
             }
-
             int child = tree.nodeChild[nodeId];
-
-            while (child != 0) {
-
+            int loop = 0;
+            while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
                 best = findDeepestBlock(tree, child, editStart, editEnd, best);
-
                 child = tree.nodeSibling[child];
-
             }
-
         }
 
         return best;
-
     }
 
 
@@ -275,7 +260,8 @@ public class JsParser {
             if (stream.types[i] == TokenStream.TK_NONE) break; // End of tokenized region
             i = skipWhitespaceAndComments(stream, i);
             if (i >= len || stream.types[i] == TokenStream.TK_NONE) break;
-            i = parseNext(source, stream, tree, i, 0);
+            int nextI = parseNext(source, stream, tree, i, 0);
+            i = (nextI <= i) ? skipToken(stream, i) : nextI;
         }
         
         // We do not resolve class inheritance for inline statements typically,
@@ -317,7 +303,8 @@ public class JsParser {
             if (stream.types[i] == TokenStream.TK_NONE) break; // End of tokenized region
             i = skipWhitespaceAndComments(stream, i);
             if (i >= len || stream.types[i] == TokenStream.TK_NONE) break;
-            i = parseNext(source, stream, tree, i, 0);
+            int nextI = parseNext(source, stream, tree, i, 0);
+            i = (nextI <= i) ? skipToken(stream, i) : nextI;
         }
 
         resolveClassInheritance(tree);
@@ -331,9 +318,19 @@ public class JsParser {
 
 
     private static int parseNext(String source, TokenStream stream, JsSyntaxTree tree, int i, int parent) {
+        if (parent > 0) {
+            int depth = 0;
+            int p = parent;
+            while (p > 0 && p < tree.nodeCount) {
+                depth++;
+                if (depth > 400) {
+                    return skipToken(stream, i);
+                }
+                p = tree.nodeParent[p];
+            }
+        }
 
         byte type = stream.types[i];
-
         int statementStart = i;
 
         
@@ -417,31 +414,31 @@ public class JsParser {
 
 
         // Generic statement
-
         int stmtNode = tree.addNode(JsSyntaxTree.N_STATEMENT, stream.tokenStart[i], 0, parent, null);
-
         int endIdx = skipToNextStatement(source, stream, tree, i, stmtNode);
-
+        if (endIdx <= i) {
+            endIdx = skipToken(stream, i);
+        }
         tree.nodeEnd[stmtNode] = getOffset(stream, source, endIdx);
-
         return endIdx;
 
     }
 
 
 
-    private static void resolveClassInheritance(JsSyntaxTree tree) {
+    static void resolveClassInheritance(JsSyntaxTree tree) {
+        if (tree == null || tree.nodeCount <= 1) return;
         java.util.Map<String, Integer> classByName = new java.util.HashMap<>();
-        for (int i = 1; i <= tree.nodeCount; i++) {
+        for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL && tree.nodeName[i] != null) {
                 classByName.put(tree.nodeName[i], i);
             }
         }
         
-        for (int i = 1; i <= tree.nodeCount; i++) {
+        for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL && tree.nodeTypeAnn[i] != null) {
                 Integer baseNodeId = classByName.get(tree.nodeTypeAnn[i]);
-                if (baseNodeId != null) {
+                if (baseNodeId != null && baseNodeId > 0 && baseNodeId < tree.nodeCount) {
                     String[] baseShape = tree.shapeTable.get(baseNodeId);
                     String[] myShape = tree.shapeTable.get(i);
                     
@@ -966,8 +963,8 @@ public class JsParser {
 
             
 
-            i = parseNext(source, stream, tree, i, blockNode);
-
+            int nextI = parseNext(source, stream, tree, i, blockNode);
+            i = (nextI <= i) ? skipToken(stream, i) : nextI;
         }
 
         tree.nodeEnd[blockNode] = getOffset(stream, source, i);
@@ -1449,41 +1446,29 @@ public class JsParser {
                 
 
                 if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[tok]) == '}') {
-
                     if (lastName != null) {
-
                         int nameNodeStart = stream.tokenStart[lastNameTok];
-
                         String nameToExport = aliasName != null ? aliasName : lastName;
-
-                        tree.addNode(JsSyntaxTree.N_IDENTIFIER, nameNodeStart, nameNodeStart + nameToExport.length(), exportNode, nameToExport);
-
+                        int id = tree.addNode(JsSyntaxTree.N_IDENTIFIER, nameNodeStart, nameNodeStart + nameToExport.length(), exportNode, nameToExport);
+                        if (aliasName != null) {
+                            tree.nodeTypeAnn[id] = lastName;
+                        }
                     }
-
                     i = skipToken(stream, tok);
-
                     break;
-
                 } else if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[tok]) == ',') {
-
                     if (lastName != null) {
-
                         int nameNodeStart = stream.tokenStart[lastNameTok];
-
                         String nameToExport = aliasName != null ? aliasName : lastName;
-
-                        tree.addNode(JsSyntaxTree.N_IDENTIFIER, nameNodeStart, nameNodeStart + nameToExport.length(), exportNode, nameToExport);
-
+                        int id = tree.addNode(JsSyntaxTree.N_IDENTIFIER, nameNodeStart, nameNodeStart + nameToExport.length(), exportNode, nameToExport);
+                        if (aliasName != null) {
+                            tree.nodeTypeAnn[id] = lastName;
+                        }
                         lastName = null;
-
                         lastNameTok = -1;
-
                         aliasName = null;
-
                         aliasTokIdx = -1;
-
                     }
-
                     i = skipToken(stream, tok);
 
                 } else if ("as".equals(word)) {
@@ -2633,39 +2618,29 @@ public class JsParser {
 
                 int firstExprChild = (initialLastChild == 0) ? tree.nodeChild[parent] : tree.nodeSibling[initialLastChild];
 
-                if (firstExprChild != 0 && firstExprChild != arrowNode) {
-
+                if (firstExprChild > 0 && firstExprChild < tree.nodeCount && firstExprChild != arrowNode) {
                     int prev = firstExprChild;
-
-                    while (prev != 0 && tree.nodeSibling[prev] != arrowNode) {
-
+                    int loopPrev = 0;
+                    while (prev > 0 && prev < tree.nodeCount && tree.nodeSibling[prev] > 0 && tree.nodeSibling[prev] < tree.nodeCount && tree.nodeSibling[prev] != arrowNode && ++loopPrev <= tree.nodeCount) {
                         prev = tree.nodeSibling[prev];
-
                     }
 
                     if (initialLastChild == 0) {
-
                         tree.nodeChild[parent] = arrowNode;
-
-                    } else {
-
+                    } else if (initialLastChild < tree.nodeCount) {
                         tree.nodeSibling[initialLastChild] = arrowNode;
-
                     }
 
                     tree.nodeChild[arrowNode] = firstExprChild;
-
                     tree.nodeLastChild[arrowNode] = prev;
-
-                    tree.nodeSibling[prev] = 0;
-
-                    
+                    if (prev > 0 && prev < tree.nodeCount) {
+                        tree.nodeSibling[prev] = 0;
+                    }
 
                     int curr = firstExprChild;
-
                     int lastParam = 0;
-
-                    while (curr != 0) {
+                    int loopCurr = 0;
+                    while (curr > 0 && curr < tree.nodeCount && ++loopCurr <= tree.nodeCount) {
 
                         int next = tree.nodeSibling[curr];
 

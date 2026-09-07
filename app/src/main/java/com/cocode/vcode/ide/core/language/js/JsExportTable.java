@@ -68,7 +68,8 @@ public final class JsExportTable {
         for (int id = 1; id < tree.nodeCount; id++) {
             if (tree.nodeType[id] != JsSyntaxTree.N_EXPORT) continue;
             int child = tree.nodeChild[id];
-            while (child != 0) {
+            int childLoop = 0;
+            while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                 if (isNamedExportChild(tree.nodeType[child])) cap++;
                 child = tree.nodeSibling[child];
             }
@@ -79,7 +80,8 @@ public final class JsExportTable {
         for (int id = 1; id < tree.nodeCount; id++) {
             if (tree.nodeType[id] != JsSyntaxTree.N_EXPORT) continue;
             int child = tree.nodeChild[id];
-            while (child != 0) {
+            int childLoop = 0;
+            while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                 int cType = tree.nodeType[child];
                 String cName = tree.nodeName[child];
                 if (isNamedExportChild(cType) && cName != null && !cName.isEmpty()) {

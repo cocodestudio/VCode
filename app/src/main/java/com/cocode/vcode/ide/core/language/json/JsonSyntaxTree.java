@@ -47,9 +47,17 @@ public class JsonSyntaxTree {
         nodeCount = 1; // 0 is reserved as root/null
     }
 
+    public static final int MAX_NODES = 100_000;
+
     public int addNode(byte type, int start, int end, int parent, String name) {
+        if (nodeCount >= MAX_NODES) {
+            return 0;
+        }
         if (nodeCount >= nodeType.length) {
-            int newCap = nodeType.length * 2;
+            int newCap = Math.min(MAX_NODES, nodeType.length * 2);
+            if (newCap <= nodeType.length) {
+                return 0;
+            }
             nodeType = Arrays.copyOf(nodeType, newCap);
             nodeStart = Arrays.copyOf(nodeStart, newCap);
             nodeEnd = Arrays.copyOf(nodeEnd, newCap);
@@ -75,12 +83,17 @@ public class JsonSyntaxTree {
         nodeParent[index] = parent;
         nodeName[index] = name;
 
+        if (parent < 0 || parent >= index) {
+            parent = 0;
+        }
+
         if (parent != 0) {
             int child = nodeChild[parent];
-            if (child == -1) {
+            if (child <= 0 || child >= index) {
                 nodeChild[parent] = index;
             } else {
-                while (nodeSibling[child] != -1) {
+                int loop = 0;
+                while (child > 0 && child < index && nodeSibling[child] > 0 && nodeSibling[child] < index && ++loop <= index) {
                     child = nodeSibling[child];
                 }
                 nodeSibling[child] = index;
@@ -169,8 +182,10 @@ public class JsonSyntaxTree {
 
     private int getDeepestNode(int node, int offset) {
         int best = node;
+        if (node <= 0 || node >= nodeCount) return 0;
         int child = nodeChild[node];
-        while (child != -1 && child != 0) {
+        int visited = 0;
+        while (child > 0 && child < nodeCount && ++visited <= nodeCount) {
             if (offset >= nodeStart[child] && offset <= nodeEnd[child]) {
                 return getDeepestNode(child, offset);
             }

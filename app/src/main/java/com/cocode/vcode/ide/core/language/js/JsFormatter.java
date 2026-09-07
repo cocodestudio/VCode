@@ -142,7 +142,8 @@ public class JsFormatter extends BaseFormatter {
                                   int cursor, int sourceLen, StringBuilder out, boolean inBlock) {
         int id = firstChild;
         int localCursor = cursor;
-        while (id != 0) {
+        int loop = 0;
+        while (id > 0 && id < tree.nodeCount && ++loop <= tree.nodeCount) {
             int nodeStart = clamp(tree.nodeStart[id], localCursor, sourceLen);
             int nodeEnd   = clamp(tree.nodeEnd[id],   nodeStart,   sourceLen);
 

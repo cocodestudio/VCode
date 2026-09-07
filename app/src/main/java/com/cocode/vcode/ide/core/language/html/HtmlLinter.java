@@ -84,7 +84,8 @@ public class HtmlLinter {
                 boolean hasNonWhitespaceText = false;
                 int nonAttrChildCount = 0;
 
-                while (child != 0) {
+                int childLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                     int cType = tree.nodeType[child];
                     if (cType == HtmlSyntaxTree.N_ATTRIBUTE) {
                         String aName = tree.nodeName[child];
@@ -308,7 +309,8 @@ public class HtmlLinter {
                     case "table":
                         boolean hasTh = false;
                         int tableChild = tree.nodeChild[i];
-                        while (tableChild != 0) {
+                        int tableLoop = 0;
+                        while (tableChild > 0 && tableChild < tree.nodeCount && ++tableLoop <= tree.nodeCount) {
                             String cName = tree.nodeName[tableChild];
                             if ("thead".equalsIgnoreCase(cName) || "th".equalsIgnoreCase(cName)) {
                                 hasTh = true;

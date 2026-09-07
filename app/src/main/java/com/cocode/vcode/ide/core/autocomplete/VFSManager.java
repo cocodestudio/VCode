@@ -46,19 +46,24 @@ public class VFSManager {
         });
     }
 
+    private static final int MAX_CACHE_ENTRIES = 10_000;
+
     private void indexDirectoryRecursively(File dir) {
+        if (directoryCache.size() >= MAX_CACHE_ENTRIES) return;
         File[] children = dir.listFiles();
         if (children == null) return;
 
         List<File> cachedList = new ArrayList<>();
         for (File child : children) {
             String name = child.getName();
-            if (name.startsWith("."))
-                continue; // Skip hidden/git and meta files
+            if (name.startsWith(".") || name.equals("node_modules") || name.equals("build")
+                    || name.equals("dist") || name.equals("out") || name.equals("vendor")
+                    || name.equals(".next") || name.equals(".nuxt"))
+                continue; // Skip hidden/build/dependencies
             cachedList.add(child);
 
             // Also add sub-directories to the queue
-            if (child.isDirectory()) {
+            if (child.isDirectory() && directoryCache.size() < MAX_CACHE_ENTRIES) {
                 indexDirectoryRecursively(child);
             }
         }

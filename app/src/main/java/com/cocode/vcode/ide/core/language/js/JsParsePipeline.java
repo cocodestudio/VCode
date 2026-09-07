@@ -46,6 +46,7 @@ public class JsParsePipeline {
 
         debounceHandler.postDelayed(() -> {
             ExecutorProvider.getInstance().runOnDiagnostic(() -> {
+                if (myRequestId != requestId.get()) return;
                 // L.1: the per-language tiering decision is now
                 // made by the shared ParseModeGate, not by an
                 // inline if-else. The JS-specific threshold of

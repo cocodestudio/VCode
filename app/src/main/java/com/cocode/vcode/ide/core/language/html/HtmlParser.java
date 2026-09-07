@@ -227,7 +227,8 @@ public class HtmlParser {
                     // Check if it has a src= attribute
                     boolean hasSrc = false;
                     int child = tree.nodeChild[i];
-                    while (child != 0) {
+                    int childLoop1 = 0;
+                    while (child > 0 && child < tree.nodeCount && ++childLoop1 <= tree.nodeCount) {
                         if (tree.nodeType[child] == HtmlSyntaxTree.N_ATTRIBUTE && "src".equals(tree.nodeName[child])) {
                             hasSrc = true;
                             break;
@@ -238,7 +239,8 @@ public class HtmlParser {
                     if (!hasSrc) {
                         // Extract inner text-node span
                         child = tree.nodeChild[i];
-                        while (child != 0) {
+                        int childLoop2 = 0;
+                        while (child > 0 && child < tree.nodeCount && ++childLoop2 <= tree.nodeCount) {
                             if (tree.nodeType[child] == HtmlSyntaxTree.N_TEXT) {
                                 int start = tree.nodeStart[child];
                                 int end = tree.nodeEnd[child];
@@ -260,7 +262,8 @@ public class HtmlParser {
                 } else if ("style".equals(tagName)) {
                     // Extract inner text-node span
                     int child = tree.nodeChild[i];
-                    while (child != 0) {
+                    int childLoop3 = 0;
+                    while (child > 0 && child < tree.nodeCount && ++childLoop3 <= tree.nodeCount) {
                         if (tree.nodeType[child] == HtmlSyntaxTree.N_TEXT) {
                             int start = tree.nodeStart[child];
                             int end = tree.nodeEnd[child];
@@ -282,7 +285,8 @@ public class HtmlParser {
                 
                 // Also scan attributes for inline style="color: red" and on*="doThing()"
                 int attr = tree.nodeChild[i];
-                while (attr != 0) {
+                int attrLoop = 0;
+                while (attr > 0 && attr < tree.nodeCount && ++attrLoop <= tree.nodeCount) {
                     if (tree.nodeType[attr] == HtmlSyntaxTree.N_ATTRIBUTE && tree.nodeValue[attr] != null) {
                         String attrName = tree.nodeName[attr];
                         if ("style".equals(attrName)) {

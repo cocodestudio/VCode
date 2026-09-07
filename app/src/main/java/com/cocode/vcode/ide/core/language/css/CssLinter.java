@@ -83,7 +83,8 @@ public class CssLinter {
                 int nestedRuleCount = 0;
 
                 // Scan children to locate selector and count declarations/nested rules
-                while (child != 0) {
+                int childScanLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++childScanLoop <= tree.nodeCount) {
                     int cType = tree.nodeType[child];
                     if (cType == CssSyntaxTree.N_SELECTOR && selectorChild == 0) {
                         selectorChild = child;
@@ -127,8 +128,8 @@ public class CssLinter {
                     if (selector.startsWith("@import")) {
                         if (pastFirstRule) {
                             problems.add(new Problem(file, selLine, selCol, selLen,
-                                    "'@import' must appear before all other rules",
-                                    Problem.Severity.ERROR));
+                                "'@import' must appear before all other rules",
+                                Problem.Severity.ERROR));
                         }
                     } else if (!selector.startsWith("@") && !selector.isEmpty()) {
                         pastFirstRule = true;
@@ -155,13 +156,15 @@ public class CssLinter {
                 boolean blockHasMarginRightAuto = false;
 
                 child = tree.nodeChild[i];
-                while (child != 0) {
+                int childDeclLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++childDeclLoop <= tree.nodeCount) {
                     if (tree.nodeType[child] == CssSyntaxTree.N_DECLARATION) {
                         int declChild = tree.nodeChild[child];
                         int propNode = 0;
                         int valNode = 0;
 
-                        while (declChild != 0) {
+                        int declLoop = 0;
+                        while (declChild > 0 && declChild < tree.nodeCount && ++declLoop <= tree.nodeCount) {
                             if (tree.nodeType[declChild] == CssSyntaxTree.N_PROPERTY) {
                                 propNode = declChild;
                             } else if (tree.nodeType[declChild] == CssSyntaxTree.N_VALUE) {

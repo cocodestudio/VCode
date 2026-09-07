@@ -18,6 +18,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,83 +44,53 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     // JSDoc type pattern
     private static final Pattern PAT_JSDOC_TYPE = Pattern.compile("@(?:type|returns?|param)\\s*\\{([^}]+)\\}");
 
-    private static final Map<String, String> BuiltinTypeTable = new HashMap<>();
+    public static final Map<String, String> BuiltinTypeTable = new HashMap<>();
+
     static {
-        // String methods -> return types
-        BuiltinTypeTable.put("@STRING.toLowerCase", "@STRING");
-        BuiltinTypeTable.put("@STRING.toUpperCase", "@STRING");
-        BuiltinTypeTable.put("@STRING.trim", "@STRING");
-        BuiltinTypeTable.put("@STRING.trimStart", "@STRING");
-        BuiltinTypeTable.put("@STRING.trimEnd", "@STRING");
-        BuiltinTypeTable.put("@STRING.slice", "@STRING");
-        BuiltinTypeTable.put("@STRING.substring", "@STRING");
-        BuiltinTypeTable.put("@STRING.substr", "@STRING");
-        BuiltinTypeTable.put("@STRING.charAt", "@STRING");
-        BuiltinTypeTable.put("@STRING.charCodeAt", "@NUMBER");
-        BuiltinTypeTable.put("@STRING.codePointAt", "@NUMBER");
-        BuiltinTypeTable.put("@STRING.indexOf", "@NUMBER");
-        BuiltinTypeTable.put("@STRING.lastIndexOf", "@NUMBER");
-        BuiltinTypeTable.put("@STRING.includes", "@BOOLEAN");
-        BuiltinTypeTable.put("@STRING.startsWith", "@BOOLEAN");
-        BuiltinTypeTable.put("@STRING.endsWith", "@BOOLEAN");
-        BuiltinTypeTable.put("@STRING.repeat", "@STRING");
-        BuiltinTypeTable.put("@STRING.replace", "@STRING");
-        BuiltinTypeTable.put("@STRING.replaceAll", "@STRING");
-        BuiltinTypeTable.put("@STRING.padStart", "@STRING");
-        BuiltinTypeTable.put("@STRING.padEnd", "@STRING");
-        BuiltinTypeTable.put("@STRING.concat", "@STRING");
-        BuiltinTypeTable.put("@STRING.split", "@ARRAY");
-        BuiltinTypeTable.put("@STRING.match", "@ARRAY");
-        BuiltinTypeTable.put("@STRING.search", "@NUMBER");
-        BuiltinTypeTable.put("@STRING.at", "@STRING");
-        BuiltinTypeTable.put("@STRING.length", "@NUMBER");
+        loadBuiltinTypeTable();
+    }
 
-        // Array methods -> return types
-        BuiltinTypeTable.put("@ARRAY.map", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.filter", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.slice", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.concat", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.flat", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.flatMap", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.reverse", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.sort", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.join", "@STRING");
-        BuiltinTypeTable.put("@ARRAY.find", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.findIndex", "@NUMBER");
-        BuiltinTypeTable.put("@ARRAY.findLast", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.findLastIndex", "@NUMBER");
-        BuiltinTypeTable.put("@ARRAY.indexOf", "@NUMBER");
-        BuiltinTypeTable.put("@ARRAY.lastIndexOf", "@NUMBER");
-        BuiltinTypeTable.put("@ARRAY.includes", "@BOOLEAN");
-        BuiltinTypeTable.put("@ARRAY.some", "@BOOLEAN");
-        BuiltinTypeTable.put("@ARRAY.every", "@BOOLEAN");
-        BuiltinTypeTable.put("@ARRAY.push", "@NUMBER");
-        BuiltinTypeTable.put("@ARRAY.pop", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.shift", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.unshift", "@NUMBER");
-        BuiltinTypeTable.put("@ARRAY.splice", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.fill", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.copyWithin", "@ARRAY");
-        BuiltinTypeTable.put("@ARRAY.at", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.forEach", "@UNDEFINED");
-        BuiltinTypeTable.put("@ARRAY.reduce", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.reduceRight", "@ANY");
-        BuiltinTypeTable.put("@ARRAY.length", "@NUMBER");
+    /**
+     * Loads JavaScript/TypeScript built-in member-to-type mappings dynamically from assets/types/builtin_types.json.
+     * Supports both hierarchical/grouped definitions (e.g. "@STRING": { "split": "@ARRAY" }) and
+     * flat key-value pairs (e.g. "@STRING.split": "@ARRAY").
+     */
+    public static synchronized void loadBuiltinTypeTable() {
+        BuiltinTypeTable.clear();
+        String json = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset("types/builtin_types.json");
+        if (json == null || json.isEmpty()) {
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(json);
+            Iterator<String> keys = root.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                Object val = root.get(key);
+                if (val instanceof JSONObject) {
+                    JSONObject methods = (JSONObject) val;
+                    Iterator<String> methodKeys = methods.keys();
+                    while (methodKeys.hasNext()) {
+                        String method = methodKeys.next();
+                        BuiltinTypeTable.put(key + "." + method, methods.getString(method));
+                    }
+                } else if (val instanceof String) {
+                    BuiltinTypeTable.put(key, (String) val);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
 
-        // Number methods -> return types
-        BuiltinTypeTable.put("@NUMBER.toFixed", "@STRING");
-        BuiltinTypeTable.put("@NUMBER.toString", "@STRING");
-        BuiltinTypeTable.put("@NUMBER.toPrecision", "@STRING");
-        BuiltinTypeTable.put("@NUMBER.toExponential", "@STRING");
-        BuiltinTypeTable.put("@NUMBER.toLocaleString", "@STRING");
-
-        // Promise methods
-        BuiltinTypeTable.put("@PROMISE.then", "@PROMISE");
-        BuiltinTypeTable.put("@PROMISE.catch", "@PROMISE");
-        BuiltinTypeTable.put("@PROMISE.finally", "@PROMISE");
-        // Boolean methods
-        BuiltinTypeTable.put("@BOOLEAN.toString", "@STRING");
-        BuiltinTypeTable.put("@BOOLEAN.valueOf", "@BOOLEAN");
+    /**
+     * Resolves the return type for a built-in type member (e.g. "@STRING", "split" -> "@ARRAY").
+     * Lazily loads the type table if not yet loaded.
+     */
+    public static String getBuiltinType(String lookupType, String memberName) {
+        if (BuiltinTypeTable.isEmpty()) {
+            loadBuiltinTypeTable();
+        }
+        return BuiltinTypeTable.get(lookupType + "." + memberName);
     }
 
     // Instance state
@@ -134,6 +105,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
     public JsAutoCompleteEngine(Context context) {
         super(context);
+        if (BuiltinTypeTable.isEmpty()) {
+            loadBuiltinTypeTable();
+        }
         loadKeywords();
     }
 
@@ -615,7 +589,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = parseResult.tree;
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_EXPORT) {
-                for (int child = tree.nodeChild[i]; child != 0; child = tree.nodeSibling[child]) {
+                for (int child = tree.nodeChild[i], childLoop = 0; child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount; child = tree.nodeSibling[child]) {
                     int cType = tree.nodeType[child];
                     String name = tree.nodeName[child];
                     if (name != null && !name.isEmpty()) {
@@ -878,7 +852,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                     String varName = cachedTree.nodeName[declNodeId];
                                     int child = cachedTree.nodeChild[parentId];
                                     int rhsNode = 0;
-                                    while (child > 0) {
+                                    int childLoop = 0;
+                                    while (child > 0 && child < cachedTree.nodeCount && ++childLoop <= cachedTree.nodeCount) {
                                         if (cachedTree.nodeType[child] != JsSyntaxTree.N_VAR_DECL && cachedTree.nodeType[child] != JsSyntaxTree.N_PARAM) {
                                             rhsNode = child;
                                             break;
@@ -1107,7 +1082,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                         lookupType = "@ARRAY";
                         elementType = "@STRING";
                     }
-                    String nextType = BuiltinTypeTable.get(lookupType + "." + memberName);
+                    String nextType = getBuiltinType(lookupType, memberName);
                     if (nextType != null) {
                         if (nextType.equals("@ANY") && elementType != null && memberName.equals("find")) {
                             inferredType = elementType;
@@ -1175,7 +1150,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                         if (activeTree.nodeType[id] == JsSyntaxTree.N_INTERFACE && inferredType.equals(activeTree.nodeName[id])) {
                             List<CompletionItem> ifaceMembers = new ArrayList<>();
                             int childId = activeTree.nodeChild[id];
-                            while (childId > 0) {
+                            int childLoop = 0;
+                            while (childId > 0 && childId < activeTree.nodeCount && ++childLoop <= activeTree.nodeCount) {
                                 if (activeTree.nodeType[childId] == JsSyntaxTree.N_PROPERTY || activeTree.nodeType[childId] == JsSyntaxTree.N_METHOD) {
                                     String mem = activeTree.nodeName[childId];
                                     if (mem != null) {
@@ -1409,9 +1385,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private String[] findReturnShapeDFS(JsSyntaxTree tree, int nodeId) {
-        if (tree == null || nodeId <= 0) return null;
+        return findReturnShapeDFS(tree, nodeId, 0);
+    }
+
+    private String[] findReturnShapeDFS(JsSyntaxTree tree, int nodeId, int depth) {
+        if (tree == null || nodeId <= 0 || nodeId >= tree.nodeCount || depth > 50) return null;
         int child = tree.nodeChild[nodeId];
-        while (child > 0) {
+        int childLoop = 0;
+        while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
             if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
                 String[] shape = tree.shapeTable.get(child);
                 if (shape != null) return shape;
@@ -1419,7 +1400,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             if (tree.nodeType[child] != JsSyntaxTree.N_FUNC_DECL && 
                 tree.nodeType[child] != JsSyntaxTree.N_ARROW_FUNC && 
                 tree.nodeType[child] != JsSyntaxTree.N_METHOD) {
-                String[] found = findReturnShapeDFS(tree, child);
+                String[] found = findReturnShapeDFS(tree, child, depth + 1);
                 if (found != null) return found;
             }
             child = tree.nodeSibling[child];
@@ -1432,16 +1413,21 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private int findReturnObjectLiteralNode(JsSyntaxTree tree, int nodeId) {
-        if (tree == null || nodeId <= 0) return 0;
+        return findReturnObjectLiteralNode(tree, nodeId, 0);
+    }
+
+    private int findReturnObjectLiteralNode(JsSyntaxTree tree, int nodeId, int depth) {
+        if (tree == null || nodeId <= 0 || nodeId >= tree.nodeCount || depth > 50) return 0;
         int child = tree.nodeChild[nodeId];
-        while (child > 0) {
+        int childLoop = 0;
+        while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
             if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
                 return child;
             }
             if (tree.nodeType[child] != JsSyntaxTree.N_FUNC_DECL && 
                 tree.nodeType[child] != JsSyntaxTree.N_ARROW_FUNC && 
                 tree.nodeType[child] != JsSyntaxTree.N_METHOD) {
-                int found = findReturnObjectLiteralNode(tree, child);
+                int found = findReturnObjectLiteralNode(tree, child, depth + 1);
                 if (found > 0) return found;
             }
             child = tree.nodeSibling[child];
@@ -1450,12 +1436,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private String getShapeOfProperty(JsSyntaxTree tree, int objNodeId, String propName) {
-        if (tree == null || objNodeId <= 0 || propName == null) return null;
+        if (tree == null || objNodeId <= 0 || objNodeId >= tree.nodeCount || propName == null) return null;
         int child = tree.nodeChild[objNodeId];
-        while (child > 0) {
+        int childLoop = 0;
+        while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
             if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
                 int propChild = tree.nodeChild[child];
-                while (propChild > 0) {
+                int propLoop = 0;
+                while (propChild > 0 && propChild < tree.nodeCount && ++propLoop <= tree.nodeCount) {
                     if ((tree.nodeType[propChild] == JsSyntaxTree.N_PROPERTY || tree.nodeType[propChild] == JsSyntaxTree.N_STATEMENT) 
                         && propName.equals(tree.nodeName[propChild])) {
                         String[] keys = tree.shapeTable.get(propChild);
@@ -1476,11 +1464,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private int findPropertyNodeId(JsSyntaxTree tree, int parentNodeId, String propName) {
-        if (tree == null || parentNodeId <= 0 || propName == null) return 0;
+        if (tree == null || parentNodeId <= 0 || parentNodeId >= tree.nodeCount || propName == null) return 0;
         int target = parentNodeId;
         if (tree.nodeType[target] != JsSyntaxTree.N_OBJECT_LITERAL) {
             int child = tree.nodeChild[target];
-            while (child > 0) {
+            int childLoop = 0;
+            while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                 if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
                     target = child;
                     break;
@@ -1489,8 +1478,10 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
+        if (target <= 0 || target >= tree.nodeCount) return 0;
         int propChild = tree.nodeChild[target];
-        while (propChild > 0) {
+        int propLoop = 0;
+        while (propChild > 0 && propChild < tree.nodeCount && ++propLoop <= tree.nodeCount) {
             if ((tree.nodeType[propChild] == JsSyntaxTree.N_PROPERTY || 
                  tree.nodeType[propChild] == JsSyntaxTree.N_METHOD ||
                  tree.nodeType[propChild] == JsSyntaxTree.N_STATEMENT) 
@@ -1507,10 +1498,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private int findChildObjectLiteral(JsSyntaxTree tree, int nodeId) {
-        if (tree == null || nodeId <= 0) return 0;
+        if (tree == null || nodeId <= 0 || nodeId >= tree.nodeCount) return 0;
         if (tree.nodeType[nodeId] == JsSyntaxTree.N_OBJECT_LITERAL) return nodeId;
         int child = tree.nodeChild[nodeId];
-        while (child > 0) {
+        int childLoop = 0;
+        while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
             if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
                 return child;
             }
@@ -1526,7 +1518,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             for (int i = 1; i < tree.nodeCount; i++) {
                 if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT && "default".equals(tree.nodeName[i])) {
                     int child = tree.nodeChild[i];
-                    if (child > 0) {
+                    if (child > 0 && child < tree.nodeCount) {
                         if (tree.nodeType[child] == JsSyntaxTree.N_IDENTIFIER) {
                             int topId = findTopLevelDeclInTree(tree, tree.nodeName[child]);
                             return topId > 0 ? topId : child;
@@ -1544,11 +1536,13 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT) {
                 int child = tree.nodeChild[i];
-                while (child > 0) {
+                int childLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                     String cName = tree.nodeName[child];
                     if (exportName.equals(cName)) {
                         if (tree.nodeType[child] == JsSyntaxTree.N_IDENTIFIER) {
-                            int topId = findTopLevelDeclInTree(tree, cName);
+                            String originalSymbol = tree.nodeTypeAnn[child] != null ? tree.nodeTypeAnn[child] : cName;
+                            int topId = findTopLevelDeclInTree(tree, originalSymbol);
                             return topId > 0 ? topId : child;
                         }
                         return child;
@@ -1723,7 +1717,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 }
             }
             int pChild = tree.nodeChild[objLit];
-            while (pChild > 0) {
+            int pChildLoop = 0;
+            while (pChild > 0 && pChild < tree.nodeCount && ++pChildLoop <= tree.nodeCount) {
                 String propName = tree.nodeName[pChild];
                 if (propName != null && !propName.isEmpty() && seen.add(propName)) {
                     int pType = tree.nodeType[pChild];
@@ -1739,7 +1734,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         } else if (tree.nodeType[nodeId] == JsSyntaxTree.N_CLASS_DECL) {
             int cChild = tree.nodeChild[nodeId];
-            while (cChild > 0) {
+            int cChildLoop = 0;
+            while (cChild > 0 && cChild < tree.nodeCount && ++cChildLoop <= tree.nodeCount) {
                 String mName = tree.nodeName[cChild];
                 if (mName != null && !mName.isEmpty() && !"constructor".equals(mName) && seen.add(mName)) {
                     int cType = tree.nodeType[cChild];
@@ -1764,7 +1760,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT) {
                 int child = tree.nodeChild[i];
-                while (child > 0) {
+                int childLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                     String name = tree.nodeName[child];
                     if (name != null && !name.isEmpty() && seen.add(name)) {
                         int cType = tree.nodeType[child];
@@ -1878,7 +1875,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 } else if (type == JsSyntaxTree.N_IMPORT) {
                     int child = cachedTree.nodeChild[id];
-                    while (child > 0) {
+                    int childLoop = 0;
+                    while (child > 0 && child < cachedTree.nodeCount && ++childLoop <= cachedTree.nodeCount) {
                         String cName = cachedTree.nodeName[child];
                         if (cName != null && !cName.isEmpty()) {
                             cachedGenericSymbols.add(new CompletionItem(cName, cName, "Module", CompletionItem.Type.KEYWORD, 0));

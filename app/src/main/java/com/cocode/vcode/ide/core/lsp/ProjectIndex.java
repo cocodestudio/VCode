@@ -224,7 +224,7 @@ public final class ProjectIndex {
      * @return the ParseResult, or null if file cannot be read
      */
     public com.cocode.vcode.ide.core.language.js.ParseResult getOrParseJsFile(File file) {
-        if (file == null) return null;
+        if (file == null || file.length() > 500 * 1024) return null; // 500 KB safety limit
         String uri = file.getAbsolutePath();
         com.cocode.vcode.ide.core.language.js.ParseResult cached = getParseResult(uri);
         if (cached != null && cached.tree != null) {
@@ -246,7 +246,7 @@ public final class ProjectIndex {
                 updateParseResult(uri, pr);
                 return pr;
             }
-        } catch (Exception ignored) {}
+        } catch (Throwable ignored) {}
         return null;
     }
 
@@ -457,14 +457,18 @@ public final class ProjectIndex {
         return projectRoot;
     }
 
+    private static boolean isIgnoredDirectory(String name) {
+        return name.startsWith(".") || name.equals("node_modules") || name.equals("build")
+                || name.equals("dist") || name.equals("out") || name.equals("vendor")
+                || name.equals(".next") || name.equals(".nuxt") || name.equals("target");
+    }
+
     private void indexDirectory(File dir) {
         File[] files = dir.listFiles();
         if (files == null) return;
         for (File f : files) {
             if (f.isDirectory()) {
-                // Skip hidden dirs and common build artefact directories
-                String name = f.getName();
-                if (!name.startsWith(".") && !name.equals("node_modules") && !name.equals("build")) {
+                if (!isIgnoredDirectory(f.getName())) {
                     indexDirectory(f);
                 }
             } else if (isSupportedFile(f)) {
@@ -483,8 +487,7 @@ public final class ProjectIndex {
         if (files == null) return;
         for (File f : files) {
             if (f.isDirectory()) {
-                String name = f.getName();
-                if (!name.startsWith(".") && !name.equals("node_modules") && !name.equals("build")) {
+                if (!isIgnoredDirectory(f.getName())) {
                     indexDirectoryIncremental(f);
                 }
             } else if (isSupportedFile(f)) {

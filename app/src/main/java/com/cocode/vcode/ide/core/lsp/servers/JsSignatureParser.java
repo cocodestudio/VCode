@@ -47,9 +47,10 @@ public class JsSignatureParser {
         }
         
         int argIndex = 0;
-        int child = tree.nodeChild[callNode];
+        int child = (callNode > 0 && callNode < tree.nodeCount) ? tree.nodeChild[callNode] : 0;
         int idx = 0;
-        while (child != 0) {
+        int loop = 0;
+        while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
             if (tree.nodeType[child] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
                 if (offset > tree.nodeStart[child] && offset <= tree.nodeEnd[child]) {
                     argIndex = idx;
@@ -69,7 +70,7 @@ public class JsSignatureParser {
             baseIdentifier = funcName.substring(dotIdx + 1);
         }
 
-        int scopeId = scopeTree.findScopeAt(tree.nodeStart[callNode], tree);
+        int scopeId = (callNode > 0 && callNode < tree.nodeCount) ? scopeTree.findScopeAt(tree.nodeStart[callNode], tree) : 0;
         int[] resolved = scopeTree.lookupSymbol(baseIdentifier, scopeId);
         
         String signature = null;
@@ -78,9 +79,10 @@ public class JsSignatureParser {
         if (resolved != null) {
             int declNodeId = resolved[1];
             StringBuilder sigBuilder = new StringBuilder();
-            int pChild = tree.nodeChild[declNodeId];
+            int pChild = (declNodeId > 0 && declNodeId < tree.nodeCount) ? tree.nodeChild[declNodeId] : 0;
             boolean first = true;
-            while (pChild != 0) {
+            int pLoop = 0;
+            while (pChild > 0 && pChild < tree.nodeCount && ++pLoop <= tree.nodeCount) {
                 if (tree.nodeType[pChild] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
                     if (!first) sigBuilder.append(", ");
                     sigBuilder.append(tree.nodeName[pChild] != null ? tree.nodeName[pChild] : "arg");

@@ -49,7 +49,8 @@ public class JsonLinter {
             } else if (type == JsonSyntaxTree.N_OBJECT) {
                 Set<String> seenKeys = new HashSet<>();
                 int child = tree.nodeChild[i];
-                while (child != -1) {
+                int childLoop = 0;
+                while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                     if (tree.nodeType[child] == JsonSyntaxTree.N_KEY) {
                         String keyName = tree.nodeName[child];
                         if (keyName != null && !keyName.isEmpty()) {
