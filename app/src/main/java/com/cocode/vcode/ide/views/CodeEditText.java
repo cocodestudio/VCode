@@ -391,6 +391,17 @@ public class CodeEditText extends View {
                     performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
                     notifySelectionChanged();
                     invalidate();
+                } else {
+                    cursor = pressed;
+                    selectionAnchor = null;
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                    showKeyboard();
+                    cursorVisible = true;
+                    scheduleBlink();
+                    invalidate();
+                    if (selectionChangeListener != null && !isSettingSelectionFromIme) {
+                        selectionChangeListener.onEmptyLongPress();
+                    }
                 }
             }
 
@@ -853,6 +864,9 @@ public class CodeEditText extends View {
                 int hitHandle = hitTestHandle(event.getX(), event.getY());
                 if (hitHandle != HANDLE_DRAG_NONE) {
                     activeDragHandle = hitHandle;
+                    if (selectionChangeListener != null) {
+                        selectionChangeListener.onSelectionChanged(false);
+                    }
                     return true;
                 }
             }
@@ -1362,6 +1376,20 @@ public class CodeEditText extends View {
         cursor = content.positionAt(content.totalLength());
         invalidate();
         notifySelectionChanged();
+    }
+
+    /**
+     * Returns true if the editor currently has a non-empty text selection.
+     */
+    public boolean hasSelection() {
+        return selectionAnchor != null && getSelectionStart() != getSelectionEnd();
+    }
+
+    /**
+     * Returns true if the entire document is currently selected.
+     */
+    public boolean isAllSelected() {
+        return hasSelection() && getSelectionStart() == 0 && getSelectionEnd() >= length();
     }
 
     /**
@@ -2636,10 +2664,11 @@ public class CodeEditText extends View {
     }
 
     /**
-     * Listener notified when selection becomes active or collapses.
+     * Listener notified when selection becomes active, collapses, or when an empty area is long-pressed.
      */
     public interface OnSelectionChangeListener {
         void onSelectionChanged(boolean hasSelection);
+        void onEmptyLongPress();
     }
 
     public interface OnCursorIdleListener {

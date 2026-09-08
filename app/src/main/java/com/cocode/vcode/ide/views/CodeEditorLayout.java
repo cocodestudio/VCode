@@ -67,7 +67,7 @@ public class CodeEditorLayout extends LinearLayout {
         lspNavigationToolbar.hide();
 
         codeEditText.setOnCursorIdleListener(offset -> {
-            if (lspNavigationToolbar != null) {
+            if (lspNavigationToolbar != null && (selectionToolbar == null || !selectionToolbar.isVisible())) {
                 lspNavigationToolbar.onCursorIdle(offset);
             }
         });
@@ -79,12 +79,23 @@ public class CodeEditorLayout extends LinearLayout {
             }
         });
 
-        codeEditText.setOnSelectionChangeListener(hasSelection -> {
-            if (hasSelection) {
-                selectionToolbar.show();
-                if (lspNavigationToolbar != null) lspNavigationToolbar.hide();
-            } else {
-                selectionToolbar.hide();
+        codeEditText.setOnSelectionChangeListener(new CodeEditText.OnSelectionChangeListener() {
+            @Override
+            public void onSelectionChanged(boolean hasSelection) {
+                if (hasSelection) {
+                    selectionToolbar.show();
+                    if (lspNavigationToolbar != null) lspNavigationToolbar.hide();
+                } else {
+                    selectionToolbar.hide();
+                }
+            }
+
+            @Override
+            public void onEmptyLongPress() {
+                if (selectionToolbar != null) {
+                    selectionToolbar.show();
+                    if (lspNavigationToolbar != null) lspNavigationToolbar.hide();
+                }
             }
         });
 
