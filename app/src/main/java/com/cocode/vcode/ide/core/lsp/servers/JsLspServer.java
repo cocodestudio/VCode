@@ -31,7 +31,7 @@ import java.util.List;
  *   <li><b>Go to Definition</b>: Resolves {@code import ... from './module'} paths,
  *       then falls back to {@link ProjectIndex} symbol lookup.</li>
  *   <li><b>Find References</b>: Symbol lookup via {@link ProjectIndex}.</li>
- *   <li><b>Signature Help</b>: Returns null (to be enhanced in a future phase).</li>
+ *   <li><b>Signature Help</b>: Context-aware parameter signatures and doc hints for global, prototype, and local functions via {@link JsSignatureParser}.</li>
  * </ul>
  */
 public final class JsLspServer implements LspServer {
@@ -95,28 +95,6 @@ public final class JsLspServer implements LspServer {
     // Diagnostics
     // -------------------------------------------------------------------------
 
-    /**
-     * Returns the text on the current line from the line start up to {@code offset}.
-     */
-    private static String getLineBeforeCursor(String text, int offset) {
-        if (text == null || offset <= 0) return "";
-        int lineStart = Math.min(offset, text.length());
-        while (lineStart > 0 && text.charAt(lineStart - 1) != '\n') lineStart--;
-        return text.substring(lineStart, Math.min(offset, text.length()));
-    }
-
-    // -------------------------------------------------------------------------
-    // Go to Definition — returns single LspLocation or null
-    // -------------------------------------------------------------------------
-
-    /**
-     * Extracts the identifier immediately before {@code idx} in {@code line}.
-     */
-    private static String extractWordBefore(String line, int end) {
-        int start = end;
-        while (start > 0 && isWordChar(line.charAt(start - 1))) start--;
-        return line.substring(start, end);
-    }
 
     // -------------------------------------------------------------------------
     // Find References
@@ -342,7 +320,7 @@ public final class JsLspServer implements LspServer {
             result.add(new LspLocation(doc.uri, new LspRange(p, endP)));
         }
         
-        // Deduplicate overlapping offsets to avoid double-replacement (Task 4.3.5 fix)
+        // Deduplicate overlapping offsets by line and character to avoid duplicate replacement locations
         java.util.Set<String> seen = new java.util.HashSet<>();
         List<LspLocation> uniqueResult = new ArrayList<>();
         for (LspLocation loc : result) {

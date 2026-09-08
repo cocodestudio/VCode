@@ -15,25 +15,31 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Semantic diagnostics analyzer for JavaScript and TypeScript source files.
+ * Performs deep semantic validation using the AST {@link JsSyntaxTree}, lexical {@link ScopeTree},
+ * and workspace-wide {@link ProjectIndex}. Detects duplicate declarations, const reassignments,
+ * function call arity mismatches, undefined symbols, and language structural violations.
+ */
 public class JsSemanticLinter {
 
-    // Find JS keywords
+    // Reserved JS and TS keywords
     private static final Set<String> JS_KEYWORDS = JsKeywords.ALL_JS_TS_KEYWORDS;
 
     public static void analyze(File file, String text, TokenStream mask, JsSyntaxTree tree, ScopeTree scopeTree, ProjectIndex index, List<Problem> problems) {
         if (index == null || text == null || text.trim().isEmpty()) return;
 
-        // AST-based checks for Phase 3
+        // Scope and declaration validation
         checkDuplicateDeclarations(file, text, scopeTree, tree, problems);
         checkConstReassignment(file, text, mask, scopeTree, tree, problems);
 
-        // 3 & 4. Arity checking
+        // Function call arity and signature validation
         checkArity(file, text, mask, index, scopeTree, tree, problems);
         
-        // 5. Undefined symbols checking
+        // Undefined symbol detection against active scope, standard library, and project index
         checkUndefined(file, text, mask, scopeTree, tree, problems);
         
-        // 6. Additional AST-based rules migrated from regex
+        // AST structural rules and syntax checks
         try { checkAdditionalAstRules(file, text, mask, tree, problems); } catch (Exception e) { problems.add(new Problem(file, 0, 0, 0, "EXCEPTION: " + e.toString() + " at " + e.getStackTrace()[0].toString(), Problem.Severity.ERROR)); }
     }
     
@@ -285,7 +291,7 @@ public class JsSemanticLinter {
             if (idEnd <= offset) continue;
             String id = text.substring(offset, idEnd);
 
-            // Skip identifiers that are part of import or export statements (Task 4.3.5 fix)
+            // Ignore identifiers bound within module import/export clauses
             boolean isInsideImportExport = false;
             for (int k = 0; k < ieCount; k++) {
                 if (offset >= ieStart[k] && offset < ieEnd[k]) {

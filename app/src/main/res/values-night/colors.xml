@@ -11,7 +11,6 @@
     <color name="vcode_accent_warning">#F5A623</color>
     <color name="vcode_accent_error">#F25F5C</color>
     <color name="vcode_accent_json">#E5C07B</color>
-    <color name="vcode_accent_git">#F97583</color>
     <color name="vcode_bracket_match_bg">#264F8EF7</color>
 
     <!-- M3 On/Container colors (dark) -->
@@ -31,11 +30,7 @@
     <color name="vcode_on_surface_variant">#7B82A0</color>
     <color name="vcode_outline">#1E2235</color>
     <color name="vcode_outline_variant">#3A3F5C</color>
-    <color name="vcode_inverse_surface">#E2E2F0</color>
-    <color name="vcode_inverse_on_surface">#2F3049</color>
-    <color name="vcode_inverse_primary">#2B6EE8</color>
     <color name="vcode_scrim">#000000</color>
-    <color name="vcode_surface_tint">#4F8EF7</color>
 
     <color name="vcode_text_primary">#E8EAF2</color>
     <color name="vcode_text_secondary">#7B82A0</color>
@@ -46,9 +41,6 @@
     <color name="vcode_line_number_text">#3A4060</color>
     <color name="vcode_active_line_highlight">#1A1E2E</color>
     <color name="vcode_selection_color">#4D4F8EF7</color>
-    <color name="vcode_tab_dirty_dot">#F5A623</color>
-    <color name="vcode_project_card_gradient_start">#1C2030</color>
-    <color name="vcode_project_card_gradient_end">#242840</color>
     <color name="vcode_branch_chip_bg">#1A4F8EF7</color>
     <color name="vcode_branch_chip_active_bg">#334F8EF7</color>
 
@@ -56,7 +48,6 @@
     <color name="vcode_diff_added_text">#3DD68C</color>
     <color name="vcode_diff_removed_bg">#3A1A1A</color>
     <color name="vcode_diff_removed_text">#F25F5C</color>
-    <color name="vcode_diff_modified_bg">#2A2A1A</color>
     <color name="vcode_diff_hunk_bg">#1A1E35</color>
 
     <color name="vcode_git_staged_color">#3DD68C</color>

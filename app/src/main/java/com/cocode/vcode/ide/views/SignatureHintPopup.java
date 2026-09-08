@@ -23,11 +23,17 @@ import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
+/**
+ * Lightweight floating popup window that displays method parameter signatures and documentation hints.
+ * Positions above or below the cursor caret in {@link CodeEditText}, highlighting the currently active
+ * parameter in bold accent styling and rendering documentation snippets for standard library and user functions.
+ */
 public class SignatureHintPopup {
 
     private final Context context;
     private final PopupWindow popupWindow;
     private final TextView tvSignature;
+    private final TextView tvDoc;
 
     public SignatureHintPopup(Context context) {
         this.context = context;
@@ -47,6 +53,20 @@ public class SignatureHintPopup {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+
+        tvDoc = new TextView(context);
+        tvDoc.setTextColor(ContextCompat.getColor(context, R.color.vcode_text_secondary));
+        tvDoc.setTypeface(FontManager.getInstance().getUiFont(context));
+        tvDoc.setTextSize(11f);
+        tvDoc.setMaxLines(3);
+        tvDoc.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams docParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        docParams.topMargin = UiUtils.dpToPx(context, 4);
+        container.addView(tvDoc, docParams);
+        tvDoc.setVisibility(View.GONE);
 
         popupWindow = new PopupWindow(container,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -85,7 +105,11 @@ public class SignatureHintPopup {
                     int start = sb.length();
                     sb.append(param.label);
                     
-                    if (i == help.activeParameter) {
+                    boolean isLast = (i == activeSig.parameters.size() - 1);
+                    boolean isRest = param.label != null && param.label.trim().startsWith("...");
+                    boolean isActive = (i == help.activeParameter) || (isLast && isRest && help.activeParameter >= i);
+
+                    if (isActive) {
                         sb.setSpan(new StyleSpan(Typeface.BOLD), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.vcode_accent_primary)), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
@@ -107,6 +131,25 @@ public class SignatureHintPopup {
         }
         
         tvSignature.setText(sb);
+
+        // Documentation display
+        String docText = null;
+        if (help.activeParameter >= 0 && help.activeParameter < activeSig.parameters.size()) {
+            LspSignatureHelp.LspParameterInformation activeParam = activeSig.parameters.get(help.activeParameter);
+            if (activeParam.documentation != null && !activeParam.documentation.trim().isEmpty()) {
+                docText = activeParam.documentation.trim();
+            }
+        }
+        if (docText == null && activeSig.documentation != null && !activeSig.documentation.trim().isEmpty()) {
+            docText = activeSig.documentation.trim();
+        }
+
+        if (docText != null && !docText.isEmpty()) {
+            tvDoc.setText(docText);
+            tvDoc.setVisibility(View.VISIBLE);
+        } else {
+            tvDoc.setVisibility(View.GONE);
+        }
         
         // Position logic similar to AutoCompletePopup
         int screenWidth = context.getResources().getDisplayMetrics().widthPixels;

@@ -16,14 +16,14 @@ import com.cocode.vcode.ide.core.language.js.ParseResult;
  * per-language pipeline's job. The gate just answers: "given this
  * file's size, which mode should I be in?"
  *
- * <p>Default thresholds match the original JS pattern:
+ * <p>Tiered scheduling thresholds:
  * <ul>
- *   <li>{@code < T1} → {@code MODE_FULL} (full tree + full scope)</li>
- *   <li>{@code <= T2} → {@code MODE_LAZY_SCOPE} (full tree, lazy scope)</li>
- *   <li>{@code <= T3} → {@code MODE_TOP_LEVEL} (top-level-only tree)</li>
- *   <li>{@code > T3} → {@code MODE_TOKENIZE_ONLY} (tokens only)</li>
+ *   <li>{@code < DEFAULT_T1 (1,000)} &rarr; {@code MODE_FULL} (complete syntax tree with eager scope analysis)</li>
+ *   <li>{@code <= DEFAULT_T2 (5,000)} &rarr; {@code MODE_LAZY_SCOPE} (complete syntax tree with deferred scope analysis)</li>
+ *   <li>{@code <= DEFAULT_T3 (15,000)} &rarr; {@code MODE_TOP_LEVEL} (top-level declarations only)</li>
+ *   <li>{@code > DEFAULT_T3} &rarr; {@code MODE_TOKENIZE_ONLY} (tokenization only, bypassing AST generation for large files)</li>
  * </ul>
- * Defaults: T1=1000, T2=5000, T3=15000. Configurable per language.
+ * Configurable per language according to document characteristics.
  */
 public final class ParseModeGate {
 
@@ -43,11 +43,18 @@ public final class ParseModeGate {
     }
 
     /**
-     * Default thresholds: T1=1000, T2=5000, T3=15000. Matches the
-     * original JS pattern.
+     * Default threshold for full parse mode (lines &lt; 1,000).
      */
     public static final int DEFAULT_T1 = 1000;
+
+    /**
+     * Default threshold for lazy scope parse mode (lines &lt;= 5,000).
+     */
     public static final int DEFAULT_T2 = 5000;
+
+    /**
+     * Default threshold for top-level only parse mode (lines &lt;= 15,000).
+     */
     public static final int DEFAULT_T3 = 15000;
 
     /**
@@ -69,15 +76,15 @@ public final class ParseModeGate {
 
     /**
      * Select a parse mode from a raw size value using caller-supplied
-     * thresholds. Per-language call sites that need different cutoffs
-     * (e.g. JSON, where "lines" is not the right unit) can pass their
-     * own T1/T2/T3.
+     * thresholds. Languages that require custom boundaries (such as JSON,
+     * where node count or byte size is more informative than line count)
+     * can provide specialized thresholds.
      *
-     * <p>The threshold semantics match the original JS code:
-     * {@code value < T1} is FULL, {@code value <= T2} is LAZY_SCOPE,
-     * {@code value <= T3} is TOP_LEVEL, otherwise TOKENIZE_ONLY.
+     * <p>Threshold evaluation:
+     * {@code value < t1} selects FULL, {@code value <= t2} selects LAZY_SCOPE,
+     * {@code value <= t3} selects TOP_LEVEL, and any larger value selects TOKENIZE_ONLY.
      *
-     * <p>Negative or zero values are treated as "tiny file" → FULL.
+     * <p>Negative or zero values indicate minimal content and default to FULL.
      */
     public static int select(SizeMetric metric, int value, int t1, int t2, int t3) {
         if (value < t1) return ParseResult.MODE_FULL;

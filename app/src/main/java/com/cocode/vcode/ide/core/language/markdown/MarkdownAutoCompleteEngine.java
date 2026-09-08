@@ -211,14 +211,6 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         return i + 1;
     }
 
-    private boolean isOnlyWhitespaceBetween(String text, int start, int end) {
-        for (int i = start; i < end; i++) {
-            char c = text.charAt(i);
-            if (c != ' ' && c != '\t') return false;
-        }
-        return true;
-    }
-
     private static class CodeBlockContext {
         String language;
         int blockStartOffset;

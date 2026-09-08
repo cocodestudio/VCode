@@ -363,13 +363,13 @@ public class FileUtils {
         }
 
         if ("content".equalsIgnoreCase(scheme)) {
-            // Step 1: Try to resolve to a real file path (local files from file managers)
+            // Attempt direct file path resolution for local storage providers
             File realFile = resolveContentUriToRealFile(context, uri);
             if (realFile != null && realFile.exists()) {
                 return realFile;
             }
 
-            // Step 2: Cloud / sandboxed providers — copy stream to the app cache
+            // Fallback for sandboxed or cloud storage providers: stream content into application cache
             return copyUriToCache(context, uri);
         }
 

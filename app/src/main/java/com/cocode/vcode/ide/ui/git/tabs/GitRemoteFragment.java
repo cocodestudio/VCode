@@ -465,16 +465,6 @@ public class GitRemoteFragment extends Fragment {
         });
     }
 
-    /**
-     * Updates the HUD status message from any thread.
-     */
-    private void postHUDProgressUpdate(String statusReport) {
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-            if (binding != null) {
-                binding.tvStatusMessage.setText(statusReport);
-            }
-        });
-    }
 
     /**
      * Sets the HUD status message and text color.

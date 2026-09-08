@@ -1,5 +1,12 @@
 package com.cocode.vcode.ide.core.language.css;
 
+/**
+ * Fast, single-pass zero-allocation parser for Cascading Style Sheets (CSS).
+ * Converts a {@link CssTokenStream} into a compact {@link CssSyntaxTree} indexing selectors,
+ * declaration blocks, property-value pairs, and at-rules (e.g. {@code @media}, {@code @supports},
+ * {@code @keyframes}). Incorporates punctuation-based synchronization recovery to remain stable
+ * and responsive during incomplete typing states.
+ */
 public class CssParser {
 
     /**

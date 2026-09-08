@@ -11,13 +11,7 @@
     <color name="vcode_accent_warning">#D4850A</color>
     <color name="vcode_accent_error">#D93B38</color>
     <color name="vcode_accent_json">#B58B00</color>
-    <color name="vcode_accent_git">#C0392B</color>
     <color name="vcode_bracket_match_bg">#26007AFF</color>
-
-    <color name="vcode_bracket_1">#FFD700</color> <!-- Gold -->
-    <color name="vcode_bracket_2">#DA70D6</color> <!-- Orchid -->
-    <color name="vcode_bracket_3">#1E90FF</color> <!-- DodgerBlue -->
-    <color name="vcode_bracket_4">#00FA9A</color> <!-- MediumSpringGreen -->
 
     <!-- Rainbow Brackets -->
     <color name="vcode_rainbow_1">#FFD700</color> <!-- Gold -->
@@ -42,11 +36,7 @@
     <color name="vcode_on_surface_variant">#5A6080</color>
     <color name="vcode_outline">#DDE0EC</color>
     <color name="vcode_outline_variant">#C1C4D0</color>
-    <color name="vcode_inverse_surface">#2F3049</color>
-    <color name="vcode_inverse_on_surface">#EEF0FA</color>
-    <color name="vcode_inverse_primary">#ADC6FF</color>
     <color name="vcode_scrim">#000000</color>
-    <color name="vcode_surface_tint">#2B6EE8</color>
 
     <color name="vcode_text_primary">#0D0F1A</color>
     <color name="vcode_text_secondary">#5A6080</color>
@@ -57,9 +47,6 @@
     <color name="vcode_line_number_text">#9BA3C0</color>
     <color name="vcode_active_line_highlight">#EEF0FA</color>
     <color name="vcode_selection_color">#4D2B6EE8</color>
-    <color name="vcode_tab_dirty_dot">#D4850A</color>
-    <color name="vcode_project_card_gradient_start">#F7F8FC</color>
-    <color name="vcode_project_card_gradient_end">#ECEEF6</color>
     <color name="vcode_branch_chip_bg">#1A2B6EE8</color>
     <color name="vcode_branch_chip_active_bg">#332B6EE8</color>
 
@@ -69,7 +56,6 @@
     <color name="vcode_diff_removed_bg">#FFEBE9</color>
     <color name="vcode_diff_removed_word_bg">#FFBDB8</color>
     <color name="vcode_diff_removed_text">#CF222E</color>
-    <color name="vcode_diff_modified_bg">#FFF8C5</color>
     <color name="vcode_diff_hunk_bg">#EEF0FA</color>
 
     <color name="vcode_git_staged_color">#1FB870</color>

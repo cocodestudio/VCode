@@ -18,7 +18,6 @@ public class HtmlLexer {
     private static final int STATE_ATTR_VALUE_UNQUOTED = 8;
     private static final int STATE_COMMENT = 9;
     private static final int STATE_DOCTYPE = 10;
-    private static final int STATE_TAG_CLOSE = 11;
     private static final int STATE_RAW_TEXT = 12;
 
     /**

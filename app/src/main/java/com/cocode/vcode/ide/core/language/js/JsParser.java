@@ -7,15 +7,10 @@ import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 
 
 /**
-
- * A fast, iterative Pratt-style parser that consumes a TokenStream and populates a JsSyntaxTree.
-
- * Phase 3 descends into function/class bodies and parses nested statements/blocks, correctly
-
- * setting parent/child relationships without recursion bounds (flat node additions).
-
+ * High-performance, iterative top-down parser that consumes a {@link TokenStream} and builds a {@link JsSyntaxTree}.
+ * Traverses module scopes, class declarations, functions, and nested statement blocks, constructing flat AST node
+ * arrays with parent/child offset mapping without deep recursive call stacks to ensure sub-millisecond AST construction.
  */
-
 public class JsParser {
 
 
@@ -1562,20 +1557,13 @@ public class JsParser {
 
             }
 
-            byte t = stream.types[nextTok];
-
-            if (t == TokenStream.TK_IDENTIFIER) {
-
+            int t = stream.types[nextTok];
+            if (t == TokenStream.TK_KEYWORD && ("function".equals(getWord(source, stream, nextTok)) || "async".equals(getWord(source, stream, nextTok)))) {
+                i = skipToken(stream, nextTok);
+            } else if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) {
                 if (name == null) name = getWord(source, stream, nextTok);
-
                 i = skipToken(stream, nextTok);
-
-            } else if (t == TokenStream.TK_KEYWORD && ("function".equals(getWord(source, stream, nextTok)) || "async".equals(getWord(source, stream, nextTok)))) {
-
-                i = skipToken(stream, nextTok);
-
             } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[nextTok]) == '*') {
-
                 i = skipToken(stream, nextTok);
 
             } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[nextTok]) == '<') {

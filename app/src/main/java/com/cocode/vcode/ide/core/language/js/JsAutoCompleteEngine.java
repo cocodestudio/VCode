@@ -112,12 +112,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         loadKeywords();
     }
 
-    @SafeVarargs
-    private static <T> T firstNonNull(T... values) {
-        for (T v : values) if (v != null) return v;
-        return null;
-    }
-
     public void setCurrentFile(File file) {
         this.currentFile = file;
         File projectRoot = ProjectSymbolIndex.getProjectRoot(file);

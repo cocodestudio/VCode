@@ -14,7 +14,9 @@ import com.cocode.vcode.ide.git.model.StashItem;
 import com.cocode.vcode.ide.utils.FontManager;
 
 /**
- * RecyclerView adapter for displaying stashed changes in the stash management sheet.
+ * RecyclerView adapter managing the display and application of Git stashes.
+ * Binds {@link StashItem} entries with index identifiers, stash descriptions, commit hashes,
+ * and controls for applying or dropping stashes.
  */
 public class StashAdapter extends ListAdapter<StashItem, StashAdapter.ViewHolder> {
 

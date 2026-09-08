@@ -1,5 +1,11 @@
 package com.cocode.vcode.ide.core.language.md;
 
+/**
+ * Lexical line scanner for Markdown documents.
+ * Scans raw document lines into an {@link MdLineStream}, classifying line structural types
+ * such as headings, list items, blockquotes, fenced code blocks, thematic breaks, and table rows
+ * with zero-allocation character scanning.
+ */
 public final class MdLexer {
 
     public static MdLineStream lex(String source) {

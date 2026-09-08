@@ -1,5 +1,11 @@
 package com.cocode.vcode.ide.core.language.md;
 
+/**
+ * Block and inline parser for Markdown documents.
+ * Consumes an {@link MdLineStream} and generates an {@link MdSyntaxTree} modeling block containers
+ * (paragraphs, headings, lists, blockquotes, code blocks) and inline spans (links, images, emphasis).
+ * Leverages {@link com.cocode.vcode.ide.core.language.base.ParseModeGate} for responsive tiering on large files.
+ */
 public final class MdParser {
 
     public static MdSyntaxTree parseBlocks(MdLineStream stream, String source) {

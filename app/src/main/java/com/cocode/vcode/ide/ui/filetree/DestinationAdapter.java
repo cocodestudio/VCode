@@ -17,7 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Adapter for listing destination folders in the file import destination picker.
+ * Hierarchical folder tree adapter for selecting target directories during file import and move operations.
+ * Renders nested folder structures with depth-based indentation, directory expansion toggles, and folder selection states.
  */
 public class DestinationAdapter extends RecyclerView.Adapter<DestinationAdapter.DestinationViewHolder> {
 

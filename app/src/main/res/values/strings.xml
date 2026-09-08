@@ -71,9 +71,7 @@
 <!--    Bottom Sheet: Diff Viewer-->
     <string name="vcode_go_to_file">Go to file</string>
 
-<!--    Bottom Sheet: Git Action Confirmed-->
-    <string name="vcode_confirm_action">Confirm Action</string>
-    <string name="vcode_commit_ref_hint">HEAD~1 or SHA-1...</string>
+    <!--    Bottom Sheet: Git Action Confirmed-->
     <string name="vcode_confirm_btn">Confirm</string>
 
     <!--    Bottom Sheet: Create Project-->
@@ -119,12 +117,9 @@
 
     <!--    Bottom Sheet: GitHub Login-->
     <string name="vcode_connect_your_github">Connect your GitHub</string>
-    <string name="vcode_how_to_get_github_token">Enter your personal access token to connect VCode IDE with your GitHub Profile.</string>
     <string name="vcode_pat">Personal Access Token</string>
-    <string name="vcode_pat_hint">(ghp_...)</string>
     <string name="vcode_connect">Connect</string>
     <string name="vcode_connecting">Connecting...</string>
-    <string name="vcode_visit_token_page">Visit Token Page</string>
 
     <!--    Bottom Sheet: Create New File-->
     <string name="vcode_create_new_file">Create New File</string>
@@ -161,12 +156,9 @@
 
     <!--    LSP Navigation Actions-->
     <string name="vcode_lsp_go_to_definition">Go to Definition</string>
-    <string name="vcode_lsp_find_references">Find References</string>
     <string name="vcode_find_usages">Find Usages</string>
     <string name="vcode_lsp_no_definition_found">No definition found</string>
-    <string name="vcode_lsp_no_references_found">No references found</string>
     <string name="vcode_no_usages_found">No usages found</string>
-    <string name="vcode_lsp_references_title">References</string>
 
 <!--    Bottom Sheet: New Branch-->
     <string name="vcode_new_branch">New Branch</string>
@@ -190,8 +182,6 @@
     <string name="vcode_project_display_name_label">PROJECT DISPLAY NAME</string>
     <string name="vcode_project_display_name_hint">e.g., My Cloned App</string>
     <string name="vcode_clone_workspace_btn">Clone Workspace</string>
-    <string name="vcode_initialize_remote_workspace">Initializing remote workspace...</string>
-    <string name="vcode_resolving_delta_objects">Resolving delta objects...</string>
     <string name="vcode_run_in_background_btn">Run in Background</string>
 
 <!--    Dialog: Hard Reset Confirmed-->
@@ -270,9 +260,6 @@
     <string name="vcode_publish_btn">Publish</string>
 
 
-    <string name="vcode_git_changes_count">• %d changes</string>
-
-
     <!--    Empty State: Projects Activity-->
     <string name="vcode_no_projects_yet">No projects yet</string>
     <string name="vcode_create_project_hint">Tap the button below to create your first project</string>
@@ -302,10 +289,6 @@
     <!--    Custom View: Editor Tab-->
     <string name="vcode_action_cancel">Cancel</string>
 
-    <!--    Custom View: JsonStatusBar-->
-    <string name="vcode_valid_json">Valid JSON</string>
-    <string name="vcode_invalid_json">Invalid JSON</string>
-    <string name="vcode_validating_json">Validating…</string>
 
     <!--    Custom View: Selection Toolbar-->
     <string name="vcode_action_cut">Cut</string>
@@ -323,10 +306,8 @@
     <string name="vcode_find_regex">.*</string>
     <string name="vcode_ssh_key">SSH Key</string>
     <string name="vcode_generate_ssh_key_desc">Generate and view public key</string>
-    <string name="vcode_login">Login</string>
     <string name="vcode_clone">Clone</string>
     <string name="vcode_problems">Problems</string>
-    <string name="vcode_global_search">Global Search</string>
     <string name="vcode_search_across_project">Search across this project</string>
     <string name="vcode_ssh_public_key">SSH Public Key</string>
     <string name="vcode_ssh_key_desc">Add this key to your Git provider (GitHub, GitLab, etc.) to authenticate via SSH.</string>
@@ -425,7 +406,6 @@
     <string name="vcode_the_quick_brown_fox_jumps">The quick brown fox jumps over the lazy dog\n0123456789</string>
     <string name="vcode_path_copied_to_clipboard">Path copied to clipboard.</string>
     <string name="vcode_project_is_still_loading_please">Project is still loading. Please wait.</string>
-    <string name="vcode_project_root_not_loaded">Project root not loaded</string>
     <string name="vcode_uncommitted_changes">Uncommitted Changes</string>
     <string name="vcode_you_have_uncommitted_modifications_inside">You have uncommitted modifications inside your workspace tracking area. Leave anyway?</string>
     <string name="vcode_leave">Leave</string>

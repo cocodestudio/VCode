@@ -312,14 +312,6 @@ public final class HtmlStaticCompletionDispatcher {
         return new ArrayList<>();
     }
 
-    private static StaticCompletionItem findTagByName(String name) {
-        if (name == null) return null;
-        for (StaticCompletionItem t : StaticCompletionLoader.getHtmlTags()) {
-            if (name.equalsIgnoreCase(t.label)) return t;
-        }
-        return null;
-    }
-
     /**
      * Walk the open tag's attribute list and return the set of
      * attribute names already present (so we don't suggest

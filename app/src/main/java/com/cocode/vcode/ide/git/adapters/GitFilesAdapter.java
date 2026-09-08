@@ -19,7 +19,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * RecyclerView adapter for displaying changed files in Git staging and working tree lists.
+ * RecyclerView adapter managing modified, staged, untracked, and conflicted files in Git panels.
+ * Binds {@link GitFileItem} models with status indicators, staging/unstaging toggles, discard actions,
+ * and navigation into visual diff inspectors.
  */
 public class GitFilesAdapter extends ListAdapter<GitFileItem, GitFilesAdapter.ViewHolder> {
 

@@ -27,6 +27,24 @@ public class JsStandardLibrary {
     public static final Map<String, String> CHAIN_RETURN_TYPES = new HashMap<>();
     public static final Set<String> PROMISE_FUNCTIONS = new HashSet<>();
 
+    public static final Map<String, Map<String, SignatureInfo>> SIGNATURES_BY_CONTAINER = new HashMap<>();
+    public static final Map<String, SignatureInfo> GLOBAL_SIGNATURES = new HashMap<>();
+    public static final Map<String, SignatureInfo> PROTOTYPE_SIGNATURES_BY_NAME = new HashMap<>();
+
+    public static final class SignatureInfo {
+        public final String name;
+        public final String detail;
+        public final String doc;
+        public final java.util.List<String> parameters;
+
+        public SignatureInfo(String name, String detail, String doc, java.util.List<String> parameters) {
+            this.name = name;
+            this.detail = detail != null ? detail : name;
+            this.doc = doc != null ? doc : "";
+            this.parameters = parameters != null ? Collections.unmodifiableList(parameters) : Collections.emptyList();
+        }
+    }
+
     static {
         ensureLoaded();
     }
@@ -40,12 +58,26 @@ public class JsStandardLibrary {
         }
     }
 
+    public static void reloadForTest() {
+        synchronized (lock) {
+            loaded = false;
+            ensureLoaded();
+        }
+    }
+
     private static void loadFromAssets() {
         String jsonStr = StaticAssetReader.readAsset("types/js_standard_library.json");
         if (jsonStr == null || jsonStr.trim().isEmpty()) {
             loadFallback();
             return;
         }
+
+        PROTOTYPE_METHODS.clear();
+        CHAIN_RETURN_TYPES.clear();
+        PROMISE_FUNCTIONS.clear();
+        SIGNATURES_BY_CONTAINER.clear();
+        GLOBAL_SIGNATURES.clear();
+        PROTOTYPE_SIGNATURES_BY_NAME.clear();
 
         try {
             JSONObject root = new JSONObject(jsonStr);
@@ -122,8 +154,165 @@ public class JsStandardLibrary {
                 }
             }
 
+            // 6. lspMembers & signatures
+            SIGNATURES_BY_CONTAINER.clear();
+            GLOBAL_SIGNATURES.clear();
+            PROTOTYPE_SIGNATURES_BY_NAME.clear();
+            if (root.has("lspMembers")) {
+                JSONObject lspObj = root.getJSONObject("lspMembers");
+                Iterator<String> containerKeys = lspObj.keys();
+                while (containerKeys.hasNext()) {
+                    String container = containerKeys.next();
+                    JSONArray members = lspObj.getJSONArray(container);
+                    Map<String, SignatureInfo> containerMap = SIGNATURES_BY_CONTAINER.computeIfAbsent(container, k -> new HashMap<>());
+
+                    for (int i = 0; i < members.length(); i++) {
+                        JSONObject m = members.getJSONObject(i);
+                        String name = m.optString("name", "");
+                        if (name.isEmpty()) continue;
+                        String kind = m.optString("kind", "fn");
+                        if (!"fn".equals(kind)) continue;
+
+                        String detail = m.optString("detail", name);
+                        String doc = m.optString("doc", "");
+                        java.util.List<String> params = new java.util.ArrayList<>();
+
+                        if (m.has("params")) {
+                            JSONArray pArr = m.getJSONArray("params");
+                            for (int p = 0; p < pArr.length(); p++) {
+                                params.add(pArr.getString(p));
+                            }
+                        } else {
+                            int open = detail.indexOf('(');
+                            int close = detail.lastIndexOf(')');
+                            if (open >= 0 && close > open) {
+                                String paramStr = detail.substring(open + 1, close).trim();
+                                if (!paramStr.isEmpty()) {
+                                    String[] parts = paramStr.split(",");
+                                    for (String part : parts) {
+                                        params.add(part.trim());
+                                    }
+                                }
+                            }
+                        }
+
+                        SignatureInfo sig = new SignatureInfo(name, detail, doc, params);
+                        containerMap.put(name, sig);
+
+                        if ("__global__".equals(container) || "window".equals(container)) {
+                            GLOBAL_SIGNATURES.putIfAbsent(name, sig);
+                        }
+                        if (container.startsWith("__")) {
+                            PROTOTYPE_SIGNATURES_BY_NAME.putIfAbsent(name, sig);
+                        }
+                    }
+                }
+            }
+
         } catch (Exception e) {
             loadFallback();
+        }
+    }
+
+    /**
+     * Resolves built-in signature info for a function or method invocation.
+     *
+     * @param funcName full function or member expression string (e.g. "console.log", "fetch", "arr.push")
+     * @param receiverType optional inferred receiver type (e.g. "@ARRAY", "@STRING", "element")
+     * @return matching SignatureInfo or null if not found
+     */
+    public static SignatureInfo getBuiltinSignature(String funcName, String receiverType) {
+        if (funcName == null || funcName.isEmpty()) return null;
+        ensureLoaded();
+
+        int dotIdx = funcName.lastIndexOf('.');
+        if (dotIdx >= 0) {
+            String container = funcName.substring(0, dotIdx);
+            String method = funcName.substring(dotIdx + 1);
+
+            // 1. Direct container lookup (e.g. "console", "Math", "document", "JSON", "URL")
+            Map<String, SignatureInfo> cMap = SIGNATURES_BY_CONTAINER.get(container);
+            if (cMap != null && cMap.containsKey(method)) {
+                return cMap.get(method);
+            }
+
+            // 2. Inferred receiver type lookup
+            if (receiverType != null) {
+                String protoContainer = mapTypeToContainer(receiverType);
+                if (protoContainer != null) {
+                    Map<String, SignatureInfo> pMap = SIGNATURES_BY_CONTAINER.get(protoContainer);
+                    if (pMap != null && pMap.containsKey(method)) {
+                        return pMap.get(method);
+                    }
+                }
+            }
+
+            // 3. Fallback to well-known prototype method by name (e.g. "push", "slice", "replace", "addEventListener")
+            SignatureInfo protoSig = PROTOTYPE_SIGNATURES_BY_NAME.get(method);
+            if (protoSig != null) {
+                return protoSig;
+            }
+
+            // 4. If container is window, check globals
+            if ("window".equals(container)) {
+                return GLOBAL_SIGNATURES.get(method);
+            }
+
+            return null;
+        } else {
+            // Standalone function or constructor call (e.g. "fetch", "setTimeout", "Promise", "Date")
+            SignatureInfo globalSig = GLOBAL_SIGNATURES.get(funcName);
+            if (globalSig != null) {
+                return globalSig;
+            }
+            // Fallback to prototype method (e.g. if invoked directly or bound)
+            return PROTOTYPE_SIGNATURES_BY_NAME.get(funcName);
+        }
+    }
+
+    private static String mapTypeToContainer(String type) {
+        if (type == null) return null;
+        switch (type.toUpperCase()) {
+            case "@ARRAY":
+            case "ARRAY":
+                return "__array__";
+            case "@STRING":
+            case "STRING":
+                return "__string__";
+            case "@NUMBER":
+            case "NUMBER":
+                return "__number__";
+            case "@DATE":
+            case "DATE":
+                return "__date__";
+            case "@MAP":
+            case "MAP":
+                return "__map__";
+            case "@SET":
+            case "SET":
+                return "__set__";
+            case "@PROMISE":
+            case "PROMISE":
+                return "__promise__";
+            case "ELEMENT":
+            case "HTMLELEMENT":
+                return "__element__";
+            case "RESPONSE":
+                return "__response__";
+            case "EVENT":
+                return "__event__";
+            case "CLASSLIST":
+                return "__classlist__";
+            case "STYLE":
+                return "__style__";
+            case "CANVASCONTEXT":
+                return "__canvascontext__";
+            case "FILEREADER":
+                return "__filereader__";
+            case "REGEXP":
+                return "__regexp__";
+            default:
+                return null;
         }
     }
 

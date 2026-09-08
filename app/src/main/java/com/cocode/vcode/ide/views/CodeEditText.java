@@ -247,7 +247,7 @@ public class CodeEditText extends View {
     private void init(Context context) {
         Typeface codeFont = FontManager.getInstance().getCodeFont(context);
 
-        // Fix #4: Restore the editor background colour (previously inherited from AppCompatEditText).
+        // Apply theme-specific surface background color
         setBackgroundColor(ContextCompat.getColor(context, R.color.vcode_bg_surface));
 
         textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -313,7 +313,7 @@ public class CodeEditText extends View {
         setLongClickable(true); // allow long-press just like EditText
         setVerticalScrollBarEnabled(true);
         setHorizontalScrollBarEnabled(true);
-        // Fix #1: OVER_SCROLL_NEVER prevents the "rubber-band" effect that misaligns
+        // Disable overscroll to prevent rubber-band bounce effects that misalign
         // the line-number gutter when content is shorter than the viewport.
         setOverScrollMode(View.OVER_SCROLL_NEVER);
 
@@ -373,8 +373,8 @@ public class CodeEditText extends View {
                 // Always notify the IME of the new cursor position so it syncs
                 // its internal state regardless of whether there was a selection.
                 notifySelectionChanged();
-                // Fix #2: Show the keyboard only on a confirmed tap (not on every ACTION_DOWN).
-                // This prevents the IME from popping up when the user just wants to scroll.
+                // Request soft keyboard display on confirmed single-tap rather than touch-down,
+                // preventing unintentional keyboard popups during scroll gestures.
                 showKeyboard();
                 return true;
             }
@@ -860,8 +860,8 @@ public class CodeEditText extends View {
 
             requestFocus();
             overScroller.abortAnimation();
-            // Fix #2: Do NOT call showKeyboard() here. It is called in onSingleTapUp() instead,
-            // so a scroll gesture (ACTION_DOWN + MOVE) never pops the keyboard.
+            // Soft keyboard is triggered in onSingleTapUp() once a stationary tap is confirmed,
+            // ensuring scroll gestures (ACTION_DOWN followed by MOVE) do not open the IME.
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         } else if (action == MotionEvent.ACTION_MOVE) {
             if (activeDragHandle != HANDLE_DRAG_NONE) {

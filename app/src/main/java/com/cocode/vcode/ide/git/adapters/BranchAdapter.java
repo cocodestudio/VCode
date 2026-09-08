@@ -15,7 +15,8 @@ import com.cocode.vcode.ide.git.model.BranchItem;
 import com.cocode.vcode.ide.utils.FontManager;
 
 /**
- * RecyclerView adapter for displaying local and remote Git branches.
+ * RecyclerView adapter managing the display and interaction of local and remote Git branches.
+ * Binds {@link BranchItem} models with active branch highlighting, checkout actions, and branch deletion controls.
  */
 public class BranchAdapter extends ListAdapter<BranchItem, BranchAdapter.ViewHolder> {
 

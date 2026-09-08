@@ -68,8 +68,8 @@ public final class StaticAssetReader {
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
                 return sb.toString();
-            } catch (Exception e) {
-                return "";
+            } catch (Exception ignored) {
+                // In unit tests, asset may not be packaged into Context, fall through to disk fallback
             }
         }
         // JVM Unit test fallback: read directly from assets directory on disk

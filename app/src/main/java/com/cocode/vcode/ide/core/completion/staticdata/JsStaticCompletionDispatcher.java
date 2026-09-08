@@ -192,25 +192,6 @@ public final class JsStaticCompletionDispatcher {
         return excluded;
     }
 
-    private static String lastGap(String source, int cursor) {
-        if (source == null) return "";
-        int start = cursor - 1;
-        // Find the most recent ';' or '{' or '}' before cursor
-        // (within reason — a 2000-char window is plenty for any
-        // practical statement context).
-        int window = 2000;
-        for (int i = cursor - 1; i >= 0 && cursor - i < window; i--) {
-            char c = source.charAt(i);
-            if (c == ';' || c == '{' || c == '}') {
-                start = i + 1;
-                break;
-            }
-        }
-        if (start < 0) start = 0;
-        if (start > cursor) start = cursor;
-        return source.substring(start, cursor);
-    }
-
     /**
      * Wider preceding context: walk back to find the most recent
      * ';' or '{' (which mark statement boundaries). If neither

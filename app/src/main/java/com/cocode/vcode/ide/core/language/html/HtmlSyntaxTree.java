@@ -167,17 +167,6 @@ public final class HtmlSyntaxTree {
     }
 
     /**
-     * Finds the index of the node that corresponds to the given AST node ID.
-     * Note: This is an internal helper.
-     */
-    private int findIndexById(int id) {
-        for (int i = 0; i < nodesByOffset.length; i++) {
-            if (nodesByOffset[i] == id) return i;
-        }
-        return -1;
-    }
-
-    /**
      * Creates a shallow copy of this tree, shifting the start/end offsets of all nodes
      * that occur after `offset` by `delta`.
      */
