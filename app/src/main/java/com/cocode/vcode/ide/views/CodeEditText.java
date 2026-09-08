@@ -76,7 +76,7 @@ public class CodeEditText extends View {
 
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
-    private static final String TRIGGER_CHARS = ".</:'\"@#!({";
+    private static final String TRIGGER_CHARS = ".</:'\"@#!({&";
 
     // Selection handle drag states
     private static final int HANDLE_DRAG_NONE = 0;
@@ -2210,6 +2210,9 @@ public class CodeEditText extends View {
                 } else break;
             }
             if (wordStart > 0 && text.charAt(wordStart - 1) == '<' && insertText.startsWith("<")) {
+                wordStart--;
+            }
+            if (wordStart > 0 && text.charAt(wordStart - 1) == '&' && insertText.startsWith("&")) {
                 wordStart--;
             }
         }

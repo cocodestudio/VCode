@@ -43,6 +43,20 @@ public class CompletionItem {
     }
 
     /**
+     * Copy constructor.
+     */
+    public CompletionItem(CompletionItem other) {
+        this.label = other.label;
+        this.insertText = other.insertText;
+        this.detail = other.detail;
+        this.type = other.type;
+        this.cursorOffset = other.cursorOffset;
+        this.replaceLength = other.replaceLength;
+        this.sortScore = other.sortScore;
+        this.sourceUri = other.sourceUri;
+    }
+
+    /**
      * Returns the text to insert, falling back to label if insertText is null or empty.
      */
     public String getEffectiveInsertText() {

@@ -99,12 +99,15 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                 TAG_TRIE.insert(item);
 
                 // Build per-tag attribute list (tag-specific + global HTML attributes)
+                HtmlDefinitions.ensureLoaded();
                 JSONArray attrs = obj.optJSONArray("attributes");
-                List<CompletionItem> attrList = new ArrayList<>(HtmlDefinitions.GLOBAL_ATTRS);
+                List<CompletionItem> attrList = new ArrayList<>(HtmlDefinitions.getGlobalAttrs());
                 if (attrs != null) {
                     for (int j = 0; j < attrs.length(); j++) {
                         String attr = attrs.optString(j);
-                        attrList.add(0, new CompletionItem(attr, attr + "=\"|\"",
+                        String insert = com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.isHtmlBooleanAttribute(attr)
+                                ? attr : attr + "=\"|\"";
+                        attrList.add(0, new CompletionItem(attr, insert,
                                 detail.isEmpty() ? tag : detail, CompletionItem.Type.ATTRIBUTE, 0));
                     }
                 }
@@ -145,10 +148,20 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             return new ArrayList<>();
         }
 
-        // 1. DOCTYPE completions (when typing "<!" or "<!D")
-        if (trimmed.equals("<!") || trimmed.startsWith("<!D") || trimmed.startsWith("<!d")) {
-            String filter = trimmed.startsWith("<!") ? trimmed.substring(2) : "";
-            return fuzzyFilter(HtmlDefinitions.DOCTYPE_ITEMS, filter);
+        // 1. DOCTYPE completions (when typing "<!" or "<!D" or "<!--" etc.)
+        int lastLt = lineBefore.lastIndexOf('<');
+        if (lastLt >= 0 && (trimmed.startsWith("<!") || trimmed.startsWith("<!--"))) {
+            String prefix = lineBefore.substring(lastLt);
+            List<CompletionItem> doctypeResults = fuzzyFilter(HtmlDefinitions.getDoctypeItems(), prefix);
+            if (!doctypeResults.isEmpty()) {
+                List<CompletionItem> out = new ArrayList<>();
+                for (CompletionItem ci : doctypeResults) {
+                    CompletionItem copy = new CompletionItem(ci);
+                    copy.setReplaceLength(prefix.length());
+                    out.add(copy);
+                }
+                return out;
+            }
         }
 
         // 2. Entity completions (when typing "&" followed by letters)
@@ -157,9 +170,24 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             if (ampIdx >= 0) {
                 String afterAmp = lineBefore.substring(ampIdx + 1);
                 if (!afterAmp.contains(";") && !afterAmp.contains(" ") && afterAmp.length() <= 10) {
-                    String entityFilter = "&" + afterAmp;
-                    List<CompletionItem> entityResults = fuzzyFilter(HtmlDefinitions.ENTITY_ITEMS, entityFilter);
-                    if (!entityResults.isEmpty()) return entityResults;
+                    HtmlTagParser.HtmlContext ctx = tagParser.parseContext(fullText, cursorPos);
+                    boolean insideCode = (ctx.unclosedTag != null &&
+                            ("script".equalsIgnoreCase(ctx.unclosedTag) || "style".equalsIgnoreCase(ctx.unclosedTag)))
+                            || (ctx.isInsideAttributeValue && ctx.currentAttributeName != null &&
+                            (ctx.currentAttributeName.startsWith("on") || "style".equalsIgnoreCase(ctx.currentAttributeName)));
+                    if (!insideCode) {
+                        String entityFilter = "&" + afterAmp;
+                        List<CompletionItem> entityResults = fuzzyFilter(HtmlDefinitions.getEntityItems(), entityFilter);
+                        if (!entityResults.isEmpty()) {
+                            List<CompletionItem> out = new ArrayList<>();
+                            for (CompletionItem ci : entityResults) {
+                                CompletionItem copy = new CompletionItem(ci);
+                                copy.setReplaceLength(entityFilter.length());
+                                out.add(copy);
+                            }
+                            return out;
+                        }
+                    }
                 }
             }
         }
@@ -317,16 +345,40 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 }
 
-                String[] values = HtmlDefinitions.ATTR_VALUES.get(attrName);
+                String[] values = HtmlDefinitions.getAttributeValues(ctx.currentTagName, attrName);
                 if (values != null) {
+                    boolean isMultiValue = "rel".equals(attrName) || "sandbox".equals(attrName)
+                            || "autocomplete".equals(attrName) || "part".equals(attrName)
+                            || "aria-haspopup".equals(attrName) || "role".equals(attrName);
+
+                    String filterWord = typedValue;
+                    java.util.Set<String> alreadyChosen = new java.util.HashSet<>();
+                    if (isMultiValue) {
+                        String[] tokens = typedValue.split("\\s+");
+                        for (String t : tokens) {
+                            if (!t.isEmpty()) alreadyChosen.add(t.toLowerCase());
+                        }
+                        if (lastSpace != -1) {
+                            filterWord = typedValue.substring(lastSpace + 1);
+                        }
+                        alreadyChosen.remove(filterWord.toLowerCase());
+                    }
+
                     List<CompletionItem> valItems = new ArrayList<>();
                     for (String v : values) {
-                        CompletionItem ci = new CompletionItem(v, v, attrName + " value",
+                        if (isMultiValue && alreadyChosen.contains(v.toLowerCase())) {
+                            continue;
+                        }
+                        String insertText = v;
+                        if (!ctx.isQuotedAttributeValue && lastSpace == -1) {
+                            insertText = "\"" + v + "\"";
+                        }
+                        CompletionItem ci = new CompletionItem(v, insertText, attrName + " value",
                                 CompletionItem.Type.VALUE, 0);
-                        ci.setReplaceLength(typedValue.length());
+                        ci.setReplaceLength(filterWord.length());
                         valItems.add(ci);
                     }
-                    return fuzzyFilter(valItems, typedValue);
+                    return fuzzyFilter(valItems, filterWord);
                 }
 
                 return new ArrayList<>();

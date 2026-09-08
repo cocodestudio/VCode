@@ -229,11 +229,29 @@ public class HtmlTagParser {
                 ctx.isTypingTagName = true;
             }
 
-            if (state == State.ATTRIBUTE_VALUE_DOUBLE_QUOTES || state == State.ATTRIBUTE_VALUE_SINGLE_QUOTES || state == State.ATTRIBUTE_VALUE_UNQUOTED) {
+            if (state == State.ATTRIBUTE_VALUE_DOUBLE_QUOTES) {
                 ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = true;
+                ctx.quoteChar = '"';
                 ctx.currentAttributeName = currentAttr.toString().toLowerCase();
                 ctx.currentAttributeValue = currentAttrValue.toString();
-            } else if (state == State.ATTRIBUTE_NAME || state == State.BEFORE_ATTRIBUTE_VALUE) {
+            } else if (state == State.ATTRIBUTE_VALUE_SINGLE_QUOTES) {
+                ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = true;
+                ctx.quoteChar = '\'';
+                ctx.currentAttributeName = currentAttr.toString().toLowerCase();
+                ctx.currentAttributeValue = currentAttrValue.toString();
+            } else if (state == State.ATTRIBUTE_VALUE_UNQUOTED) {
+                ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = false;
+                ctx.currentAttributeName = currentAttr.toString().toLowerCase();
+                ctx.currentAttributeValue = currentAttrValue.toString();
+            } else if (state == State.BEFORE_ATTRIBUTE_VALUE) {
+                ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = false;
+                ctx.currentAttributeName = currentAttr.toString().toLowerCase();
+                ctx.currentAttributeValue = "";
+            } else if (state == State.ATTRIBUTE_NAME) {
                 ctx.currentAttributeName = currentAttr.toString().toLowerCase();
             }
         }
@@ -266,6 +284,8 @@ public class HtmlTagParser {
         public String currentTagName = null;
         public String currentAttributeName = null;
         public boolean isInsideAttributeValue = false;
+        public boolean isQuotedAttributeValue = false;
+        public char quoteChar = 0;
         public String currentAttributeValue = null;
         public String unclosedTag = null;
     }

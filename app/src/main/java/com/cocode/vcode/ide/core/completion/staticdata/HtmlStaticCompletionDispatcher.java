@@ -107,12 +107,16 @@ public final class HtmlStaticCompletionDispatcher {
                 return Position.ATTRIBUTE_NAME;
             }
             // Skip past '=' and value.
-            while (i < cursor && (Character.isWhitespace(source.charAt(i)) || source.charAt(i) == '=')) i++;
+            boolean hasEquals = false;
+            while (i < cursor && (Character.isWhitespace(source.charAt(i)) || source.charAt(i) == '=')) {
+                if (source.charAt(i) == '=') hasEquals = true;
+                i++;
+            }
             if (i >= cursor) {
-                // Cursor is at the '=' or just after. Still
-                // attribute-name position (the user is starting
-                // to type the value, but value completion is
-                // out of M.8 scope).
+                if (hasEquals) {
+                    // Cursor is at or after '=' -> value position, not attribute name
+                    return Position.NONE;
+                }
                 return Position.ATTRIBUTE_NAME;
             }
             char v = source.charAt(i);
@@ -175,11 +179,32 @@ public final class HtmlStaticCompletionDispatcher {
     private static volatile List<CompletionItem> CACHED_GLOBAL_PREFIXES = null;
     private static volatile java.util.Map<String, List<CompletionItem>> CACHED_TAG_ATTRS = null;
 
+    private static final java.util.Set<String> BOOLEAN_ATTRS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "hidden", "inert", "popover", "autofocus", "disabled", "checked", "readonly",
+            "required", "multiple", "novalidate", "formnovalidate", "reversed", "allowfullscreen",
+            "ismap", "loop", "muted", "playsinline", "default", "open", "async", "defer", "nomodule"
+    ));
+
+    public static boolean isHtmlBooleanAttribute(String attr) {
+        return attr != null && BOOLEAN_ATTRS.contains(attr.toLowerCase());
+    }
+
+    private static CompletionItem findDefinitionAttr(String name) {
+        if (name == null) return null;
+        for (CompletionItem ci : com.cocode.vcode.ide.core.language.html.HtmlDefinitions.getGlobalAttrs()) {
+            if (ci.getLabel().equalsIgnoreCase(name)) {
+                return ci;
+            }
+        }
+        return null;
+    }
+
     public static void clearCachesForTest() {
         CACHED_TAG_COMPLETIONS = null;
         CACHED_GLOBAL_ATTRS = null;
         CACHED_GLOBAL_PREFIXES = null;
         CACHED_TAG_ATTRS = null;
+        com.cocode.vcode.ide.core.language.html.HtmlDefinitions.resetForTest();
     }
 
     private static void initHtmlCaches() {
@@ -197,7 +222,14 @@ public final class HtmlStaticCompletionDispatcher {
             if (t.attributes != null) {
                 List<CompletionItem> tagAttrs = new ArrayList<>();
                 for (String a : t.attributes) {
-                    tagAttrs.add(new CompletionItem(a, a + "=\"|\"", "Attribute", CompletionItem.Type.ATTRIBUTE, 0));
+                    CompletionItem def = findDefinitionAttr(a);
+                    if (def != null) {
+                        tagAttrs.add(def);
+                    } else if (BOOLEAN_ATTRS.contains(a.toLowerCase())) {
+                        tagAttrs.add(new CompletionItem(a, a, "Boolean attribute", CompletionItem.Type.ATTRIBUTE, 0));
+                    } else {
+                        tagAttrs.add(new CompletionItem(a, a + "=\"|\"", "Attribute", CompletionItem.Type.ATTRIBUTE, 0));
+                    }
                 }
                 attrs.put(t.label.toLowerCase(), tagAttrs);
             }
@@ -206,8 +238,17 @@ public final class HtmlStaticCompletionDispatcher {
         CACHED_TAG_COMPLETIONS = tags;
         
         List<CompletionItem> globals = new ArrayList<>();
+        java.util.Set<String> globalNames = new java.util.HashSet<>();
+        
+        for (CompletionItem ci : com.cocode.vcode.ide.core.language.html.HtmlDefinitions.getGlobalAttrs()) {
+            globals.add(ci);
+            globalNames.add(ci.getLabel().toLowerCase());
+        }
         for (String a : StaticCompletionLoader.getHtmlGlobalAttributes()) {
-            globals.add(new CompletionItem(a, a + "=\"|\"", "Global attribute", CompletionItem.Type.ATTRIBUTE, 0));
+            if (globalNames.add(a.toLowerCase())) {
+                String insert = BOOLEAN_ATTRS.contains(a.toLowerCase()) ? a : a + "=\"|\"";
+                globals.add(new CompletionItem(a, insert, "Global attribute", CompletionItem.Type.ATTRIBUTE, 0));
+            }
         }
         CACHED_GLOBAL_ATTRS = globals;
         
@@ -243,10 +284,10 @@ public final class HtmlStaticCompletionDispatcher {
             java.util.Set<String> alreadyPresent = collectAttributesOnTag(source, cursor);
             java.util.Set<String> seen = new java.util.HashSet<>(alreadyPresent);
             if (tag != null) {
-                List<CompletionItem> tagAttrs = CACHED_TAG_ATTRS.get(tag);
+                List<CompletionItem> tagAttrs = CACHED_TAG_ATTRS.get(tag.toLowerCase());
                 if (tagAttrs != null) {
                     for (CompletionItem ci : tagAttrs) {
-                        if (seen.add(ci.getLabel())) {
+                        if (seen.add(ci.getLabel().toLowerCase())) {
                             out.add(ci);
                         }
                     }
@@ -254,15 +295,15 @@ public final class HtmlStaticCompletionDispatcher {
             }
             // Global attributes.
             for (CompletionItem ci : CACHED_GLOBAL_ATTRS) {
-                if (seen.add(ci.getLabel())) {
+                if (seen.add(ci.getLabel().toLowerCase())) {
                     out.add(ci);
                 }
             }
-            // Prefix-only ?" emit the prefix as a completion so the
+            // Prefix-only — emit the prefix as a completion so the
             // user can type `data-` and the editor expands to
             // `data-` with a value placeholder.
             for (CompletionItem ci : CACHED_GLOBAL_PREFIXES) {
-                if (seen.add(ci.getLabel())) {
+                if (seen.add(ci.getLabel().toLowerCase())) {
                     out.add(ci);
                 }
             }
@@ -295,40 +336,72 @@ public final class HtmlStaticCompletionDispatcher {
             if (c == '>') return out;
         }
         if (lastLt < 0) return out;
-        // Find the end of the tag name (first whitespace or '>'
-        // or '/' after '<').
+
+        // Find the tag name
         int nameEnd = lastLt + 1;
+        if (nameEnd < source.length() && (source.charAt(nameEnd) == '/' || source.charAt(nameEnd) == '!')) {
+            return out;
+        }
         while (nameEnd < source.length()) {
             char c = source.charAt(nameEnd);
             if (Character.isWhitespace(c) || c == '/' || c == '>') break;
             nameEnd++;
         }
-        // Walk from nameEnd to cursor, splitting on whitespace.
+
+        // Find the tag end (first unquoted '>')
+        int tagEnd = source.length();
+        boolean inQuote = false;
+        char q = 0;
+        for (int j = nameEnd; j < source.length(); j++) {
+            char c = source.charAt(j);
+            if (inQuote) {
+                if (c == q) inQuote = false;
+            } else {
+                if (c == '"' || c == '\'') {
+                    inQuote = true;
+                    q = c;
+                } else if (c == '>') {
+                    tagEnd = j;
+                    break;
+                } else if (c == '<') {
+                    tagEnd = j;
+                    break;
+                }
+            }
+        }
+
         int i = nameEnd;
-        while (i < cursor) {
-            // Skip whitespace.
-            while (i < cursor && Character.isWhitespace(source.charAt(i))) i++;
-            if (i >= cursor) break;
-            // Read attribute name (up to '=' or whitespace or '>').
+        while (i < tagEnd) {
+            while (i < tagEnd && Character.isWhitespace(source.charAt(i))) i++;
+            if (i >= tagEnd || source.charAt(i) == '>' || source.charAt(i) == '/') break;
+
             int attrStart = i;
-            while (i < cursor) {
+            while (i < tagEnd) {
                 char c = source.charAt(i);
                 if (Character.isWhitespace(c) || c == '=' || c == '>' || c == '/') break;
                 i++;
             }
-            if (i > attrStart) {
-                out.add(source.substring(attrStart, i));
-            }
-            // Skip past the '=' and the value if present.
-            while (i < cursor && (Character.isWhitespace(source.charAt(i)) || source.charAt(i) == '=')) i++;
-            if (i < cursor && (source.charAt(i) == '"' || source.charAt(i) == '\'')) {
+            int attrEnd = i;
+            String attrName = source.substring(attrStart, attrEnd);
+
+            // Skip past '=' and value
+            while (i < tagEnd && (Character.isWhitespace(source.charAt(i)) || source.charAt(i) == '=')) i++;
+            if (i < tagEnd && (source.charAt(i) == '"' || source.charAt(i) == '\'')) {
                 char quote = source.charAt(i);
                 i++;
-                while (i < cursor && source.charAt(i) != quote) i++;
-                if (i < cursor) i++; // closing quote
+                while (i < tagEnd && source.charAt(i) != quote) i++;
+                if (i < tagEnd) i++;
             } else {
-                // Unquoted value: read until whitespace.
-                while (i < cursor && !Character.isWhitespace(source.charAt(i))) i++;
+                while (i < tagEnd && !Character.isWhitespace(source.charAt(i)) && source.charAt(i) != '>') i++;
+            }
+
+            // If the cursor is currently inside or right at the end of this attribute name,
+            // the user is currently typing/editing it — do not mark it as already present.
+            if (cursor >= attrStart && cursor <= attrEnd) {
+                continue;
+            }
+            if (!attrName.isEmpty()) {
+                out.add(attrName.toLowerCase());
             }
         }
         return out;
