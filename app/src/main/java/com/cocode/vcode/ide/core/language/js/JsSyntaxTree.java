@@ -51,6 +51,7 @@ public final class JsSyntaxTree {
     public static final int FLAG_LET       = 2;
     public static final int FLAG_CONST     = 3;
     public static final int FLAG_REST      = 4;
+    public static final int FLAG_PARAM_PROP = 8;
 
     public int[] nodesByOffset; // Sorted node IDs
 

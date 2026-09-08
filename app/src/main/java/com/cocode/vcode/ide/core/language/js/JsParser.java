@@ -1040,7 +1040,12 @@ public class JsParser {
     private static void scanConstructorForThisAssignments(JsSyntaxTree tree, int node, java.util.Set<String> keys) {
         int child = tree.nodeChild[node];
         while (child > 0) {
-            if (tree.nodeType[child] == JsSyntaxTree.N_MEMBER_EXPR) {
+            if (tree.nodeType[child] == JsSyntaxTree.N_PARAM && (tree.nodeExtra[child] & JsSyntaxTree.FLAG_PARAM_PROP) != 0) {
+                String name = tree.nodeName[child];
+                if (name != null && !name.isEmpty()) {
+                    keys.add(name);
+                }
+            } else if (tree.nodeType[child] == JsSyntaxTree.N_MEMBER_EXPR) {
                 String name = tree.nodeName[child];
                 if (name != null && name.startsWith("this.")) {
                     keys.add(name.substring(5));
@@ -1658,7 +1663,24 @@ public class JsParser {
                 isRest = true;
                 continue; // skip spread operator
             }
-            if (t == TokenStream.TK_IDENTIFIER) {
+            boolean isParamProp = false;
+            if (t == TokenStream.TK_KEYWORD || t == TokenStream.TK_IDENTIFIER) {
+                String kw = getWord(source, stream, i);
+                if ("public".equals(kw) || "private".equals(kw) || "protected".equals(kw) || "readonly".equals(kw)) {
+                    isParamProp = true;
+                    i = skipToken(stream, i);
+                    i = skipWhitespaceAndComments(stream, i);
+                    if (i < stream.length) {
+                        String secondKw = getWord(source, stream, i);
+                        if ("readonly".equals(secondKw)) {
+                            i = skipToken(stream, i);
+                            i = skipWhitespaceAndComments(stream, i);
+                        }
+                        if (i < stream.length) t = stream.types[i];
+                    }
+                }
+            }
+            if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) {
                 String paramName = getWord(source, stream, i);
                 int pStart = stream.tokenStart[i];
                 i = skipToken(stream, i);
@@ -1666,6 +1688,9 @@ public class JsParser {
                 if (isRest) {
                     tree.nodeExtra[paramNodeId] = JsSyntaxTree.FLAG_REST;
                     isRest = false;
+                }
+                if (isParamProp) {
+                    tree.nodeExtra[paramNodeId] |= JsSyntaxTree.FLAG_PARAM_PROP;
                 }
                 
                 int next = skipWhitespaceAndComments(stream, i);
@@ -1809,7 +1834,7 @@ public class JsParser {
                     tree.shapeTable.put(classNode, keys.toArray(new String[0]));
                 }
 
-                tree.nodeEnd[classNode] = i;
+                tree.nodeEnd[classNode] = getOffset(stream, source, i);
                 return i;
             } else {
                 if (isTopLevelKeyword(source, stream, nextTok) && hasNewlineBetween(source, stream, i, nextTok)) {
@@ -2612,6 +2637,7 @@ public class JsParser {
                     if (prev > 0 && prev < tree.nodeCount) {
                         tree.nodeSibling[prev] = 0;
                     }
+                    tree.nodeStart[arrowNode] = tree.nodeStart[firstExprChild];
 
                     int curr = firstExprChild;
                     int lastParam = 0;

@@ -344,7 +344,7 @@ public class JsSemanticLinter {
                             int type = tree.nodeType[tree.nodesByOffset[temp]];
                             if (type == JsSyntaxTree.N_IDENTIFIER) {
                                 isAstIdentifier = true;
-                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL)) {
+                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT)) {
                                 isAstDeclaration = true;
                             }
                             temp--;
@@ -354,7 +354,7 @@ public class JsSemanticLinter {
                             int type = tree.nodeType[tree.nodesByOffset[temp]];
                             if (type == JsSyntaxTree.N_IDENTIFIER) {
                                 isAstIdentifier = true;
-                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL)) {
+                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT)) {
                                 isAstDeclaration = true;
                             }
                             temp++;

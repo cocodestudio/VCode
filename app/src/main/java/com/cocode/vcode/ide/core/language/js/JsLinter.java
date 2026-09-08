@@ -27,9 +27,20 @@ public class JsLinter {
         String[] lines = LinterUtils.splitLines(text);
 
         if (index != null) {
-            com.cocode.vcode.ide.core.language.js.ParseResult cached = index.getParseResult(file.getAbsolutePath());
-            JsSyntaxTree tree = (cached != null && cached.tree != null) ? cached.tree : JsParser.parseFull(text, mask);
-            ScopeTree scopeTree = (cached != null && cached.scopeTree != null) ? cached.scopeTree : ScopeTree.build(tree);
+            String filePath = file != null ? file.getAbsolutePath() : "";
+            com.cocode.vcode.ide.core.language.js.ParseResult cached = !filePath.isEmpty() ? index.getParseResult(filePath) : null;
+            JsSyntaxTree tree;
+            ScopeTree scopeTree;
+            if (cached != null && cached.tree != null && text.equals(cached.source)) {
+                tree = cached.tree;
+                scopeTree = (cached.scopeTree != null) ? cached.scopeTree : ScopeTree.build(tree);
+            } else {
+                tree = JsParser.parseFull(text, mask);
+                if (tree != null) {
+                    tree.buildNodesByOffset();
+                }
+                scopeTree = ScopeTree.build(tree);
+            }
             JsSemanticLinter.analyze(file, text, mask, tree, scopeTree, index, problems);
         }
 

@@ -1980,15 +1980,54 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
+        List<int[]> classRanges = new ArrayList<>();
+        Set<String> classMembers = new HashSet<>();
+        if (cachedTree != null) {
+            for (int i = 1; i < cachedTree.nodeCount; i++) {
+                if (cachedTree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL || cachedTree.nodeType[i] == JsSyntaxTree.N_INTERFACE) {
+                    classRanges.add(new int[]{cachedTree.nodeStart[i], cachedTree.nodeEnd[i]});
+                }
+            }
+            if (cachedTree.shapeTable != null) {
+                for (String[] members : cachedTree.shapeTable.values()) {
+                    if (members != null) {
+                        for (String m : members) {
+                            if (m != null && !m.isEmpty()) classMembers.add(m);
+                        }
+                    }
+                }
+            }
+        }
+
         if (cachedTokens != null) {
             for (int t = 0; t < cachedTokens.length; t++) {
                 if (cachedTokens.types[t] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER) {
                     int start = cachedTokens.tokenStart[t];
+
+                    // Skip property access and private member access (e.g. this.name, obj.foo, #bar)
+                    int pre = start - 1;
+                    while (pre >= 0 && Character.isWhitespace(text.charAt(pre))) pre--;
+                    if (pre >= 0 && (text.charAt(pre) == '.' || text.charAt(pre) == '#')) {
+                        continue;
+                    }
+
+                    // Skip tokens defined inside class/interface bodies so they do not leak into global scope
+                    boolean insideClass = false;
+                    for (int[] range : classRanges) {
+                        if (start >= range[0] && start <= range[1]) {
+                            insideClass = true;
+                            break;
+                        }
+                    }
+                    if (insideClass) continue;
+
                     int end = (t + 1 < cachedTokens.length) ? cachedTokens.tokenStart[t + 1] : text.length();
                     while (end > start && !isWordChar(text.charAt(end - 1))) end--;
                     if (end - start >= 3) {
                         String w = text.substring(start, end);
-                        if (!builtinNames.contains(w) && (cachedScopeTree == null || !cachedScopeTree.symbols.containsKey(w))) {
+                        if (!builtinNames.contains(w) 
+                                && !classMembers.contains(w) 
+                                && (cachedScopeTree == null || !cachedScopeTree.symbols.containsKey(w))) {
                             cachedGenericSymbols.add(new CompletionItem(w, w, "Word", CompletionItem.Type.VALUE, 0));
                         }
                     }
