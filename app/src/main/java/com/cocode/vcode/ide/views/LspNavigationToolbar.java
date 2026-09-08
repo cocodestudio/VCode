@@ -294,13 +294,13 @@ public class LspNavigationToolbar {
                 if (refs != null && !refs.isEmpty()) {
                     navigationListener.onShowReferences(refs);
                 } else if (context != null) {
-                    Toast.makeText(context, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(context, R.string.vcode_no_usages_found, Toast.LENGTH_SHORT).show();
                 }
             }
         });
 
         if (context != null) {
-            TooltipCompat.setTooltipText(binding.btnReferences, context.getString(R.string.vcode_lsp_find_references));
+            TooltipCompat.setTooltipText(binding.btnReferences, context.getString(R.string.vcode_find_usages));
         }
 
         binding.btnRename.setOnClickListener(v -> {

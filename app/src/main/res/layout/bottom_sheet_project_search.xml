@@ -29,6 +29,7 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/ll_search_inputs_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
@@ -178,6 +179,17 @@
         android:visibility="invisible"
         app:indicatorColor="?attr/colorPrimary"
         app:trackColor="@android:color/transparent" />
+
+    <TextView
+        android:id="@+id/tv_empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="32dp"
+        android:text="@string/vcode_no_usages_found"
+        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rv_search_results"

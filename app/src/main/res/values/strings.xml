@@ -162,8 +162,10 @@
     <!--    LSP Navigation Actions-->
     <string name="vcode_lsp_go_to_definition">Go to Definition</string>
     <string name="vcode_lsp_find_references">Find References</string>
+    <string name="vcode_find_usages">Find Usages</string>
     <string name="vcode_lsp_no_definition_found">No definition found</string>
     <string name="vcode_lsp_no_references_found">No references found</string>
+    <string name="vcode_no_usages_found">No usages found</string>
     <string name="vcode_lsp_references_title">References</string>
 
 <!--    Bottom Sheet: New Branch-->

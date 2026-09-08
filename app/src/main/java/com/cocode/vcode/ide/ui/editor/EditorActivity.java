@@ -34,6 +34,7 @@ import com.cocode.vcode.ide.ui.filetree.FileTreeFragment;
 import com.cocode.vcode.ide.ui.sheets.editor.GoToLineBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.editor.ProblemsBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.editor.SnippetsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -952,37 +953,28 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     public void showReferences(List<com.cocode.vcode.ide.core.lsp.LspLocation> result) {
         if (result == null || result.isEmpty()) {
-            Toast.makeText(this, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.vcode_no_usages_found, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (result.size() == 1) {
-            navigateToLocation(result.get(0));
-        } else {
-            List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> refOptions = new java.util.ArrayList<>();
-            for (com.cocode.vcode.ide.core.lsp.LspLocation loc : result) {
-                String path = loc.uri;
-                if (path.startsWith("file://")) {
-                    try {
-                        path = new java.net.URI(loc.uri).getPath();
-                    } catch (Exception e) {
-                        path = path.substring(7);
-                    }
-                }
-                File f = new File(path);
-                int line = loc.range != null ? loc.range.start.line + 1 : 1;
-                String label = f.getName() + ":" + line;
 
-                String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
-                int iconResId = FileType.fromExtension(ext).getIconResId();
-
-                refOptions.add(new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option(
-                        iconResId, label,
-                        () -> navigateToLocation(loc)
-                ));
-            }
-            com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet refsSheet = new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet();
-            refsSheet.setOptions(refOptions);
-            refsSheet.show(getSupportFragmentManager(), getString(R.string.vcode_lsp_references_title));
+        CodeEditText editor = getActiveCodeEditor();
+        String query = "";
+        if (editor != null && editor.getText() != null) {
+            query = com.cocode.vcode.ide.core.lsp.SymbolExtractor.extractWord(
+                    editor.getText().toString(), editor.getSelectionStart());
         }
+
+        ProjectSearchBottomSheet sheet = new ProjectSearchBottomSheet();
+        sheet.setUsages(getString(R.string.vcode_find_usages), query, result);
+        sheet.setListener((file, line) -> {
+            viewModel.openFile(file);
+            binding.viewerContainer.postDelayed(() -> {
+                CodeEditText targetEditor = getActiveCodeEditor();
+                if (targetEditor != null && line > 0) {
+                    targetEditor.goToLine(line);
+                }
+            }, 300);
+        });
+        sheet.show(getSupportFragmentManager(), "FindUsages");
     }
 }

@@ -53,7 +53,7 @@
                     android:paddingVertical="14dp"
                     android:src="@drawable/ic_magnifying_glass"
                     app:tint="@color/vcode_text_primary"
-                    android:contentDescription="@string/vcode_lsp_find_references" />
+                    android:contentDescription="@string/vcode_find_usages" />
 
                 <!-- Rename -->
                 <ImageView
