@@ -134,7 +134,7 @@ public class SignatureHintPopup {
 
         // Documentation display
         String docText = null;
-        if (help.activeParameter >= 0 && help.activeParameter < activeSig.parameters.size()) {
+        if (activeSig.parameters != null && help.activeParameter >= 0 && help.activeParameter < activeSig.parameters.size()) {
             LspSignatureHelp.LspParameterInformation activeParam = activeSig.parameters.get(help.activeParameter);
             if (activeParam.documentation != null && !activeParam.documentation.trim().isEmpty()) {
                 docText = activeParam.documentation.trim();
@@ -184,10 +184,19 @@ public class SignatureHintPopup {
         int yAbove = windowYTop - popupHeight - UiUtils.dpToPx(context, 4);
 
         int y;
-        if (yAbove < visibleFrame.top) {
-            y = Math.max(visibleFrame.top, yBelow);
-        } else {
+        if (yAbove >= visibleFrame.top) {
             y = yAbove;
+        } else if (yBelow + popupHeight <= visibleFrame.bottom) {
+            y = yBelow;
+        } else {
+            y = Math.max(visibleFrame.top, yAbove);
+        }
+
+        if (y + popupHeight > visibleFrame.bottom) {
+            y = Math.max(visibleFrame.top, visibleFrame.bottom - popupHeight);
+        }
+        if (y < visibleFrame.top) {
+            y = visibleFrame.top;
         }
 
         if (x + popupWidth > screenWidth) {

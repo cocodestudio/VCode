@@ -87,25 +87,96 @@ public class JsSignatureParser {
         String sourceLabel = "Local function";
         List<String> parsedParamNames = null;
 
-        // 1. Check local file declaration in scope
-        if (resolved != null && resolved[1] > 0 && resolved[1] < tree.nodeCount) {
-            int declNodeId = resolved[1];
-            int declType = tree.nodeType[declNodeId];
-            if (declType == JsSyntaxTree.N_FUNC_DECL || declType == JsSyntaxTree.N_ARROW_FUNC || declType == JsSyntaxTree.N_METHOD) {
-                parsedParamNames = new ArrayList<>();
-                int pChild = tree.nodeChild[declNodeId];
-                int pLoop = 0;
-                while (pChild > 0 && pChild < tree.nodeCount && ++pLoop <= tree.nodeCount) {
-                    if (tree.nodeType[pChild] == JsSyntaxTree.N_PARAM) {
-                        parsedParamNames.add(tree.nodeName[pChild] != null ? tree.nodeName[pChild] : "arg");
+        // 1. Special case: super(...) call inside derived class constructor or method
+        if ("super".equals(baseIdentifier) || "super".equals(funcName)) {
+            int enclosingClass = findEnclosingClassNode(tree, activeOpenParen);
+            if (enclosingClass > 0 && tree.nodeTypeAnn[enclosingClass] != null) {
+                String superName = tree.nodeTypeAnn[enclosingClass];
+                int[] superResolved = scopeTree.lookupSymbol(superName, scopeId);
+                if (superResolved != null && superResolved[1] > 0 && superResolved[1] < tree.nodeCount) {
+                    parsedParamNames = extractClassConstructorParams(tree, superResolved[1], scopeTree, scopeId);
+                    signature = String.join(", ", parsedParamNames);
+                    sourceLabel = "Super constructor (" + superName + ")";
+                } else {
+                    JsStandardLibrary.SignatureInfo builtinSuper = JsStandardLibrary.getBuiltinSignature(superName, null);
+                    if (builtinSuper != null && builtinSuper.parameters != null) {
+                        parsedParamNames = builtinSuper.parameters;
+                        signature = String.join(", ", parsedParamNames);
+                        sourceLabel = "Super constructor (" + superName + ")";
                     }
-                    pChild = tree.nodeSibling[pChild];
                 }
-                signature = String.join(", ", parsedParamNames);
             }
         }
 
-        // 2. Check built-in signatures from JsStandardLibrary
+        // 2. Check local file declaration in scope
+        if (signature == null && resolved != null && resolved[1] > 0 && resolved[1] < tree.nodeCount) {
+            int declNodeId = resolved[1];
+            int declType = tree.nodeType[declNodeId];
+
+            if (declType == JsSyntaxTree.N_FUNC_DECL || declType == JsSyntaxTree.N_ARROW_FUNC || declType == JsSyntaxTree.N_METHOD) {
+                parsedParamNames = extractParamNames(tree, declNodeId);
+                signature = String.join(", ", parsedParamNames);
+                sourceLabel = (declType == JsSyntaxTree.N_METHOD) ? "Method" : "Local function";
+            } else if (declType == JsSyntaxTree.N_CLASS_DECL) {
+                parsedParamNames = extractClassConstructorParams(tree, declNodeId, scopeTree, scopeId);
+                signature = String.join(", ", parsedParamNames);
+                sourceLabel = "Class constructor";
+            } else if (declType == JsSyntaxTree.N_VAR_DECL) {
+                int child = tree.nodeChild[declNodeId];
+                if (child > 0 && child < tree.nodeCount) {
+                    int cType = tree.nodeType[child];
+                    if (cType == JsSyntaxTree.N_FUNC_DECL || cType == JsSyntaxTree.N_ARROW_FUNC) {
+                        parsedParamNames = extractParamNames(tree, child);
+                        signature = String.join(", ", parsedParamNames);
+                        sourceLabel = "Function";
+                    } else if (cType == JsSyntaxTree.N_CLASS_DECL) {
+                        parsedParamNames = extractClassConstructorParams(tree, child, scopeTree, scopeId);
+                        signature = String.join(", ", parsedParamNames);
+                        sourceLabel = "Class constructor";
+                    }
+                }
+            }
+        }
+
+        // 3. Check object literal member if receiver is in scope (e.g. mathUtils.add(|))
+        if (signature == null && dotIdx >= 0) {
+            String receiver = funcName.substring(0, dotIdx);
+            int[] recResolved = scopeTree.lookupSymbol(receiver, scopeId);
+            if (recResolved != null && recResolved[1] > 0 && recResolved[1] < tree.nodeCount) {
+                int recNodeId = recResolved[1];
+                int recType = tree.nodeType[recNodeId];
+                int objNode = (recType == JsSyntaxTree.N_VAR_DECL) ? tree.nodeChild[recNodeId] : recNodeId;
+                if (objNode > 0 && objNode < tree.nodeCount && tree.nodeType[objNode] == JsSyntaxTree.N_OBJECT_LITERAL) {
+                    int mChild = tree.nodeChild[objNode];
+                    int mGuard = 0;
+                    while (mChild > 0 && mChild < tree.nodeCount && ++mGuard <= tree.nodeCount) {
+                        if (baseIdentifier.equals(tree.nodeName[mChild])) {
+                            int mType = tree.nodeType[mChild];
+                            if (mType == JsSyntaxTree.N_METHOD) {
+                                parsedParamNames = extractParamNames(tree, mChild);
+                                signature = String.join(", ", parsedParamNames);
+                                sourceLabel = "Method";
+                                break;
+                            } else if (mType == JsSyntaxTree.N_PROPERTY) {
+                                int propVal = tree.nodeChild[mChild];
+                                if (propVal > 0 && propVal < tree.nodeCount) {
+                                    int pvType = tree.nodeType[propVal];
+                                    if (pvType == JsSyntaxTree.N_FUNC_DECL || pvType == JsSyntaxTree.N_ARROW_FUNC) {
+                                        parsedParamNames = extractParamNames(tree, propVal);
+                                        signature = String.join(", ", parsedParamNames);
+                                        sourceLabel = "Method";
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        mChild = tree.nodeSibling[mChild];
+                    }
+                }
+            }
+        }
+
+        // 4. Check built-in signatures from JsStandardLibrary
         if (signature == null) {
             String receiverType = null;
             if (dotIdx >= 0) {
@@ -135,7 +206,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 3. Fallback to ProjectIndex definitions for cross-file project symbols
+        // 5. Fallback to ProjectIndex definitions for cross-file project symbols
         if (signature == null) {
             com.cocode.vcode.ide.core.lsp.ProjectIndex index = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance();
             List<com.cocode.vcode.ide.core.lsp.LspLocation> defs = index.findDefinitions(baseIdentifier);
@@ -154,8 +225,12 @@ public class JsSignatureParser {
                 if (targetEntry != null) break;
             }
 
-            if (targetEntry != null && targetEntry.detail != null) {
-                signature = targetEntry.detail;
+            if (targetEntry != null) {
+                if (targetEntry.detail != null) {
+                    signature = targetEntry.detail;
+                } else if (targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS) {
+                    signature = "";
+                }
                 sourceLabel = targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS ? "Cross-file class" : "Cross-file function";
             }
         }
@@ -184,14 +259,78 @@ public class JsSignatureParser {
         return new LspSignatureHelp(Collections.singletonList(sig), 0, argIndex);
     }
 
+    private static List<String> extractParamNames(JsSyntaxTree tree, int funcNode) {
+        List<String> list = new ArrayList<>();
+        if (tree == null || funcNode <= 0 || funcNode >= tree.nodeCount) return list;
+        int pChild = tree.nodeChild[funcNode];
+        int pLoop = 0;
+        while (pChild > 0 && pChild < tree.nodeCount && ++pLoop <= tree.nodeCount) {
+            if (tree.nodeType[pChild] == JsSyntaxTree.N_PARAM) {
+                list.add(tree.nodeName[pChild] != null ? tree.nodeName[pChild] : "arg");
+            }
+            pChild = tree.nodeSibling[pChild];
+        }
+        return list;
+    }
+
+    private static List<String> extractClassConstructorParams(JsSyntaxTree tree, int classNodeId, com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree, int scopeId) {
+        if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) return Collections.emptyList();
+        int child = tree.nodeChild[classNodeId];
+        int guard = 0;
+        while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
+            if (tree.nodeType[child] == JsSyntaxTree.N_METHOD && "constructor".equals(tree.nodeName[child])) {
+                return extractParamNames(tree, child);
+            }
+            child = tree.nodeSibling[child];
+        }
+        // Check superclass
+        String superName = tree.nodeTypeAnn[classNodeId];
+        if (superName != null && !superName.isEmpty()) {
+            if (scopeTree != null) {
+                int[] superResolved = scopeTree.lookupSymbol(superName, scopeId);
+                if (superResolved != null && superResolved[1] > 0 && superResolved[1] < tree.nodeCount) {
+                    if (tree.nodeType[superResolved[1]] == JsSyntaxTree.N_CLASS_DECL) {
+                        return extractClassConstructorParams(tree, superResolved[1], scopeTree, scopeId);
+                    }
+                }
+            }
+            JsStandardLibrary.SignatureInfo builtinSuper = JsStandardLibrary.getBuiltinSignature(superName, null);
+            if (builtinSuper != null && builtinSuper.parameters != null) {
+                return builtinSuper.parameters;
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    private static int findEnclosingClassNode(JsSyntaxTree tree, int offset) {
+        if (tree == null || tree.nodeCount <= 1) return 0;
+        int bestClass = 0;
+        int minLen = Integer.MAX_VALUE;
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL) {
+                if (offset >= tree.nodeStart[i] && offset <= tree.nodeEnd[i]) {
+                    int len = tree.nodeEnd[i] - tree.nodeStart[i];
+                    if (len < minLen) {
+                        minLen = len;
+                        bestClass = i;
+                    }
+                }
+            }
+        }
+        return bestClass;
+    }
+
     private static int findOpenParenForCall(String text, JsSyntaxTree tree, int node) {
         String name = tree.nodeName[node];
         int start = tree.nodeStart[node];
         int searchFrom = (name != null && !name.isEmpty()) ? start + name.length() : start;
+        int depth = 0;
         for (int i = searchFrom; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '(') return i;
-            if (!Character.isWhitespace(c) && c != '\n' && c != '\r') break;
+            if (c == '<') depth++;
+            else if (c == '>') { if (depth > 0) depth--; }
+            else if (c == '(' && depth == 0) return i;
+            else if (depth == 0 && !Character.isWhitespace(c) && c != '\n' && c != '\r') break;
         }
         for (int i = start; i < text.length(); i++) {
             char c = text.charAt(i);
@@ -258,6 +397,29 @@ public class JsSignatureParser {
         int end = openParen - 1;
         while (end >= 0 && Character.isWhitespace(text.charAt(end))) end--;
         if (end < 0) return null;
+
+        // Skip generic type arguments e.g. func<T, U>( or new Map<string, number>(
+        if (text.charAt(end) == '>') {
+            int gDepth = 0;
+            int gIdx = end;
+            while (gIdx >= 0) {
+                char gc = text.charAt(gIdx);
+                if (gc == '>') gDepth++;
+                else if (gc == '<') {
+                    gDepth--;
+                    if (gDepth == 0) {
+                        end = gIdx - 1;
+                        while (end >= 0 && Character.isWhitespace(text.charAt(end))) end--;
+                        break;
+                    }
+                } else if (gc == ';' || gc == '{' || gc == '}') {
+                    break;
+                }
+                gIdx--;
+            }
+        }
+        if (end < 0) return null;
+
         int start = end;
         while (start >= 0) {
             char c = text.charAt(start);

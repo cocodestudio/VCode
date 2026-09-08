@@ -196,4 +196,116 @@ public class JsSignatureParserTest {
         assertEquals(1, sig.parameters.size());
         assertEquals("customUrl", sig.parameters.get(0).label);
     }
+
+    @Test
+    public void testClassConstructor_explicitConstructor() {
+        String code = "class Student {\n  constructor(name, rollNo) {\n    this.name = name;\n  }\n}\nnew Student(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(5, 12);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help should not be null for new Student(", help);
+        assertEquals(0, help.activeParameter);
+
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue(sig.label.startsWith("Student("));
+        assertEquals(2, sig.parameters.size());
+        assertEquals("name", sig.parameters.get(0).label);
+        assertEquals("rollNo", sig.parameters.get(1).label);
+        assertEquals("Class constructor", sig.documentation);
+    }
+
+    @Test
+    public void testClassConstructor_secondArgument() {
+        String code = "class Student {\n  constructor(name, rollNo) {}\n}\nnew Student(\"Alice\", ";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(3, 21);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        assertEquals(1, help.activeParameter);
+        assertEquals("rollNo", help.signatures.get(0).parameters.get(1).label);
+    }
+
+    @Test
+    public void testClassConstructor_defaultZeroArg() {
+        String code = "class App {}\nnew App(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(1, 8);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertEquals("App()", sig.label);
+        assertEquals(0, sig.parameters.size());
+    }
+
+    @Test
+    public void testSuperConstructorCall() {
+        String code = "class Person {\n  constructor(name) {}\n}\nclass Student extends Person {\n  constructor(name, rollNo) {\n    super(\n  }\n}";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(5, 10);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("super() signature help should resolve Person constructor", help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue(sig.label.startsWith("super("));
+        assertEquals(1, sig.parameters.size());
+        assertEquals("name", sig.parameters.get(0).label);
+    }
+
+    @Test
+    public void testSubclassInheritedConstructor() {
+        String code = "class Animal {\n  constructor(species, age) {}\n}\nclass Dog extends Animal {}\nnew Dog(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(4, 8);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertEquals(2, sig.parameters.size());
+        assertEquals("species", sig.parameters.get(0).label);
+        assertEquals("age", sig.parameters.get(1).label);
+    }
+
+    @Test
+    public void testVariableAssignedArrowFunction() {
+        String code = "const calculate = (x, y, z) => x + y + z;\ncalculate(10, ";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(1, 14);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        assertEquals(1, help.activeParameter);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertEquals(3, sig.parameters.size());
+        assertEquals("x", sig.parameters.get(0).label);
+        assertEquals("y", sig.parameters.get(1).label);
+        assertEquals("z", sig.parameters.get(2).label);
+    }
+
+    @Test
+    public void testVariableAssignedFunctionExpr() {
+        String code = "const greet = function(greeting, recipient) {};\ngreet(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(1, 6);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertEquals(2, sig.parameters.size());
+        assertEquals("greeting", sig.parameters.get(0).label);
+        assertEquals("recipient", sig.parameters.get(1).label);
+    }
+
+    @Test
+    public void testGenericTypeScriptConstructorCall() {
+        String code = "new Map<string, number>(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(0, code.length());
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Generic constructor new Map<K, V>( should resolve Map built-in", help);
+        assertTrue(help.signatures.get(0).label.startsWith("Map("));
+    }
 }

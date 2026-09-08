@@ -110,13 +110,48 @@ public final class SymbolExtractor {
                     nameStart = nameIndex;
                 }
 
+                String detail = extractParametersDetail(tree, i);
+
                 LspPosition pos = offsetToPosition(text, nameStart);
                 LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-                results.add(new SymbolEntry(name, doc.uri, range, kind));
+                results.add(new SymbolEntry(name, doc.uri, range, kind, detail));
             }
         }
 
         return results;
+    }
+
+    private static String extractParametersDetail(JsSyntaxTree tree, int node) {
+        if (tree == null || node <= 0 || node >= tree.nodeCount) return null;
+        int type = tree.nodeType[node];
+        if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC || type == JsSyntaxTree.N_METHOD) {
+            List<String> params = new ArrayList<>();
+            int child = tree.nodeChild[node];
+            int guard = 0;
+            while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
+                if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
+                    params.add(tree.nodeName[child] != null ? tree.nodeName[child] : "arg");
+                }
+                child = tree.nodeSibling[child];
+            }
+            return String.join(", ", params);
+        } else if (type == JsSyntaxTree.N_CLASS_DECL) {
+            int child = tree.nodeChild[node];
+            int guard = 0;
+            while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
+                if (tree.nodeType[child] == JsSyntaxTree.N_METHOD && "constructor".equals(tree.nodeName[child])) {
+                    return extractParametersDetail(tree, child);
+                }
+                child = tree.nodeSibling[child];
+            }
+            return "";
+        } else if (type == JsSyntaxTree.N_VAR_DECL) {
+            int child = tree.nodeChild[node];
+            if (child > 0 && child < tree.nodeCount) {
+                return extractParametersDetail(tree, child);
+            }
+        }
+        return null;
     }
 
     // -------------------------------------------------------------------------
