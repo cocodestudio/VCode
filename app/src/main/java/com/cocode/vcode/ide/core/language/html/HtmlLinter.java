@@ -235,6 +235,11 @@ public class HtmlLinter {
                         }
                         if ("viewport".equalsIgnoreCase(nameAttr)) hasViewport = true;
                         if ("description".equalsIgnoreCase(nameAttr)) hasMetaDescription = true;
+                        if ((nameAttr != null || httpEquiv != null) && !attrs.containsKey("content")) {
+                            problems.add(new Problem(file, tagLine, tagCol, 6,
+                                    "'<meta>' with '" + (nameAttr != null ? "name" : "http-equiv") + "' is missing 'content' attribute",
+                                    Problem.Severity.WARNING));
+                        }
                         break;
                     case "title":
                         hasTitle = true;
@@ -287,6 +292,27 @@ public class HtmlLinter {
                             problems.add(new Problem(file, tagLine, tagCol, 8,
                                     "'<button>' is missing 'type' attribute (defaults to 'submit', which can cause bugs)",
                                     Problem.Severity.WARNING));
+                        }
+                        break;
+                    case "label":
+                        if (!attrs.containsKey("for")) {
+                            boolean hasControlChild = false;
+                            int labelChild = tree.nodeChild[i];
+                            int labelLoop = 0;
+                            while (labelChild > 0 && labelChild < tree.nodeCount && ++labelLoop <= tree.nodeCount) {
+                                String cn = tree.nodeName[labelChild];
+                                if ("input".equalsIgnoreCase(cn) || "select".equalsIgnoreCase(cn)
+                                        || "textarea".equalsIgnoreCase(cn) || "button".equalsIgnoreCase(cn)) {
+                                    hasControlChild = true;
+                                    break;
+                                }
+                                labelChild = tree.nodeSibling[labelChild];
+                            }
+                            if (!hasControlChild) {
+                                problems.add(new Problem(file, tagLine, tagCol, 7,
+                                        "'<label>' is missing 'for' attribute and does not wrap a form control",
+                                        Problem.Severity.WARNING));
+                            }
                         }
                         break;
                     case "a":
@@ -354,14 +380,29 @@ public class HtmlLinter {
 
                 // RULE: Required Attributes
                 if (!tagName.equals("img") && !tagName.equals("script")) {
-                    Set<String> req = KnownElements.REQUIRED_ATTRIBUTES.get(tagName);
-                    if (req != null) {
-                        for (String reqAttr : req) {
-                            if (!attrs.containsKey(reqAttr)) {
-                                if (tagName.equals("a") && reqAttr.equals("href")) continue;
-                                problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
-                                        "'<" + tagName + ">' is missing required attribute '" + reqAttr + "'",
-                                        Problem.Severity.WARNING));
+                    boolean hasChildSource = false;
+                    if (("video".equals(tagName) || "audio".equals(tagName)) && !attrs.containsKey("src")) {
+                        int mediaChild = tree.nodeChild[i];
+                        int mediaLoop = 0;
+                        while (mediaChild > 0 && mediaChild < tree.nodeCount && ++mediaLoop <= tree.nodeCount) {
+                            if ("source".equalsIgnoreCase(tree.nodeName[mediaChild])) {
+                                hasChildSource = true;
+                                break;
+                            }
+                            mediaChild = tree.nodeSibling[mediaChild];
+                        }
+                    }
+
+                    if (!hasChildSource) {
+                        Set<String> req = KnownElements.REQUIRED_ATTRIBUTES.get(tagName);
+                        if (req != null) {
+                            for (String reqAttr : req) {
+                                if (!attrs.containsKey(reqAttr)) {
+                                    if (tagName.equals("a") && reqAttr.equals("href")) continue;
+                                    problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
+                                            "'<" + tagName + ">' is missing required attribute '" + reqAttr + "'",
+                                            Problem.Severity.WARNING));
+                                }
                             }
                         }
                     }

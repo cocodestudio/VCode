@@ -219,12 +219,12 @@ public class CssLinter {
                 if (blockHasColor && !blockHasBgColor) {
                     problems.add(new Problem(file, ruleLine, 1, 5,
                             "'color' is set without 'background-color': may cause readability issues on some themes",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.INFO));
                 }
                 if (blockHasBgColor && !blockHasColor) {
                     problems.add(new Problem(file, ruleLine, 1, 16,
                             "'background-color' is set without 'color': may cause readability issues on some themes",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.INFO));
                 }
 
                 // Flex/grid without gap

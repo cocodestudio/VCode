@@ -193,13 +193,7 @@ public final class KnownElements {
         REQUIRED_ATTRIBUTES.put("audio", new HashSet<>(List.of("src")));
         REQUIRED_ATTRIBUTES.put("track", new HashSet<>(Arrays.asList("src", "kind")));
         REQUIRED_ATTRIBUTES.put("area", new HashSet<>(List.of("alt")));
-        REQUIRED_ATTRIBUTES.put("th", new HashSet<>(List.of("scope")));
-        REQUIRED_ATTRIBUTES.put("label", new HashSet<>(List.of("for")));
-        REQUIRED_ATTRIBUTES.put("form", new HashSet<>(List.of("action")));
-        REQUIRED_ATTRIBUTES.put("meta", new HashSet<>(List.of("content")));
         REQUIRED_ATTRIBUTES.put("link", new HashSet<>(Arrays.asList("href", "rel")));
-        REQUIRED_ATTRIBUTES.put("script", new HashSet<>(List.of("src")));
-        REQUIRED_ATTRIBUTES.put("button", new HashSet<>(List.of("type")));
     }
 
     static {

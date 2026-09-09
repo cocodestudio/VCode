@@ -33,7 +33,8 @@ public class TsLinter {
     private static final Pattern PAT_ENUM = Pattern.compile("\\benum\\s+(\\w+)");
     private static final Pattern PAT_REDUNDANT_TYPE = Pattern.compile(
             "\\b(?:const|let)\\s+(\\w+)\\s*:\\s*(string|number|boolean)\\s*=\\s*(['\"`].*?['\"`]|\\d+\\.?\\d*|true|false)");
-    private static final Pattern PAT_NONNULL_COUNT = Pattern.compile("\\w+\\s*!");
+    private static final Pattern PAT_NONNULL_COUNT = Pattern.compile(
+            "\\b(?!(?:return|throw|case|delete|void|typeof|instanceof|in|await|yield)\\b)(\\w+)\\s*!(?!=)");
     private static final Pattern PAT_UNION_UNDEFINED = Pattern.compile(
             "(\\w+)\\s*:\\s*([\\w<>]+)\\s*\\|\\s*undefined");
     private static final Pattern PAT_READONLY_ARRAY = Pattern.compile(
@@ -285,7 +286,7 @@ public class TsLinter {
         Matcher m = PAT_NONNULL_COUNT.matcher(text);
         int count = 0;
         while (m.find()) {
-            if (!mask.isMasked(m.start())) count++;
+            if (!mask.isMasked(m.start()) && !mask.isMasked(m.end() - 1)) count++;
         }
         if (count > 3) {
             out.add(new Problem(file, 1, 1, 1,

@@ -74,6 +74,8 @@ public class BracketMatcher {
         java.util.List<Problem> problems = new java.util.ArrayList<>();
         if (text == null || text.isEmpty()) return problems;
 
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), 0);
+
         java.util.Stack<int[]> parenStack = new java.util.Stack<>();
         java.util.Stack<int[]> bracketStack = new java.util.Stack<>();
         java.util.Stack<int[]> braceStack = new java.util.Stack<>();
@@ -83,21 +85,23 @@ public class BracketMatcher {
 
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '(') parenStack.push(new int[]{line, col});
-            else if (c == '[') bracketStack.push(new int[]{line, col});
-            else if (c == '{') braceStack.push(new int[]{line, col});
-            else if (c == ')') {
-                if (parenStack.isEmpty()) {
-                    problems.add(new Problem(file, line, col, 1, "Unmatched closing parenthesis ')'", Problem.Severity.ERROR));
-                } else parenStack.pop();
-            } else if (c == ']') {
-                if (bracketStack.isEmpty()) {
-                    problems.add(new Problem(file, line, col, 1, "Unmatched closing bracket ']'", Problem.Severity.ERROR));
-                } else bracketStack.pop();
-            } else if (c == '}') {
-                if (braceStack.isEmpty()) {
-                    problems.add(new Problem(file, line, col, 1, "Unmatched closing brace '}'", Problem.Severity.ERROR));
-                } else braceStack.pop();
+            if (!mask[i]) {
+                if (c == '(') parenStack.push(new int[]{line, col});
+                else if (c == '[') bracketStack.push(new int[]{line, col});
+                else if (c == '{') braceStack.push(new int[]{line, col});
+                else if (c == ')') {
+                    if (parenStack.isEmpty()) {
+                        problems.add(new Problem(file, line, col, 1, "Unmatched closing parenthesis ')'", Problem.Severity.ERROR));
+                    } else parenStack.pop();
+                } else if (c == ']') {
+                    if (bracketStack.isEmpty()) {
+                        problems.add(new Problem(file, line, col, 1, "Unmatched closing bracket ']'", Problem.Severity.ERROR));
+                    } else bracketStack.pop();
+                } else if (c == '}') {
+                    if (braceStack.isEmpty()) {
+                        problems.add(new Problem(file, line, col, 1, "Unmatched closing brace '}'", Problem.Severity.ERROR));
+                    } else braceStack.pop();
+                }
             }
 
             if (c == '\n') {
@@ -199,10 +203,11 @@ public class BracketMatcher {
         boolean inBlockComment = (mode == 1);
         boolean inTemplate = (mode == 4 || mode == 5 || templateDepth > 0);
         boolean inLineComment = false;
+        boolean inHtmlComment = false;
         int templateBraceDepth = (mode == 5) ? Math.max(1, braceDepth) : 0;
 
         for (int i = from; i < to; i++) {
-            mask[i - from] = inSingle || inDouble || inLineComment || inBlockComment || (inTemplate && templateBraceDepth == 0);
+            mask[i - from] = inSingle || inDouble || inLineComment || inBlockComment || inHtmlComment || (inTemplate && templateBraceDepth == 0);
 
             char c = text.charAt(i);
             char n = (i + 1 < text.length()) ? text.charAt(i + 1) : '\0';
@@ -214,18 +219,43 @@ public class BracketMatcher {
             if (inBlockComment) {
                 if (c == '*' && n == '/') {
                     inBlockComment = false;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
                     i++;
                 }
                 continue;
             }
+            if (inHtmlComment) {
+                if (c == '-' && n == '-' && i + 2 < text.length() && text.charAt(i + 2) == '>') {
+                    inHtmlComment = false;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
+                    if (i + 2 < to) mask[i + 2 - from] = true;
+                    i += 2;
+                }
+                continue;
+            }
             if (!inSingle && !inDouble && (!inTemplate || templateBraceDepth > 0)) {
+                if (c == '<' && n == '!' && i + 3 < text.length() && text.charAt(i + 2) == '-' && text.charAt(i + 3) == '-') {
+                    inHtmlComment = true;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
+                    if (i + 2 < to) mask[i + 2 - from] = true;
+                    if (i + 3 < to) mask[i + 3 - from] = true;
+                    i += 3;
+                    continue;
+                }
                 if (c == '/' && n == '/') {
                     inLineComment = true;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
                     i++;
                     continue;
                 }
                 if (c == '/' && n == '*') {
                     inBlockComment = true;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
                     i++;
                     continue;
                 }
@@ -233,6 +263,10 @@ public class BracketMatcher {
             if (c == '\\') {
                 i++;
                 continue;
+            }
+            if (c == '\n' && !inTemplate) {
+                inSingle = false;
+                inDouble = false;
             }
             if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
             else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;

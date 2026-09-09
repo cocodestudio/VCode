@@ -56,13 +56,7 @@
     "audio": ["src"],
     "track": ["src", "kind"],
     "area": ["alt"],
-    "th": ["scope"],
-    "label": ["for"],
-    "form": ["action"],
-    "meta": ["content"],
-    "link": ["href", "rel"],
-    "script": ["src"],
-    "button": ["type"]
+    "link": ["href", "rel"]
   },
   "semanticSuggestions": {
     "header": "<header>",

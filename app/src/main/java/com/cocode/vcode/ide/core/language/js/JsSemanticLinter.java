@@ -194,18 +194,33 @@ public class JsSemanticLinter {
                     
                     if (declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeType[declNodeId] == JsSyntaxTree.N_VAR_DECL) {
                         int child = tree.nodeChild[declNodeId];
-                        if (child > 0 && child < tree.nodeCount && (tree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC || tree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL)) {
+                        if (child > 0 && child < tree.nodeCount && (tree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC 
+                                || tree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL
+                                || tree.nodeType[child] == JsSyntaxTree.N_CLASS_DECL)) {
                             targetNodeId = child;
                         }
                     }
                     
-                    int child = (targetNodeId > 0 && targetNodeId < tree.nodeCount) ? tree.nodeChild[targetNodeId] : 0;
-                    int childLoop = 0;
-                    while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
-                        if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
-                            totalParams++;
+                    if (targetNodeId > 0 && targetNodeId < tree.nodeCount && tree.nodeType[targetNodeId] == JsSyntaxTree.N_CLASS_DECL) {
+                        int[] ctorInfo = resolveClassConstructorParams(tree, targetNodeId, scopeTree, scopeId, index);
+                        if (ctorInfo == null) {
+                            continue; // Unknown external superclass: bypass arity check to prevent false positives
                         }
-                        child = tree.nodeSibling[child];
+                        totalParams = ctorInfo[0];
+                        if (ctorInfo[1] == 1) isVariadic = true;
+                    } else {
+                        int child = (targetNodeId > 0 && targetNodeId < tree.nodeCount) ? tree.nodeChild[targetNodeId] : 0;
+                        int childLoop = 0;
+                        while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
+                            if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
+                                if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_REST) != 0) {
+                                    isVariadic = true;
+                                } else {
+                                    totalParams++;
+                                }
+                            }
+                            child = tree.nodeSibling[child];
+                        }
                     }
                 } else {
                     List<LspLocation> defs = index.findDefinitions(baseIdentifier);
@@ -260,6 +275,94 @@ public class JsSemanticLinter {
                 }
             }
         }
+    }
+
+    private static int[] resolveClassConstructorParams(JsSyntaxTree tree, int classNodeId, ScopeTree scopeTree, int scopeId, ProjectIndex index) {
+        if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) {
+            return new int[]{0, 0};
+        }
+        // 1. Look for explicit constructor method in this class
+        int child = tree.nodeChild[classNodeId];
+        int guard = 0;
+        while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
+            if (tree.nodeType[child] == JsSyntaxTree.N_METHOD && "constructor".equals(tree.nodeName[child])) {
+                int total = 0;
+                boolean variadic = false;
+                int pChild = tree.nodeChild[child];
+                int pGuard = 0;
+                while (pChild > 0 && pChild < tree.nodeCount && ++pGuard <= tree.nodeCount) {
+                    if (tree.nodeType[pChild] == JsSyntaxTree.N_PARAM) {
+                        if ((tree.nodeExtra[pChild] & JsSyntaxTree.FLAG_REST) != 0) {
+                            variadic = true;
+                        } else {
+                            total++;
+                        }
+                    }
+                    pChild = tree.nodeSibling[pChild];
+                }
+                return new int[]{total, variadic ? 1 : 0};
+            }
+            child = tree.nodeSibling[child];
+        }
+
+        // 2. No explicit constructor in this class -> check superclass if any
+        String superName = tree.nodeTypeAnn[classNodeId];
+        if (superName != null && !superName.isEmpty()) {
+            // 2a. Check if superclass is in scope in the same file
+            if (scopeTree != null) {
+                int[] superResolved = scopeTree.lookupSymbol(superName, scopeId);
+                if (superResolved != null && superResolved[1] > 0 && superResolved[1] < tree.nodeCount) {
+                    int superDeclId = superResolved[1];
+                    if (tree.nodeType[superDeclId] == JsSyntaxTree.N_CLASS_DECL) {
+                        return resolveClassConstructorParams(tree, superDeclId, scopeTree, scopeId, index);
+                    } else if (tree.nodeType[superDeclId] == JsSyntaxTree.N_VAR_DECL) {
+                        int sc = tree.nodeChild[superDeclId];
+                        if (sc > 0 && sc < tree.nodeCount && tree.nodeType[sc] == JsSyntaxTree.N_CLASS_DECL) {
+                            return resolveClassConstructorParams(tree, sc, scopeTree, scopeId, index);
+                        }
+                    }
+                }
+            }
+
+            // 2b. Check built-in standard library classes (e.g. Error, Map, Set, Event, etc.)
+            JsStandardLibrary.SignatureInfo builtinSuper = JsStandardLibrary.getBuiltinSignature(superName, null);
+            if (builtinSuper != null && builtinSuper.parameters != null) {
+                boolean variadic = false;
+                int total = 0;
+                for (String p : builtinSuper.parameters) {
+                    if (p.contains("...")) variadic = true;
+                    else total++;
+                }
+                return new int[]{total, variadic ? 1 : 0};
+            }
+
+            // 2c. Check cross-file project symbols via index
+            if (index != null) {
+                List<LspLocation> defs = index.findDefinitions(superName);
+                for (LspLocation loc : defs) {
+                    List<SymbolEntry> syms = index.getFileSymbols(loc.uri);
+                    if (syms == null) continue;
+                    for (SymbolEntry s : syms) {
+                        if (s.name.equals(superName) && s.kind == SymbolEntry.KIND_CLASS) {
+                            if (s.detail != null) {
+                                String detail = s.detail.trim();
+                                boolean variadic = detail.contains("...");
+                                String[] parts = detail.isEmpty() ? new String[0] : detail.split(",");
+                                return new int[]{parts.length, variadic ? 1 : 0};
+                            }
+                            return new int[]{0, 0};
+                        }
+                    }
+                }
+            }
+
+            // Superclass cannot be resolved (e.g. external node_modules or unindexed library)
+            // Return null to bypass arity check and prevent false positives
+            return null;
+        }
+
+        // 3. No explicit constructor and no superclass -> default ES6 constructor takes 0 arguments
+        return new int[]{0, 0};
     }
     
     private static void checkUndefined(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {

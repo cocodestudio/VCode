@@ -52,9 +52,7 @@ public class DiagnosticEngine {
                         String embeddedText = text.substring(emb.startOffset, Math.min(emb.endOffset, text.length()));
                         List<Problem> sub = new ArrayList<>();
                         
-                        if (emb.result.tree != null) {
-                            sub = JsLinter.analyze(file, embeddedText, null);
-                        } else if (emb.result.cssTree != null) {
+                        if (emb.result.cssTree != null) {
                             sub = CssLinter.analyze(file, embeddedText);
                         }
                         
@@ -79,8 +77,6 @@ public class DiagnosticEngine {
                 problems.addAll(JsLinter.analyze(file, text, index));
             } else if (type == FileType.TYPESCRIPT) {
                 problems.addAll(TsLinter.analyze(file, text, index));
-            } else if (type == FileType.JSON) {
-                problems.addAll(com.cocode.vcode.ide.core.language.json.JsonLinter.analyze(file, text));
             } else if (type == FileType.MARKDOWN) {
                 problems.addAll(com.cocode.vcode.ide.core.language.md.MarkdownLinter.analyze(file, text));
             }

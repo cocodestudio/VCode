@@ -144,6 +144,15 @@ public final class SymbolExtractor {
                 }
                 child = tree.nodeSibling[child];
             }
+            // Check superclass in the same file if subclass has no explicit constructor
+            String superName = tree.nodeTypeAnn[node];
+            if (superName != null && !superName.isEmpty()) {
+                for (int s = 1; s < tree.nodeCount; s++) {
+                    if (tree.nodeType[s] == JsSyntaxTree.N_CLASS_DECL && superName.equals(tree.nodeName[s])) {
+                        return extractParametersDetail(tree, s);
+                    }
+                }
+            }
             return "";
         } else if (type == JsSyntaxTree.N_VAR_DECL) {
             int child = tree.nodeChild[node];
