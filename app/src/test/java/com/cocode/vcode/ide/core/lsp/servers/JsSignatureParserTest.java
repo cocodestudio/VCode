@@ -55,7 +55,7 @@ public class JsSignatureParserTest {
         assertEquals(2, help.activeParameter);
 
         LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
-        assertTrue(sig.label.startsWith("console.log("));
+        assertTrue(sig.label.startsWith("log("));
         assertTrue(sig.parameters.get(0).label.startsWith("..."));
     }
 
@@ -70,7 +70,7 @@ public class JsSignatureParserTest {
         assertEquals(3, help.activeParameter);
 
         LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
-        assertTrue(sig.label.startsWith("Math.max("));
+        assertTrue(sig.label.startsWith("max("));
     }
 
     @Test
@@ -84,7 +84,7 @@ public class JsSignatureParserTest {
         assertEquals(2, help.activeParameter);
 
         LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
-        assertTrue(sig.label.startsWith("JSON.stringify("));
+        assertTrue(sig.label.startsWith("stringify("));
         assertEquals(3, sig.parameters.size());
         assertEquals("value", sig.parameters.get(0).label);
         assertEquals("replacer", sig.parameters.get(1).label);
@@ -307,5 +307,48 @@ public class JsSignatureParserTest {
         LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
         assertNotNull("Generic constructor new Map<K, V>( should resolve Map built-in", help);
         assertTrue(help.signatures.get(0).label.startsWith("Map("));
+    }
+
+    @Test
+    public void testChainedCall_addEventListener() {
+        String code = "document.getElementById(\"btn\").addEventListener(\"click\", ";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(0, code.length());
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Chained addEventListener call should resolve signature help", help);
+        assertEquals(1, help.activeParameter);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Signature label should be method name only without chain", sig.label.startsWith("addEventListener("));
+    }
+
+    @Test
+    public void testChainedCall_mapAfterFilter() {
+        String code = "items.filter(x => x > 0).map(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(0, code.length());
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Signature label should be method name only", sig.label.startsWith("map("));
+    }
+
+    @Test
+    public void testSignatureHintPopup_extractMethodName() {
+        assertEquals("getElementById", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("document.getElementById"));
+        assertEquals("addEventListener", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("document.getElementById(\"btn\").addEventListener"));
+        assertEquals("map", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("items.filter(x => x).map"));
+        assertEquals("log", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("console.log"));
+        assertEquals("doSomething", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("a.b.c.doSomething"));
+        assertEquals("Student", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("new com.example.Student"));
+        assertEquals("Map", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("new Map<string, number>"));
+        assertEquals("bar", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("foo?.bar"));
+        assertEquals("addEventListener", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName(".addEventListener"));
+        assertEquals("getName", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("student.getName"));
+        assertEquals("fetch", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("fetch"));
+        assertEquals("super", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName("super"));
+        assertEquals("", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName(""));
+        assertEquals("", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName(null));
     }
 }

@@ -70,6 +70,14 @@ public class JsSignatureParser {
             funcName = funcName.substring(4).trim();
         }
 
+        while (funcName.startsWith(".")) {
+            funcName = funcName.substring(1).trim();
+        }
+
+        if (funcName.isEmpty()) {
+            return null;
+        }
+
         int argIndex = computeArgIndex(text, activeOpenParen, offset);
 
         String baseIdentifier = funcName;
@@ -190,7 +198,7 @@ public class JsSignatureParser {
             JsStandardLibrary.SignatureInfo builtin = JsStandardLibrary.getBuiltinSignature(funcName, receiverType);
             if (builtin != null) {
                 String paramsStr = String.join(", ", builtin.parameters);
-                String displayLabel = funcName + "(" + paramsStr + ")";
+                String displayLabel = baseIdentifier + "(" + paramsStr + ")";
 
                 List<LspSignatureHelp.LspParameterInformation> paramInfoList = new ArrayList<>();
                 for (String p : builtin.parameters) {
@@ -240,7 +248,7 @@ public class JsSignatureParser {
         }
 
         LspSignatureHelp.LspSignatureInformation sig = new LspSignatureHelp.LspSignatureInformation(
-                funcName + "(" + signature.trim().replaceAll("\\s+", " ") + ")",
+                baseIdentifier + "(" + signature.trim().replaceAll("\\s+", " ") + ")",
                 sourceLabel,
                 new ArrayList<>()
         );

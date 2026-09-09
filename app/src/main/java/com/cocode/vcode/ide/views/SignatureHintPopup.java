@@ -91,43 +91,56 @@ public class SignatureHintPopup {
 
         SpannableStringBuilder sb = new SpannableStringBuilder();
         String label = activeSig.label;
-        
-        if (activeSig.parameters == null || activeSig.parameters.isEmpty()) {
-            sb.append(label);
-        } else {
-            // Find function name and open paren
-            int openParen = label.indexOf('(');
-            if (openParen >= 0) {
-                sb.append(label.substring(0, openParen + 1));
-                
-                for (int i = 0; i < activeSig.parameters.size(); i++) {
-                    LspSignatureHelp.LspParameterInformation param = activeSig.parameters.get(i);
-                    int start = sb.length();
-                    sb.append(param.label);
-                    
-                    boolean isLast = (i == activeSig.parameters.size() - 1);
-                    boolean isRest = param.label != null && param.label.trim().startsWith("...");
-                    boolean isActive = (i == help.activeParameter) || (isLast && isRest && help.activeParameter >= i);
+        if (label == null) {
+            tvSignature.setText("");
+            return;
+        }
 
-                    if (isActive) {
-                        sb.setSpan(new StyleSpan(Typeface.BOLD), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.vcode_accent_primary)), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    }
-                    
-                    if (i < activeSig.parameters.size() - 1) {
-                        sb.append(", ");
-                    }
+        int openParen = label.indexOf('(');
+        String methodName = "";
+        String suffix = "";
+
+        if (openParen >= 0) {
+            methodName = extractMethodName(label.substring(0, openParen));
+            int closeParen = label.lastIndexOf(')');
+            if (closeParen > openParen) {
+                suffix = label.substring(closeParen);
+            } else {
+                suffix = ")";
+            }
+        } else {
+            methodName = extractMethodName(label);
+        }
+
+        if (activeSig.parameters == null || activeSig.parameters.isEmpty()) {
+            if (openParen >= 0) {
+                sb.append(methodName).append(label.substring(openParen));
+            } else {
+                sb.append(methodName);
+            }
+        } else {
+            sb.append(methodName).append("(");
+            
+            for (int i = 0; i < activeSig.parameters.size(); i++) {
+                LspSignatureHelp.LspParameterInformation param = activeSig.parameters.get(i);
+                int start = sb.length();
+                sb.append(param != null && param.label != null ? param.label : "");
+                
+                boolean isLast = (i == activeSig.parameters.size() - 1);
+                boolean isRest = param != null && param.label != null && param.label.trim().startsWith("...");
+                boolean isActive = (i == help.activeParameter) || (isLast && isRest && help.activeParameter >= i);
+
+                if (isActive) {
+                    sb.setSpan(new StyleSpan(Typeface.BOLD), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.vcode_accent_primary)), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
                 
-                int closeParen = label.lastIndexOf(')');
-                if (closeParen > openParen) {
-                    sb.append(label.substring(closeParen));
-                } else {
-                    sb.append(")");
+                if (i < activeSig.parameters.size() - 1) {
+                    sb.append(", ");
                 }
-            } else {
-                sb.append(label);
             }
+            
+            sb.append(suffix);
         }
         
         tvSignature.setText(sb);
@@ -219,5 +232,33 @@ public class SignatureHintPopup {
 
     public boolean isShowing() {
         return popupWindow.isShowing();
+    }
+
+    /**
+     * Extracts only the simple method or function name from a signature prefix string,
+     * stripping any receiver objects, chaining dots (e.g. "a.b.c.foo"), "new" keywords,
+     * generic type arguments, and leading dots.
+     *
+     * @param prefix the text preceding '(' in a signature label, or the full label if no '(' exists
+     * @return the isolated method name
+     */
+    public static String extractMethodName(String prefix) {
+        if (prefix == null) return "";
+        prefix = prefix.trim();
+        if (prefix.startsWith("new ")) {
+            prefix = prefix.substring(4).trim();
+        }
+        int genericStart = prefix.indexOf('<');
+        if (genericStart >= 0 && prefix.endsWith(">")) {
+            prefix = prefix.substring(0, genericStart).trim();
+        }
+        int lastDot = prefix.lastIndexOf('.');
+        if (lastDot >= 0) {
+            prefix = prefix.substring(lastDot + 1).trim();
+        }
+        while (prefix.startsWith(".")) {
+            prefix = prefix.substring(1).trim();
+        }
+        return prefix;
     }
 }
