@@ -27,7 +27,7 @@ public class JsSemanticLinter {
     private static final Set<String> JS_KEYWORDS = JsKeywords.ALL_JS_TS_KEYWORDS;
 
     public static void analyze(File file, String text, TokenStream mask, JsSyntaxTree tree, ScopeTree scopeTree, ProjectIndex index, List<Problem> problems) {
-        if (index == null || text == null || text.trim().isEmpty()) return;
+        if (text == null || text.trim().isEmpty() || tree == null || scopeTree == null) return;
 
         // Scope and declaration validation
         checkDuplicateDeclarations(file, text, scopeTree, tree, problems);
@@ -40,7 +40,7 @@ public class JsSemanticLinter {
         checkUndefined(file, text, mask, scopeTree, tree, problems);
         
         // AST structural rules and syntax checks
-        try { checkAdditionalAstRules(file, text, mask, tree, problems); } catch (Exception e) { problems.add(new Problem(file, 0, 0, 0, "EXCEPTION: " + e.toString() + " at " + e.getStackTrace()[0].toString(), Problem.Severity.ERROR)); }
+        try { checkAdditionalAstRules(file, text, mask, tree, problems); } catch (Exception ignored) {}
     }
     
     private static void checkDuplicateDeclarations(File file, String text, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
@@ -223,7 +223,7 @@ public class JsSemanticLinter {
                         }
                     }
                 } else {
-                    List<LspLocation> defs = index.findDefinitions(baseIdentifier);
+                    List<LspLocation> defs = (index != null) ? index.findDefinitions(baseIdentifier) : java.util.Collections.emptyList();
                     SymbolEntry targetEntry = null;
                     
                     for (LspLocation loc : defs) {
@@ -447,7 +447,7 @@ public class JsSemanticLinter {
                             int type = tree.nodeType[tree.nodesByOffset[temp]];
                             if (type == JsSyntaxTree.N_IDENTIFIER) {
                                 isAstIdentifier = true;
-                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT)) {
+                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT || type == JsSyntaxTree.N_ENUM || type == JsSyntaxTree.N_INTERFACE || type == JsSyntaxTree.N_TYPE_ALIAS)) {
                                 isAstDeclaration = true;
                             }
                             temp--;
@@ -457,7 +457,7 @@ public class JsSemanticLinter {
                             int type = tree.nodeType[tree.nodesByOffset[temp]];
                             if (type == JsSyntaxTree.N_IDENTIFIER) {
                                 isAstIdentifier = true;
-                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT)) {
+                            } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT || type == JsSyntaxTree.N_ENUM || type == JsSyntaxTree.N_INTERFACE || type == JsSyntaxTree.N_TYPE_ALIAS)) {
                                 isAstDeclaration = true;
                             }
                             temp++;
@@ -495,9 +495,16 @@ public class JsSemanticLinter {
             if (c == '{' || c == '[' || c == '(' || c == ',') {
                 return true;
             }
-            String sub = text.substring(Math.max(0, i - 8), i + 1);
-            if (sub.endsWith("function") || sub.endsWith("class") || sub.endsWith("let") || sub.endsWith("const") || sub.endsWith("var") || sub.endsWith("catch") || sub.endsWith("get") || sub.endsWith("set")) {
-                int kwLen = sub.endsWith("function") ? 8 : sub.endsWith("class") ? 5 : sub.endsWith("catch") ? 5 : sub.endsWith("const") ? 5 : sub.endsWith("let") ? 3 : sub.endsWith("var") ? 3 : 3;
+            String sub = text.substring(Math.max(0, i - 12), i + 1);
+            if (sub.endsWith("function") || sub.endsWith("class") || sub.endsWith("let") || sub.endsWith("const") || sub.endsWith("var") || sub.endsWith("catch") || sub.endsWith("get") || sub.endsWith("set") || sub.endsWith("enum") || sub.endsWith("interface") || sub.endsWith("type") || sub.endsWith("declare") || sub.endsWith("namespace")) {
+                int kwLen;
+                if (sub.endsWith("function")) kwLen = 8;
+                else if (sub.endsWith("interface")) kwLen = 9;
+                else if (sub.endsWith("namespace")) kwLen = 9;
+                else if (sub.endsWith("declare")) kwLen = 7;
+                else if (sub.endsWith("class") || sub.endsWith("catch") || sub.endsWith("const")) kwLen = 5;
+                else if (sub.endsWith("enum") || sub.endsWith("type")) kwLen = 4;
+                else kwLen = 3; // let, var, get, set
                 int wordStart = (i + 1) - kwLen;
                 if (wordStart >= 0 && (wordStart == 0 || !Character.isLetterOrDigit(text.charAt(wordStart - 1)))) {
                     return true;
@@ -527,28 +534,29 @@ public class JsSemanticLinter {
         }
         
         // Token stream rules
-        for (int i = 0; i < mask.types.length; i++) {
+        int streamLen = Math.min(mask.length, text.length());
+        for (int i = 0; i < streamLen; i++) {
             byte type = mask.types[i];
             int start = mask.tokenStart[i];
             int end = start;
-            while (end < mask.types.length && mask.tokenStart[end] == start && mask.types[end] == type) {
+            while (end < streamLen && mask.tokenStart[end] == start && mask.types[end] == type) {
                 end++;
             }
             
             if (type == TokenStream.TK_OPERATOR) {
                 int opEnd = end;
-                while (opEnd < mask.types.length && mask.types[opEnd] == TokenStream.TK_OPERATOR) {
+                while (opEnd < streamLen && mask.types[opEnd] == TokenStream.TK_OPERATOR) {
                     opEnd++;
                 }
                 
                 String op = text.substring(start, opEnd).trim();
                 
                 if ("/".equals(op)) {
-                    for (int j = opEnd; j < mask.types.length; j++) {
+                    for (int j = opEnd; j < streamLen; j++) {
                         byte nType = mask.types[j];
                         int nStart = mask.tokenStart[j];
                         int nEnd = nStart;
-                        while (nEnd < mask.types.length && mask.tokenStart[nEnd] == nStart && mask.types[nEnd] == nType) nEnd++;
+                        while (nEnd < streamLen && mask.tokenStart[nEnd] == nStart && mask.types[nEnd] == nType) nEnd++;
                         
                         if (nType == TokenStream.TK_WHITESPACE || nType == TokenStream.TK_COMMENT) {
                             j = nEnd - 1;
@@ -582,14 +590,14 @@ public class JsSemanticLinter {
                         
                         if (pType == TokenStream.TK_PUNCT) {
                             int pEnd = pStart;
-                            while (pEnd < mask.types.length && mask.tokenStart[pEnd] == pStart) pEnd++;
+                            while (pEnd < streamLen && mask.tokenStart[pEnd] == pStart) pEnd++;
                             String punct = text.substring(pStart, pEnd).trim();
                             if (punct.equals(";") || punct.equals("{") || punct.equals("}")) break;
                         }
                         
                         if (pType == TokenStream.TK_KEYWORD || pType == TokenStream.TK_IDENTIFIER) {
                             int pEnd = pStart;
-                            while (pEnd < mask.types.length && mask.tokenStart[pEnd] == pStart) pEnd++;
+                            while (pEnd < streamLen && mask.tokenStart[pEnd] == pStart) pEnd++;
                             String prev = text.substring(pStart, pEnd).trim();
                             if ("typeof".equals(prev)) hasTypeof = true;
                             if ("undefined".equals(prev)) hasUndefined = true;
@@ -598,11 +606,11 @@ public class JsSemanticLinter {
                     }
                     
                     // Walk forwards
-                    for (int j = opEnd; j < mask.types.length; j++) {
+                    for (int j = opEnd; j < streamLen; j++) {
                         byte nType = mask.types[j];
                         int nStart = mask.tokenStart[j];
                         int nEnd = nStart;
-                        while (nEnd < mask.types.length && mask.tokenStart[nEnd] == nStart && mask.types[nEnd] == nType) nEnd++;
+                        while (nEnd < streamLen && mask.tokenStart[nEnd] == nStart && mask.types[nEnd] == nType) nEnd++;
                         
                         if (nType == TokenStream.TK_WHITESPACE || nType == TokenStream.TK_COMMENT) {
                             j = nEnd - 1;

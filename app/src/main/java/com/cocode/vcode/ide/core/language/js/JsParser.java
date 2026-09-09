@@ -171,8 +171,7 @@ public class JsParser {
 
         }
 
-
-
+        newTree.buildNodesByOffset();
         return newTree;
 
     }
@@ -330,9 +329,16 @@ public class JsParser {
 
         
 
-        if (type == TokenStream.TK_KEYWORD) {
+        if (type == TokenStream.TK_KEYWORD || type == TokenStream.TK_IDENTIFIER) {
 
             String kw = getWord(source, stream, i);
+
+            if ("declare".equals(kw)) {
+                int afterDeclare = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                if (afterDeclare < stream.length) {
+                    return parseNext(source, stream, tree, afterDeclare, parent);
+                }
+            }
 
             if ("import".equals(kw)) return parseImport(source, stream, tree, i, parent);
 
@@ -1286,6 +1292,22 @@ public class JsParser {
                 continue;
             }
 
+            if ("type".equals(word)) {
+                int nextTok = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                if (nextTok < stream.length) {
+                    byte nt = stream.types[nextTok];
+                    char nc = source.charAt(stream.tokenStart[nextTok]);
+                    if (!insideBraces && (nc == '{' || nc == '*')) {
+                        i = skipToken(stream, i);
+                        continue;
+                    }
+                    if (insideBraces && (nt == TokenStream.TK_IDENTIFIER || nt == TokenStream.TK_KEYWORD) && !"as".equals(getWord(source, stream, nextTok)) && !"from".equals(getWord(source, stream, nextTok))) {
+                        i = skipToken(stream, i);
+                        continue;
+                    }
+                }
+            }
+
             if (t == TokenStream.TK_IDENTIFIER || (t == TokenStream.TK_KEYWORD && "default".equals(word))) {
                 String name = word;
                 int declNode = tree.addNode(JsSyntaxTree.N_VAR_DECL, stream.tokenStart[i], getOffset(stream, source, skipToken(stream, i)), importNode, name);
@@ -1358,7 +1380,7 @@ public class JsParser {
 
         
 
-        if (i < stream.length && stream.types[i] == TokenStream.TK_KEYWORD) {
+        if (i < stream.length && (stream.types[i] == TokenStream.TK_KEYWORD || stream.types[i] == TokenStream.TK_IDENTIFIER)) {
 
             String kw = getWord(source, stream, i);
 
@@ -1370,9 +1392,25 @@ public class JsParser {
 
                 return i;
 
-            } else if ("class".equals(kw)) {
+            } else if ("class".equals(kw) || "interface".equals(kw) || "enum".equals(kw)) {
 
                 i = parseClass(source, stream, tree, i, exportNode);
+
+                tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+
+                return i;
+
+            } else if ("type".equals(kw)) {
+
+                i = parseTypeAlias(source, stream, tree, i, exportNode);
+
+                tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+
+                return i;
+
+            } else if ("namespace".equals(kw) || "module".equals(kw)) {
+
+                i = parseNamespace(source, stream, tree, i, exportNode);
 
                 tree.nodeEnd[exportNode] = getOffset(stream, source, i);
 
@@ -1781,8 +1819,8 @@ public class JsParser {
 
 
     private static int parseClass(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
-        int i = startIdx;
-        int nodeStart = stream.tokenStart[i];
+        int i = skipToken(stream, startIdx);
+        int nodeStart = stream.tokenStart[startIdx];
         String kw = getWord(source, stream, startIdx);
         int nodeType = "interface".equals(kw) ? JsSyntaxTree.N_INTERFACE : ("enum".equals(kw) ? JsSyntaxTree.N_ENUM : JsSyntaxTree.N_CLASS_DECL);
 
@@ -1812,7 +1850,11 @@ public class JsParser {
                 int classNode = tree.addNode(nodeType, nodeStart, 0, parent, name);
                 tree.nodeTypeAnn[classNode] = extendsName;
 
-                i = parseClassBody(source, stream, tree, nextTok, classNode);
+                if (nodeType == JsSyntaxTree.N_ENUM) {
+                    i = parseEnumBody(source, stream, tree, nextTok, classNode);
+                } else {
+                    i = parseClassBody(source, stream, tree, nextTok, classNode);
+                }
                 
                 // C.1 pre-populate shape for class/interface
                 java.util.Set<String> keys = new java.util.LinkedHashSet<>();
@@ -1976,6 +2018,57 @@ public class JsParser {
     }
 
 
+
+    private static int parseEnumBody(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int enumNode) {
+        int i = skipToken(stream, startIdx); // skip '{'
+
+        while (i < stream.length) {
+            i = skipWhitespaceAndComments(stream, i);
+            if (i >= stream.length) break;
+
+            byte t = stream.types[i];
+            if (t == TokenStream.TK_PUNCT) {
+                char c = source.charAt(stream.tokenStart[i]);
+                if (c == '}') {
+                    return skipToken(stream, i);
+                }
+                if (c == ',' || c == ';') {
+                    i = skipToken(stream, i);
+                    continue;
+                }
+            }
+
+            if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_STRING || t == TokenStream.TK_KEYWORD) {
+                int nodeStart = stream.tokenStart[i];
+                String name = getWord(source, stream, i);
+                if (name.length() >= 2 && ((name.startsWith("\"") && name.endsWith("\"")) || (name.startsWith("'") && name.endsWith("'")))) {
+                    name = name.substring(1, name.length() - 1);
+                }
+                int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, enumNode, name);
+                i = skipToken(stream, i);
+
+                int next = skipWhitespaceAndComments(stream, i);
+                if (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[next]) == '=') {
+                    i = skipToken(stream, next); // skip '='
+                    i = parseExpressionTokens(source, stream, tree, i, propNode, STOP_OBJ_PROP);
+                } else {
+                    i = next;
+                }
+                tree.nodeEnd[propNode] = getOffset(stream, source, i);
+
+                int afterProp = skipWhitespaceAndComments(stream, i);
+                if (afterProp < stream.length && stream.types[afterProp] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[afterProp]) == ',') {
+                    i = skipToken(stream, afterProp);
+                } else {
+                    i = afterProp;
+                }
+                continue;
+            }
+
+            i = skipToken(stream, i);
+        }
+        return i;
+    }
 
     private static int parseClassBody(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 

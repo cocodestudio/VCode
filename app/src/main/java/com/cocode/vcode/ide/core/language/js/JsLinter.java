@@ -26,13 +26,16 @@ public class JsLinter {
         TokenStream mask = JsLexer.tokenize(text);
         String[] lines = LinterUtils.splitLines(text);
 
+        JsSyntaxTree tree;
+        ScopeTree scopeTree;
         if (index != null) {
             String filePath = file != null ? file.getAbsolutePath() : "";
             com.cocode.vcode.ide.core.language.js.ParseResult cached = !filePath.isEmpty() ? index.getParseResult(filePath) : null;
-            JsSyntaxTree tree;
-            ScopeTree scopeTree;
             if (cached != null && cached.tree != null && text.equals(cached.source)) {
                 tree = cached.tree;
+                if (tree.nodesByOffset == null) {
+                    tree.buildNodesByOffset();
+                }
                 scopeTree = (cached.scopeTree != null) ? cached.scopeTree : ScopeTree.build(tree);
             } else {
                 tree = JsParser.parseFull(text, mask);
@@ -41,8 +44,14 @@ public class JsLinter {
                 }
                 scopeTree = ScopeTree.build(tree);
             }
-            JsSemanticLinter.analyze(file, text, mask, tree, scopeTree, index, problems);
+        } else {
+            tree = JsParser.parseFull(text, mask);
+            if (tree != null) {
+                tree.buildNodesByOffset();
+            }
+            scopeTree = ScopeTree.build(tree);
         }
+        JsSemanticLinter.analyze(file, text, mask, tree, scopeTree, index, problems);
 
         return problems;
     }

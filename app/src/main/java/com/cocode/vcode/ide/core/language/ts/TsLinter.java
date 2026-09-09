@@ -208,10 +208,11 @@ public class TsLinter {
         Matcher m = PAT_FN_PARAMS.matcher(text);
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
-            String[] params = Objects.requireNonNull(m.group(1)).split(",");
+            List<String> params = splitParameters(Objects.requireNonNull(m.group(1)));
             String lastOptional = null;
             for (String param : params) {
                 String p = param.trim();
+                if (p.isEmpty()) continue;
                 boolean isOptional = p.contains("?") || p.contains("= ");
                 if (!isOptional && lastOptional != null) {
                     int line = LinterUtils.getLine(text, m.start());
@@ -224,6 +225,27 @@ public class TsLinter {
                 else lastOptional = null;
             }
         }
+    }
+
+    private static List<String> splitParameters(String paramList) {
+        List<String> list = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < paramList.length(); i++) {
+            char c = paramList.charAt(i);
+            if (c == '(' || c == '[' || c == '{' || c == '<') {
+                depth++;
+            } else if (c == ')' || c == ']' || c == '}' || c == '>') {
+                if (depth > 0) depth--;
+            } else if (c == ',' && depth == 0) {
+                list.add(paramList.substring(start, i));
+                start = i + 1;
+            }
+        }
+        if (start < paramList.length()) {
+            list.add(paramList.substring(start));
+        }
+        return list;
     }
 
     private static void checkNamespace(File file, String text, TokenStream mask, List<Problem> out) {
@@ -259,7 +281,7 @@ public class TsLinter {
             int col = LinterUtils.getColumn(text, nameStart);
             out.add(new Problem(file, line, col, Objects.requireNonNull(m.group(1)).length(),
                     "Enums add runtime overhead: consider 'const' object with 'as const' for better tree-shaking",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.INFO));
         }
     }
 

@@ -182,7 +182,7 @@ public final class ScopeTree {
 
             String name = tree.nodeName[nodeId];
             if (name != null && !name.isEmpty() && !"{destructure}".equals(name)) {
-                if (isDeclaration(type)) {
+                if (isDeclaration(type, nodeId, tree)) {
                     int targetScope = isScopeCreator(type) ? parentScope : myScope;
 
                     if (type == JsSyntaxTree.N_VAR_DECL && tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_VAR) {
@@ -261,19 +261,33 @@ public final class ScopeTree {
                type == JsSyntaxTree.N_SETTER ||
                type == JsSyntaxTree.N_BLOCK ||
                type == JsSyntaxTree.N_FOR_STMT ||
-               type == JsSyntaxTree.N_CATCH_CLAUSE;
+               type == JsSyntaxTree.N_CATCH_CLAUSE ||
+               type == JsSyntaxTree.N_ENUM ||
+               type == JsSyntaxTree.N_INTERFACE;
     }
 
-    private static boolean isDeclaration(int type) {
-        return type == JsSyntaxTree.N_FUNC_DECL ||
-               type == JsSyntaxTree.N_ARROW_FUNC ||
-               type == JsSyntaxTree.N_CLASS_DECL ||
-               type == JsSyntaxTree.N_METHOD ||
-               type == JsSyntaxTree.N_GETTER ||
-               type == JsSyntaxTree.N_SETTER ||
-               type == JsSyntaxTree.N_VAR_DECL ||
-               type == JsSyntaxTree.N_PARAM ||
-               type == JsSyntaxTree.N_IMPORT;
+    private static boolean isDeclaration(int type, int nodeId, JsSyntaxTree tree) {
+        if (type == JsSyntaxTree.N_FUNC_DECL ||
+            type == JsSyntaxTree.N_ARROW_FUNC ||
+            type == JsSyntaxTree.N_CLASS_DECL ||
+            type == JsSyntaxTree.N_METHOD ||
+            type == JsSyntaxTree.N_GETTER ||
+            type == JsSyntaxTree.N_SETTER ||
+            type == JsSyntaxTree.N_VAR_DECL ||
+            type == JsSyntaxTree.N_PARAM ||
+            type == JsSyntaxTree.N_IMPORT ||
+            type == JsSyntaxTree.N_ENUM ||
+            type == JsSyntaxTree.N_INTERFACE ||
+            type == JsSyntaxTree.N_TYPE_ALIAS) {
+            return true;
+        }
+        if (type == JsSyntaxTree.N_PROPERTY && nodeId > 0 && tree != null && nodeId < tree.nodeCount) {
+            int pId = tree.nodeParent[nodeId];
+            if (pId > 0 && pId < tree.nodeCount && tree.nodeType[pId] == JsSyntaxTree.N_ENUM) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
