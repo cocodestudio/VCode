@@ -84,39 +84,70 @@ public class MarkdownLinter {
             }
         }
 
-        // 2. Pattern checks for links, images, URLs, tabs, and whitespace
+        // 2. Pattern checks for links, images, URLs, tabs, and whitespace (gated against code blocks)
+        List<int[]> codeSpans = new ArrayList<>();
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == MdSyntaxTree.N_CODE_BLOCK) {
+                codeSpans.add(new int[]{tree.nodeStart[i], tree.nodeEnd[i]});
+            }
+        }
+        int bStart = -1;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '`') {
+                if (bStart == -1) {
+                    bStart = i;
+                } else {
+                    codeSpans.add(new int[]{bStart, i + 1});
+                    bStart = -1;
+                }
+            }
+        }
+
         Matcher m = EMPTY_LINK_TEXT.matcher(text);
         while (m.find()) {
+            if (isInsideCode(m.start(), codeSpans)) continue;
             if (m.start() > 0 && text.charAt(m.start() - 1) == '!') continue;
             problems.add(createProblem(file, text, m, "Link has no text", Problem.Severity.WARNING));
         }
 
         m = EMPTY_IMAGE_ALT.matcher(text);
         while (m.find()) {
+            if (isInsideCode(m.start(), codeSpans)) continue;
             problems.add(createProblem(file, text, m, "Image is missing alt text: required for accessibility", Problem.Severity.WARNING));
         }
 
         m = USELESS_IMAGE_ALT.matcher(text);
         while (m.find()) {
+            if (isInsideCode(m.start(), codeSpans)) continue;
             problems.add(createProblem(file, text, m, "Useless alt text. Avoid using words like 'image' or 'picture'.", Problem.Severity.WARNING));
         }
 
         m = RAW_URL.matcher(text);
         while (m.find()) {
+            if (isInsideCode(m.start(), codeSpans)) continue;
             problems.add(createProblem(file, text, m, "Raw URL detected. Enclose in < > or use a standard link format.", Problem.Severity.WARNING));
         }
 
         m = TRAILING_WHITESPACE.matcher(text);
         while (m.find()) {
+            if (isInsideCode(m.start(), codeSpans)) continue;
             problems.add(createProblem(file, text, m, "Trailing whitespace detected", Problem.Severity.WARNING));
         }
 
         m = HARD_TAB.matcher(text);
         while (m.find()) {
+            if (isInsideCode(m.start(), codeSpans)) continue;
             problems.add(createProblem(file, text, m, "Hard tab detected. Use spaces instead.", Problem.Severity.WARNING));
         }
 
         return problems;
+    }
+
+    private static boolean isInsideCode(int offset, List<int[]> codeSpans) {
+        for (int[] span : codeSpans) {
+            if (offset >= span[0] && offset < span[1]) return true;
+        }
+        return false;
     }
 
     private static Problem createProblem(File file, String text, Matcher m, String message, Problem.Severity severity) {

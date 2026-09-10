@@ -23,15 +23,22 @@ public class JsLinter {
         return analyze(file, text, null, index);
     }
 
-    public static List<Problem> analyze(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
-        if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
+    public static class AnalysisContext {
+        public final JsSyntaxTree tree;
+        public final ScopeTree scopeTree;
+        public final TokenStream stream;
 
-        List<Problem> problems = new ArrayList<>();
+        public AnalysisContext(JsSyntaxTree tree, ScopeTree scopeTree, TokenStream stream) {
+            this.tree = tree;
+            this.scopeTree = scopeTree;
+            this.stream = stream;
+        }
+    }
+
+    public static AnalysisContext prepareContext(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (mask == null) {
             mask = JsLexer.tokenize(text);
         }
-        String[] lines = LinterUtils.splitLines(text);
-
         JsSyntaxTree tree;
         ScopeTree scopeTree;
         if (index != null) {
@@ -57,7 +64,15 @@ public class JsLinter {
             }
             scopeTree = ScopeTree.build(tree);
         }
-        JsSemanticLinter.analyze(file, text, mask, tree, scopeTree, index, problems);
+        return new AnalysisContext(tree, scopeTree, mask);
+    }
+
+    public static List<Problem> analyze(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+        if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
+
+        List<Problem> problems = new ArrayList<>();
+        AnalysisContext ctx = prepareContext(file, text, mask, index);
+        JsSemanticLinter.analyze(file, text, ctx.stream, ctx.tree, ctx.scopeTree, index, problems);
 
         return problems;
     }
