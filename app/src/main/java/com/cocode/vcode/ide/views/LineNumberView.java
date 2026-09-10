@@ -21,6 +21,9 @@ public class LineNumberView extends View {
     private static final int DIVIDER_WIDTH_PX = 1;
     // Perf: reuse char buffer to avoid String alloc per line in draw loop
     private final char[] lineNumBuffer = new char[6];
+    // Perf: reuse FontMetricsInt to avoid allocation per frame in onDraw
+    private final Paint.FontMetricsInt fontMetrics = new Paint.FontMetricsInt();
+    private float density = 1f;
     private Paint numberPaint;
     private Paint bgPaint;
     private Paint dividerPaint;
@@ -48,6 +51,7 @@ public class LineNumberView extends View {
     }
 
     private void init() {
+        density = getContext().getResources().getDisplayMetrics().density;
         bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         bgPaint.setColor(ContextCompat.getColor(getContext(), R.color.vcode_line_number_bg));
 
@@ -95,9 +99,8 @@ public class LineNumberView extends View {
         float textX = getWidth() - DIVIDER_WIDTH_PX - dpToPx(4);
 
         // Obtain font metrics from numberPaint to align baseline exactly with editor text
-        Paint.FontMetricsInt fm = new Paint.FontMetricsInt();
-        numberPaint.getFontMetricsInt(fm);
-        int ascent = fm.ascent;
+        numberPaint.getFontMetricsInt(fontMetrics);
+        int ascent = fontMetrics.ascent;
 
         int _colorPrimary = colorsLoaded ? colorPrimary : ContextCompat.getColor(getContext(), R.color.vcode_text_primary);
         int _colorSecondary = colorsLoaded ? colorSecondary : ContextCompat.getColor(getContext(), R.color.vcode_line_number_text);
@@ -169,7 +172,7 @@ public class LineNumberView extends View {
     }
 
     private float dpToPx(float dp) {
-        return dp * getContext().getResources().getDisplayMetrics().density;
+        return dp * density;
     }
 
     private float spToPx(float sp) {

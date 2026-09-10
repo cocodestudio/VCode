@@ -11,7 +11,7 @@ package com.cocode.vcode.ide.core.editor.text;
  * of the owning {@link Content} instance, and all reads that need a stable snapshot must occur
  * under its read lock.
  */
-public final class ContentLine {
+public final class ContentLine implements CharSequence {
 
     private static final int MIN_CAPACITY = 32;
     public java.util.List<com.cocode.vcode.ide.core.editor.highlight.HighlightToken> tokens;
@@ -134,6 +134,16 @@ public final class ContentLine {
         return buffer.length - (gapEnd - gapStart);
     }
 
+    @androidx.annotation.NonNull
+    @Override
+    public CharSequence subSequence(int start, int end) {
+        int len = end - start;
+        if (len <= 0) return "";
+        char[] dst = new char[len];
+        getChars(start, end, dst, 0);
+        return new String(dst);
+    }
+
     public void getChars(int start, int end, char[] dest, int destOffset) {
         int count = end - start;
         if (start < gapStart) {
@@ -145,6 +155,24 @@ public final class ContentLine {
         } else {
             System.arraycopy(buffer, start + (gapEnd - gapStart), dest, destOffset, count);
         }
+    }
+
+    public void appendTo(StringBuilder sb, int start, int end) {
+        int count = end - start;
+        if (count <= 0) return;
+        if (start < gapStart) {
+            int beforeGap = Math.min(count, gapStart - start);
+            sb.append(buffer, start, beforeGap);
+            if (beforeGap < count) {
+                sb.append(buffer, gapEnd, count - beforeGap);
+            }
+        } else {
+            sb.append(buffer, start + (gapEnd - gapStart), count);
+        }
+    }
+
+    public void appendTo(StringBuilder sb) {
+        appendTo(sb, 0, length());
     }
 
     public String toLineString() {

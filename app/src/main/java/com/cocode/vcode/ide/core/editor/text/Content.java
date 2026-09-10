@@ -66,12 +66,14 @@ public final class Content {
      */
     private long[] bit;
     private int bitCapacity = 0;
+    private volatile int cachedMaxLineLength = -1;
 
     // Construction
 
     public Content() {
         lines.add(new ContentLine());
         rebuildBit();
+        cachedMaxLineLength = 0;
     }
 
     /**
@@ -244,6 +246,7 @@ public final class Content {
             lines.addAll(loaded.lines);
             bit = loaded.bit;
             bitCapacity = loaded.bitCapacity;
+            cachedMaxLineLength = loaded.longestLineLength;
         } finally {
             lock.writeLock().unlock();
         }
@@ -427,7 +430,7 @@ public final class Content {
             StringBuilder sb = new StringBuilder(Math.max(0, total));
             for (int i = 0; i < lines.size(); i++) {
                 ContentLine cl = lines.get(i);
-                sb.append(cl.toLineString());
+                cl.appendTo(sb);
                 if (i < lines.size() - 1) sb.append('\n');
             }
             return sb.toString();
@@ -457,21 +460,19 @@ public final class Content {
 
             if (startPos.line == endPos.line) {
                 ContentLine cl = lines.get(startPos.line);
-                sb.append(cl.buffer, startPos.column, endPos.column - startPos.column);
+                cl.appendTo(sb, startPos.column, endPos.column);
             } else {
                 ContentLine cl = lines.get(startPos.line);
-                char[] tmp = new char[cl.length() - startPos.column];
-                cl.getChars(startPos.column, cl.length(), tmp, 0);
-                sb.append(tmp);
+                cl.appendTo(sb, startPos.column, cl.length());
                 sb.append('\n');
                 for (int i = startPos.line + 1; i < endPos.line; i++) {
                     ContentLine line = lines.get(i);
-                    sb.append(line.toLineString());
+                    line.appendTo(sb);
                     sb.append('\n');
                 }
                 ContentLine endCl = lines.get(endPos.line);
                 if (endPos.column > 0) {
-                    sb.append(endCl.buffer, 0, endPos.column);
+                    endCl.appendTo(sb, 0, endPos.column);
                 }
             }
             return sb.toString();
@@ -488,6 +489,8 @@ public final class Content {
      * The renderer caches this and invalidates it via the {@link ContentChangeListener}.
      */
     public int longestLineLength() {
+        int cached = cachedMaxLineLength;
+        if (cached >= 0) return cached;
         lock.readLock().lock();
         try {
             int max = 0;
@@ -495,6 +498,7 @@ public final class Content {
                 int len = lines.get(i).length();
                 if (len > max) max = len;
             }
+            cachedMaxLineLength = max;
             return max;
         } finally {
             lock.readLock().unlock();
@@ -534,8 +538,12 @@ public final class Content {
         if (firstNewline < 0) {
             // No newline — simple single-line insert
             char[] src = toCharArray(text);
-            lines.get(line).insert(column, src, 0, src.length);
+            ContentLine cl = lines.get(line);
+            cl.insert(column, src, 0, src.length);
             bitAdd(line, src.length);
+            if (cachedMaxLineLength >= 0) {
+                cachedMaxLineLength = Math.max(cachedMaxLineLength, cl.length());
+            }
         } else {
             // There is at least one newline — we need to split the current line and insert new lines
             ContentLine currentLine = lines.get(line);
@@ -570,13 +578,19 @@ public final class Content {
             lines.add(insertPos, lastNew);
 
             rebuildBit();
+            cachedMaxLineLength = -1;
         }
     }
 
     private void deleteInternal(int startLine, int startColumn, int endLine, int endColumn) {
         if (startLine == endLine) {
-            lines.get(startLine).delete(startColumn, endColumn);
+            ContentLine cl = lines.get(startLine);
+            int oldLen = cl.length();
+            cl.delete(startColumn, endColumn);
             bitAdd(startLine, -(endColumn - startColumn));
+            if (cachedMaxLineLength >= 0 && oldLen >= cachedMaxLineLength) {
+                cachedMaxLineLength = -1;
+            }
         } else {
             // Merge startLine and endLine: keep [0, startColumn) from startLine and
             // [endColumn, ...) from endLine.
@@ -595,6 +609,7 @@ public final class Content {
             // Remove all intermediate lines and the end line
             lines.subList(startLine + 1, endLine + 1).clear();
             rebuildBit();
+            cachedMaxLineLength = -1;
         }
     }
 

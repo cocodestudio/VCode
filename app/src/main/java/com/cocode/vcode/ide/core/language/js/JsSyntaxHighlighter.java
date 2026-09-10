@@ -84,8 +84,15 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         return JS_KEYWORDS.contains(word) || JS_BOOLEANS.contains(word);
     }
 
+    protected boolean isBoolean(CharSequence cs, int start, int end) {
+        int len = end - start;
+        if (len == 4) return match(cs, start, end, "true");
+        if (len == 5) return match(cs, start, end, "false");
+        return false;
+    }
+
     protected boolean isBoolean(String word) {
-        return JS_BOOLEANS.contains(word);
+        return word != null && isBoolean((CharSequence) word, 0, word.length());
     }
 
     public static int getMode(int state) {
@@ -104,24 +111,30 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         return (mode & 0x7) | ((templateDepth & 0x7) << 3) | ((braceDepth & 0x3FF) << 6);
     }
 
-    private static boolean isRegexAllowedAfterKeyword(String word) {
-        switch (word) {
-            case "return":
-            case "case":
-            case "typeof":
-            case "yield":
-            case "await":
-            case "delete":
-            case "throw":
-            case "void":
-            case "instanceof":
-            case "in":
-            case "of":
-            case "new":
-                return true;
+    private static boolean isRegexAllowedAfterKeyword(CharSequence cs, int start, int end) {
+        int len = end - start;
+        if (len < 2 || len > 10) return false;
+        char c0 = cs.charAt(start);
+        switch (len) {
+            case 2:
+                return (c0 == 'i' && match(cs, start, end, "in")) || (c0 == 'o' && match(cs, start, end, "of"));
+            case 3:
+                return c0 == 'n' && match(cs, start, end, "new");
+            case 4:
+                return (c0 == 'c' && match(cs, start, end, "case")) || (c0 == 'v' && match(cs, start, end, "void"));
+            case 5:
+                return (c0 == 'y' && match(cs, start, end, "yield")) || (c0 == 'a' && match(cs, start, end, "await")) || (c0 == 't' && match(cs, start, end, "throw"));
+            case 6:
+                return (c0 == 'r' && match(cs, start, end, "return")) || (c0 == 't' && match(cs, start, end, "typeof")) || (c0 == 'd' && match(cs, start, end, "delete"));
+            case 10:
+                return match(cs, start, end, "instanceof");
             default:
                 return false;
         }
+    }
+
+    private static boolean isRegexAllowedAfterKeyword(String word) {
+        return word != null && isRegexAllowedAfterKeyword((CharSequence) word, 0, word.length());
     }
 
     private static int matchOperator(String s, int pos, int len) {
@@ -527,14 +540,13 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
                 while (j < len && (Character.isLetterOrDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '_' || lineStr.charAt(j) == '$')) {
                     j++;
                 }
-                String word = lineStr.substring(i, j);
-                if (isKeyword(word)) {
-                    if (isBoolean(word)) {
+                if (isKeyword(lineStr, i, j)) {
+                    if (isBoolean(lineStr, i, j)) {
                         tokens.add(new HighlightToken(lineIndex, i, j, colorBoolean, false));
                     } else {
                         tokens.add(new HighlightToken(lineIndex, i, j, colorKeyword, false));
                     }
-                    lastTokenType = isRegexAllowedAfterKeyword(word) ? 0 : 1;
+                    lastTokenType = isRegexAllowedAfterKeyword(lineStr, i, j) ? 0 : 1;
                 } else {
                     int k = j;
                     while (k < len && Character.isWhitespace(lineStr.charAt(k))) {
@@ -542,19 +554,20 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
                     }
                     if (k < len && lineStr.charAt(k) == '(') {
                         tokens.add(new HighlightToken(lineIndex, i, j, colorFunction, false));
+                    } else if ((match(lineStr, i, j, "rgb") || match(lineStr, i, j, "rgba") || match(lineStr, i, j, "hsl") || match(lineStr, i, j, "hsla")) && j < len && lineStr.charAt(j) == '(') {
+                        int closeIdx = lineStr.indexOf(')', j);
+                        if (closeIdx != -1) {
+                            Integer fnColor = ColorParser.parse(lineStr.substring(i, closeIdx + 1));
+                            if (fnColor != null) {
+                                tokens.add(new HighlightToken(lineIndex, i, closeIdx + 1, colorNumber, false, true, fnColor));
+                                j = closeIdx + 1;
+                            }
+                        }
                     } else {
+                        String word = lineStr.substring(i, j);
                         Integer cssColor = ColorParser.parse(word);
                         if (cssColor != null) {
                             tokens.add(new HighlightToken(lineIndex, i, j, colorNumber, false, true, cssColor));
-                        } else if ((word.equals("rgb") || word.equals("rgba") || word.equals("hsl") || word.equals("hsla")) && j < len && lineStr.charAt(j) == '(') {
-                            int closeIdx = lineStr.indexOf(')', j);
-                            if (closeIdx != -1) {
-                                Integer fnColor = ColorParser.parse(lineStr.substring(i, closeIdx + 1));
-                                if (fnColor != null) {
-                                    tokens.add(new HighlightToken(lineIndex, i, closeIdx + 1, colorNumber, false, true, fnColor));
-                                    j = closeIdx + 1;
-                                }
-                            }
                         }
                     }
                     lastTokenType = 1;

@@ -6,6 +6,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
@@ -208,6 +209,40 @@ public class CodeEditText extends View {
     private int searchActiveIndex = -1;
     private volatile long textLoadToken = 0;
 
+    // Full text cache for autocomplete and search
+    private String cachedFullText;
+    private long cachedFullTextVersion = -1;
+
+    private String getCachedFullText() {
+        long currentVersion = content.getVersion();
+        if (cachedFullText == null || cachedFullTextVersion != currentVersion) {
+            cachedFullText = content.getText();
+            cachedFullTextVersion = currentVersion;
+        }
+        return cachedFullText;
+    }
+
+    // Reusable objects and cached metrics for 60fps rendering
+    private final Path reusableDiagnosticPath = new Path();
+    private float density = 1f;
+    private float handleRadiusPx = 10f;
+    private float handleThresholdPx = 40f;
+    private int tabSize = 2;
+    private String tabSpaces = "  ";
+
+    public void setTabSize(int size) {
+        if (size <= 0) size = 2;
+        this.tabSize = size;
+        StringBuilder sb = new StringBuilder(size);
+        for (int i = 0; i < size; i++) sb.append(' ');
+        this.tabSpaces = sb.toString();
+        this.indentEngine = new IndentationEngine(size);
+    }
+
+    public int getTabSize() {
+        return tabSize;
+    }
+
     // Cursor blink runnable
     private final Runnable blinkRunnable = () -> {
         cursorVisible = !cursorVisible;
@@ -305,7 +340,10 @@ public class CodeEditText extends View {
         bracketHighlightPaint.setStyle(Paint.Style.STROKE);
         bracketHighlightPaint.setStrokeWidth(3f);
 
-        indentEngine = new IndentationEngine(new AppSettings().tabSize);
+        density = context.getResources().getDisplayMetrics().density;
+        handleRadiusPx = dpToPx(5);
+        handleThresholdPx = dpToPx(20);
+        setTabSize(new AppSettings().tabSize);
 
         setFocusable(true);
         setFocusableInTouchMode(true);
@@ -518,8 +556,9 @@ public class CodeEditText extends View {
                 int state = contentLine.getTokenizerStartState();
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
-                contentLine.tokens = syntaxHighlighter.tokenizeLine(contentLine.toLineString(), line, internalState);
-                BracketMatcher.applyRainbowBrackets(contentLine.tokens, contentLine.toLineString(), rainbowColors, depth, internalState, line);
+                String lineStr = contentLine.toLineString();
+                contentLine.tokens = syntaxHighlighter.tokenizeLine(lineStr, line, internalState);
+                BracketMatcher.applyRainbowBrackets(contentLine.tokens, lineStr, rainbowColors, depth, internalState, line);
             }
             List<HighlightToken> lineTokens = contentLine.tokens;
 
@@ -561,7 +600,7 @@ public class CodeEditText extends View {
                 } else {
                     Arrays.fill(colorBuffer, 0, renderLen, defaultTextColor);
                     Arrays.fill(underlineBuffer, 0, renderLen, false);
-                    for (int i = 0; i < renderLen; i++) previewBuffer[i] = false;
+                    Arrays.fill(previewBuffer, 0, renderLen, false);
 
                     // Apply tokens (later tokens overwrite earlier ones)
                     for (HighlightToken tok : lineTokens) {
@@ -692,8 +731,29 @@ public class CodeEditText extends View {
         if (searchDecorations == null || searchDecorations.isEmpty()) return;
 
         int total = content.totalLength();
-        for (int i = 0; i < searchDecorations.size(); i++) {
+        int firstLineFlat = content.flatOffset(new ContentPosition(firstLine, 0));
+        int lastLineEndCol = content.lineLength(lastLine);
+        int lastLineFlat = content.flatOffset(new ContentPosition(lastLine, lastLineEndCol));
+
+        // Binary search for first decoration whose absoluteEnd >= firstLineFlat
+        int low = 0;
+        int high = searchDecorations.size() - 1;
+        int startIndex = searchDecorations.size();
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            if (searchDecorations.get(mid).absoluteEnd >= firstLineFlat) {
+                startIndex = mid;
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+
+        for (int i = startIndex; i < searchDecorations.size(); i++) {
             SearchResult r = searchDecorations.get(i);
+            if (r.absoluteStart > lastLineFlat) {
+                break; // Ordered by start offset — no subsequent match can be visible
+            }
             if (r.absoluteStart < 0 || r.absoluteEnd > total || r.absoluteStart >= r.absoluteEnd)
                 continue;
 
@@ -787,10 +847,10 @@ public class CodeEditText extends View {
                 color = cachedInfoColor;
             diagnosticPaint.setColor(color);
 
-            if (problem.getCachedPath() == null || wordWrap) {
+            if (wordWrap) {
                 float x0 = paddingLeft + getCursorX(lineIdx, colStart);
                 float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
-                if (wordWrap && colEnd > colStart && colInSubRow(colEnd) < colInSubRow(colStart)) {
+                if (colEnd > colStart && colInSubRow(colEnd) < colInSubRow(colStart)) {
                     // problem spans multiple subrows, just draw for the first subrow
                     x1 = paddingLeft + getWidth() - getPaddingRight();
                 }
@@ -799,19 +859,40 @@ public class CodeEditText extends View {
                 float period = 8f;
                 float half = period / 2f;
 
-                android.graphics.Path path = new android.graphics.Path();
-                path.moveTo(x0, waveY);
+                reusableDiagnosticPath.reset();
+                reusableDiagnosticPath.moveTo(x0, waveY);
                 boolean up = true;
                 for (float cx2 = x0; cx2 < x1; cx2 += half) {
                     float ex = Math.min(cx2 + half, x1);
                     float mid = (cx2 + ex) / 2f;
                     float ctlY = up ? waveY - amp : waveY + amp;
-                    path.quadTo(mid, ctlY, ex, waveY);
+                    reusableDiagnosticPath.quadTo(mid, ctlY, ex, waveY);
                     up = !up;
                 }
-                problem.setCachedPath(path);
+                canvas.drawPath(reusableDiagnosticPath, diagnosticPaint);
+            } else {
+                if (problem.getCachedPath() == null) {
+                    float x0 = paddingLeft + getCursorX(lineIdx, colStart);
+                    float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
+                    float waveY = paddingTop + absoluteVisualRow(lineIdx, colStart) * lineHeightPx + lineHeightPx + 2;
+                    float amp = 2.5f;
+                    float period = 8f;
+                    float half = period / 2f;
+
+                    Path path = new Path();
+                    path.moveTo(x0, waveY);
+                    boolean up = true;
+                    for (float cx2 = x0; cx2 < x1; cx2 += half) {
+                        float ex = Math.min(cx2 + half, x1);
+                        float mid = (cx2 + ex) / 2f;
+                        float ctlY = up ? waveY - amp : waveY + amp;
+                        path.quadTo(mid, ctlY, ex, waveY);
+                        up = !up;
+                    }
+                    problem.setCachedPath(path);
+                }
+                canvas.drawPath(problem.getCachedPath(), diagnosticPaint);
             }
-            canvas.drawPath(problem.getCachedPath(), diagnosticPaint);
         }
     }
 
@@ -826,12 +907,12 @@ public class CodeEditText extends View {
         // Draw the cursor line at this position
         canvas.drawLine(cx, cy, cx, cy + lineHeightPx, cursorPaint);
         // Draw a small filled circle as the drag handle
-        canvas.drawCircle(cx, handleY, dpToPx(5, getContext()), handlePaint);
+        canvas.drawCircle(cx, handleY, handleRadiusPx, handlePaint);
     }
 
     private int hitTestHandle(float touchX, float touchY) {
         if (selectionAnchor == null) return HANDLE_DRAG_NONE;
-        float threshold = dpToPx(20, getContext());
+        float threshold = handleThresholdPx;
 
         ContentPosition startPos = ContentPosition.min(cursor, selectionAnchor);
         ContentPosition endPos = ContentPosition.max(cursor, selectionAnchor);
@@ -2090,7 +2171,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth, internalState);
+                int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState);
                 int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
                 line.setTokenizerEndState(newState);
@@ -2118,7 +2199,7 @@ public class CodeEditText extends View {
                             int depth = (bgState >>> 16) & 0xFFFF;
 
                             int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                            int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth, internalState);
+                            int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState);
 
                             int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
@@ -2156,33 +2237,42 @@ public class CodeEditText extends View {
         // LSP bridge has taken over completions for this language — skip legacy engine.
         if (lspCompletionActive) return;
 
+        int totalLen = content.totalLength();
         int flatCursor = content.flatOffset(cursor);
-        String fullText = content.getText();
 
-        if (flatCursor <= 0 || flatCursor > fullText.length()) {
+        if (flatCursor <= 0 || flatCursor > totalLen) {
             autoCompletePopup.dismiss();
             return;
         }
 
-        if (isCursorInComment(fullText, flatCursor)) {
-            autoCompletePopup.dismiss();
-            return;
-        }
-
-        char lastChar = fullText.charAt(flatCursor - 1);
+        // Fast character checks directly without allocating or fetching full text
+        char lastChar = (cursor.column > 0)
+                ? content.charAt(cursor.line, cursor.column - 1)
+                : '\n';
 
         if (Character.isWhitespace(lastChar)) {
             autoCompletePopup.dismiss();
             return;
         }
 
+        char prevChar = (cursor.column >= 2)
+                ? content.charAt(cursor.line, cursor.column - 2)
+                : (flatCursor >= 2 ? content.getSubstring(flatCursor - 2, flatCursor - 1).charAt(0) : '\0');
+
         boolean isTriggerChar = TRIGGER_CHARS.indexOf(lastChar) >= 0
-                || (lastChar == '{' && flatCursor >= 2 && fullText.charAt(flatCursor - 2) == '$');
+                || (lastChar == '{' && flatCursor >= 2 && prevChar == '$');
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$'
                 || (lastChar == '-' && (fileType == FileType.CSS || fileType == FileType.HTML));
 
         if (!isIdentifier && !isTriggerChar) {
+            autoCompletePopup.dismiss();
+            return;
+        }
+
+        String fullText = getCachedFullText();
+
+        if (isCursorInComment(fullText, flatCursor)) {
             autoCompletePopup.dismiss();
             return;
         }
@@ -2223,65 +2313,67 @@ public class CodeEditText extends View {
         isInsertingCompletion = true;
         try {
             int flatCursor = content.flatOffset(cursor);
-            String text = content.getText();
+            int lineStartFlat = flatCursor - cursor.column;
+            String linePrefix = content.getSubstring(lineStartFlat, flatCursor);
 
-        // Compute wordStart
-        int wordStart;
-        if (item.getReplaceLength() >= 0) {
-            wordStart = Math.max(0, flatCursor - item.getReplaceLength());
-        } else {
-            wordStart = flatCursor;
-            while (wordStart > 0) {
-                char c = text.charAt(wordStart - 1);
-                if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '$' || c == '@') {
-                    wordStart--;
-                } else break;
+            // Compute wordStart
+            int col = cursor.column;
+            if (item.getReplaceLength() >= 0) {
+                col = Math.max(0, cursor.column - item.getReplaceLength());
+            } else {
+                while (col > 0) {
+                    char c = linePrefix.charAt(col - 1);
+                    if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '$' || c == '@') {
+                        col--;
+                    } else break;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '<' && insertText.startsWith("<")) {
+                    col--;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '&' && insertText.startsWith("&")) {
+                    col--;
+                }
             }
-            if (wordStart > 0 && text.charAt(wordStart - 1) == '<' && insertText.startsWith("<")) {
-                wordStart--;
-            }
-            if (wordStart > 0 && text.charAt(wordStart - 1) == '&' && insertText.startsWith("&")) {
-                wordStart--;
-            }
-        }
+            int wordStart = lineStartFlat + col;
 
-        // Handle indentation for multi-line insertions
-        int lineStart = wordStart;
-        while (lineStart > 0 && text.charAt(lineStart - 1) != '\n') lineStart--;
-        StringBuilder baseIndent = new StringBuilder();
-        for (int i = lineStart; i < wordStart; i++) {
-            char c = text.charAt(i);
-            if (c == ' ' || c == '\t') baseIndent.append(c);
-            else break;
-        }
-        if (insertText.contains("\n")) {
-            insertText = insertText.replace("\n", "\n" + baseIndent);
-        }
-
-        // Handle pipe cursor marker
-        int pipeIdx = insertText.indexOf('|');
-        String cleanInsert;
-        int finalCursorFlat;
-        if (pipeIdx >= 0) {
-            cleanInsert = insertText.substring(0, pipeIdx) + insertText.substring(pipeIdx + 1);
-            finalCursorFlat = wordStart + pipeIdx;
-        } else {
-            cleanInsert = insertText;
-            finalCursorFlat = wordStart + cleanInsert.length() + item.getCursorOffset();
-        }
-
-        // Deduplicate trailing bracket/quote
-        if (!cleanInsert.isEmpty() && flatCursor < text.length()) {
-            char lastInserted = cleanInsert.charAt(cleanInsert.length() - 1);
-            char nextInDoc = text.charAt(flatCursor);
-            if (item.getCursorOffset() == 0 && pipeIdx < 0
-                    && (lastInserted == ')' || lastInserted == ']' || lastInserted == '}'
-                    || lastInserted == '"' || lastInserted == '\'')
-                    && lastInserted == nextInDoc) {
-                cleanInsert = cleanInsert.substring(0, cleanInsert.length() - 1);
-                finalCursorFlat = wordStart + cleanInsert.length();
+            // Handle indentation for multi-line insertions
+            StringBuilder baseIndent = new StringBuilder();
+            for (int i = 0; i < col; i++) {
+                char c = linePrefix.charAt(i);
+                if (c == ' ' || c == '\t') baseIndent.append(c);
+                else break;
             }
-        }
+            if (insertText.contains("\n")) {
+                insertText = insertText.replace("\n", "\n" + baseIndent);
+            }
+
+            // Handle pipe cursor marker
+            int pipeIdx = insertText.indexOf('|');
+            String cleanInsert;
+            int finalCursorFlat;
+            if (pipeIdx >= 0) {
+                cleanInsert = insertText.substring(0, pipeIdx) + insertText.substring(pipeIdx + 1);
+                finalCursorFlat = wordStart + pipeIdx;
+            } else {
+                cleanInsert = insertText;
+                finalCursorFlat = wordStart + cleanInsert.length() + item.getCursorOffset();
+            }
+
+            // Deduplicate trailing bracket/quote
+            int docLen = content.totalLength();
+            if (!cleanInsert.isEmpty() && flatCursor < docLen) {
+                char lastInserted = cleanInsert.charAt(cleanInsert.length() - 1);
+                char nextInDoc = (cursor.column < content.lineLength(cursor.line))
+                        ? content.charAt(cursor.line, cursor.column)
+                        : '\n';
+                if (item.getCursorOffset() == 0 && pipeIdx < 0
+                        && (lastInserted == ')' || lastInserted == ']' || lastInserted == '}'
+                        || lastInserted == '"' || lastInserted == '\'')
+                        && lastInserted == nextInDoc) {
+                    cleanInsert = cleanInsert.substring(0, cleanInsert.length() - 1);
+                    finalCursorFlat = wordStart + cleanInsert.length();
+                }
+            }
         ContentPosition wordStartPos = content.positionAt(wordStart);
         ContentPosition beforeCursor = cursor;
         UndoStack.EditorSnapshot before = snapshotAt(beforeCursor, selectionAnchor);
@@ -2511,8 +2603,12 @@ public class CodeEditText extends View {
 
     // Internal — bracket match
 
+    private float dpToPx(float dp) {
+        return dp * density;
+    }
+
     private float dpToPx(float dp, Context ctx) {
-        return dp * ctx.getResources().getDisplayMetrics().density;
+        return dp * density;
     }
 
     // Internal — comment detection
@@ -2533,10 +2629,7 @@ public class CodeEditText extends View {
     }
 
     private String buildTabSpaces() {
-        StringBuilder sb = new StringBuilder();
-        int tabSize = new AppSettings().tabSize;
-        for (int i = 0; i < tabSize; i++) sb.append(' ');
-        return sb.toString();
+        return tabSpaces;
     }
 
     private float getCursorX(int line, int col) {
@@ -2685,6 +2778,11 @@ public class CodeEditText extends View {
      */
     private static final class ContentCharSequence implements CharSequence {
         private final Content content;
+        private int cachedIndex = -1;
+        private int cachedLine = 0;
+        private int cachedCol = 0;
+        private int cachedLineLen = -1;
+        private long cachedVersion = -1;
 
         ContentCharSequence(Content c) {
             this.content = c;
@@ -2697,16 +2795,46 @@ public class CodeEditText extends View {
 
         @Override
         public char charAt(int index) {
-            ContentPosition pos = content.positionAt(index);
-            if (pos.column < content.lineLength(pos.line))
-                return content.charAt(pos.line, pos.column);
+            long version = content.getVersion();
+            if (version != cachedVersion) {
+                cachedVersion = version;
+                cachedIndex = -1;
+            }
+
+            int line, col;
+            if (cachedIndex >= 0 && index == cachedIndex + 1 && cachedLineLen >= 0) {
+                if (cachedCol < cachedLineLen) {
+                    line = cachedLine;
+                    col = cachedCol + 1;
+                } else {
+                    line = cachedLine + 1;
+                    col = 0;
+                    cachedLineLen = (line < content.lineCount()) ? content.lineLength(line) : 0;
+                }
+            } else if (cachedIndex >= 0 && index == cachedIndex) {
+                line = cachedLine;
+                col = cachedCol;
+            } else {
+                ContentPosition pos = content.positionAt(index);
+                line = pos.line;
+                col = pos.column;
+                cachedLineLen = content.lineLength(line);
+            }
+
+            cachedIndex = index;
+            cachedLine = line;
+            cachedCol = col;
+
+            if (col < cachedLineLen) {
+                return content.charAt(line, col);
+            }
             return '\n';
         }
 
         @NonNull
         @Override
         public CharSequence subSequence(int start, int end) {
-            return content.getText().subSequence(start, end);
+            return content.getSubstring(start, end);
         }
 
         @NonNull

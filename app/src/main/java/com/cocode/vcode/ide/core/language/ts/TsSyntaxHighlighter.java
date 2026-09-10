@@ -35,7 +35,38 @@ public class TsSyntaxHighlighter extends JsSyntaxHighlighter {
     }
 
     @Override
+    public boolean isKeyword(CharSequence cs, int start, int end) {
+        if (super.isKeyword(cs, start, end)) return true;
+        int len = end - start;
+        if (len < 2 || len > 10) return false;
+        char c0 = cs.charAt(start);
+        switch (len) {
+            case 2:
+                return (c0 == 'a' && match(cs, start, end, "as")) || (c0 == 'i' && match(cs, start, end, "is"));
+            case 3:
+                return (c0 == 'a' && match(cs, start, end, "any")) || (c0 == 'g' && match(cs, start, end, "get")) || (c0 == 's' && match(cs, start, end, "set"));
+            case 4:
+                return (c0 == 't' && match(cs, start, end, "type")) || (c0 == 'e' && match(cs, start, end, "enum"));
+            case 5:
+                return (c0 == 'i' && match(cs, start, end, "infer")) || (c0 == 'n' && match(cs, start, end, "never")) || (c0 == 'k' && match(cs, start, end, "keyof"));
+            case 6:
+                return (c0 == 'p' && match(cs, start, end, "public")) || (c0 == 'm' && match(cs, start, end, "module")) || (c0 == 'n' && match(cs, start, end, "number")) || (c0 == 's' && (match(cs, start, end, "string") || match(cs, start, end, "symbol"))) || (c0 == 'b' && match(cs, start, end, "bigint"));
+            case 7:
+                return (c0 == 'p' && match(cs, start, end, "private")) || (c0 == 'd' && match(cs, start, end, "declare")) || (c0 == 'b' && match(cs, start, end, "boolean")) || (c0 == 'u' && match(cs, start, end, "unknown")) || (c0 == 'a' && match(cs, start, end, "asserts"));
+            case 8:
+                return (c0 == 'r' && match(cs, start, end, "readonly")) || (c0 == 'a' && match(cs, start, end, "abstract")) || (c0 == 'o' && match(cs, start, end, "override"));
+            case 9:
+                return (c0 == 'i' && match(cs, start, end, "interface")) || (c0 == 'p' && match(cs, start, end, "protected")) || (c0 == 'n' && match(cs, start, end, "namespace")) || (c0 == 's' && match(cs, start, end, "satisfies"));
+            case 10:
+                return match(cs, start, end, "implements");
+            default:
+                return false;
+        }
+    }
+
+    @Override
     protected boolean isKeyword(String word) {
-        return super.isKeyword(word) || TS_KEYWORDS.contains(word);
+        if (word == null) return false;
+        return isKeyword((CharSequence) word, 0, word.length());
     }
 }

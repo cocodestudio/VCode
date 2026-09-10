@@ -177,11 +177,15 @@ public class JsonSyntaxHighlighter extends SyntaxHighlighter {
                 while (j < len && Character.isLetter(lineStr.charAt(j))) {
                     j++;
                 }
-                String word = lineStr.substring(i, j);
-                if (word.equals("true") || word.equals("false")) {
+                int wlen = j - i;
+                if (wlen == 4) {
+                    if (match(lineStr, i, j, "true")) {
+                        tokens.add(new HighlightToken(lineIndex, i, j, colorBoolean, false));
+                    } else if (match(lineStr, i, j, "null")) {
+                        tokens.add(new HighlightToken(lineIndex, i, j, colorNull, false));
+                    }
+                } else if (wlen == 5 && match(lineStr, i, j, "false")) {
                     tokens.add(new HighlightToken(lineIndex, i, j, colorBoolean, false));
-                } else if (word.equals("null")) {
-                    tokens.add(new HighlightToken(lineIndex, i, j, colorNull, false));
                 }
                 i = j;
                 continue;

@@ -791,8 +791,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         CodeEditText codeEditText = getActiveCodeEditor();
         if (codeEditText == null || codeEditText.getText() == null) return;
 
-        int maxLines = codeEditText.getLineCount();
-        if (maxLines == 0) maxLines = codeEditText.getText().toString().split("\n", -1).length;
+        int maxLines = Math.max(1, codeEditText.getLineCount());
 
         GoToLineBottomSheet sheet = new GoToLineBottomSheet();
         sheet.setMaxLines(maxLines);

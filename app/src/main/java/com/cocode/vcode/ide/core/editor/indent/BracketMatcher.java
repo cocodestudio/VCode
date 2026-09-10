@@ -53,11 +53,11 @@ public class BracketMatcher {
         }
     }
 
-    public static int computeBracketDepth(String text, int initialDepth) {
+    public static int computeBracketDepth(CharSequence text, int initialDepth) {
         return computeBracketDepth(text, initialDepth, 0);
     }
 
-    public static int computeBracketDepth(String text, int initialDepth, int startState) {
+    public static int computeBracketDepth(CharSequence text, int initialDepth, int startState) {
         if (text == null) return initialDepth;
         boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
         int depth = initialDepth;

@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.cocode.vcode.ide.R;
@@ -72,19 +73,59 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
         // Apply captured state to the new node tree
         restoreExpandedState(rootNodes, expandedPaths);
 
-        flatNodes.clear();
+        List<FileNode> newFlatNodes = new ArrayList<>();
         // Transform the nested tree into a flat list for the adapter
-        flatten(rootNodes, flatNodes);
-        notifyDataSetChanged();
+        flatten(rootNodes, newFlatNodes);
+
+        DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return flatNodes.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return newFlatNodes.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                FileNode oldNode = flatNodes.get(oldItemPosition);
+                FileNode newNode = newFlatNodes.get(newItemPosition);
+                return oldNode.getFile().equals(newNode.getFile());
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                FileNode oldNode = flatNodes.get(oldItemPosition);
+                FileNode newNode = newFlatNodes.get(newItemPosition);
+                return oldNode.isExpanded() == newNode.isExpanded()
+                        && oldNode.getDepth() == newNode.getDepth()
+                        && oldNode.isDirectory() == newNode.isDirectory()
+                        && oldNode.getName().equals(newNode.getName());
+            }
+        });
+
+        flatNodes.clear();
+        flatNodes.addAll(newFlatNodes);
+        diffResult.dispatchUpdatesTo(this);
     }
 
     /**
      * Updates the clipboard state to visualize cut/copy operations.
      */
     public void setClipboardState(File file, boolean isCut) {
+        File oldFile = this.clipboardFile;
         this.clipboardFile = file;
         this.isCutAction = isCut;
-        notifyDataSetChanged();
+
+        // Targeted notify only for the affected file(s) rather than notifyDataSetChanged()
+        for (int i = 0; i < flatNodes.size(); i++) {
+            File f = flatNodes.get(i).getFile();
+            if ((file != null && f.equals(file)) || (oldFile != null && f.equals(oldFile))) {
+                notifyItemChanged(i);
+            }
+        }
     }
 
     public File getClipboardFile() {
