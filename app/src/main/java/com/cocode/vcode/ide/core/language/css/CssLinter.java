@@ -111,7 +111,7 @@ public class CssLinter {
                     }
 
                     // ID selector check
-                    if (selector.contains("#") && !selector.startsWith("@")) {
+                    if (selector.contains("#") && !selector.startsWith("@") && !isInsideSpecialAtRule(tree, i)) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "Avoid using ID selectors ('#id') for styling: prefer class selectors",
                                 Problem.Severity.INFO));
@@ -405,14 +405,43 @@ public class CssLinter {
         return false;
     }
 
+    private static int findMatchingParen(String s, int openParenIdx) {
+        int depth = 0;
+        for (int i = openParenIdx; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean hasFallbackComma(String inner) {
+        int parenDepth = 0;
+        for (int i = 0; i < inner.length(); i++) {
+            char c = inner.charAt(i);
+            if (c == '(') parenDepth++;
+            else if (c == ')') {
+                if (parenDepth > 0) parenDepth--;
+            } else if (c == ',' && parenDepth == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean hasVarWithoutFallback(String s) {
         if (s == null) return false;
         int start = s.indexOf("var(");
         while (start >= 0) {
-            int close = s.indexOf(')', start);
-            if (close > start) {
-                String inner = s.substring(start + 4, close);
-                if (!inner.contains(",")) return true;
+            int openParen = start + 3;
+            int close = findMatchingParen(s, openParen);
+            if (close > openParen) {
+                String inner = s.substring(openParen + 1, close);
+                if (!hasFallbackComma(inner)) return true;
             }
             start = s.indexOf("var(", start + 4);
         }
@@ -422,10 +451,22 @@ public class CssLinter {
     private static void extractVarUsages(String s, Set<String> usedVars) {
         int start = s.indexOf("var(");
         while (start >= 0) {
-            int close = s.indexOf(')', start);
-            if (close > start) {
-                String inner = s.substring(start + 4, close).trim();
-                int comma = inner.indexOf(',');
+            int openParen = start + 3;
+            int close = findMatchingParen(s, openParen);
+            if (close > openParen) {
+                String inner = s.substring(openParen + 1, close).trim();
+                int comma = -1;
+                int parenDepth = 0;
+                for (int i = 0; i < inner.length(); i++) {
+                    char c = inner.charAt(i);
+                    if (c == '(') parenDepth++;
+                    else if (c == ')') {
+                        if (parenDepth > 0) parenDepth--;
+                    } else if (c == ',' && parenDepth == 0) {
+                        comma = i;
+                        break;
+                    }
+                }
                 String varName = comma >= 0 ? inner.substring(0, comma).trim() : inner;
                 if (varName.startsWith("--")) {
                     usedVars.add(varName);
@@ -437,11 +478,35 @@ public class CssLinter {
 
     private static boolean selectorSpecificityTooHigh(String selector) {
         if (selector == null || selector.isEmpty() || selector.startsWith("@")) return false;
-        int depth = 0;
-        for (String part : selector.split("\\s+")) {
-            if (!part.isEmpty()) depth++;
+        for (String group : selector.split(",")) {
+            int depth = 0;
+            for (String part : group.trim().split("\\s+")) {
+                if (!part.isEmpty()) depth++;
+            }
+            if (depth > 3) return true;
         }
-        return depth > 3;
+        return false;
+    }
+
+    private static boolean isInsideSpecialAtRule(CssSyntaxTree tree, int node) {
+        int parent = tree.nodeParent[node];
+        while (parent > 0 && parent < tree.nodeCount) {
+            if (tree.nodeType[parent] == CssSyntaxTree.N_AT_RULE) {
+                int child = tree.nodeChild[parent];
+                int loop = 0;
+                while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
+                    if (tree.nodeType[child] == CssSyntaxTree.N_SELECTOR) {
+                        String sel = tree.nodeName[child];
+                        if (sel != null && (sel.startsWith("@keyframes") || sel.startsWith("@font-face") || sel.startsWith("@-webkit-keyframes"))) {
+                            return true;
+                        }
+                    }
+                    child = tree.nodeSibling[child];
+                }
+            }
+            parent = tree.nodeParent[parent];
+        }
+        return false;
     }
 
     private static void checkShortenableHexTokens(File file, String text, CssSyntaxTree tree, List<Problem> problems) {

@@ -87,4 +87,41 @@ public class JsonLinterTest {
         }
         assertTrue("Should report error for invalid identifier keyword", foundError);
     }
+
+    @Test
+    public void testMalformedNumberReportsSyntaxError() {
+        String source = "{ \"num\": 1.2.3 }";
+        List<Problem> problems = JsonLinter.analyze(mockFile, source);
+        boolean foundError = false;
+        for (Problem p : problems) {
+            if (p.getSeverity() == Problem.Severity.ERROR) {
+                foundError = true;
+                break;
+            }
+        }
+        assertTrue("Should report syntax error for malformed number 1.2.3", foundError);
+    }
+
+    @Test
+    public void testNormalizeKey() {
+        assertEquals("name", JsonLinter.normalizeKey("\"name\""));
+        assertEquals("name", JsonLinter.normalizeKey("'name'"));
+        assertEquals("name", JsonLinter.normalizeKey("\"name"));
+        assertEquals("name", JsonLinter.normalizeKey("name"));
+        assertEquals("name", JsonLinter.normalizeKey("  \"name\"  "));
+    }
+
+    @Test
+    public void testDuplicateKeysNormalized() {
+        String source = "{\n \"name\": \"Alice\",\n \"name\": \"Bob\"\n}";
+        List<Problem> problems = JsonLinter.analyze(mockFile, source);
+        boolean foundDuplicate = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Duplicate") && p.getMessage().contains("name")) {
+                foundDuplicate = true;
+                break;
+            }
+        }
+        assertTrue("Should report duplicate key across normalized quotes", foundDuplicate);
+    }
 }

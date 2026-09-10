@@ -52,6 +52,7 @@ public final class JsSyntaxTree {
     public static final int FLAG_CONST     = 3;
     public static final int FLAG_REST      = 4;
     public static final int FLAG_PARAM_PROP = 8;
+    public static final int FLAG_DEFAULT   = 16;
 
     public int[] nodesByOffset; // Sorted node IDs
 
@@ -115,7 +116,7 @@ public final class JsSyntaxTree {
     }
 
     private void sortNodesByOffsetIterative(int initialLow, int initialHigh) {
-        int[] stack = new int[64];
+        int[] stack = new int[128];
         int top = 0;
         stack[top++] = initialLow;
         stack[top++] = initialHigh;
@@ -162,6 +163,10 @@ public final class JsSyntaxTree {
 
                 int leftLen = lt - low;
                 int rightLen = high - gt;
+
+                if (top + 2 >= stack.length) {
+                    stack = Arrays.copyOf(stack, stack.length * 2);
+                }
 
                 if (leftLen > rightLen) {
                     if (leftLen > 1) {

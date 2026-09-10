@@ -41,6 +41,7 @@ public class HtmlLinter {
         boolean hasViewport = false;
         boolean hasTitle = false;
         boolean hasMetaDescription = false;
+        boolean isFullDocument = false;
         int headingLevel = 0;
 
         int nodeCount = tree.nodeCount;
@@ -49,6 +50,11 @@ public class HtmlLinter {
             int start = tree.nodeStart[i];
             int end = tree.nodeEnd[i];
             int length = Math.max(1, end - start);
+
+            if (type == HtmlSyntaxTree.N_DOCTYPE) {
+                isFullDocument = true;
+                continue;
+            }
 
             if (type == HtmlSyntaxTree.N_ERROR) {
                 String errorName = tree.nodeName[i];
@@ -72,6 +78,9 @@ public class HtmlLinter {
                 String tagName = tree.nodeName[i];
                 if (tagName == null) continue;
                 tagName = tagName.toLowerCase();
+                if ("html".equals(tagName) || "head".equals(tagName)) {
+                    isFullDocument = true;
+                }
 
                 int tagLine = LinterUtils.getLine(text, start);
                 int tagCol = LinterUtils.getColumn(text, start);
@@ -333,18 +342,7 @@ public class HtmlLinter {
                         }
                         break;
                     case "table":
-                        boolean hasTh = false;
-                        int tableChild = tree.nodeChild[i];
-                        int tableLoop = 0;
-                        while (tableChild > 0 && tableChild < tree.nodeCount && ++tableLoop <= tree.nodeCount) {
-                            String cName = tree.nodeName[tableChild];
-                            if ("thead".equalsIgnoreCase(cName) || "th".equalsIgnoreCase(cName)) {
-                                hasTh = true;
-                                break;
-                            }
-                            tableChild = tree.nodeSibling[tableChild];
-                        }
-                        if (!hasTh) {
+                        if (!hasTableHeader(tree, i)) {
                             problems.add(new Problem(file, tagLine, tagCol, 7,
                                     "'<table>' has no header row: add '<thead>' and '<th>' for accessibility",
                                     Problem.Severity.INFO));
@@ -419,29 +417,54 @@ public class HtmlLinter {
             }
         }
 
-        // DOCUMENT-LEVEL WARNINGS
-        if (!hasCharset) {
-            problems.add(new Problem(file, 1, 1, 1,
-                    "Missing '<meta charset=\"...\">' in <head>: may cause encoding issues",
-                    Problem.Severity.WARNING));
-        }
-        if (!hasViewport) {
-            problems.add(new Problem(file, 1, 1, 1,
-                    "Missing viewport meta tag: page may not be mobile-responsive",
-                    Problem.Severity.WARNING));
-        }
-        if (!hasTitle) {
-            problems.add(new Problem(file, 1, 1, 1,
-                    "Missing '<title>' in <head>",
-                    Problem.Severity.WARNING));
-        }
-        if (!hasMetaDescription) {
-            problems.add(new Problem(file, 1, 1, 1,
-                    "Consider adding '<meta name=\"description\">' for SEO",
-                    Problem.Severity.INFO));
+        // DOCUMENT-LEVEL WARNINGS (Only for full HTML documents, not partial fragments or components)
+        if (isFullDocument) {
+            if (!hasCharset) {
+                problems.add(new Problem(file, 1, 1, 1,
+                        "Missing '<meta charset=\"...\">' in <head>: may cause encoding issues",
+                        Problem.Severity.WARNING));
+            }
+            if (!hasViewport) {
+                problems.add(new Problem(file, 1, 1, 1,
+                        "Missing viewport meta tag: page may not be mobile-responsive",
+                        Problem.Severity.WARNING));
+            }
+            if (!hasTitle) {
+                problems.add(new Problem(file, 1, 1, 1,
+                        "Missing '<title>' in <head>",
+                        Problem.Severity.WARNING));
+            }
+            if (!hasMetaDescription) {
+                problems.add(new Problem(file, 1, 1, 1,
+                        "Consider adding '<meta name=\"description\">' for SEO",
+                        Problem.Severity.INFO));
+            }
         }
 
         return problems;
+    }
+
+    private static boolean hasTableHeader(HtmlSyntaxTree tree, int tableNode) {
+        return scanForTableHeader(tree, tableNode, 0);
+    }
+
+    private static boolean scanForTableHeader(HtmlSyntaxTree tree, int parentNode, int depth) {
+        if (depth > 3) return false;
+        int child = tree.nodeChild[parentNode];
+        int loop = 0;
+        while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
+            if (tree.nodeType[child] == HtmlSyntaxTree.N_ELEMENT) {
+                String name = tree.nodeName[child];
+                if ("thead".equalsIgnoreCase(name) || "th".equalsIgnoreCase(name)) {
+                    return true;
+                }
+                if (scanForTableHeader(tree, child, depth + 1)) {
+                    return true;
+                }
+            }
+            child = tree.nodeSibling[child];
+        }
+        return false;
     }
 
     private static String cleanAttrVal(String val) {

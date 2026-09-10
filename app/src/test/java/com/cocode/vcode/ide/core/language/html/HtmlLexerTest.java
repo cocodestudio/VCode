@@ -142,4 +142,19 @@ public class HtmlLexerTest {
         }
         assertEquals(HtmlTokenStream.TK_TAG_CLOSE, stream.types[pathEnd]);
     }
+
+    @Test
+    public void testRawTextClosingNeedleNotMatchedOnPrefix() {
+        String source = "<script>var s = '</scripting>';</script>";
+        HtmlTokenStream stream = HtmlLexer.tokenize(source);
+
+        int fakeClose = source.indexOf("</scripting>");
+        // The </scripting> should be treated as text, not a tag close
+        assertTrue("Character '<' of </scripting> should remain text", stream.isText(fakeClose));
+
+        int realClose = source.indexOf("</script>");
+        assertEquals("Real </script> should be TK_TAG_OPEN", HtmlTokenStream.TK_TAG_OPEN, stream.types[realClose]);
+        assertEquals("Real </script> slash should be TK_TAG_OPEN", HtmlTokenStream.TK_TAG_OPEN, stream.types[realClose + 1]);
+        assertTrue("Real tag name 's' should be tag name", stream.isTagName(realClose + 2));
+    }
 }

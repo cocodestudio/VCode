@@ -73,4 +73,12 @@ public class CssLexerTest {
         String expected = "SEL:@media|SEL:screen|PUNCT:{|SEL:.c|PUNCT:{|PROP:color|PUNCT::|VAL:red|PUNCT:;|PUNCT:}|PUNCT:}";
         assertEquals(expected, getTokens(stream, source));
     }
+
+    @Test
+    public void testNativeNesting() {
+        String source = ".parent { color: red; .child { font-size: 12px; } &:hover { opacity: 0.8; } }";
+        CssTokenStream stream = CssLexer.tokenize(source);
+        String expected = "SEL:.parent|PUNCT:{|PROP:color|PUNCT::|VAL:red|PUNCT:;|SEL:.child|PUNCT:{|PROP:font-size|PUNCT::|VAL:12px|PUNCT:;|PUNCT:}|SEL:&:hover|PUNCT:{|PROP:opacity|PUNCT::|VAL:0.8|PUNCT:;|PUNCT:}|PUNCT:}";
+        assertEquals(expected, getTokens(stream, source));
+    }
 }

@@ -25,6 +25,7 @@ public class JsonSyntaxTree {
     public int[] nodeParent;
     public int[] nodeChild;
     public int[] nodeSibling;
+    public int[] nodeLastChild;
     public String[] nodeName;
 
     public int nodeCount;
@@ -39,10 +40,12 @@ public class JsonSyntaxTree {
         nodeParent = new int[initialCapacity];
         nodeChild = new int[initialCapacity];
         nodeSibling = new int[initialCapacity];
+        nodeLastChild = new int[initialCapacity];
         nodeName = new String[initialCapacity];
         
         Arrays.fill(nodeChild, -1);
         Arrays.fill(nodeSibling, -1);
+        Arrays.fill(nodeLastChild, -1);
         
         nodeCount = 1; // 0 is reserved as root/null
     }
@@ -72,6 +75,11 @@ public class JsonSyntaxTree {
             System.arraycopy(nodeSibling, 0, newSibling, 0, nodeSibling.length);
             Arrays.fill(newSibling, nodeSibling.length, newCap, -1);
             nodeSibling = newSibling;
+
+            int[] newLastChild = new int[newCap];
+            System.arraycopy(nodeLastChild, 0, newLastChild, 0, nodeLastChild.length);
+            Arrays.fill(newLastChild, nodeLastChild.length, newCap, -1);
+            nodeLastChild = newLastChild;
             
             nodeName = Arrays.copyOf(nodeName, newCap);
         }
@@ -81,39 +89,131 @@ public class JsonSyntaxTree {
         nodeStart[index] = start;
         nodeEnd[index] = end;
         nodeParent[index] = parent;
+        nodeChild[index] = -1;
+        nodeSibling[index] = -1;
+        nodeLastChild[index] = -1;
         nodeName[index] = name;
 
         if (parent < 0 || parent >= index) {
             parent = 0;
+            nodeParent[index] = 0;
         }
 
         if (parent != 0) {
-            int child = nodeChild[parent];
-            if (child <= 0 || child >= index) {
+            int prevLast = nodeLastChild[parent];
+            if (prevLast <= 0 || prevLast >= index) {
                 nodeChild[parent] = index;
             } else {
-                int loop = 0;
-                while (child > 0 && child < index && nodeSibling[child] > 0 && nodeSibling[child] < index && ++loop <= index) {
-                    child = nodeSibling[child];
-                }
-                nodeSibling[child] = index;
+                nodeSibling[prevLast] = index;
             }
+            nodeLastChild[parent] = index;
         }
 
         return index;
     }
 
     public void buildNodesByOffset() {
+        if (nodeCount <= 1) {
+            nodesByOffset = new int[0];
+            return;
+        }
         nodesByOffset = new int[nodeCount - 1];
         for (int i = 1; i < nodeCount; i++) {
             nodesByOffset[i - 1] = i;
         }
-        
-        // Simple insertion sort since mostly ordered by start offset
-        for (int i = 1; i < nodesByOffset.length; i++) {
+        if (nodesByOffset.length > 1) {
+            sortNodesByOffsetIterative(0, nodesByOffset.length - 1);
+        }
+    }
+
+    private void sortNodesByOffsetIterative(int initialLow, int initialHigh) {
+        int[] stack = new int[128];
+        int top = 0;
+        stack[top++] = initialLow;
+        stack[top++] = initialHigh;
+
+        while (top > 0) {
+            int high = stack[--top];
+            int low = stack[--top];
+
+            while (low < high) {
+                int len = high - low + 1;
+                if (len <= 16) {
+                    insertionSortNodesByOffset(low, high);
+                    break;
+                }
+
+                int mid = (low + high) >>> 1;
+                medianOfThree(low, mid, high);
+
+                int pivotId = nodesByOffset[mid];
+                int pivotStart = nodeStart[pivotId];
+
+                int lt = low;
+                int gt = high;
+                int i = low;
+
+                while (i <= gt) {
+                    int currId = nodesByOffset[i];
+                    int currStart = nodeStart[currId];
+                    if (currStart < pivotStart) {
+                        int temp = nodesByOffset[lt];
+                        nodesByOffset[lt] = nodesByOffset[i];
+                        nodesByOffset[i] = temp;
+                        lt++;
+                        i++;
+                    } else if (currStart > pivotStart) {
+                        int temp = nodesByOffset[i];
+                        nodesByOffset[i] = nodesByOffset[gt];
+                        nodesByOffset[gt] = temp;
+                        gt--;
+                    } else {
+                        i++;
+                    }
+                }
+
+                int leftLen = lt - low;
+                int rightLen = high - gt;
+
+                if (top + 2 >= stack.length) {
+                    stack = Arrays.copyOf(stack, stack.length * 2);
+                }
+
+                if (leftLen > rightLen) {
+                    if (leftLen > 1) {
+                        stack[top++] = low;
+                        stack[top++] = lt - 1;
+                    }
+                    low = gt + 1;
+                } else {
+                    if (rightLen > 1) {
+                        stack[top++] = gt + 1;
+                        stack[top++] = high;
+                    }
+                    high = lt - 1;
+                }
+            }
+        }
+    }
+
+    private void medianOfThree(int a, int b, int c) {
+        if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
+            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+        }
+        if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
+            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
+                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+            }
+        }
+    }
+
+    private void insertionSortNodesByOffset(int low, int high) {
+        for (int i = low + 1; i <= high; i++) {
             int key = nodesByOffset[i];
+            int keyStart = nodeStart[key];
             int j = i - 1;
-            while (j >= 0 && nodeStart[nodesByOffset[j]] > nodeStart[key]) {
+            while (j >= low && nodeStart[nodesByOffset[j]] > keyStart) {
                 nodesByOffset[j + 1] = nodesByOffset[j];
                 j--;
             }
@@ -133,16 +233,7 @@ public class JsonSyntaxTree {
             int node = nodesByOffset[mid];
             
             if (offset >= nodeStart[node] && offset <= nodeEnd[node]) {
-                bestMatch = node;
-                // Narrow down to deepest child
-                int child = nodeChild[node];
-                while (child != -1) {
-                    if (offset >= nodeStart[child] && offset <= nodeEnd[child]) {
-                        return getDeepestNode(child, offset);
-                    }
-                    child = nodeSibling[child];
-                }
-                return bestMatch;
+                return getDeepestNode(node, offset);
             } else if (nodeStart[node] > offset) {
                 high = mid - 1;
             } else {
@@ -181,16 +272,26 @@ public class JsonSyntaxTree {
     }
 
     private int getDeepestNode(int node, int offset) {
-        int best = node;
         if (node <= 0 || node >= nodeCount) return 0;
-        int child = nodeChild[node];
-        int visited = 0;
-        while (child > 0 && child < nodeCount && ++visited <= nodeCount) {
-            if (offset >= nodeStart[child] && offset <= nodeEnd[child]) {
-                return getDeepestNode(child, offset);
+        int current = node;
+        int depthLimit = 0;
+        while (current > 0 && current < nodeCount && ++depthLimit <= nodeCount) {
+            int child = nodeChild[current];
+            int nextChild = 0;
+            int visited = 0;
+            while (child > 0 && child < nodeCount && ++visited <= nodeCount) {
+                if (offset >= nodeStart[child] && offset <= nodeEnd[child]) {
+                    nextChild = child;
+                    break;
+                }
+                child = nodeSibling[child];
             }
-            child = nodeSibling[child];
+            if (nextChild > 0) {
+                current = nextChild;
+            } else {
+                break;
+            }
         }
-        return best;
+        return current;
     }
 }

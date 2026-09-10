@@ -34,7 +34,7 @@ public class TsLinter {
     private static final Pattern PAT_REDUNDANT_TYPE = Pattern.compile(
             "\\b(?:const|let)\\s+(\\w+)\\s*:\\s*(string|number|boolean)\\s*=\\s*(['\"`].*?['\"`]|\\d+\\.?\\d*|true|false)");
     private static final Pattern PAT_NONNULL_COUNT = Pattern.compile(
-            "\\b(?!(?:return|throw|case|delete|void|typeof|instanceof|in|await|yield)\\b)(\\w+)\\s*!(?!=)");
+            "\\b(?!(?:return|throw|case|delete|void|typeof|instanceof|in|await|yield)\\b)(\\w+)[ \\t]*!(?!=)");
     private static final Pattern PAT_UNION_UNDEFINED = Pattern.compile(
             "(\\w+)\\s*:\\s*([\\w<>]+)\\s*\\|\\s*undefined");
     private static final Pattern PAT_READONLY_ARRAY = Pattern.compile(
@@ -56,9 +56,8 @@ public class TsLinter {
     public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.trim().isEmpty()) return Collections.emptyList();
 
-        List<Problem> problems = new ArrayList<>(JsLinter.analyze(file, text, index));
-
         TokenStream mask = JsLexer.tokenize(text);
+        List<Problem> problems = new ArrayList<>(JsLinter.analyze(file, text, mask, index));
         String[] lines = LinterUtils.splitLines(text);
 
         checkTypeMismatch(file, text, mask, problems);
@@ -78,6 +77,15 @@ public class TsLinter {
         checkInlineObjectType(file, text, mask, problems);
 
         return problems;
+    }
+
+    private static boolean isRangeMasked(TokenStream mask, int start, int end) {
+        if (mask == null) return false;
+        int clampedEnd = Math.min(end, mask.length);
+        for (int k = Math.max(0, start); k < clampedEnd; k++) {
+            if (mask.isMasked(k)) return true;
+        }
+        return false;
     }
 
     // TS-specific rules
@@ -144,7 +152,7 @@ public class TsLinter {
                         while (p < text.length() && (text.charAt(p) == ' ' || text.charAt(p) == '\t')) p++;
                         if (p < text.length() && text.charAt(p) == '!') {
                             boolean isNotEquals = (p + 1 < text.length() && text.charAt(p + 1) == '=');
-                            if (!isNotEquals) {
+                            if (!isNotEquals && !mask.isMasked(p)) {
                                 int line = LinterUtils.getLine(text, idx);
                                 int col = LinterUtils.getColumn(text, idx);
                                 out.add(new Problem(file, line, col, (p + 1) - idx,
@@ -213,7 +221,7 @@ public class TsLinter {
             for (String param : params) {
                 String p = param.trim();
                 if (p.isEmpty()) continue;
-                boolean isOptional = p.contains("?") || p.contains("= ");
+                boolean isOptional = hasDefaultOrOptional(p);
                 if (!isOptional && lastOptional != null) {
                     int line = LinterUtils.getLine(text, m.start());
                     int col = LinterUtils.getColumn(text, m.start());
@@ -221,10 +229,29 @@ public class TsLinter {
                             "Optional parameter '" + lastOptional + "?' before required parameter '" + p.split(":")[0].trim() + "': required params must come first",
                             Problem.Severity.WARNING));
                 }
-                if (isOptional) lastOptional = p.split("[?:]")[0].trim();
+                if (isOptional) lastOptional = p.split("[?=:]")[0].trim();
                 else lastOptional = null;
             }
         }
+    }
+
+    private static boolean hasDefaultOrOptional(String param) {
+        if (param.contains("?")) return true;
+        int depth = 0;
+        for (int i = 0; i < param.length(); i++) {
+            char c = param.charAt(i);
+            if (c == '<' || c == '(' || c == '[' || c == '{') {
+                depth++;
+            } else if (c == '>' || c == ')' || c == ']' || c == '}') {
+                if (depth > 0) depth--;
+            } else if (c == '=' && depth == 0) {
+                if (i + 1 < param.length() && (param.charAt(i + 1) == '>' || param.charAt(i + 1) == '=')) {
+                    continue;
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<String> splitParameters(String paramList) {
@@ -347,6 +374,10 @@ public class TsLinter {
         while (m.find()) {
             if (mask.isMasked(m.start())) continue;
             String body = m.group(1);
+            // Verify this is a type signature, not an object literal
+            if (body.contains(",") || body.contains(": true") || body.contains(": false") || body.contains(": null")) {
+                continue;
+            }
             // count properties (split by ;)
             int propCount = 0;
             for (String part : Objects.requireNonNull(body).split(";")) {

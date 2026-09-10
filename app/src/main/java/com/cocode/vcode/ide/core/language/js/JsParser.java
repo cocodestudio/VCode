@@ -1185,11 +1185,20 @@ public class JsParser {
                     return i;
 
                 } else if (c == '[') {
-
-                    i = skipBlockFast(source, stream, i, '[', ']');
-
+                    int close = skipBlockFast(source, stream, i, '[', ']');
+                    int inner = skipToken(stream, i);
+                    while (inner < close) {
+                        inner = skipWhitespaceAndComments(stream, inner);
+                        if (inner >= close) break;
+                        byte it = stream.types[inner];
+                        if (it == TokenStream.TK_IDENTIFIER) {
+                            String idName = getWord(source, stream, inner);
+                            tree.addNode(JsSyntaxTree.N_IDENTIFIER, stream.tokenStart[inner], getOffset(stream, source, skipToken(stream, inner)), parent, idName);
+                        }
+                        inner = skipToken(stream, inner);
+                    }
+                    i = close;
                     name = "{computed}";
-
                     continue;
 
                 } else {
@@ -1686,6 +1695,7 @@ public class JsParser {
     private static int parseParams(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
         int i = skipToken(stream, startIdx);
         boolean isRest = false;
+        int lastParamNodeId = -1;
         
         while (i < stream.length) {
             i = skipWhitespaceAndComments(stream, i);
@@ -1723,6 +1733,7 @@ public class JsParser {
                 int pStart = stream.tokenStart[i];
                 i = skipToken(stream, i);
                 int paramNodeId = tree.addNode(JsSyntaxTree.N_PARAM, pStart, pStart + paramName.length(), parent, paramName);
+                lastParamNodeId = paramNodeId;
                 if (isRest) {
                     tree.nodeExtra[paramNodeId] = JsSyntaxTree.FLAG_REST;
                     isRest = false;
@@ -1735,6 +1746,7 @@ public class JsParser {
                 if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && (source.charAt(stream.tokenStart[next]) == ':' || source.charAt(stream.tokenStart[next]) == '?')) {
                     int typeStart = next + 1;
                     if (source.charAt(stream.tokenStart[next]) == '?') {
+                        tree.nodeExtra[paramNodeId] |= JsSyntaxTree.FLAG_DEFAULT;
                         int skipNext = skipWhitespaceAndComments(stream, next + 1);
                         if (skipNext < stream.length && stream.types[skipNext] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[skipNext]) == ':') {
                             typeStart = skipToken(stream, skipNext);
@@ -1751,6 +1763,7 @@ public class JsParser {
                 char close = open == '{' ? '}' : ']';
                 int bNodeStart = stream.tokenStart[i];
                 int declNode = tree.addNode(JsSyntaxTree.N_PARAM, bNodeStart, 0, parent, "{destructure}");
+                lastParamNodeId = declNode;
                 if (isRest) {
                     tree.nodeExtra[declNode] = JsSyntaxTree.FLAG_REST;
                     isRest = false;
@@ -1762,6 +1775,7 @@ public class JsParser {
                 if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && (source.charAt(stream.tokenStart[next]) == ':' || source.charAt(stream.tokenStart[next]) == '?')) {
                     int typeStart = next + 1;
                     if (source.charAt(stream.tokenStart[next]) == '?') {
+                        tree.nodeExtra[declNode] |= JsSyntaxTree.FLAG_DEFAULT;
                         int skipNext = skipWhitespaceAndComments(stream, next + 1);
                         if (skipNext < stream.length && stream.types[skipNext] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[skipNext]) == ':') {
                             typeStart = skipToken(stream, skipNext);
@@ -1779,7 +1793,9 @@ public class JsParser {
                 i = skipToken(stream, i);
 
             } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '=') {
-
+                if (lastParamNodeId > 0 && lastParamNodeId < tree.nodeCount) {
+                    tree.nodeExtra[lastParamNodeId] |= JsSyntaxTree.FLAG_DEFAULT;
+                }
                 i = skipToken(stream, i);
 
                 int depth = 0;
@@ -2762,7 +2778,9 @@ public class JsParser {
 
 
                         if (isDefaultValue) {
-
+                            if (lastParam > 0 && lastParam < tree.nodeCount) {
+                                tree.nodeExtra[lastParam] |= JsSyntaxTree.FLAG_DEFAULT;
+                            }
                             tree.nodeSibling[lastParam] = next;
 
                             tree.nodeParent[curr] = lastParam;
@@ -2772,19 +2790,26 @@ public class JsParser {
                             tree.nodeSibling[curr] = 0;
 
                         } else {
-
                             if (tree.nodeType[curr] == JsSyntaxTree.N_IDENTIFIER) {
-
                                 tree.nodeType[curr] = JsSyntaxTree.N_PARAM;
-
                             } else if (tree.nodeType[curr] == JsSyntaxTree.N_STATEMENT) {
-
                                 convertObjectLiteralToParams(tree, curr);
+                            }
 
+                            int arrowStart = stream.tokenStart[i];
+                            int scanEnd = (next > 0 && next < tree.nodeCount) ? tree.nodeStart[next] : arrowStart;
+                            scanEnd = Math.min(scanEnd, source.length());
+                            for (int p = tree.nodeEnd[curr]; p < scanEnd; p++) {
+                                char c = source.charAt(p);
+                                if (c == ',') break;
+                                if (c == '=') {
+                                    if (p + 1 < source.length() && source.charAt(p + 1) == '>') continue;
+                                    tree.nodeExtra[curr] |= JsSyntaxTree.FLAG_DEFAULT;
+                                    break;
+                                }
                             }
 
                             lastParam = curr;
-
                         }
 
                         curr = next;

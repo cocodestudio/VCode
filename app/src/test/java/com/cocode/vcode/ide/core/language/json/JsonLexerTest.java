@@ -86,4 +86,20 @@ public class JsonLexerTest {
         String expected = "{:{|ERR:xyz|,:,|}:}";
         assertEquals(expected, getTokens(stream, source));
     }
+
+    @Test
+    public void testValidNumbers() {
+        String source = "[ 0, -0, 123, -456, 0.5, 1.25e+2, 1e-3 ]";
+        JsonTokenStream stream = JsonLexer.tokenize(source);
+        String expected = "[:[|NUM:0|,:,|NUM:-0|,:,|NUM:123|,:,|NUM:-456|,:,|NUM:0.5|,:,|NUM:1.25e+2|,:,|NUM:1e-3|]:]";
+        assertEquals(expected, getTokens(stream, source));
+    }
+
+    @Test
+    public void testMalformedNumbers() {
+        String source = "[ 1.2.3, -., --5, 1e, 1. ]";
+        JsonTokenStream stream = JsonLexer.tokenize(source);
+        String expected = "[:[|ERR:1.2.3|,:,|ERR:-.|,:,|ERR:--5|,:,|ERR:1e|,:,|ERR:1.|]:]";
+        assertEquals(expected, getTokens(stream, source));
+    }
 }

@@ -105,6 +105,12 @@ public class HtmlLexer {
                                     break;
                                 }
                             }
+                            if (match && i + needleLen < regionEnd) {
+                                char nextC = source.charAt(i + needleLen);
+                                if (nextC != '>' && nextC != '/' && !Character.isWhitespace(nextC)) {
+                                    match = false;
+                                }
+                            }
                             if (match) {
                                 types[i] = HtmlTokenStream.TK_TAG_OPEN;
                                 starts[i] = i;

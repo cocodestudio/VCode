@@ -66,4 +66,16 @@ public class HtmlSyntaxTreeTest {
         assertNull(tree.nodeValue[childId]);
         assertNull(tree.nodeName[rootId]);
     }
+
+    @Test
+    public void testResetShrinkAllowsObjectReference() {
+        // Tree capacity > 32768 triggers reset shrink path
+        HtmlSyntaxTree tree = new HtmlSyntaxTree(40000);
+        tree.reset(100);
+
+        // Should be able to store non-String objects (e.g. ParseResult) without ArrayStoreException
+        Object customPayload = new Object();
+        tree.nodeReference[1] = customPayload;
+        assertSame(customPayload, tree.nodeReference[1]);
+    }
 }

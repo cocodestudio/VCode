@@ -75,7 +75,7 @@ public final class CssSyntaxTree {
     }
 
     private void sortNodesByOffsetIterative(int initialLow, int initialHigh) {
-        int[] stack = new int[64];
+        int[] stack = new int[128];
         int top = 0;
         stack[top++] = initialLow;
         stack[top++] = initialHigh;
@@ -122,6 +122,10 @@ public final class CssSyntaxTree {
 
                 int leftLen = lt - low;
                 int rightLen = high - gt;
+
+                if (top + 2 >= stack.length) {
+                    stack = Arrays.copyOf(stack, stack.length * 2);
+                }
 
                 if (leftLen > rightLen) {
                     if (leftLen > 1) {

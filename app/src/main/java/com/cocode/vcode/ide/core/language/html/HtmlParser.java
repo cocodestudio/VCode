@@ -1,6 +1,7 @@
 package com.cocode.vcode.ide.core.language.html;
 
 import java.util.Arrays;
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.language.js.ParseResult;
 
 /**
@@ -10,10 +11,6 @@ import com.cocode.vcode.ide.core.language.js.ParseResult;
  */
 public class HtmlParser {
 
-    private static final String[] VOID_ELEMENTS = {
-        "area", "base", "br", "col", "embed", "hr", "img", "input",
-        "link", "meta", "param", "source", "track", "wbr"
-    };
     /**
      * Parses the given token stream into a flat-array syntax tree.
      * @param source The original HTML source string
@@ -37,7 +34,7 @@ public class HtmlParser {
 
             if (type == HtmlTokenStream.TK_TEXT) {
                 int start = stream.tokenStart[p];
-                int end = getEnd(stream, p);
+                int end = advancePastToken(stream, p);
                 tree.addNode(HtmlSyntaxTree.N_TEXT, start, end, currentParent, null, null);
                 p = end;
                 continue;
@@ -45,7 +42,7 @@ public class HtmlParser {
 
             if (type == HtmlTokenStream.TK_COMMENT) {
                 int start = stream.tokenStart[p];
-                int end = getEnd(stream, p);
+                int end = advancePastToken(stream, p);
                 tree.addNode(HtmlSyntaxTree.N_COMMENT, start, end, currentParent, null, null);
                 p = end;
                 continue;
@@ -53,7 +50,7 @@ public class HtmlParser {
 
             if (type == HtmlTokenStream.TK_DOCTYPE) {
                 int start = stream.tokenStart[p];
-                int end = getEnd(stream, p);
+                int end = advancePastToken(stream, p);
                 tree.addNode(HtmlSyntaxTree.N_DOCTYPE, start, end, currentParent, null, null);
                 p = end;
                 continue;
@@ -61,7 +58,7 @@ public class HtmlParser {
 
             if (type == HtmlTokenStream.TK_TAG_OPEN) {
                 int start = stream.tokenStart[p];
-                int openEnd = getEnd(stream, p);
+                int openEnd = advancePastToken(stream, p);
                 boolean isClosingTag = (openEnd - start >= 2 && source.charAt(start + 1) == '/');
                 
                 p = openEnd;
@@ -70,7 +67,7 @@ public class HtmlParser {
 
                 String tagName = null;
                 if (p < stream.length && stream.types[p] == HtmlTokenStream.TK_TAG_NAME) {
-                    int nameEnd = getEnd(stream, p);
+                    int nameEnd = advancePastToken(stream, p);
                     tagName = source.substring(stream.tokenStart[p], nameEnd).toLowerCase();
                     p = nameEnd;
                 }
@@ -89,7 +86,7 @@ public class HtmlParser {
                         int closeTagEndOffset = p;
                         while (p < stream.length) {
                             if (stream.types[p] == HtmlTokenStream.TK_TAG_CLOSE) {
-                                closeTagEndOffset = getEnd(stream, p);
+                                closeTagEndOffset = advancePastToken(stream, p);
                                 p = closeTagEndOffset;
                                 break;
                             } else if (stream.types[p] == HtmlTokenStream.TK_TAG_OPEN) {
@@ -119,7 +116,7 @@ public class HtmlParser {
                         int closeTagEndOffset = p;
                         while (p < stream.length && stream.types[p] != HtmlTokenStream.TK_TAG_CLOSE && stream.types[p] != HtmlTokenStream.TK_TAG_OPEN) p++;
                         if (p < stream.length && stream.types[p] == HtmlTokenStream.TK_TAG_CLOSE) {
-                            closeTagEndOffset = getEnd(stream, p);
+                            closeTagEndOffset = advancePastToken(stream, p);
                             p = closeTagEndOffset;
                         } else {
                             closeTagEndOffset = p;
@@ -137,7 +134,7 @@ public class HtmlParser {
                     byte t = stream.types[p];
                     if (t == HtmlTokenStream.TK_TAG_CLOSE) {
                         int closeStart = stream.tokenStart[p];
-                        int closeEnd = getEnd(stream, p);
+                        int closeEnd = advancePastToken(stream, p);
                         if (closeEnd - closeStart >= 2 && source.charAt(closeEnd - 2) == '/') {
                             selfClosing = true;
                         }
@@ -146,7 +143,7 @@ public class HtmlParser {
                         break;
                     } else if (t == HtmlTokenStream.TK_ATTR_NAME) {
                         int attrNameStart = stream.tokenStart[p];
-                        int attrNameEnd = getEnd(stream, p);
+                        int attrNameEnd = advancePastToken(stream, p);
                         String attrName = source.substring(attrNameStart, attrNameEnd);
                         p = attrNameEnd;
                         
@@ -158,7 +155,7 @@ public class HtmlParser {
                         
                         if (p < stream.length && stream.types[p] == HtmlTokenStream.TK_ATTR_VALUE) {
                             valStart = stream.tokenStart[p];
-                            int valEnd = getEnd(stream, p);
+                            int valEnd = advancePastToken(stream, p);
                             attrValue = source.substring(valStart, valEnd);
                             attrEnd = valEnd;
                             p = valEnd;
@@ -339,7 +336,7 @@ public class HtmlParser {
         }
     }
 
-    private static int getEnd(HtmlTokenStream stream, int p) {
+    private static int advancePastToken(HtmlTokenStream stream, int p) {
         int start = stream.tokenStart[p];
         byte type = stream.types[p];
         int end = p;
@@ -350,9 +347,6 @@ public class HtmlParser {
     }
 
     private static boolean isVoidElement(String tag) {
-        for (String v : VOID_ELEMENTS) {
-            if (v.equals(tag)) return true;
-        }
-        return false;
+        return tag != null && KnownElements.VOID_ELEMENTS.contains(tag.toLowerCase());
     }
 }

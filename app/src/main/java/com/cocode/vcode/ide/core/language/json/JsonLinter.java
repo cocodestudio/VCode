@@ -54,7 +54,8 @@ public class JsonLinter {
                     if (tree.nodeType[child] == JsonSyntaxTree.N_KEY) {
                         String keyName = tree.nodeName[child];
                         if (keyName != null && !keyName.isEmpty()) {
-                            if (!seenKeys.add(keyName)) {
+                            String normalized = normalizeKey(keyName);
+                            if (!seenKeys.add(normalized)) {
                                 int start = tree.nodeStart[child];
                                 int end = tree.nodeEnd[child];
                                 int len = Math.max(1, end - start);
@@ -71,5 +72,19 @@ public class JsonLinter {
         }
         
         return problems;
+    }
+
+    static String normalizeKey(String key) {
+        if (key == null) return "";
+        key = key.trim();
+        int start = 0;
+        int end = key.length();
+        if (start < end && (key.charAt(start) == '"' || key.charAt(start) == '\'')) {
+            start++;
+        }
+        if (end > start && (key.charAt(end - 1) == '"' || key.charAt(end - 1) == '\'')) {
+            end--;
+        }
+        return key.substring(start, end).trim();
     }
 }

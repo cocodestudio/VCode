@@ -29,10 +29,15 @@ public class JsonParser {
             
             int start = stream.tokenStart[p];
             int end = getTokenEnd(stream, start);
-            p = end; // advance outer pointer
+            p = Math.max(p + 1, end); // advance outer pointer with forward progress guarantee
 
             if (type == JsonTokenStream.TK_ERROR) {
                 tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Unrecognized syntax");
+                if (currentParent != root && tree.nodeType[currentParent] == JsonSyntaxTree.N_KEY && !expectColon) {
+                    tree.nodeEnd[currentParent] = end;
+                    if (depth > 0) currentParent = parentStack[--depth];
+                    else currentParent = root;
+                }
                 lastWasComma = false;
                 continue;
             }
@@ -229,7 +234,7 @@ public class JsonParser {
         while (i < stream.length && stream.tokenStart[i] == start) {
             i++;
         }
-        return i;
+        return Math.max(i, start + 1);
     }
 
     private static void checkMissingQuote(JsonSyntaxTree tree, int start, int end, int parent, String source) {

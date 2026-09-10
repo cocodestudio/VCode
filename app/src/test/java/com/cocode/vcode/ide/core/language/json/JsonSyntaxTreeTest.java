@@ -42,4 +42,34 @@ public class JsonSyntaxTreeTest {
         assertTrue(tree.nodeType.length >= 25);
         assertEquals(arr, tree.nodeParent[tree.nodeCount - 1]);
     }
+
+    @Test
+    public void testDeeplyNestedTreeNoStackOverflow() {
+        int depth = 600;
+        JsonSyntaxTree tree = new JsonSyntaxTree(depth + 10);
+        int currentParent = 0;
+        int innermost = 0;
+
+        for (int i = 0; i < depth; i++) {
+            currentParent = tree.addNode(JsonSyntaxTree.N_OBJECT, i, depth * 2 - i, currentParent, null);
+            innermost = currentParent;
+        }
+
+        tree.buildNodesByOffset();
+        int found = tree.getNodeAtOffset(depth - 1);
+        assertEquals(innermost, found);
+    }
+
+    @Test
+    public void testQuicksortWithIdenticalOffsets() {
+        JsonSyntaxTree tree = new JsonSyntaxTree(100);
+        int parent = tree.addNode(JsonSyntaxTree.N_OBJECT, 0, 100, 0, null);
+        for (int i = 0; i < 50; i++) {
+            tree.addNode(JsonSyntaxTree.N_VALUE_NUMBER, 10, 20, parent, "1");
+        }
+        tree.buildNodesByOffset();
+        assertTrue(tree.nodeCount > 50);
+        int found = tree.getNodeAtOffset(15);
+        assertTrue(found > 0);
+    }
 }

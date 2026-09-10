@@ -197,16 +197,24 @@ public class CssLexer {
     }
 
     private static boolean isSelector(String source, int start, int endOffset) {
+        char firstChar = source.charAt(start);
+        if (firstChar == '.' || firstChar == '#' || firstChar == '&' || firstChar == '@' ||
+            firstChar == '>' || firstChar == '+' || firstChar == '~' || firstChar == '[') {
+            return true;
+        }
+
         boolean inString = false;
         char quote = 0;
         boolean inComment = false;
         boolean hasColon = false;
 
-        for (int i = start; i < endOffset; i++) {
+        int limit = Math.min(endOffset, start + 512);
+
+        for (int i = start; i < limit; i++) {
             char c = source.charAt(i);
 
             if (inComment) {
-                if (c == '*' && i + 1 < endOffset && source.charAt(i + 1) == '/') {
+                if (c == '*' && i + 1 < limit && source.charAt(i + 1) == '/') {
                     inComment = false;
                     i++;
                 }
@@ -222,7 +230,7 @@ public class CssLexer {
                 continue;
             }
 
-            if (c == '/' && i + 1 < endOffset && source.charAt(i + 1) == '*') {
+            if (c == '/' && i + 1 < limit && source.charAt(i + 1) == '*') {
                 inComment = true;
                 i++;
                 continue;
@@ -245,6 +253,6 @@ public class CssLexer {
                 return !hasColon; // if no colon, treat as selector (e.g. at-rule or syntax error)
             }
         }
-        return true; // Default to selector for unclosed statements
+        return !hasColon; // Default to selector only if no colon was found
     }
 }

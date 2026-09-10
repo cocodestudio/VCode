@@ -118,9 +118,10 @@ public class JsSemanticLinter {
                     }
                 }
                 
+                boolean isAssign = false;
+
                 if (nextTok != -1 && mask.types[nextTok] == TokenStream.TK_OPERATOR) {
                     char ch = text.charAt(mask.tokenStart[nextTok]);
-                    boolean isAssign = false;
                     
                     if (ch == '=') {
                         isAssign = true;
@@ -140,29 +141,62 @@ public class JsSemanticLinter {
                             }
                         }
                     }
-                    
-                    if (isAssign) {
-                    
-                        String baseIdentifier = name;
-                        int dotIdx = name.indexOf('.');
-                        if (dotIdx >= 0) {
-                            // assigning to a property of a const variable is allowed!
-                            continue;
+                }
+
+                // Check prefix ++ or -- before this identifier (e.g. ++x or --x)
+                if (!isAssign) {
+                    int startOffset = tree.nodeStart[i];
+                    int pLow = 0, pHigh = mask.types.length - 1;
+                    int endTokenIdx = -1;
+                    while (pLow <= pHigh) {
+                        int mid = (pLow + pHigh) >>> 1;
+                        if (mask.tokenStart[mid] < startOffset) {
+                            endTokenIdx = mid;
+                            pLow = mid + 1;
+                        } else {
+                            pHigh = mid - 1;
                         }
-                        
-                        int scopeId = scopeTree.findScopeAt(tree.nodeStart[i], tree);
-                        int[] resolved = scopeTree.lookupSymbol(baseIdentifier, scopeId, tree.nodeStart[i], tree);
-                        
-                        if (resolved != null && resolved[2] == JsSyntaxTree.N_VAR_DECL) {
-                            int declNodeId = resolved[1];
-                            
-                            if (tree.nodeExtra[declNodeId] == JsSyntaxTree.FLAG_CONST) {
-                                int line = LinterUtils.getLine(text, tree.nodeStart[i]);
-                                int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
-                                problems.add(new Problem(file, line, col, baseIdentifier.length(),
-                                        "Cannot reassign 'const' variable '" + baseIdentifier + "'",
-                                        Problem.Severity.ERROR));
+                    }
+                    int prevTok = -1;
+                    for (int t = endTokenIdx; t >= 0; t--) {
+                        if (mask.types[t] != TokenStream.TK_WHITESPACE && mask.types[t] != TokenStream.TK_COMMENT) {
+                            prevTok = t;
+                            break;
+                        }
+                    }
+                    if (prevTok >= 1 && mask.types[prevTok] == TokenStream.TK_OPERATOR) {
+                        int prevPrevTok = prevTok - 1;
+                        if (mask.tokenStart[prevTok] == mask.tokenStart[prevPrevTok] + 1 && mask.types[prevPrevTok] == TokenStream.TK_OPERATOR) {
+                            char c1 = text.charAt(mask.tokenStart[prevPrevTok]);
+                            char c2 = text.charAt(mask.tokenStart[prevTok]);
+                            if ((c1 == '+' && c2 == '+') || (c1 == '-' && c2 == '-')) {
+                                isAssign = true;
                             }
+                        }
+                    }
+                }
+                    
+                if (isAssign) {
+                
+                    String baseIdentifier = name;
+                    int dotIdx = name.indexOf('.');
+                    if (dotIdx >= 0) {
+                        // assigning to a property of a const variable is allowed!
+                        continue;
+                    }
+                    
+                    int scopeId = scopeTree.findScopeAt(tree.nodeStart[i], tree);
+                    int[] resolved = scopeTree.lookupSymbol(baseIdentifier, scopeId, tree.nodeStart[i], tree);
+                    
+                    if (resolved != null && resolved[2] == JsSyntaxTree.N_VAR_DECL) {
+                        int declNodeId = resolved[1];
+                        
+                        if ((tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_CONST || tree.nodeExtra[declNodeId] == JsSyntaxTree.FLAG_CONST) {
+                            int line = LinterUtils.getLine(text, tree.nodeStart[i]);
+                            int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
+                            problems.add(new Problem(file, line, col, baseIdentifier.length(),
+                                    "Cannot reassign 'const' variable '" + baseIdentifier + "'",
+                                    Problem.Severity.ERROR));
                         }
                     }
                 }
@@ -186,6 +220,7 @@ public class JsSemanticLinter {
                 int[] resolved = scopeTree.lookupSymbol(baseIdentifier, scopeId, tree.nodeStart[i], tree);
                 
                 int totalParams = 0;
+                int minParams = 0;
                 boolean isVariadic = false;
                 
                 if (resolved != null) {
@@ -206,8 +241,9 @@ public class JsSemanticLinter {
                         if (ctorInfo == null) {
                             continue; // Unknown external superclass: bypass arity check to prevent false positives
                         }
-                        totalParams = ctorInfo[0];
-                        if (ctorInfo[1] == 1) isVariadic = true;
+                        minParams = ctorInfo[0];
+                        totalParams = ctorInfo[1];
+                        if (ctorInfo[2] == 1) isVariadic = true;
                     } else {
                         int child = (targetNodeId > 0 && targetNodeId < tree.nodeCount) ? tree.nodeChild[targetNodeId] : 0;
                         int childLoop = 0;
@@ -217,6 +253,9 @@ public class JsSemanticLinter {
                                     isVariadic = true;
                                 } else {
                                     totalParams++;
+                                    if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                        minParams++;
+                                    }
                                 }
                             }
                             child = tree.nodeSibling[child];
@@ -243,6 +282,12 @@ public class JsSemanticLinter {
                         
                         String[] declaredParams = detail.trim().isEmpty() ? new String[0] : detail.split(",");
                         totalParams = declaredParams.length;
+                        minParams = 0;
+                        for (String p : declaredParams) {
+                            if (!p.contains("?") && !p.contains("=") && !p.contains("...")) {
+                                minParams++;
+                            }
+                        }
                     } else {
                         continue;
                     }
@@ -260,11 +305,12 @@ public class JsSemanticLinter {
                     child = tree.nodeSibling[child];
                 }
                 
-                if (actualArgs < totalParams) {
+                if (actualArgs < minParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
+                    String expectedStr = (minParams == totalParams) ? String.valueOf(totalParams) : "at least " + minParams;
                     problems.add(new Problem(file, line, col, identifier.length(),
-                            "Too few arguments: '" + identifier + "' expects " + totalParams + " argument(s), but got " + actualArgs,
+                            "Too few arguments: '" + identifier + "' expects " + expectedStr + " argument(s), but got " + actualArgs,
                             Problem.Severity.ERROR));
                 } else if (actualArgs > totalParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
@@ -279,7 +325,7 @@ public class JsSemanticLinter {
 
     private static int[] resolveClassConstructorParams(JsSyntaxTree tree, int classNodeId, ScopeTree scopeTree, int scopeId, ProjectIndex index) {
         if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) {
-            return new int[]{0, 0};
+            return new int[]{0, 0, 0};
         }
         // 1. Look for explicit constructor method in this class
         int child = tree.nodeChild[classNodeId];
@@ -287,6 +333,7 @@ public class JsSemanticLinter {
         while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
             if (tree.nodeType[child] == JsSyntaxTree.N_METHOD && "constructor".equals(tree.nodeName[child])) {
                 int total = 0;
+                int min = 0;
                 boolean variadic = false;
                 int pChild = tree.nodeChild[child];
                 int pGuard = 0;
@@ -296,11 +343,14 @@ public class JsSemanticLinter {
                             variadic = true;
                         } else {
                             total++;
+                            if ((tree.nodeExtra[pChild] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                min++;
+                            }
                         }
                     }
                     pChild = tree.nodeSibling[pChild];
                 }
-                return new int[]{total, variadic ? 1 : 0};
+                return new int[]{min, total, variadic ? 1 : 0};
             }
             child = tree.nodeSibling[child];
         }
@@ -329,11 +379,17 @@ public class JsSemanticLinter {
             if (builtinSuper != null && builtinSuper.parameters != null) {
                 boolean variadic = false;
                 int total = 0;
+                int min = 0;
                 for (String p : builtinSuper.parameters) {
                     if (p.contains("...")) variadic = true;
-                    else total++;
+                    else {
+                        total++;
+                        if (!p.contains("?") && !p.contains("=")) {
+                            min++;
+                        }
+                    }
                 }
-                return new int[]{total, variadic ? 1 : 0};
+                return new int[]{min, total, variadic ? 1 : 0};
             }
 
             // 2c. Check cross-file project symbols via index
@@ -348,9 +404,15 @@ public class JsSemanticLinter {
                                 String detail = s.detail.trim();
                                 boolean variadic = detail.contains("...");
                                 String[] parts = detail.isEmpty() ? new String[0] : detail.split(",");
-                                return new int[]{parts.length, variadic ? 1 : 0};
+                                int min = 0;
+                                for (String p : parts) {
+                                    if (!p.contains("?") && !p.contains("=") && !p.contains("...")) {
+                                        min++;
+                                    }
+                                }
+                                return new int[]{min, parts.length, variadic ? 1 : 0};
                             }
-                            return new int[]{0, 0};
+                            return new int[]{0, 0, 0};
                         }
                     }
                 }
@@ -362,7 +424,7 @@ public class JsSemanticLinter {
         }
 
         // 3. No explicit constructor and no superclass -> default ES6 constructor takes 0 arguments
-        return new int[]{0, 0};
+        return new int[]{0, 0, 0};
     }
     
     private static void checkUndefined(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
@@ -521,8 +583,7 @@ public class JsSemanticLinter {
             // checkConsole
             if (type == JsSyntaxTree.N_MEMBER_EXPR || type == JsSyntaxTree.N_CALL_EXPR) {
                 if ("console.log".equals(tree.nodeName[i]) || "console.error".equals(tree.nodeName[i]) || 
-                    "console.warn".equals(tree.nodeName[i]) || "console.info".equals(tree.nodeName[i]) ||
-                    "console".equals(tree.nodeName[i])) {
+                    "console.warn".equals(tree.nodeName[i]) || "console.info".equals(tree.nodeName[i])) {
                     
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);

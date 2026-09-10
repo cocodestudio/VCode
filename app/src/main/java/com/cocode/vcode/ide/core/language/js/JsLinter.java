@@ -20,10 +20,16 @@ public class JsLinter {
     }
 
     public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+        return analyze(file, text, null, index);
+    }
+
+    public static List<Problem> analyze(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
 
         List<Problem> problems = new ArrayList<>();
-        TokenStream mask = JsLexer.tokenize(text);
+        if (mask == null) {
+            mask = JsLexer.tokenize(text);
+        }
         String[] lines = LinterUtils.splitLines(text);
 
         JsSyntaxTree tree;

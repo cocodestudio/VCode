@@ -6,6 +6,7 @@ import org.junit.Test;
 import java.io.File;
 import java.util.List;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class CssLinterTest {
@@ -160,5 +161,56 @@ public class CssLinterTest {
             }
         }
         assertTrue("Should report unused CSS variable info", foundUnused);
+    }
+
+    @Test
+    public void testSpecificityCommaSeparated() {
+        // Each group <= 3 tokens -> should not be flagged
+        String css = ".a .b, .c .d, .e .f { color: red; }";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        boolean specificWarn = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Overly specific selector")) specificWarn = true;
+        }
+        assertFalse("Comma-separated groups with <=3 tokens should not be overly specific", specificWarn);
+
+        // One group with 4 tokens -> should be flagged
+        String cssOver = ".a .b, .c .d .e .f { color: red; }";
+        List<Problem> problemsOver = CssLinter.analyze(mockFile, cssOver);
+        boolean specificWarnOver = false;
+        for (Problem p : problemsOver) {
+            if (p.getMessage().contains("Overly specific selector")) specificWarnOver = true;
+        }
+        assertTrue("Group with 4 tokens should be flagged as overly specific", specificWarnOver);
+    }
+
+    @Test
+    public void testNestedVarFallback() {
+        String cssWithFallback = "body { color: var(--main, var(--fallback, red)); }";
+        List<Problem> problems = CssLinter.analyze(mockFile, cssWithFallback);
+        boolean varWarn = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("without a fallback")) varWarn = true;
+        }
+        assertFalse("Nested var() with fallback should not warn", varWarn);
+
+        String cssNoFallback = "body { color: var(--main); }";
+        List<Problem> problems2 = CssLinter.analyze(mockFile, cssNoFallback);
+        boolean varWarn2 = false;
+        for (Problem p : problems2) {
+            if (p.getMessage().contains("without a fallback")) varWarn2 = true;
+        }
+        assertTrue("var() without fallback should warn", varWarn2);
+    }
+
+    @Test
+    public void testIdSelectorInsideKeyframesNotWarned() {
+        String css = "@keyframes slide { #frame { opacity: 1; } }";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        boolean idWarn = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Avoid using ID selectors")) idWarn = true;
+        }
+        assertFalse("ID selector inside @keyframes should not warn", idWarn);
     }
 }

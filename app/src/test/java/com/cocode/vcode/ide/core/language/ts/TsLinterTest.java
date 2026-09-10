@@ -33,4 +33,18 @@ public class TsLinterTest {
 
         assertTrue("Should detect type mismatch in TS", foundMismatch);
     }
+
+    @Test
+    public void testOptionalBeforeRequiredWithDefaultParam() {
+        String ts = "function test(x = 'default', y: number) {}";
+        List<Problem> problems = TsLinter.analyze(mockFile, ts);
+        boolean foundWarning = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("required params must come first")) {
+                foundWarning = true;
+                break;
+            }
+        }
+        assertTrue("Default parameter x='default' before y must trigger optional before required warning", foundWarning);
+    }
 }

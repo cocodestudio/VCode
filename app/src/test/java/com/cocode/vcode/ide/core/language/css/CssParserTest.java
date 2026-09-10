@@ -119,4 +119,22 @@ public class CssParserTest {
         int prop = tree.nodeChild[goodDecl];
         assertEquals("margin", tree.nodeName[prop]);
     }
+
+    @Test
+    public void testNativeNestingParsing() {
+        String source = ".parent { color: red; .child { color: blue; } }";
+        CssTokenStream stream = CssLexer.tokenize(source);
+        CssSyntaxTree tree = CssParser.parse(stream, source);
+        
+        int parentRule = 1;
+        assertEquals(CssSyntaxTree.N_RULE, tree.nodeType[parentRule]);
+        int childNode = tree.nodeChild[parentRule]; // selector .parent
+        assertEquals(".parent", tree.nodeName[childNode]);
+        int declNode = tree.nodeSibling[childNode]; // color: red
+        assertEquals(CssSyntaxTree.N_DECLARATION, tree.nodeType[declNode]);
+        int nestedRuleNode = tree.nodeSibling[declNode]; // .child
+        assertEquals(CssSyntaxTree.N_RULE, tree.nodeType[nestedRuleNode]);
+        int nestedSelector = tree.nodeChild[nestedRuleNode];
+        assertEquals(".child", tree.nodeName[nestedSelector]);
+    }
 }
