@@ -2030,10 +2030,11 @@ public class CodeEditText extends View {
         int flatCursor = content.flatOffset(cursor);
         String formattedSnippet = getFormattedSnippet(snippetTemplate, flatCursor, currentText);
 
-        int pipeIndex = formattedSnippet.indexOf('|');
+        boolean isMarkdownTable = formattedSnippet.contains("| ---") || formattedSnippet.contains("|---");
+        int pipeIndex = isMarkdownTable ? -1 : formattedSnippet.indexOf('|');
         if (pipeIndex != -1) {
             formattedSnippet = formattedSnippet.substring(0, pipeIndex)
-                    + formattedSnippet.substring(pipeIndex + 1);
+                    + formattedSnippet.substring(pipeIndex + 1).replace("|", "");
         }
 
         isApplyingHighlight = true;
@@ -2042,6 +2043,9 @@ public class CodeEditText extends View {
         content.insert(cursor.line, cursor.column, formattedSnippet);
         if (pipeIndex != -1) {
             cursor = content.positionAt(flatCursor + pipeIndex);
+        } else if (isMarkdownTable) {
+            int firstCell = formattedSnippet.indexOf("| ");
+            cursor = content.positionAt(flatCursor + (firstCell != -1 ? firstCell + 2 : 0));
         } else {
             cursor = content.positionAt(flatCursor + formattedSnippet.length());
         }
@@ -2343,20 +2347,43 @@ public class CodeEditText extends View {
                 if (c == ' ' || c == '\t') baseIndent.append(c);
                 else break;
             }
+            String rawInsertText = insertText;
             if (insertText.contains("\n")) {
                 insertText = insertText.replace("\n", "\n" + baseIndent);
             }
 
-            // Handle pipe cursor marker
-            int pipeIdx = insertText.indexOf('|');
+            // Check if this is a Markdown table snippet
+            boolean isMarkdownTable = insertText.contains("| ---") || insertText.contains("|---");
+
+            // Handle cursor marker or offset
+            int pipeIdx = isMarkdownTable ? -1 : insertText.indexOf('|');
             String cleanInsert;
             int finalCursorFlat;
             if (pipeIdx >= 0) {
-                cleanInsert = insertText.substring(0, pipeIdx) + insertText.substring(pipeIdx + 1);
+                // Strip the cursor pipe and any subsequent marker pipes
+                cleanInsert = insertText.substring(0, pipeIdx)
+                        + insertText.substring(pipeIdx + 1).replace("|", "");
                 finalCursorFlat = wordStart + pipeIdx;
+            } else if (isMarkdownTable) {
+                cleanInsert = insertText;
+                int firstCell = insertText.indexOf("| ");
+                finalCursorFlat = wordStart + (firstCell != -1 ? firstCell + 2 : 0);
+            } else if (item.getCursorOffset() > 0) {
+                cleanInsert = insertText;
+                // Count newlines before cursorOffset in rawInsertText to adjust for baseIndent
+                int targetOffset = Math.min(rawInsertText.length(), item.getCursorOffset());
+                int newlinesBefore = 0;
+                for (int i = 0; i < targetOffset; i++) {
+                    if (rawInsertText.charAt(i) == '\n') newlinesBefore++;
+                }
+                int adjustedOffset = item.getCursorOffset() + (newlinesBefore * baseIndent.length());
+                finalCursorFlat = wordStart + Math.min(cleanInsert.length(), adjustedOffset);
+            } else if (item.getCursorOffset() < 0) {
+                cleanInsert = insertText;
+                finalCursorFlat = wordStart + Math.max(0, cleanInsert.length() + item.getCursorOffset());
             } else {
                 cleanInsert = insertText;
-                finalCursorFlat = wordStart + cleanInsert.length() + item.getCursorOffset();
+                finalCursorFlat = wordStart + cleanInsert.length();
             }
 
             // Deduplicate trailing bracket/quote
@@ -2366,12 +2393,11 @@ public class CodeEditText extends View {
                 char nextInDoc = (cursor.column < content.lineLength(cursor.line))
                         ? content.charAt(cursor.line, cursor.column)
                         : '\n';
-                if (item.getCursorOffset() == 0 && pipeIdx < 0
-                        && (lastInserted == ')' || lastInserted == ']' || lastInserted == '}'
+                if ((lastInserted == ')' || lastInserted == ']' || lastInserted == '}'
                         || lastInserted == '"' || lastInserted == '\'')
                         && lastInserted == nextInDoc) {
                     cleanInsert = cleanInsert.substring(0, cleanInsert.length() - 1);
-                    finalCursorFlat = wordStart + cleanInsert.length();
+                    finalCursorFlat = Math.min(finalCursorFlat, wordStart + cleanInsert.length());
                 }
             }
         ContentPosition wordStartPos = content.positionAt(wordStart);

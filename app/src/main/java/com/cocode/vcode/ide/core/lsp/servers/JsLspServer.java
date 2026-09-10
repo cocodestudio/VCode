@@ -139,14 +139,23 @@ public final class JsLspServer implements LspServer {
         List<CompletionItem> suggestions = autoCompleteEngine.getSuggestions(doc.text, offset);
         if (suggestions == null) return Collections.emptyList();
 
+        return convertCompletions(suggestions);
+    }
+
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> suggestions) {
+        if (suggestions == null || suggestions.isEmpty()) return Collections.emptyList();
         List<LspCompletionItem> result = new ArrayList<>(suggestions.size());
         for (CompletionItem item : suggestions) {
             String insert = item.getEffectiveInsertText();
             int curOffset = item.getCursorOffset();
-            if (curOffset < 0) {
-                int pipeIdx = insert.length() + curOffset;
-                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+            if (insert != null && insert.indexOf('|') < 0) {
+                if (curOffset < 0) {
+                    int pipeIdx = insert.length() + curOffset;
+                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
+                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+                    }
+                } else if (curOffset > 0 && curOffset <= insert.length()) {
+                    insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
                 }
             }
             result.add(new LspCompletionItem(

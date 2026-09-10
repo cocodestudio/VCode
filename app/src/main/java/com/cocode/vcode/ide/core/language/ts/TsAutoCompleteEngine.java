@@ -51,7 +51,8 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
         String lower = word.toLowerCase();
         for (String kw : TS_KEYWORDS) {
             if (kw.startsWith(lower)) {
-                CompletionItem item = new CompletionItem(kw, kw, "TypeScript", CompletionItem.Type.KEYWORD, 100);
+                CompletionItem item = new CompletionItem(kw, kw, "TypeScript", CompletionItem.Type.KEYWORD, 0);
+                item.setSortScore(100);
                 item.setReplaceLength(word.length());
                 tsItems.add(item);
             }

@@ -74,14 +74,16 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             if (colorFuncs != null) {
                 for (int i = 0; i < colorFuncs.length(); i++) {
                     String f = colorFuncs.optString(i);
-                    colorItems.add(new CompletionItem(f, f, "Color function", CompletionItem.Type.CSS_VALUE, 0));
+                    String label = f.replace("|", "");
+                    colorItems.add(new CompletionItem(label, f, "Color function", CompletionItem.Type.CSS_VALUE, 0));
                 }
             }
             JSONArray globalFuncs = obj.optJSONArray("global_functions");
             if (globalFuncs != null) {
                 for (int i = 0; i < globalFuncs.length(); i++) {
                     String f = globalFuncs.optString(i);
-                    globalValueItems.add(new CompletionItem(f, f, "Function", CompletionItem.Type.CSS_VALUE, 0));
+                    String label = f.replace("|", "");
+                    globalValueItems.add(new CompletionItem(label, f, "Function", CompletionItem.Type.CSS_VALUE, 0));
                 }
             }
         } catch (Exception e) { /* Non-critical */ }

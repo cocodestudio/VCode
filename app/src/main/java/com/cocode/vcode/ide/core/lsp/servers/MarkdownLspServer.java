@@ -73,17 +73,23 @@ public final class MarkdownLspServer implements LspServer {
         markdownEngine.setCurrentFile(file);
 
         List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = markdownEngine.getSuggestions(doc.text, flatOffset);
+        return convertCompletions(legacy);
+    }
+
+    public static List<LspCompletionItem> convertCompletions(List<com.cocode.vcode.ide.core.model.CompletionItem> legacy) {
         List<LspCompletionItem> result = new ArrayList<>();
-        
-        // Convert legacy items
         if (legacy != null) {
             for (com.cocode.vcode.ide.core.model.CompletionItem ci : legacy) {
                 String insert = ci.getEffectiveInsertText();
                 int curOffset = ci.getCursorOffset();
-                if (curOffset < 0) {
-                    int pipeIdx = insert.length() + curOffset;
-                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+                if (insert != null && insert.indexOf('|') < 0) {
+                    if (curOffset < 0) {
+                        int pipeIdx = insert.length() + curOffset;
+                        if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
+                            insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+                        }
+                    } else if (curOffset > 0 && curOffset <= insert.length()) {
+                        insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
                     }
                 }
                 
@@ -108,7 +114,6 @@ public final class MarkdownLspServer implements LspServer {
                 ));
             }
         }
-        
         return result;
     }
 

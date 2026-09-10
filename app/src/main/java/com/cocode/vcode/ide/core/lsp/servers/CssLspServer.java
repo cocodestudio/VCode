@@ -61,16 +61,20 @@ public final class CssLspServer implements LspServer {
 
 
 
-    private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
         if (legacy == null || legacy.isEmpty()) return Collections.emptyList();
         List<LspCompletionItem> result = new ArrayList<>(legacy.size());
         for (CompletionItem ci : legacy) {
             String insert = ci.getEffectiveInsertText();
             int curOffset = ci.getCursorOffset();
-            if (curOffset < 0) {
-                int pipeIdx = insert.length() + curOffset;
-                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+            if (insert != null && insert.indexOf('|') < 0) {
+                if (curOffset < 0) {
+                    int pipeIdx = insert.length() + curOffset;
+                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
+                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
+                    }
+                } else if (curOffset > 0 && curOffset <= insert.length()) {
+                    insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
                 }
             }
             int kind = mapKind(ci.getType());

@@ -357,13 +357,18 @@ public class EmmetParser {
         }
 
         String result = sb.toString();
-        // If no cursor marker exists, place it inside the first empty tag
+        // If no cursor marker exists, place it inside the first empty tag or empty attribute
         if (!result.contains("|")) {
             int firstClose = result.indexOf("></");
             if (firstClose != -1) {
                 result = result.substring(0, firstClose + 1) + "|" + result.substring(firstClose + 1);
             } else {
-                result = result + "|";
+                int firstEmptyAttr = result.indexOf("=\"\"");
+                if (firstEmptyAttr != -1) {
+                    result = result.substring(0, firstEmptyAttr + 2) + "|" + result.substring(firstEmptyAttr + 2);
+                } else {
+                    result = result + "|";
+                }
             }
         }
         return result;
