@@ -1,6 +1,9 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
+import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
+import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
@@ -27,11 +30,11 @@ public final class MarkdownLspServer implements LspServer {
 
     private static final Pattern LINK_PATTERN = Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
 
-    private final com.cocode.vcode.ide.core.language.markdown.MarkdownAutoCompleteEngine markdownEngine;
+    private final MarkdownAutoCompleteEngine markdownEngine;
     private volatile boolean ready = false;
 
     public MarkdownLspServer(Context context) {
-        this.markdownEngine = new com.cocode.vcode.ide.core.language.markdown.MarkdownAutoCompleteEngine(context);
+        this.markdownEngine = new MarkdownAutoCompleteEngine(context);
     }
     
     /**
@@ -76,45 +79,8 @@ public final class MarkdownLspServer implements LspServer {
         return convertCompletions(legacy);
     }
 
-    public static List<LspCompletionItem> convertCompletions(List<com.cocode.vcode.ide.core.model.CompletionItem> legacy) {
-        List<LspCompletionItem> result = new ArrayList<>();
-        if (legacy != null) {
-            for (com.cocode.vcode.ide.core.model.CompletionItem ci : legacy) {
-                String insert = ci.getEffectiveInsertText();
-                int curOffset = ci.getCursorOffset();
-                if (insert != null && insert.indexOf('|') < 0) {
-                    if (curOffset < 0) {
-                        int pipeIdx = insert.length() + curOffset;
-                        if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                            insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                        }
-                    } else if (curOffset > 0 && curOffset <= insert.length()) {
-                        insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
-                    }
-                }
-                
-                int kind;
-                if (ci.getType() == com.cocode.vcode.ide.core.model.CompletionItem.Type.FOLDER) {
-                    kind = LspCompletionItem.KIND_FOLDER;
-                } else if (ci.getType() == com.cocode.vcode.ide.core.model.CompletionItem.Type.FILE) {
-                    kind = LspCompletionItem.KIND_FILE;
-                } else if (ci.getType() == com.cocode.vcode.ide.core.model.CompletionItem.Type.SNIPPET) {
-                    kind = LspCompletionItem.KIND_SNIPPET;
-                } else {
-                    kind = LspCompletionItem.KIND_TEXT;
-                }
-                
-                result.add(new LspCompletionItem(
-                        ci.getLabel(),
-                        insert,
-                        kind,
-                        ci.getDetail(),
-                        null,
-                        ci.getReplaceLength()
-                ));
-            }
-        }
-        return result;
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
+        return LspCompletionConverter.convert(legacy);
     }
 
     @Override

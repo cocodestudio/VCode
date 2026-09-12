@@ -1,4 +1,5 @@
-package com.cocode.vcode.ide.core.language.markdown;
+package com.cocode.vcode.ide.core.language.md;
+
 
 import android.content.Context;
 

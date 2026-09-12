@@ -1,4 +1,6 @@
 package com.cocode.vcode.ide.core.language.html;
+ 
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -12,7 +14,7 @@ import java.util.Objects;
 public class HtmlTagParser {
 
     public static boolean isVoidElement(String tagName) {
-        return HtmlTagCache.isVoidElement(tagName);
+        return KnownElements.isVoidElement(tagName);
     }
 
     /**

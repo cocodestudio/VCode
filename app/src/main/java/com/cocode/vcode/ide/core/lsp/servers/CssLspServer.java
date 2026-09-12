@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.css.CssLinter;
+import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
@@ -62,48 +63,7 @@ public final class CssLspServer implements LspServer {
 
 
     public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
-        if (legacy == null || legacy.isEmpty()) return Collections.emptyList();
-        List<LspCompletionItem> result = new ArrayList<>(legacy.size());
-        for (CompletionItem ci : legacy) {
-            String insert = ci.getEffectiveInsertText();
-            int curOffset = ci.getCursorOffset();
-            if (insert != null && insert.indexOf('|') < 0) {
-                if (curOffset < 0) {
-                    int pipeIdx = insert.length() + curOffset;
-                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                    }
-                } else if (curOffset > 0 && curOffset <= insert.length()) {
-                    insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
-                }
-            }
-            int kind = mapKind(ci.getType());
-            result.add(new LspCompletionItem(
-                    ci.getLabel(),
-                    insert,
-                    kind,
-                    ci.getDetail(),
-                    null,
-                    ci.getReplaceLength()
-            ));
-        }
-        return result;
-    }
-
-    private static int mapKind(CompletionItem.Type type) {
-        if (type == null) return LspCompletionItem.KIND_TEXT;
-        switch (type) {
-            case CSS_PROPERTY:
-                return LspCompletionItem.KIND_PROPERTY;
-            case CSS_VALUE:
-                return LspCompletionItem.KIND_VALUE;
-            case SNIPPET:
-                return LspCompletionItem.KIND_SNIPPET;
-            case KEYWORD:
-                return LspCompletionItem.KIND_KEYWORD;
-            default:
-                return LspCompletionItem.KIND_TEXT;
-        }
+        return LspCompletionConverter.convert(legacy);
     }
 
     // -------------------------------------------------------------------------

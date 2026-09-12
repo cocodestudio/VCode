@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsLinter;
+import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -56,27 +57,6 @@ public final class TsLspServer implements LspServer {
 
     private static boolean isWordChar(char c) {
         return Character.isLetterOrDigit(c) || c == '_' || c == '$';
-    }
-
-    private static int mapKind(CompletionItem.Type type) {
-        if (type == null) return LspCompletionItem.KIND_TEXT;
-        switch (type) {
-            case FUNCTION:
-            case BUILTIN:
-                return LspCompletionItem.KIND_FUNCTION;
-            case KEYWORD:
-                return LspCompletionItem.KIND_KEYWORD;
-            case SNIPPET:
-                return LspCompletionItem.KIND_SNIPPET;
-            case VALUE:
-                return LspCompletionItem.KIND_VALUE;
-            case FILE:
-                return LspCompletionItem.KIND_FILE;
-            case FOLDER:
-                return LspCompletionItem.KIND_FOLDER;
-            default:
-                return LspCompletionItem.KIND_TEXT;
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -139,31 +119,7 @@ public final class TsLspServer implements LspServer {
     }
 
     public static List<LspCompletionItem> convertCompletions(List<CompletionItem> suggestions) {
-        if (suggestions == null || suggestions.isEmpty()) return Collections.emptyList();
-        List<LspCompletionItem> result = new ArrayList<>(suggestions.size());
-        for (CompletionItem item : suggestions) {
-            String insert = item.getEffectiveInsertText();
-            int curOffset = item.getCursorOffset();
-            if (insert != null && insert.indexOf('|') < 0) {
-                if (curOffset < 0) {
-                    int pipeIdx = insert.length() + curOffset;
-                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                    }
-                } else if (curOffset > 0 && curOffset <= insert.length()) {
-                    insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
-                }
-            }
-            result.add(new LspCompletionItem(
-                    item.getLabel(),
-                    insert,
-                    mapKind(item.getType()),
-                    item.getDetail(),
-                    null,
-                    item.getReplaceLength()
-            ));
-        }
-        return result;
+        return LspCompletionConverter.convert(suggestions);
     }
 
     @Override
@@ -173,7 +129,7 @@ public final class TsLspServer implements LspServer {
         }
         try {
             File file = new File(doc.uri);
-            List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+            List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.editor.indent.BracketMatcher.findMismatches(file, doc.text));
             List<Problem> tsProblems = TsLinter.analyze(file, doc.text, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
             if (tsProblems != null) problems.addAll(tsProblems);
             return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);

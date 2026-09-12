@@ -165,4 +165,59 @@ public class CodeEditTextTest {
         String expected = "function test() {\n    ";
         assertEquals(expected, editor.getText().toString());
     }
+
+    @Test
+    public void testCursorPaintStrokeWidthUsesDensity() {
+        float expectedWidth = 2f * editor.getDensity();
+        assertEquals(expectedWidth, editor.getCursorPaint().getStrokeWidth(), 0.001f);
+    }
+
+    @Test
+    public void testSelectWordAtDoesNotSelectDistantWordsOnPunctuation() {
+        editor.setText("body {\n  margin: 0;\n}");
+        // "  margin: 0;" -> col 10 is '0', col 11 is ';', col 12 is after ';'
+        assertFalse("Holding after ';' should not select '0'",
+                editor.selectWordAt(new ContentPosition(1, 12)));
+        assertFalse("Holding on ';' should not select '0'",
+                editor.selectWordAt(new ContentPosition(1, 11)));
+        assertFalse("Holding on '{' should not select word",
+                editor.selectWordAt(new ContentPosition(0, 5)));
+    }
+
+    @Test
+    public void testSelectWordAtBetweenTagsDoesNotSelectTag() {
+        editor.setText("<div></div>");
+        // "<div></div>" -> '<'(0), 'd'(1), 'i'(2), 'v'(3), '>'(4), '<'(5), '/'(6), 'd'(7), 'i'(8), 'v'(9), '>'(10)
+        // Position 5 is between '>' and '<'
+        assertFalse("Holding between tags should not select closing div",
+                editor.selectWordAt(new ContentPosition(0, 5)));
+    }
+
+    @Test
+    public void testSelectWordAtSelectsWordDirectly() {
+        editor.setText("<div></div>");
+        // Opening tag "div" is from col 1 to 4
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 2)));
+        assertEquals(1, editor.getSelectionStart());
+        assertEquals(4, editor.getSelectionEnd());
+
+        // Closing tag "div" is from col 7 to 10
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 8)));
+        assertEquals(7, editor.getSelectionStart());
+        assertEquals(10, editor.getSelectionEnd());
+    }
+
+    @Test
+    public void testSelectWordAtEndOfWordBoundary() {
+        editor.setText("hello world");
+        // Col 5 is space right after 'hello'
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 5)));
+        assertEquals(0, editor.getSelectionStart());
+        assertEquals(5, editor.getSelectionEnd());
+
+        // Col 11 is end of line right after 'world'
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 11)));
+        assertEquals(6, editor.getSelectionStart());
+        assertEquals(11, editor.getSelectionEnd());
+    }
 }

@@ -3,10 +3,13 @@ package com.cocode.vcode.ide.core.diagnostic.util;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
+import com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem;
+import com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -33,18 +36,41 @@ public final class KnownElements {
     public static final Set<String> JS_GLOBALS = new HashSet<>();
     public static final Set<String> ASYNC_APIS = new HashSet<>();
 
-    // HTML tag & void element lookup tables — populated from completions/html_tags.json
+    // HTML tag, void element & inline element lookup tables — populated from completions/html_tags.json
     public static final Set<String> VOID_ELEMENTS = new HashSet<>();
     public static final Set<String> VALID_HTML_TAGS = new HashSet<>();
+    public static final Set<String> INLINE_ELEMENTS = new HashSet<>();
 
     // CSS properties & colors — populated from completions/css_properties.json & css_colors.json
     public static final Set<String> VALID_CSS_PROPERTIES = new HashSet<>();
+    public static final Set<String> CSS_COLOR_PROPERTIES = new HashSet<>();
     public static final Set<String> CSS_NAMED_COLORS = new HashSet<>();
 
     private static volatile boolean isLoaded = false;
     private static final Object lock = new Object();
 
     static {
+        // Fallback bootstrap records for void & block elements so queries never fail
+        Collections.addAll(VOID_ELEMENTS,
+                "area", "base", "br", "col", "embed", "hr", "img", "input",
+                "link", "meta", "param", "source", "track", "wbr");
+
+        Collections.addAll(BLOCK_ELEMENTS,
+                "address", "article", "aside", "blockquote", "details", "dialog", "dd", "div",
+                "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2",
+                "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "li", "main", "nav", "ol",
+                "p", "pre", "section", "summary", "table", "ul");
+
+        Collections.addAll(INLINE_ELEMENTS,
+                "a", "abbr", "acronym", "b", "bdo", "big", "br", "button", "cite", "code", "dfn", "em", "i",
+                "img", "input", "kbd", "label", "map", "object", "output", "q", "s", "samp", "select", "small",
+                "span", "strong", "sub", "sup", "textarea", "time", "tt", "u", "var");
+
+        Collections.addAll(CSS_COLOR_PROPERTIES,
+                "color", "background-color", "border-color", "border-top-color", "border-right-color",
+                "border-bottom-color", "border-left-color", "outline-color", "text-decoration-color", "caret-color",
+                "accent-color", "column-rule-color", "scrollbar-color");
+
         ensureLoaded();
     }
 
@@ -67,7 +93,50 @@ public final class KnownElements {
             loadHtmlTags();
             loadCssProperties();
             loadCssColors();
-            isLoaded = true;
+            if (!VALID_HTML_TAGS.isEmpty() && !VALID_CSS_PROPERTIES.isEmpty()) {
+                isLoaded = true;
+            }
+        }
+    }
+
+    /**
+     * Determines if a tag is a self-closing void element that cannot contain internal children.
+     */
+    public static boolean isVoidElement(String tag) {
+        if (!isLoaded) ensureLoaded();
+        return tag != null && VOID_ELEMENTS.contains(tag.toLowerCase());
+    }
+
+    /**
+     * Determines if a tag behaves as structural block-level markup.
+     */
+    public static boolean isBlockElement(String tag) {
+        if (!isLoaded) ensureLoaded();
+        return tag != null && BLOCK_ELEMENTS.contains(tag.toLowerCase());
+    }
+
+    /**
+     * Determines if a tag behaves as inline markup.
+     */
+    public static boolean isInlineElement(String tag) {
+        if (!isLoaded) ensureLoaded();
+        return tag != null && INLINE_ELEMENTS.contains(tag.toLowerCase());
+    }
+
+    /**
+     * Determines if a CSS property accepts color values.
+     */
+    public static boolean isCssColorProperty(String prop) {
+        if (!isLoaded) ensureLoaded();
+        return prop != null && CSS_COLOR_PROPERTIES.contains(prop.toLowerCase());
+    }
+
+    /**
+     * Drops cached loaded flag for test injection.
+     */
+    public static void resetForTest() {
+        synchronized (lock) {
+            isLoaded = false;
         }
     }
 
@@ -180,38 +249,48 @@ public final class KnownElements {
 
     private static void loadHtmlTags() {
         try {
-            String json = StaticAssetReader.readAsset("completions/html_tags.json");
-            if (json == null || json.isEmpty()) return;
-            JSONArray arr;
-            String trimmed = json.trim();
-            if (trimmed.startsWith("[")) {
-                arr = new JSONArray(trimmed);
-            } else {
-                JSONObject root = new JSONObject(trimmed);
-                arr = root.getJSONArray("tags");
-            }
-            VALID_HTML_TAGS.clear();
-            VOID_ELEMENTS.clear();
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String tag = obj.optString("tag").toLowerCase();
-                if (tag.isEmpty()) continue;
-                VALID_HTML_TAGS.add(tag);
-                if (obj.optBoolean("selfClosing", false)) VOID_ELEMENTS.add(tag);
+            StaticCompletionItem[] items = StaticCompletionLoader.getHtmlTags();
+            if (items != null && items.length > 0) {
+                VALID_HTML_TAGS.clear();
+                VOID_ELEMENTS.clear();
+                INLINE_ELEMENTS.clear();
+                for (StaticCompletionItem item : items) {
+                    if (item.label != null && !item.label.isEmpty()) {
+                        String tag = item.label.toLowerCase();
+                        VALID_HTML_TAGS.add(tag);
+                        if (item.selfClosing) {
+                            VOID_ELEMENTS.add(tag);
+                        }
+                        if (!BLOCK_ELEMENTS.contains(tag) && !isSpecialDocumentElement(tag)) {
+                            INLINE_ELEMENTS.add(tag);
+                        }
+                    }
+                }
             }
         } catch (Exception ignored) {
         }
     }
 
+    private static boolean isSpecialDocumentElement(String tag) {
+        return "html".equals(tag) || "head".equals(tag) || "body".equals(tag)
+                || "style".equals(tag) || "script".equals(tag);
+    }
+
     private static void loadCssProperties() {
         try {
-            String json = StaticAssetReader.readAsset("completions/css_properties.json");
-            if (json == null || json.isEmpty()) return;
-            JSONArray arr = new JSONArray(json);
-            VALID_CSS_PROPERTIES.clear();
-            for (int i = 0; i < arr.length(); i++) {
-                String prop = arr.getJSONObject(i).optString("property").toLowerCase();
-                if (!prop.isEmpty()) VALID_CSS_PROPERTIES.add(prop);
+            StaticCompletionItem[] items = StaticCompletionLoader.getCssProperties();
+            if (items != null && items.length > 0) {
+                VALID_CSS_PROPERTIES.clear();
+                CSS_COLOR_PROPERTIES.clear();
+                for (StaticCompletionItem item : items) {
+                    if (item.label != null && !item.label.isEmpty()) {
+                        String prop = item.label.toLowerCase();
+                        VALID_CSS_PROPERTIES.add(prop);
+                        if (item.acceptsColor) {
+                            CSS_COLOR_PROPERTIES.add(prop);
+                        }
+                    }
+                }
             }
         } catch (Exception ignored) {
         }
@@ -219,15 +298,14 @@ public final class KnownElements {
 
     private static void loadCssColors() {
         try {
-            String json = StaticAssetReader.readAsset("completions/css_colors.json");
-            if (json == null || json.isEmpty()) return;
-            JSONObject obj = new JSONObject(json);
-            JSONArray colors = obj.optJSONArray("colors");
-            if (colors == null) return;
-            CSS_NAMED_COLORS.clear();
-            for (int i = 0; i < colors.length(); i++) {
-                String c = colors.optString(i).toLowerCase();
-                if (!c.isEmpty()) CSS_NAMED_COLORS.add(c);
+            String[] colors = StaticCompletionLoader.getCssColors();
+            if (colors != null && colors.length > 0) {
+                CSS_NAMED_COLORS.clear();
+                for (String c : colors) {
+                    if (c != null && !c.isEmpty()) {
+                        CSS_NAMED_COLORS.add(c.toLowerCase());
+                    }
+                }
             }
         } catch (Exception ignored) {
         }

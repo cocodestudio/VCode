@@ -239,7 +239,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
             ExecutorProvider.getInstance().runOnMain(() -> {
                 binding.progressSearch.setVisibility(View.INVISIBLE);
-                android.widget.Toast.makeText(requireContext(), "Replaced in " + currentResults.size() + " files", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(requireContext(), getString(R.string.vcode_replaced_in_files, currentResults.size()), android.widget.Toast.LENGTH_SHORT).show();
                 performSearch(query);
             });
         });

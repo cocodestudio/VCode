@@ -538,7 +538,7 @@ public final class LspEditorBridge {
             return;
         }
 
-        String triggerChars = ".</:'\"@#!";
+        String triggerChars = ".</:'\"@#!>+^*[]})%";
         boolean isTriggerChar = triggerChars.indexOf(lastChar) >= 0;
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$' || lastChar == '-';
@@ -931,14 +931,10 @@ public final class LspEditorBridge {
             if (li == null || li.label == null) continue;
             String insert = (li.insertText != null && !li.insertText.isEmpty())
                     ? li.insertText : li.label;
-            // Compute the cursor offset inside the insert text if a '|' marker is present.
             // The '|' convention is used by the autocomplete engines to mark cursor position.
+            // Retain '|' in insert text so CodeEditText.insertCompletion can position the caret
+            // accurately even after multi-line base indentation is applied.
             int cursorOffset = 0;
-            int pipeIdx = insert.indexOf('|');
-            if (pipeIdx >= 0) {
-                cursorOffset = -(insert.length() - pipeIdx - 1);
-                insert = insert.replace("|", "");
-            }
             CompletionItem ci = new CompletionItem(
                     li.label, insert, li.detail, mapKindToLegacy(li.kind), cursorOffset);
             ci.setReplaceLength(li.replaceLength);

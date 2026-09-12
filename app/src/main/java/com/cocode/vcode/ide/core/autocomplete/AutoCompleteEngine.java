@@ -126,18 +126,7 @@ public abstract class AutoCompleteEngine {
             // Standard Emmet characters
             if (c == '>') {
                 // Distinguish Emmet child operator '>' from HTML tag closing '>'.
-                // An HTML tag closing '>' is preceded by a tag name (letters/digits)
-                // which is itself preceded by '<' or '</'.
-                // Walk back from start-1 to check: if we find a '<' before any
-                // non-tag-name character, this '>' belongs to an HTML tag — stop.
-                int lookahead = start - 1;
-                while (lookahead >= 0 && (Character.isLetterOrDigit(text.charAt(lookahead))
-                        || text.charAt(lookahead) == '-' || text.charAt(lookahead) == '_'
-                        || text.charAt(lookahead) == '/')) {
-                    lookahead--;
-                }
-                if (lookahead >= 0 && text.charAt(lookahead) == '<') {
-                    // This '>' closes an HTML tag like <p>, </p>, <br/> — stop here.
+                if (isHtmlTagClose(text, start)) {
                     break;
                 }
                 // It's an Emmet child operator — include it.
@@ -151,6 +140,47 @@ public abstract class AutoCompleteEngine {
             }
         }
         return text.substring(start + 1, pos);
+    }
+
+    private static boolean isHtmlTagClose(String text, int gtPos) {
+        if (gtPos <= 0 || gtPos >= text.length()) return false;
+        char prev = text.charAt(gtPos - 1);
+        if (prev == ']' || prev == '}' || prev == ')' || prev == '*' || prev == '+' || prev == '^' || prev == '>') {
+            return false;
+        }
+        int i = gtPos - 1;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i < 0) return false;
+
+        if (text.charAt(i) == '/') i--;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i < 0) return false;
+
+        while (i >= 0) {
+            char ch = text.charAt(i);
+            if (ch == '>') {
+                return false;
+            }
+            if (ch == '<') {
+                return true;
+            }
+            if (ch == '"' || ch == '\'') {
+                char quote = ch;
+                i--;
+                while (i >= 0 && text.charAt(i) != quote) {
+                    if (text.charAt(i) == '\n') return false;
+                    i--;
+                }
+                if (i < 0) return false;
+                i--;
+                continue;
+            }
+            if (ch == '\n') {
+                return false;
+            }
+            i--;
+        }
+        return false;
     }
 
     /**

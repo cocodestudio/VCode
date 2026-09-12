@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Centralized, shared repository for JavaScript and TypeScript keywords,
@@ -20,11 +21,12 @@ public final class JsKeywords {
     private static volatile boolean loaded = false;
 
     public static final Set<String> JS_KEYWORDS = new HashSet<>();
-    public static final Set<String> TS_KEYWORDS = new HashSet<>(Arrays.asList(
-            "type", "interface", "implements", "public", "private", "protected",
-            "readonly", "enum", "declare", "namespace", "module", "any", "number",
-            "boolean", "string", "symbol", "unknown", "never", "as", "is", "keyof",
-            "infer", "abstract", "get", "set", "override", "satisfies", "asserts", "bigint"
+    public static final Set<String> TS_KEYWORDS = new TreeSet<>(Arrays.asList(
+            "abstract", "any", "as", "asserts", "bigint", "boolean", "declare",
+            "enum", "get", "implements", "infer", "interface", "is", "keyof",
+            "module", "namespace", "never", "number", "object", "override",
+            "private", "protected", "public", "readonly", "satisfies", "set",
+            "string", "symbol", "type", "unknown"
     ));
 
     public static final Set<String> JS_BUILTINS = new HashSet<>(Arrays.asList(

@@ -297,7 +297,7 @@ public class GitRemoteFragment extends Fragment {
         try {
             token = credentialStore.getToken(requireContext());
         } catch (Exception e) {
-            Toast.makeText(requireContext(), "Failed to get token: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), getString(R.string.vcode_failed_to_get_token, e.getMessage()), Toast.LENGTH_SHORT).show();
             return;
         }
         if (token == null || token.isEmpty()) return;
@@ -360,7 +360,7 @@ public class GitRemoteFragment extends Fragment {
                     }
                     if (isAdded()) {
                         refreshAccountUIState();
-                        Toast.makeText(requireContext(), "Signed in as @" + username, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(requireContext(), getString(R.string.vcode_signed_in_as, username), Toast.LENGTH_SHORT).show();
                     }
                 });
             } catch (Exception e) {
@@ -383,7 +383,7 @@ public class GitRemoteFragment extends Fragment {
 
         // Ensure authentication is present before attempting a push
         if (!credentialStore.hasCredentials(context)) {
-            Toast.makeText(context, "Connect your GitHub account to " + operation + ".", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, getString(R.string.vcode_connect_github_to_action, operation), Toast.LENGTH_SHORT).show();
             openGitHubLoginSheet();
             return;
         }

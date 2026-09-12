@@ -5,14 +5,10 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.js.JsKeywords;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
 
-import java.util.Set;
-
 /**
  * Syntax highlighter for TypeScript source files.
  */
 public class TsSyntaxHighlighter extends JsSyntaxHighlighter {
-
-    private static final Set<String> TS_KEYWORDS = JsKeywords.TS_KEYWORDS;
 
     public TsSyntaxHighlighter(Context context) {
         super(context);
@@ -50,7 +46,12 @@ public class TsSyntaxHighlighter extends JsSyntaxHighlighter {
             case 5:
                 return (c0 == 'i' && match(cs, start, end, "infer")) || (c0 == 'n' && match(cs, start, end, "never")) || (c0 == 'k' && match(cs, start, end, "keyof"));
             case 6:
-                return (c0 == 'p' && match(cs, start, end, "public")) || (c0 == 'm' && match(cs, start, end, "module")) || (c0 == 'n' && match(cs, start, end, "number")) || (c0 == 's' && (match(cs, start, end, "string") || match(cs, start, end, "symbol"))) || (c0 == 'b' && match(cs, start, end, "bigint"));
+                return (c0 == 'p' && match(cs, start, end, "public"))
+                        || (c0 == 'm' && match(cs, start, end, "module"))
+                        || (c0 == 'n' && match(cs, start, end, "number"))
+                        || (c0 == 'o' && match(cs, start, end, "object"))
+                        || (c0 == 's' && (match(cs, start, end, "string") || match(cs, start, end, "symbol")))
+                        || (c0 == 'b' && match(cs, start, end, "bigint"));
             case 7:
                 return (c0 == 'p' && match(cs, start, end, "private")) || (c0 == 'd' && match(cs, start, end, "declare")) || (c0 == 'b' && match(cs, start, end, "boolean")) || (c0 == 'u' && match(cs, start, end, "unknown")) || (c0 == 'a' && match(cs, start, end, "asserts"));
             case 8:
@@ -60,13 +61,14 @@ public class TsSyntaxHighlighter extends JsSyntaxHighlighter {
             case 10:
                 return match(cs, start, end, "implements");
             default:
-                return false;
+                break;
         }
+        return JsKeywords.isTsKeyword(cs.subSequence(start, end).toString());
     }
 
     @Override
     protected boolean isKeyword(String word) {
         if (word == null) return false;
-        return isKeyword((CharSequence) word, 0, word.length());
+        return super.isKeyword(word) || JsKeywords.isTsKeyword(word);
     }
 }

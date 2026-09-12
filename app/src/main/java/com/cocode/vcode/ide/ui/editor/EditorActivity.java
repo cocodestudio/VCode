@@ -690,9 +690,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 editor.replaceRange(0, editor.length(), result.modifiedHtml);
                                 viewModel.saveAll();
                                 viewModel.refreshFileTree();
-                                android.widget.Toast.makeText(EditorActivity.this, "Extracted to " + filename, android.widget.Toast.LENGTH_SHORT).show();
+                                android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_extracted_to_file, filename), android.widget.Toast.LENGTH_SHORT).show();
                             } catch (java.io.IOException e) {
-                                android.widget.Toast.makeText(EditorActivity.this, "Failed to write file: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+                                android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_failed_to_write_file, e.getMessage()), android.widget.Toast.LENGTH_SHORT).show();
                             }
                         } else {
                             android.widget.Toast.makeText(EditorActivity.this, result.errorMessage, android.widget.Toast.LENGTH_SHORT).show();
@@ -832,7 +832,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         FileType lang = activeFile.getFileType();
         int originalCursor = codeEditText.getSelectionStart();
 
-        java.util.List<com.cocode.vcode.ide.core.model.Problem> bracketProblems = com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(activeFile.getFile(), rawCode);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> bracketProblems = com.cocode.vcode.ide.core.editor.indent.BracketMatcher.findMismatches(activeFile.getFile(), rawCode);
         if (bracketProblems != null && !bracketProblems.isEmpty()) {
             Toast.makeText(this, R.string.vcode_cannot_format_unbalanced_brackets, Toast.LENGTH_SHORT).show();
             return;

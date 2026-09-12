@@ -5,6 +5,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +67,7 @@ public final class StaticCompletionLoader {
     private static volatile StaticCompletionItem[] cssPropertiesCache;
     private static volatile Map<String, StaticCompletionItem> cssPropertyMapCache;
     private static volatile String[] cssColorsCache;
+    private static volatile Set<String> cssColorPropertiesCache;
     private static volatile String[] cssColorFunctionsCache;
     private static volatile String[] cssGlobalFunctionsCache;
     private static volatile StaticCompletionItem[] jsonSnippetsCache;
@@ -116,6 +118,22 @@ public final class StaticCompletionLoader {
         return cssColorsCache;
     }
 
+    public static Set<String> getCssColorProperties() {
+        if (cssColorPropertiesCache == null) {
+            Set<String> colorProps = new HashSet<>();
+            StaticCompletionItem[] props = getCssProperties();
+            if (props != null) {
+                for (StaticCompletionItem item : props) {
+                    if (item != null && item.acceptsColor && item.label != null) {
+                        colorProps.add(item.label.toLowerCase());
+                    }
+                }
+            }
+            cssColorPropertiesCache = Collections.unmodifiableSet(colorProps);
+        }
+        return cssColorPropertiesCache;
+    }
+
     public static String[] getCssColorFunctions() {
         if (cssColorFunctionsCache == null) loadCssColorsFromAssets();
         return cssColorFunctionsCache;
@@ -143,6 +161,7 @@ public final class StaticCompletionLoader {
         cssPropertiesCache = null;
         cssPropertyMapCache = null;
         cssColorsCache = null;
+        cssColorPropertiesCache = null;
         cssColorFunctionsCache = null;
         cssGlobalFunctionsCache = null;
         jsonSnippetsCache = null;
@@ -150,6 +169,7 @@ public final class StaticCompletionLoader {
         HtmlStaticCompletionDispatcher.clearCachesForTest();
         CssStaticCompletionDispatcher.clearCachesForTest();
         JsonStaticCompletionDispatcher.clearCachesForTest();
+        com.cocode.vcode.ide.core.diagnostic.util.KnownElements.resetForTest();
     }
 
     // --- Asset-backed loaders (read from android.content.Context) -----

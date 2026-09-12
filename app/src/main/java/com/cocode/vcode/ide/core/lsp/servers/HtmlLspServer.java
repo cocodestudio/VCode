@@ -5,6 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.language.html.HtmlAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.html.HtmlLinter;
 import com.cocode.vcode.ide.core.language.html.HtmlTagParser;
+import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -74,54 +75,7 @@ public final class HtmlLspServer implements LspServer {
     }
 
     public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacyItems) {
-        if (legacyItems == null || legacyItems.isEmpty()) return Collections.emptyList();
-        List<LspCompletionItem> result = new ArrayList<>(legacyItems.size());
-        for (CompletionItem ci : legacyItems) {
-            String insert = ci.getEffectiveInsertText();
-            int curOffset = ci.getCursorOffset();
-            if (insert != null && insert.indexOf('|') < 0) {
-                if (curOffset < 0) {
-                    int pipeIdx = insert.length() + curOffset;
-                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                    }
-                } else if (curOffset > 0 && curOffset <= insert.length()) {
-                    insert = insert.substring(0, curOffset) + "|" + insert.substring(curOffset);
-                }
-            }
-            int kind = mapKind(ci.getType());
-            result.add(new LspCompletionItem(
-                    ci.getLabel(),
-                    insert,
-                    kind,
-                    ci.getDetail(),
-                    null,
-                    ci.getReplaceLength()
-            ));
-        }
-        return result;
-    }
-
-    private static int mapKind(CompletionItem.Type type) {
-        if (type == null) return LspCompletionItem.KIND_TEXT;
-        switch (type) {
-            case TAG:
-                return LspCompletionItem.KIND_CLASS;
-            case ATTRIBUTE:
-                return LspCompletionItem.KIND_PROPERTY;
-            case VALUE:
-                return LspCompletionItem.KIND_VALUE;
-            case SNIPPET:
-                return LspCompletionItem.KIND_SNIPPET;
-            case KEYWORD:
-                return LspCompletionItem.KIND_KEYWORD;
-            case FILE:
-                return LspCompletionItem.KIND_FILE;
-            case FOLDER:
-                return LspCompletionItem.KIND_FOLDER;
-            default:
-                return LspCompletionItem.KIND_TEXT;
-        }
+        return LspCompletionConverter.convert(legacyItems);
     }
 
     // -------------------------------------------------------------------------
@@ -220,7 +174,7 @@ public final class HtmlLspServer implements LspServer {
 
         try {
             File file = new File(doc.uri);
-            List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(file, doc.text));
+            List<Problem> problems = new ArrayList<>(com.cocode.vcode.ide.core.editor.indent.BracketMatcher.findMismatches(file, doc.text));
             List<Problem> htmlProblems = HtmlLinter.analyze(file, doc.text);
             if (htmlProblems != null) problems.addAll(htmlProblems);
             return com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.deduplicateAndSort(file, problems);

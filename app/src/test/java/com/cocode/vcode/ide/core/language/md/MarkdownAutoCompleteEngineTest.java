@@ -1,6 +1,5 @@
 package com.cocode.vcode.ide.core.language.md;
 
-import com.cocode.vcode.ide.core.language.markdown.MarkdownAutoCompleteEngine;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import org.junit.Test;
 

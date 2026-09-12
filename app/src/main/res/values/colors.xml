@@ -87,4 +87,8 @@
     <color name="vcode_file_log">#34495E</color>
     <color name="vcode_file_bak">#7F8C8D</color>
     <color name="vcode_file_git">#F05032</color>
+    <color name="vcode_status_success">#4CAF50</color>
+    <color name="vcode_status_error">#F44336</color>
+    <color name="vcode_search_match_bg">#55FFD700</color>
+    <color name="vcode_search_active_bg">#AAFF9800</color>
 </resources>

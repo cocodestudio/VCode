@@ -62,4 +62,8 @@
     <color name="vcode_lang_on_js">#1C2030</color>
     <color name="vcode_lang_json">#E5C07B</color>
     <color name="vcode_lang_md">#5BB8FF</color>
+    <color name="vcode_status_success">#4CAF50</color>
+    <color name="vcode_status_error">#F44336</color>
+    <color name="vcode_search_match_bg">#55FFD700</color>
+    <color name="vcode_search_active_bg">#AAFF9800</color>
 </resources>

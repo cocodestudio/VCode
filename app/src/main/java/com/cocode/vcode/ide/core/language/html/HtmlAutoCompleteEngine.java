@@ -398,7 +398,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                         || emmetAbbr.contains("[") || emmetAbbr.contains("]")
                         || emmetAbbr.contains(":")
                         || emmetAbbr.equals("!")
-                        || emmetAbbr.startsWith("lorem");
+                        || emmetAbbr.startsWith("lorem")
+                        || EmmetParser.isHtmlAlias(emmetAbbr);
                 
                 if (isComplex) {
                     CompletionItem emmetItem = new CompletionItem(emmetAbbr, expanded,

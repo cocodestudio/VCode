@@ -45,8 +45,8 @@ import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.json.JsonSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.markdown.MarkdownAutoCompleteEngine;
-import com.cocode.vcode.ide.core.language.markdown.MarkdownSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.md.MarkdownSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.svg.SvgAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
@@ -77,7 +77,7 @@ public class CodeEditText extends View {
 
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
-    private static final String TRIGGER_CHARS = ".</:'\"@#!({&";
+    private static final String TRIGGER_CHARS = ".</:'\"@#!({&>+^*[]})%";
 
     // Selection handle drag states
     private static final int HANDLE_DRAG_NONE = 0;
@@ -280,6 +280,7 @@ public class CodeEditText extends View {
 
     @SuppressLint("ClickableViewAccessibility")
     private void init(Context context) {
+        density = context.getResources().getDisplayMetrics().density;
         Typeface codeFont = FontManager.getInstance().getCodeFont(context);
 
         // Apply theme-specific surface background color
@@ -301,7 +302,7 @@ public class CodeEditText extends View {
 
         cursorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         cursorPaint.setColor(ContextCompat.getColor(context, R.color.vcode_accent_primary));
-        cursorPaint.setStrokeWidth(dpToPx(2, context));
+        cursorPaint.setStrokeWidth(dpToPx(2f));
         cursorPaint.setStyle(Paint.Style.STROKE);
 
         selectionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -330,17 +331,16 @@ public class CodeEditText extends View {
         overScroller = new OverScroller(context);
 
         searchMatchPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        searchMatchPaint.setColor(0x55FFD700);
+        searchMatchPaint.setColor(ContextCompat.getColor(context, R.color.vcode_search_match_bg));
         searchMatchPaint.setStyle(Paint.Style.FILL);
         searchActivePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        searchActivePaint.setColor(0xAAFF9800);
+        searchActivePaint.setColor(ContextCompat.getColor(context, R.color.vcode_search_active_bg));
         searchActivePaint.setStyle(Paint.Style.FILL);
 
         bracketHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         bracketHighlightPaint.setStyle(Paint.Style.STROKE);
         bracketHighlightPaint.setStrokeWidth(3f);
 
-        density = context.getResources().getDisplayMetrics().density;
         handleRadiusPx = dpToPx(5);
         handleThresholdPx = dpToPx(20);
         setTabSize(new AppSettings().tabSize);
@@ -430,7 +430,9 @@ public class CodeEditText extends View {
                     notifySelectionChanged();
                     invalidate();
                 } else {
-                    cursor = pressed;
+                    if (hasSelection() || cursor == null || cursor.line != pressed.line || Math.abs(cursor.column - pressed.column) > 1) {
+                        cursor = pressed;
+                    }
                     selectionAnchor = null;
                     performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
                     showKeyboard();
@@ -2634,7 +2636,15 @@ public class CodeEditText extends View {
     }
 
     private float dpToPx(float dp, Context ctx) {
-        return dp * density;
+        return dpToPx(dp);
+    }
+
+    Paint getCursorPaint() {
+        return cursorPaint;
+    }
+
+    float getDensity() {
+        return density;
     }
 
     // Internal — comment detection
@@ -2725,46 +2735,42 @@ public class CodeEditText extends View {
      * <ul>
      *   <li>Word characters: letter, digit, underscore, dollar sign (same as
      *       {@code android.text.method.WordIterator}).</li>
-     *   <li>If the finger lands in whitespace, the nearest adjacent word is selected.</li>
-     *   <li>If the line is empty, nothing is selected (returns {@code false}).</li>
+     *   <li>If the finger lands on a word character, the enclosing word is selected.</li>
+     *   <li>If the finger lands at the end of a line or whitespace immediately after a word, that word is selected.</li>
+     *   <li>If the line is empty or pos is on punctuation/whitespace not touching a word, returns {@code false}.</li>
      * </ul>
      *
      * @return {@code true} if a non-empty selection was made.
      */
-    private boolean selectWordAt(ContentPosition pos) {
+    boolean selectWordAt(ContentPosition pos) {
+        if (pos == null || pos.line < 0 || pos.line >= content.lineCount()) return false;
         int lineLen = content.lineLength(pos.line);
         if (lineLen == 0) return false;
 
-        // Clamp column to valid range
-        int col = Math.min(pos.column, lineLen - 1);
-
-        int minStart = Math.max(0, col - 100);
-        int maxEnd = Math.min(lineLen, col + 100);
-
-        // If we landed in whitespace, try to shift to the nearest word character
-        if (!isWordChar(content.charAt(pos.line, col))) {
-            int right = col;
-            while (right < maxEnd && !isWordChar(content.charAt(pos.line, right))) right++;
-            int left = col - 1;
-            while (left >= minStart && !isWordChar(content.charAt(pos.line, left))) left--;
-
-            if (right < maxEnd) {
-                col = right;
-            } else if (left >= minStart) {
-                col = left;
-            } else {
-                return false; // entire line is whitespace within bounds
+        int targetCol = -1;
+        if (pos.column < lineLen && isWordChar(content.charAt(pos.line, pos.column))) {
+            targetCol = pos.column;
+        } else if (pos.column > 0 && isWordChar(content.charAt(pos.line, pos.column - 1))) {
+            // Only select preceding word if touch landed on trailing whitespace or at the end of the line
+            // (prevents selecting words across punctuation like ';' or '>')
+            if (pos.column >= lineLen || Character.isWhitespace(content.charAt(pos.line, pos.column))) {
+                targetCol = pos.column - 1;
             }
         }
 
+        if (targetCol == -1) return false;
+
         // Expand left to word start
-        int wordStart = col;
-        while (wordStart > minStart && isWordChar(content.charAt(pos.line, wordStart - 1)))
+        int wordStart = targetCol;
+        while (wordStart > 0 && isWordChar(content.charAt(pos.line, wordStart - 1))) {
             wordStart--;
+        }
 
         // Expand right to word end
-        int wordEnd = col;
-        while (wordEnd < maxEnd && isWordChar(content.charAt(pos.line, wordEnd))) wordEnd++;
+        int wordEnd = targetCol + 1;
+        while (wordEnd < lineLen && isWordChar(content.charAt(pos.line, wordEnd))) {
+            wordEnd++;
+        }
 
         if (wordStart >= wordEnd) return false;
 

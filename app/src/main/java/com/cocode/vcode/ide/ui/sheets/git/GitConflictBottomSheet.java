@@ -107,8 +107,9 @@ public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
                     repository.stageFile(path);
                 }
                 ExecutorProvider.getInstance().runOnMain(() -> {
+                    String version = getString(ours ? R.string.vcode_version_local : R.string.vcode_version_remote);
                     if (isAdded()) Toast.makeText(requireContext(),
-                            "Conflicts resolved using " + (ours ? "local" : "remote") + " version. Stage and commit to finish.",
+                            getString(R.string.vcode_conflicts_resolved, version),
                             Toast.LENGTH_LONG).show();
                     if (onResolved != null) onResolved.run();
                     dismiss();
@@ -116,7 +117,7 @@ public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
             } catch (Exception e) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isAdded()) Toast.makeText(requireContext(),
-                            "Failed to resolve: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            getString(R.string.vcode_failed_to_resolve, e.getMessage()), Toast.LENGTH_SHORT).show();
                 });
             }
         });
@@ -139,7 +140,7 @@ public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
             } catch (Exception e) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isAdded()) Toast.makeText(requireContext(),
-                            "Failed to abort: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            getString(R.string.vcode_failed_to_abort, e.getMessage()), Toast.LENGTH_SHORT).show();
                 });
             }
         });

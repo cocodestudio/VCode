@@ -21,11 +21,6 @@ import java.util.Set;
  */
 public class CssLinter {
 
-    private static final Set<String> COLOR_PROPS = new HashSet<>(java.util.Arrays.asList(
-            "color", "background-color", "border-color", "border-top-color", "border-right-color",
-            "border-bottom-color", "border-left-color", "outline-color", "text-decoration-color", "caret-color",
-            "accent-color", "column-rule-color", "scrollbar-color"));
-
     private static boolean isValidColor(String v) {
         if (v == null || v.isEmpty()) return true;
         String lo = v.toLowerCase().trim();
@@ -340,7 +335,7 @@ public class CssLinter {
         }
 
         // Invalid color value check
-        if (COLOR_PROPS.contains(pLo)) {
+        if (KnownElements.isCssColorProperty(pLo)) {
             String v = valTrimmed.replace("!important", "").trim();
             if (!v.isEmpty() && !isValidColor(v)) {
                 problems.add(new Problem(file, propLine, propCol, propLen,

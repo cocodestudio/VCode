@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.diagnostic;
 
+import com.cocode.vcode.ide.core.editor.indent.BracketMatcher;
 import com.cocode.vcode.ide.core.language.css.CssLinter;
 import com.cocode.vcode.ide.core.language.html.HtmlLinter;
 import com.cocode.vcode.ide.core.language.js.JsLinter;
@@ -31,10 +32,10 @@ public class DiagnosticEngine {
         List<Problem> problems = new ArrayList<>();
 
         try {
-            // BracketLinter handles () [] {} — skip for CSS/SCSS since CssLinter owns {} there
+            // BracketMatcher handles () [] {} — skip for CSS/SCSS since CssLinter owns {} there
             if (type != null && type.isTextBased()
                     && type != FileType.CSS && type != FileType.SCSS) {
-                problems.addAll(BracketLinter.analyze(file, text));
+                problems.addAll(BracketMatcher.findMismatches(file, text));
             }
 
             if (type == FileType.JSON) {

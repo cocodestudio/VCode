@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.html;
 
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.language.base.BaseFormatter;
 import com.cocode.vcode.ide.core.language.css.CssFormatter;
 import com.cocode.vcode.ide.core.language.js.JsFormatter;
@@ -20,12 +21,6 @@ import java.util.regex.Pattern;
 public class HtmlFormatter extends BaseFormatter {
 
 
-    // Inline elements — stay on same line as their content
-    private static final Set<String> INLINE = new HashSet<>(Arrays.asList(
-            "a", "abbr", "acronym", "b", "bdo", "big", "br", "button", "cite", "code", "dfn", "em", "i",
-            "img", "input", "kbd", "label", "map", "object", "output", "q", "s", "samp", "select", "small",
-            "span", "strong", "sub", "sup", "textarea", "time", "tt", "u", "var"
-    ));
     // Body-level block elements that get a blank line before/after for readability.
     // head, html, body, style, script deliberately excluded — they must not generate blank lines.
 
@@ -140,7 +135,7 @@ public class HtmlFormatter extends BaseFormatter {
             } else if (isOpen) {
                 String formatted = formatTag(text, pad);
                 out.append(formatted).append("\n");
-                if (!isSelfClose && !INLINE.contains(tagName)) {
+                if (!isSelfClose && !KnownElements.isInlineElement(tagName)) {
                     depth++;
                 }
             } else if (isClose) {
@@ -253,7 +248,7 @@ public class HtmlFormatter extends BaseFormatter {
     }
 
     private boolean isVoid(String tag) {
-        return HtmlTagCache.isVoidElement(tagName(tag));
+        return KnownElements.isVoidElement(tagName(tag));
     }
 
 }
