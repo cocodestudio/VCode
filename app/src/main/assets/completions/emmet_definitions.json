@@ -37,6 +37,7 @@
     "input:hidden": "<input type=\"hidden\" name=\"|\">",
     "input:h": "<input type=\"hidden\" name=\"|\">",
     "input:email": "<input type=\"email\" name=\"|\" id=\"\">",
+    "input:e": "<input type=\"email\" name=\"|\" id=\"\">",
     "input:number": "<input type=\"number\" name=\"|\" id=\"\">",
     "input:date": "<input type=\"date\" name=\"|\" id=\"\">",
     "input:datetime": "<input type=\"datetime-local\" name=\"|\" id=\"\">",
@@ -82,6 +83,136 @@
     "menu": "<menu>|</menu>",
     "dialog": "<dialog>|</dialog>",
     "tarea": "<textarea name=\"|\" id=\"\" cols=\"30\" rows=\"10\"></textarea>"
+  },
+  "htmlSnippetAliases": {
+    "select+": "<select name=\"|\" id=\"\">\n    <option value=\"\"></option>\n</select>",
+    "ol+": "<ol>\n    <li>|</li>\n</ol>",
+    "ul+": "<ul>\n    <li>|</li>\n</ul>",
+    "dl+": "<dl>\n    <dt>|</dt>\n    <dd></dd>\n</dl>",
+    "table+": "<table>\n    <tr>\n        <td>|</td>\n    </tr>\n</table>"
+  },
+  "elementAliases": {
+    "bq": "blockquote",
+    "btn": "button",
+    "fig": "figure",
+    "figc": "figcaption",
+    "pic": "picture",
+    "ifr": "iframe",
+    "emb": "embed",
+    "obj": "object",
+    "aud": "audio",
+    "vid": "video",
+    "str": "strong",
+    "prog": "progress",
+    "sect": "section",
+    "art": "article",
+    "hdr": "header",
+    "ftr": "footer",
+    "tarea": "textarea"
+  },
+  "defaultTagAttributes": {
+    "a": {
+      "href": ""
+    },
+    "link": {
+      "rel": "stylesheet",
+      "href": ""
+    },
+    "img": {
+      "src": "",
+      "alt": ""
+    },
+    "input": {
+      "type": "text"
+    },
+    "form": {
+      "action": ""
+    },
+    "iframe": {
+      "src": "",
+      "frameborder": "0"
+    }
+  },
+  "colonTagTemplates": {
+    "input:text": { "tag": "input", "attributes": { "type": "text", "name": "", "id": "" } },
+    "input:password": { "tag": "input", "attributes": { "type": "password", "name": "", "id": "" } },
+    "input:p": { "tag": "input", "attributes": { "type": "password", "name": "", "id": "" } },
+    "input:checkbox": { "tag": "input", "attributes": { "type": "checkbox", "name": "", "id": "" } },
+    "input:c": { "tag": "input", "attributes": { "type": "checkbox", "name": "", "id": "" } },
+    "input:radio": { "tag": "input", "attributes": { "type": "radio", "name": "", "id": "" } },
+    "input:r": { "tag": "input", "attributes": { "type": "radio", "name": "", "id": "" } },
+    "input:submit": { "tag": "input", "attributes": { "type": "submit", "value": "" } },
+    "input:s": { "tag": "input", "attributes": { "type": "submit", "value": "" } },
+    "input:reset": { "tag": "input", "attributes": { "type": "reset", "value": "" } },
+    "input:button": { "tag": "input", "attributes": { "type": "button", "value": "" } },
+    "input:b": { "tag": "input", "attributes": { "type": "button", "value": "" } },
+    "input:file": { "tag": "input", "attributes": { "type": "file", "name": "", "id": "" } },
+    "input:f": { "tag": "input", "attributes": { "type": "file", "name": "", "id": "" } },
+    "input:hidden": { "tag": "input", "attributes": { "type": "hidden", "name": "" } },
+    "input:h": { "tag": "input", "attributes": { "type": "hidden", "name": "" } },
+    "input:image": { "tag": "input", "attributes": { "type": "image", "src": "", "alt": "" } },
+    "input:i": { "tag": "input", "attributes": { "type": "image", "src": "", "alt": "" } },
+    "input:email": { "tag": "input", "attributes": { "type": "email", "name": "", "id": "" } },
+    "input:e": { "tag": "input", "attributes": { "type": "email", "name": "", "id": "" } },
+    "input:number": { "tag": "input", "attributes": { "type": "number", "name": "", "id": "" } },
+    "input:date": { "tag": "input", "attributes": { "type": "date", "name": "", "id": "" } },
+    "input:datetime": { "tag": "input", "attributes": { "type": "datetime-local", "name": "", "id": "" } },
+    "input:time": { "tag": "input", "attributes": { "type": "time", "name": "", "id": "" } },
+    "input:month": { "tag": "input", "attributes": { "type": "month", "name": "", "id": "" } },
+    "input:week": { "tag": "input", "attributes": { "type": "week", "name": "", "id": "" } },
+    "input:tel": { "tag": "input", "attributes": { "type": "tel", "name": "", "id": "" } },
+    "input:url": { "tag": "input", "attributes": { "type": "url", "name": "", "id": "" } },
+    "input:search": { "tag": "input", "attributes": { "type": "search", "name": "", "id": "" } },
+    "input:color": { "tag": "input", "attributes": { "type": "color", "name": "", "id": "" } },
+    "input:range": { "tag": "input", "attributes": { "type": "range", "name": "", "id": "" } },
+    "link:css": { "tag": "link", "attributes": { "rel": "stylesheet", "href": "style.css" } },
+    "link:print": { "tag": "link", "attributes": { "rel": "stylesheet", "href": "print.css", "media": "print" } },
+    "link:favicon": { "tag": "link", "attributes": { "rel": "shortcut icon", "href": "favicon.ico", "type": "image/x-icon" } },
+    "link:touch": { "tag": "link", "attributes": { "rel": "apple-touch-icon", "href": "favicon.png" } },
+    "link:rss": { "tag": "link", "attributes": { "rel": "alternate", "type": "application/rss+xml", "title": "RSS", "href": "rss.xml" } },
+    "link:atom": { "tag": "link", "attributes": { "rel": "alternate", "type": "application/atom+xml", "title": "Atom", "href": "atom.xml" } },
+    "meta:vp": { "tag": "meta", "attributes": { "name": "viewport", "content": "width=device-width, initial-scale=1.0" } },
+    "meta:utf": { "tag": "meta", "attributes": { "charset": "UTF-8" } },
+    "meta:compat": { "tag": "meta", "attributes": { "http-equiv": "X-UA-Compatible", "content": "IE=edge" } },
+    "script:src": { "tag": "script", "attributes": { "src": "" } },
+    "form:get": { "tag": "form", "attributes": { "action": "", "method": "get" } },
+    "form:post": { "tag": "form", "attributes": { "action": "", "method": "post" } },
+    "a:link": { "tag": "a", "attributes": { "href": "http://" } },
+    "a:mail": { "tag": "a", "attributes": { "href": "mailto:" } },
+    "a:tel": { "tag": "a", "attributes": { "href": "tel:+" } },
+    "btn:s": { "tag": "button", "attributes": { "type": "submit" } },
+    "btn:r": { "tag": "button", "attributes": { "type": "reset" } },
+    "btn:b": { "tag": "button", "attributes": { "type": "button" } }
+  },
+  "contextualParentTags": {
+    "ul": "li",
+    "ol": "li",
+    "table": "tr",
+    "tbody": "tr",
+    "thead": "tr",
+    "tfoot": "tr",
+    "tr": "td",
+    "select": "option",
+    "dl": "dt",
+    "map": "area",
+    "colgroup": "col"
+  },
+  "cssUnitlessProperties": [
+    "z-index",
+    "opacity",
+    "font-weight",
+    "line-height",
+    "flex",
+    "flex-grow",
+    "flex-shrink",
+    "order"
+  ],
+  "cssHexProperties": {
+    "c": { "property": "color", "prefix": "" },
+    "col": { "property": "color", "prefix": "" },
+    "bg": { "property": "background", "prefix": "" },
+    "bd": { "property": "border", "prefix": "1px solid " },
+    "bdc": { "property": "border-color", "prefix": "" }
   },
   "cssAbbreviations": {
     "d": "display: |;",
@@ -339,5 +470,19 @@
     "cl": "clear",
     "bs": "box-sizing",
     "bxz": "box-sizing"
+  },
+  "cssUnitAliases": {
+    "p": "%",
+    "%": "%",
+    "e": "em",
+    "r": "rem",
+    "x": "px",
+    "vh": "vh",
+    "vw": "vw",
+    "vmin": "vmin",
+    "vmax": "vmax",
+    "pt": "pt",
+    "s": "s",
+    "ms": "ms"
   }
 }

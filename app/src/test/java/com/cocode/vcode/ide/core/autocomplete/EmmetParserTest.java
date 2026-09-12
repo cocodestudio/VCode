@@ -256,4 +256,60 @@ public class EmmetParserTest {
         assertNotNull(EmmetCssDefinitions.CSS_ABBREVS.get("df"));
         assertNotNull(EmmetCssDefinitions.CSS_PROP_MAP.get("m"));
     }
+
+    @Test
+    public void testElementAliases() {
+        String btnResult = EmmetParser.expandHtml("btn.primary", null);
+        assertNotNull(btnResult);
+        assertTrue(btnResult.contains("<button class=\"primary\">"));
+
+        String bqResult = EmmetParser.expandHtml("bq", null);
+        assertNotNull(bqResult);
+        assertTrue(bqResult.contains("<blockquote>"));
+
+        String sectArt = EmmetParser.expandHtml("sect>art", null);
+        assertNotNull(sectArt);
+        assertTrue(sectArt.contains("<section>"));
+        assertTrue(sectArt.contains("<article>"));
+
+        String tarea = EmmetParser.expandHtml("tarea#bio", null);
+        assertNotNull(tarea);
+        assertTrue(tarea.contains("<textarea id=\"bio\">"));
+    }
+
+    @Test
+    public void testColonTagTemplatesInTree() {
+        String formSubmit = EmmetParser.expandHtml("form>btn:s.save", null);
+        assertNotNull(formSubmit);
+        assertTrue(formSubmit.contains("<form"));
+        assertTrue(formSubmit.contains("<button class=\"save\" type=\"submit\">"));
+
+        String inputEmail = EmmetParser.expandHtml("div>input:e", null);
+        assertNotNull(inputEmail);
+        assertTrue(inputEmail.contains("<input"));
+        assertTrue(inputEmail.contains("type=\"email\""));
+
+        String linkCss = EmmetParser.expandHtml("head>link:css", null);
+        assertNotNull(linkCss);
+        assertTrue(linkCss.contains("<link rel=\"stylesheet\" href=\"style.css\">"));
+    }
+
+    @Test
+    public void testDefaultTagAttributesInTree() {
+        String aResult = EmmetParser.expandHtml("p>a", null);
+        assertNotNull(aResult);
+        assertTrue(aResult.contains("<a href=\"|\">"));
+
+        String imgResult = EmmetParser.expandHtml("div>img.thumb", null);
+        assertNotNull(imgResult);
+        assertTrue(imgResult.contains("class=\"thumb\""));
+        assertTrue(imgResult.contains("src="));
+        assertTrue(imgResult.contains("alt="));
+
+        String formResult = EmmetParser.expandHtml("div>form.login", null);
+        assertNotNull(formResult);
+        assertTrue(formResult.contains("<form"));
+        assertTrue(formResult.contains("action="));
+        assertTrue(formResult.contains("class=\"login\""));
+    }
 }

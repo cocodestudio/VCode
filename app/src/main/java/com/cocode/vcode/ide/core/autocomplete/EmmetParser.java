@@ -10,18 +10,18 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Production-grade Emmet abbreviation expander supporting HTML and CSS.
+ * Emmet abbreviation expander supporting HTML and CSS.
  *
  * <p>HTML features:
  * <ul>
@@ -52,119 +52,29 @@ public class EmmetParser {
 
     // HTML Patterns
     private static final Pattern PAT_ABBR = Pattern.compile("^[a-zA-Z0-9_.#*()+>^\\[\\]=\"{} $!:\\-/@']+$");
-    private static final Pattern PAT_HEX_COLOR = Pattern.compile("^(c|col|bg|bd|bdc)#([0-9a-fA-F]*)$");
+    private static final Pattern PAT_HEX_COLOR = Pattern.compile("^([a-zA-Z]+)#([0-9a-fA-F]*)$");
 
     // CSS Patterns
     private static final Pattern PAT_CSS_NUMERIC = Pattern.compile(
             "^([a-z]+)(-?[0-9]+(?:\\.[0-9]+)?(?:-+[0-9]+(?:\\.[0-9]+)?)*)([a-z%]*)$");
 
-    // Shared Cache
+    // Shared Cache loaded dynamically from completions/emmet_definitions.json
     private static final Object lock = new Object();
     private static volatile boolean loaded = false;
     private static String defaultBoilerplate;
     private static String[] loremWords;
     private static final Map<String, String> HTML_ALIASES = new HashMap<>();
-
-    // HTML Snippet Aliases (standalone whole-snippet expansions)
     private static final Map<String, String> HTML_SNIPPET_ALIASES = new HashMap<>();
-    static {
-        HTML_SNIPPET_ALIASES.put("select+", "<select name=\"|\" id=\"\">\n    <option value=\"\"></option>\n</select>");
-        HTML_SNIPPET_ALIASES.put("ol+", "<ol>\n    <li>|</li>\n</ol>");
-        HTML_SNIPPET_ALIASES.put("ul+", "<ul>\n    <li>|</li>\n</ul>");
-        HTML_SNIPPET_ALIASES.put("dl+", "<dl>\n    <dt>|</dt>\n    <dd></dd>\n</dl>");
-        HTML_SNIPPET_ALIASES.put("table+", "<table>\n    <tr>\n        <td>|</td>\n    </tr>\n</table>");
-    }
-
-    // Default tag attributes for standard elements
+    private static final Map<String, String> ELEMENT_ALIASES = new HashMap<>();
     private static final Map<String, Map<String, String>> DEFAULT_TAG_ATTRS = new HashMap<>();
-    static {
-        Map<String, String> aAttrs = new LinkedHashMap<>();
-        aAttrs.put("href", "");
-        DEFAULT_TAG_ATTRS.put("a", aAttrs);
-
-        Map<String, String> linkAttrs = new LinkedHashMap<>();
-        linkAttrs.put("rel", "stylesheet");
-        linkAttrs.put("href", "");
-        DEFAULT_TAG_ATTRS.put("link", linkAttrs);
-
-        Map<String, String> imgAttrs = new LinkedHashMap<>();
-        imgAttrs.put("src", "");
-        imgAttrs.put("alt", "");
-        DEFAULT_TAG_ATTRS.put("img", imgAttrs);
-
-        Map<String, String> inputAttrs = new LinkedHashMap<>();
-        inputAttrs.put("type", "text");
-        DEFAULT_TAG_ATTRS.put("input", inputAttrs);
-
-        Map<String, String> formAttrs = new LinkedHashMap<>();
-        formAttrs.put("action", "");
-        DEFAULT_TAG_ATTRS.put("form", formAttrs);
-
-        Map<String, String> iframeAttrs = new LinkedHashMap<>();
-        iframeAttrs.put("src", "");
-        iframeAttrs.put("frameborder", "0");
-        DEFAULT_TAG_ATTRS.put("iframe", iframeAttrs);
-    }
-
-    // Known colon shorthands mapped to base tag + default attributes
     private static final Map<String, TagTemplate> COLON_TAG_TEMPLATES = new HashMap<>();
-    static {
-        registerColonTemplate("input:text", "input", "type", "text", "name", "", "id", "");
-        registerColonTemplate("input:password", "input", "type", "password", "name", "", "id", "");
-        registerColonTemplate("input:p", "input", "type", "password", "name", "", "id", "");
-        registerColonTemplate("input:checkbox", "input", "type", "checkbox", "name", "", "id", "");
-        registerColonTemplate("input:c", "input", "type", "checkbox", "name", "", "id", "");
-        registerColonTemplate("input:radio", "input", "type", "radio", "name", "", "id", "");
-        registerColonTemplate("input:r", "input", "type", "radio", "name", "", "id", "");
-        registerColonTemplate("input:submit", "input", "type", "submit", "value", "");
-        registerColonTemplate("input:s", "input", "type", "submit", "value", "");
-        registerColonTemplate("input:reset", "input", "type", "reset", "value", "");
-        registerColonTemplate("input:button", "input", "type", "button", "value", "");
-        registerColonTemplate("input:b", "input", "type", "button", "value", "");
-        registerColonTemplate("input:file", "input", "type", "file", "name", "", "id", "");
-        registerColonTemplate("input:f", "input", "type", "file", "name", "", "id", "");
-        registerColonTemplate("input:hidden", "input", "type", "hidden", "name", "");
-        registerColonTemplate("input:h", "input", "type", "hidden", "name", "");
-        registerColonTemplate("input:image", "input", "type", "image", "src", "", "alt", "");
-        registerColonTemplate("input:i", "input", "type", "image", "src", "", "alt", "");
-        registerColonTemplate("input:email", "input", "type", "email", "name", "", "id", "");
-        registerColonTemplate("input:number", "input", "type", "number", "name", "", "id", "");
-        registerColonTemplate("input:date", "input", "type", "date", "name", "", "id", "");
-        registerColonTemplate("input:datetime", "input", "type", "datetime-local", "name", "", "id", "");
-        registerColonTemplate("input:time", "input", "type", "time", "name", "", "id", "");
-        registerColonTemplate("input:month", "input", "type", "month", "name", "", "id", "");
-        registerColonTemplate("input:week", "input", "type", "week", "name", "", "id", "");
-        registerColonTemplate("input:tel", "input", "type", "tel", "name", "", "id", "");
-        registerColonTemplate("input:url", "input", "type", "url", "name", "", "id", "");
-        registerColonTemplate("input:search", "input", "type", "search", "name", "", "id", "");
-        registerColonTemplate("input:color", "input", "type", "color", "name", "", "id", "");
-        registerColonTemplate("input:range", "input", "type", "range", "name", "", "id", "");
-        registerColonTemplate("link:css", "link", "rel", "stylesheet", "href", "style.css");
-        registerColonTemplate("link:print", "link", "rel", "stylesheet", "href", "print.css", "media", "print");
-        registerColonTemplate("link:favicon", "link", "rel", "shortcut icon", "href", "favicon.ico", "type", "image/x-icon");
-        registerColonTemplate("link:touch", "link", "rel", "apple-touch-icon", "href", "favicon.png");
-        registerColonTemplate("link:rss", "link", "rel", "alternate", "type", "application/rss+xml", "title", "RSS", "href", "rss.xml");
-        registerColonTemplate("link:atom", "link", "rel", "alternate", "type", "application/atom+xml", "title", "Atom", "href", "atom.xml");
-        registerColonTemplate("meta:vp", "meta", "name", "viewport", "content", "width=device-width, initial-scale=1.0");
-        registerColonTemplate("meta:utf", "meta", "charset", "UTF-8");
-        registerColonTemplate("meta:compat", "meta", "http-equiv", "X-UA-Compatible", "content", "IE=edge");
-        registerColonTemplate("script:src", "script", "src", "");
-        registerColonTemplate("form:get", "form", "action", "", "method", "get");
-        registerColonTemplate("form:post", "form", "action", "", "method", "post");
-        registerColonTemplate("a:link", "a", "href", "http://");
-        registerColonTemplate("a:mail", "a", "href", "mailto:");
-        registerColonTemplate("a:tel", "a", "href", "tel:+");
-        registerColonTemplate("btn:s", "button", "type", "submit");
-        registerColonTemplate("btn:r", "button", "type", "reset");
-        registerColonTemplate("btn:b", "button", "type", "button");
-    }
+    private static final Map<String, String> CONTEXTUAL_PARENT_TAGS = new HashMap<>();
+    private static final Set<String> CSS_UNITLESS_PROPERTIES = new HashSet<>();
+    private static final Map<String, HexProperty> CSS_HEX_PROPERTIES = new HashMap<>();
+    private static final Map<String, String> CSS_UNIT_ALIASES = new HashMap<>();
 
-    private static void registerColonTemplate(String alias, String tag, String... keyValues) {
-        Map<String, String> attrs = new LinkedHashMap<>();
-        for (int i = 0; i < keyValues.length; i += 2) {
-            attrs.put(keyValues[i], keyValues[i + 1]);
-        }
-        COLON_TAG_TEMPLATES.put(alias, new TagTemplate(tag, attrs));
+    static {
+        ensureLoaded();
     }
 
     private static class TagTemplate {
@@ -177,22 +87,40 @@ public class EmmetParser {
         }
     }
 
-    private static final String[] FALLBACK_LOREM = {
-            "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do",
-            "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore", "magna", "aliqua", "enim",
-            "ad", "minim", "veniam", "quis", "nostrud", "exercitation", "ullamco", "laboris", "nisi", "ut",
-            "aliquip", "ex", "ea", "commodo", "consequat", "duis", "aute", "irure", "dolor", "in",
-            "reprehenderit", "in", "voluptate", "velit", "esse", "cillum", "dolore", "eu", "fugiat", "nulla",
-            "pariatur", "excepteur", "sint", "occaecat", "cupidatat", "non", "proident", "sunt", "in", "culpa",
-            "qui", "officia", "deserunt", "mollit", "anim", "id", "est", "laborum"
-    };
+    private static class HexProperty {
+        final String property;
+        final String prefix;
 
-    private static void ensureLoaded() {
+        HexProperty(String property, String prefix) {
+            this.property = property;
+            this.prefix = prefix != null ? prefix : "";
+        }
+    }
+
+    public static void ensureLoaded() {
         if (loaded) return;
         synchronized (lock) {
             if (loaded) return;
             loadFromAssets();
             loaded = true;
+        }
+    }
+
+    public static void resetForTest() {
+        synchronized (lock) {
+            loaded = false;
+            defaultBoilerplate = null;
+            loremWords = null;
+            HTML_ALIASES.clear();
+            HTML_SNIPPET_ALIASES.clear();
+            ELEMENT_ALIASES.clear();
+            DEFAULT_TAG_ATTRS.clear();
+            COLON_TAG_TEMPLATES.clear();
+            CONTEXTUAL_PARENT_TAGS.clear();
+            CSS_UNITLESS_PROPERTIES.clear();
+            CSS_HEX_PROPERTIES.clear();
+            CSS_UNIT_ALIASES.clear();
+            ensureLoaded();
         }
     }
 
@@ -222,6 +150,87 @@ public class EmmetParser {
                     HTML_ALIASES.put(k, aliasesObj.getString(k));
                 }
             }
+            if (root.has("htmlSnippetAliases")) {
+                JSONObject snipObj = root.getJSONObject("htmlSnippetAliases");
+                Iterator<String> keys = snipObj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    HTML_SNIPPET_ALIASES.put(k, snipObj.getString(k));
+                }
+            }
+            if (root.has("elementAliases")) {
+                JSONObject elemObj = root.getJSONObject("elementAliases");
+                Iterator<String> keys = elemObj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    ELEMENT_ALIASES.put(k, elemObj.getString(k));
+                }
+            }
+            if (root.has("defaultTagAttributes")) {
+                JSONObject defAttrsObj = root.getJSONObject("defaultTagAttributes");
+                Iterator<String> tags = defAttrsObj.keys();
+                while (tags.hasNext()) {
+                    String tag = tags.next();
+                    JSONObject attrsObj = defAttrsObj.getJSONObject(tag);
+                    Map<String, String> attrs = new LinkedHashMap<>();
+                    Iterator<String> attrKeys = attrsObj.keys();
+                    while (attrKeys.hasNext()) {
+                        String attrKey = attrKeys.next();
+                        attrs.put(attrKey, attrsObj.getString(attrKey));
+                    }
+                    DEFAULT_TAG_ATTRS.put(tag, attrs);
+                }
+            }
+            if (root.has("colonTagTemplates")) {
+                JSONObject tmplObj = root.getJSONObject("colonTagTemplates");
+                Iterator<String> keys = tmplObj.keys();
+                while (keys.hasNext()) {
+                    String alias = keys.next();
+                    JSONObject item = tmplObj.getJSONObject(alias);
+                    String tag = item.getString("tag");
+                    Map<String, String> attrs = new LinkedHashMap<>();
+                    if (item.has("attributes")) {
+                        JSONObject attrsObj = item.getJSONObject("attributes");
+                        Iterator<String> attrKeys = attrsObj.keys();
+                        while (attrKeys.hasNext()) {
+                            String attrKey = attrKeys.next();
+                            attrs.put(attrKey, attrsObj.getString(attrKey));
+                        }
+                    }
+                    COLON_TAG_TEMPLATES.put(alias, new TagTemplate(tag, attrs));
+                }
+            }
+            if (root.has("contextualParentTags")) {
+                JSONObject ctxObj = root.getJSONObject("contextualParentTags");
+                Iterator<String> keys = ctxObj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    CONTEXTUAL_PARENT_TAGS.put(k.toLowerCase(), ctxObj.getString(k));
+                }
+            }
+            if (root.has("cssUnitlessProperties")) {
+                JSONArray arr = root.getJSONArray("cssUnitlessProperties");
+                for (int i = 0; i < arr.length(); i++) {
+                    CSS_UNITLESS_PROPERTIES.add(arr.getString(i));
+                }
+            }
+            if (root.has("cssHexProperties")) {
+                JSONObject hexObj = root.getJSONObject("cssHexProperties");
+                Iterator<String> keys = hexObj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    JSONObject item = hexObj.getJSONObject(k);
+                    CSS_HEX_PROPERTIES.put(k, new HexProperty(item.getString("property"), item.optString("prefix", "")));
+                }
+            }
+            if (root.has("cssUnitAliases")) {
+                JSONObject unitObj = root.getJSONObject("cssUnitAliases");
+                Iterator<String> keys = unitObj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    CSS_UNIT_ALIASES.put(k, unitObj.getString(k));
+                }
+            }
         } catch (Exception ignored) {
         }
     }
@@ -234,7 +243,8 @@ public class EmmetParser {
         ensureLoaded();
         return HTML_SNIPPET_ALIASES.containsKey(abbr)
                 || HTML_ALIASES.containsKey(abbr)
-                || COLON_TAG_TEMPLATES.containsKey(abbr);
+                || COLON_TAG_TEMPLATES.containsKey(abbr)
+                || ELEMENT_ALIASES.containsKey(abbr);
     }
 
     /**
@@ -310,19 +320,16 @@ public class EmmetParser {
 
     private static String getDefaultBoilerplate() {
         ensureLoaded();
-        if (defaultBoilerplate != null) return defaultBoilerplate;
-        return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n" +
-                "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-                "    <title>Document</title>\n</head>\n<body>\n    |\n</body>\n</html>";
+        return defaultBoilerplate != null ? defaultBoilerplate : "";
     }
 
     private static String generateLorem(int count) {
         if (count <= 0) return "";
         ensureLoaded();
-        String[] words = (loremWords != null && loremWords.length > 0) ? loremWords : FALLBACK_LOREM;
+        if (loremWords == null || loremWords.length == 0) return "";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < count; i++) {
-            String word = words[i % words.length];
+            String word = loremWords[i % loremWords.length];
             if (i == 0) {
                 sb.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
             } else {
@@ -362,43 +369,28 @@ public class EmmetParser {
         // 1. Hex color shorthands: c#f, c#333, bg#000, bd#f00
         Matcher hexMatch = PAT_HEX_COLOR.matcher(abbr);
         if (hexMatch.matches()) {
+            ensureLoaded();
             String propAbbr = hexMatch.group(1);
-            String hexDigits = hexMatch.group(2);
-            String property;
-            String prefix = "";
-            switch (Objects.requireNonNull(propAbbr)) {
-                case "c":
-                case "col":
-                    property = "color";
-                    break;
-                case "bg":
-                    property = "background";
-                    break;
-                case "bd":
-                    property = "border";
-                    prefix = "1px solid ";
-                    break;
-                case "bdc":
-                    property = "border-color";
-                    break;
-                default:
-                    property = "color";
-                    break;
-            }
+            HexProperty hexProp = CSS_HEX_PROPERTIES.get(propAbbr);
+            if (hexProp != null) {
+                String hexDigits = hexMatch.group(2);
+                String property = hexProp.property;
+                String prefix = hexProp.prefix;
 
-            String hexVal;
-            if (hexDigits == null || hexDigits.isEmpty()) {
-                hexVal = "#|";
-            } else if (hexDigits.length() == 1) {
-                hexVal = "#" + hexDigits + hexDigits + hexDigits;
-            } else if (hexDigits.length() == 2) {
-                hexVal = "#" + hexDigits + hexDigits + hexDigits;
-            } else {
-                hexVal = "#" + hexDigits;
-            }
+                String hexVal;
+                if (hexDigits == null || hexDigits.isEmpty()) {
+                    hexVal = "#|";
+                } else if (hexDigits.length() == 1) {
+                    hexVal = "#" + hexDigits + hexDigits + hexDigits;
+                } else if (hexDigits.length() == 2) {
+                    hexVal = "#" + hexDigits + hexDigits + hexDigits;
+                } else {
+                    hexVal = "#" + hexDigits;
+                }
 
-            String res = property + ": " + prefix + hexVal + ";";
-            return applyImportant(res, important);
+                String res = property + ": " + prefix + hexVal + ";";
+                return applyImportant(res, important);
+            }
         }
 
         // 2. Check named abbreviations first (exact match)
@@ -426,45 +418,10 @@ public class EmmetParser {
             String property = EmmetCssDefinitions.CSS_PROP_MAP.get(propAbbr);
             if (property == null) return null;
 
-            String unit;
-            switch (Objects.requireNonNull(unitSuffix)) {
-                case "p":
-                case "%":
-                    unit = "%";
-                    break;
-                case "e":
-                    unit = "em";
-                    break;
-                case "r":
-                    unit = "rem";
-                    break;
-                case "x":
-                    unit = "px";
-                    break;
-                case "vh":
-                    unit = "vh";
-                    break;
-                case "vw":
-                    unit = "vw";
-                    break;
-                case "vmin":
-                    unit = "vmin";
-                    break;
-                case "vmax":
-                    unit = "vmax";
-                    break;
-                case "pt":
-                    unit = "pt";
-                    break;
-                case "s":
-                    unit = "s";
-                    break;
-                case "ms":
-                    unit = "ms";
-                    break;
-                default:
-                    unit = unitSuffix.isEmpty() ? "px" : unitSuffix;
-                    break;
+            ensureLoaded();
+            String unit = CSS_UNIT_ALIASES.get(unitSuffix);
+            if (unit == null) {
+                unit = (unitSuffix == null || unitSuffix.isEmpty()) ? "px" : unitSuffix;
             }
 
             StringBuilder value = parseCssNumericValues(numPart, property, unit);
@@ -513,10 +470,8 @@ public class EmmetParser {
             }
         }
 
-        boolean isUnitless = property.equals("z-index") || property.equals("opacity")
-                || property.equals("font-weight") || property.equals("line-height")
-                || property.equals("flex") || property.equals("flex-grow")
-                || property.equals("flex-shrink") || property.equals("order");
+        ensureLoaded();
+        boolean isUnitless = CSS_UNITLESS_PROPERTIES.contains(property);
 
         for (int i = 0; i < values.size(); i++) {
             String val = values.get(i);
@@ -966,6 +921,7 @@ public class EmmetParser {
         String finalTag;
         Map<String, String> baseAttrs = new LinkedHashMap<>();
 
+        ensureLoaded();
         if (COLON_TAG_TEMPLATES.containsKey(tagOrAlias)) {
             TagTemplate tmpl = COLON_TAG_TEMPLATES.get(tagOrAlias);
             if (tmpl != null) {
@@ -977,7 +933,8 @@ public class EmmetParser {
         } else if (tagOrAlias.isEmpty()) {
             finalTag = getDefaultTagForParent(parentTag);
         } else {
-            finalTag = tagOrAlias;
+            String resolvedTag = ELEMENT_ALIASES.get(tagOrAlias);
+            finalTag = resolvedTag != null ? resolvedTag : tagOrAlias;
             Map<String, String> defaults = DEFAULT_TAG_ATTRS.get(finalTag);
             if (defaults != null) {
                 baseAttrs.putAll(defaults);
@@ -1065,28 +1022,9 @@ public class EmmetParser {
 
     public static String getDefaultTagForParent(String parentTag) {
         if (parentTag == null) return "div";
-        switch (parentTag.toLowerCase()) {
-            case "ul":
-            case "ol":
-                return "li";
-            case "table":
-            case "tbody":
-            case "thead":
-            case "tfoot":
-                return "tr";
-            case "tr":
-                return "td";
-            case "select":
-                return "option";
-            case "dl":
-                return "dt";
-            case "map":
-                return "area";
-            case "colgroup":
-                return "col";
-            default:
-                return "div";
-        }
+        ensureLoaded();
+        String tag = CONTEXTUAL_PARENT_TAGS.get(parentTag.toLowerCase());
+        return tag != null ? tag : "div";
     }
 
     /**
