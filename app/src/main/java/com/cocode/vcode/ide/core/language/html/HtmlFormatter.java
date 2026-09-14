@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.html;
 
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.language.base.BaseFormatter;
 import com.cocode.vcode.ide.core.language.css.CssFormatter;
 import com.cocode.vcode.ide.core.language.js.JsFormatter;
@@ -19,20 +20,14 @@ import java.util.regex.Pattern;
  */
 public class HtmlFormatter extends BaseFormatter {
 
-    private static final Set<String> VOID = new HashSet<>(Arrays.asList(
-            "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"
-    ));
-    // Inline elements — stay on same line as their content
-    private static final Set<String> INLINE = new HashSet<>(Arrays.asList(
-            "a", "abbr", "acronym", "b", "bdo", "big", "br", "button", "cite", "code", "dfn", "em", "i",
-            "img", "input", "kbd", "label", "map", "object", "output", "q", "s", "samp", "select", "small",
-            "span", "strong", "sub", "sup", "textarea", "time", "tt", "u", "var"
-    ));
+
     // Body-level block elements that get a blank line before/after for readability.
     // head, html, body, style, script deliberately excluded — they must not generate blank lines.
 
     private static final Pattern MULTI_NL = Pattern.compile("\\n{3,}");
     private static final Pattern ATTR_SPLIT = Pattern.compile("(\\S+)\\s*=\\s*(\"[^\"]*\"|'[^']*'|\\S+)|([\\w:@.#\\-]+)");
+    private static final Pattern STYLE_TAG = Pattern.compile("(?is)(<style[^>]*>)(.*?)(</style>)");
+    private static final Pattern SCRIPT_TAG = Pattern.compile("(?is)(<script[^>]*>)(.*?)(</script>)");
 
     @Override
     public String format(String code) {
@@ -45,9 +40,9 @@ public class HtmlFormatter extends BaseFormatter {
         JsFormatter js = new JsFormatter();
 
         // Extract and format embedded CSS
-        code = replaceEmbedded(code, "style", css, styleBlocks, uuid, "STYLE");
+        code = replaceEmbedded(code, STYLE_TAG, css, styleBlocks, uuid, "STYLE");
         // Extract and format embedded JS
-        code = replaceEmbedded(code, "script", js, scriptBlocks, uuid, "SCRIPT");
+        code = replaceEmbedded(code, SCRIPT_TAG, js, scriptBlocks, uuid, "SCRIPT");
 
         String result = formatHtml(code);
 
@@ -59,9 +54,8 @@ public class HtmlFormatter extends BaseFormatter {
         return result.trim() + "\n";
     }
 
-    private String replaceEmbedded(String code, String tag, BaseFormatter fmt,
+    private String replaceEmbedded(String code, Pattern p, BaseFormatter fmt,
                                    List<String> store, String uuid, String key) {
-        Pattern p = Pattern.compile("(?is)(<" + tag + "[^>]*>)(.*?)(</" + tag + ">)");
         Matcher m = p.matcher(code);
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
@@ -79,10 +73,15 @@ public class HtmlFormatter extends BaseFormatter {
     private String reInject(String result, List<String> blocks, String uuid, String key) {
         for (int i = 0; i < blocks.size(); i++) {
             String ph = "___" + key + "_" + uuid + "_" + i + "___";
-            Matcher m = Pattern.compile("(?m)^([ \\t]*)" + Pattern.quote(ph) + "$").matcher(result);
-            if (m.find()) {
-                String pad = m.group(1);
-                result = result.replace(Objects.requireNonNull(m.group(0)), indent(blocks.get(i), pad));
+            int phIdx = result.indexOf(ph);
+            if (phIdx >= 0) {
+                int lineStart = result.lastIndexOf('\n', phIdx);
+                lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+                String pad = result.substring(lineStart, phIdx);
+                int lineEnd = phIdx + ph.length();
+                if (lineEnd < result.length() && result.charAt(lineEnd) == '\r') lineEnd++;
+                if (lineEnd < result.length() && result.charAt(lineEnd) == '\n') lineEnd++;
+                result = result.substring(0, lineStart) + indent(blocks.get(i), pad) + "\n" + result.substring(lineEnd);
             }
         }
         return result;
@@ -136,7 +135,7 @@ public class HtmlFormatter extends BaseFormatter {
             } else if (isOpen) {
                 String formatted = formatTag(text, pad);
                 out.append(formatted).append("\n");
-                if (!isSelfClose && !INLINE.contains(tagName)) {
+                if (!isSelfClose && !KnownElements.isInlineElement(tagName)) {
                     depth++;
                 }
             } else if (isClose) {
@@ -249,7 +248,7 @@ public class HtmlFormatter extends BaseFormatter {
     }
 
     private boolean isVoid(String tag) {
-        return VOID.contains(tagName(tag).toLowerCase());
+        return KnownElements.isVoidElement(tagName(tag));
     }
 
 }

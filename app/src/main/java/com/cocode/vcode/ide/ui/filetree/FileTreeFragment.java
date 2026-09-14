@@ -11,6 +11,7 @@ import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -22,6 +23,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -61,6 +63,8 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     private FileTreeAdapter adapter;
     private FileSelectionListener selectionListener;
     private File selectedImportDestination = null;
+    private DrawerLayout.DrawerListener drawerListener = null;
+    private DrawerLayout attachedDrawerLayout = null;
     /**
      * Result launcher for importing multiple files from the system picker.
      */
@@ -106,6 +110,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         float density = getResources().getDisplayMetrics().density;
         adapter = new FileTreeAdapter(this, 16, density);
         binding.rvFileTree.setLayoutManager(new LinearLayoutManager(getContext()));
+        binding.rvFileTree.setItemAnimator(null);
         binding.rvFileTree.setAdapter(adapter);
 
         // Apply specialized UI fonts
@@ -123,9 +128,51 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         binding.btnImportFiles.setOnClickListener(v -> showImportDestinationDialog(() -> importFilesLauncher.launch("*/*")));
         binding.btnImportFolder.setOnClickListener(v -> showImportDestinationDialog(() -> importFolderLauncher.launch(null)));
 
+        setupDrawerListener(view);
+    }
 
+    private void setupDrawerListener(View view) {
+        if (getActivity() != null) {
+            DrawerLayout dl = getActivity().findViewById(R.id.drawer_layout);
+            if (dl != null) {
+                attachedDrawerLayout = dl;
+                drawerListener = new DrawerLayout.SimpleDrawerListener() {
+                    @Override
+                    public void onDrawerClosed(@NonNull View drawerView) {
+                        clearClipboardState();
+                    }
+                };
+                attachedDrawerLayout.addDrawerListener(drawerListener);
+                return;
+            }
+        }
+        view.post(() -> {
+            if (!isAdded() || attachedDrawerLayout != null) return;
+            ViewParent parent = view.getParent();
+            while (parent != null) {
+                if (parent instanceof DrawerLayout) {
+                    attachedDrawerLayout = (DrawerLayout) parent;
+                    drawerListener = new DrawerLayout.SimpleDrawerListener() {
+                        @Override
+                        public void onDrawerClosed(@NonNull View drawerView) {
+                            clearClipboardState();
+                        }
+                    };
+                    attachedDrawerLayout.addDrawerListener(drawerListener);
+                    break;
+                }
+                parent = parent.getParent();
+            }
+        });
+    }
 
-
+    /**
+     * Clears any active clipboard cut/copy state and restores normal node opacity.
+     */
+    public void clearClipboardState() {
+        if (adapter != null) {
+            adapter.clearClipboardState();
+        }
     }
 
     /**
@@ -218,10 +265,6 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         File clipboardFile = adapter.getClipboardFile();
         boolean canPaste = clipboardFile != null && clipboardFile.exists();
 
-        if (isRoot && !canPaste) {
-            return;
-        }
-
         LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(getLayoutInflater());
         int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
         int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
@@ -238,32 +281,39 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         popupWindow.setElevation(8f);
         popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
 
-        if (!isRoot) {
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, "Rename", () -> showRenameDialog(file));
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Copy", () -> {
+        if (isRoot) {
+            addFindInFilesPopupItem(popupBinding.popupContainer, popupWindow, file, node);
+        } else {
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, getString(R.string.vcode_rename), () -> showRenameDialog(file));
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_copy), () -> {
                 adapter.setClipboardState(file, false);
             });
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_scissors, "Cut", () -> {
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_scissors, getString(R.string.vcode_cut), () -> {
                 adapter.setClipboardState(file, true);
             });
-        }
 
-        if (canPaste) {
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_file_plus, "Paste", () -> {
-                File destDir = file.isDirectory() ? file : file.getParentFile();
-                performPaste(destDir);
-            });
-        }
+            if (canPaste) {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_file_plus, getString(R.string.vcode_paste), () -> {
+                    File destDir = file.isDirectory() ? file : file.getParentFile();
+                    performPaste(destDir);
+                });
+            }
 
-        if (!isRoot) {
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Copy Path", () -> showCopyPathPopup(anchor, file));
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_copy_path), () -> showCopyPathPopup(anchor, file));
 
             addDivider(popupBinding.popupContainer);
 
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_magnifying_glass, "Find in Files", () -> {
-                if (file.isDirectory()) {
-                    com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet searchSheet = new com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet();
-                    searchSheet.setProjectRoot(file);
+            addFindInFilesPopupItem(popupBinding.popupContainer, popupWindow, file, node);
+
+            if (!file.isDirectory()) {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_magnifying_glass, getString(R.string.vcode_find_usages), () -> {
+                    List<com.cocode.vcode.ide.core.lsp.LspLocation> usages = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().findFileUsages(file.getName());
+                    if (usages == null || usages.isEmpty()) {
+                        Toast.makeText(getContext(), R.string.vcode_no_usages_found, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    ProjectSearchBottomSheet searchSheet = new ProjectSearchBottomSheet();
+                    searchSheet.setUsages(getString(R.string.vcode_find_usages), file.getName(), usages);
                     searchSheet.setListener((searchedFile, lineNumber) -> {
                         if (selectionListener != null) {
                             selectionListener.onFileSelected(new FileNode(searchedFile, 0));
@@ -275,64 +325,13 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
                             }
                         }
                     });
-                    searchSheet.show(getChildFragmentManager(), "ProjectSearch");
-                } else if (selectionListener != null) {
-                    selectionListener.onFindInFile(node);
-                }
-            });
-
-            if (!file.isDirectory()) {
-                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_magnifying_glass, "Find Usages", () -> {
-                    List<com.cocode.vcode.ide.core.lsp.LspLocation> usages = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().findFileUsages(file.getName());
-                    if (usages == null || usages.isEmpty()) {
-                        Toast.makeText(getContext(), "No usages found", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    if (usages.size() == 1) {
-                        com.cocode.vcode.ide.core.lsp.LspLocation loc = usages.get(0);
-                        int line = loc.range != null ? loc.range.start.line + 1 : 1;
-                        if (selectionListener != null) {
-                            selectionListener.onFileSelected(new FileNode(new File(loc.uri), 0));
-                            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
-                                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
-                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                                    editorActivity.jumpToLine(line);
-                                }, 500);
-                            }
-                        }
-                    } else {
-                        List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> options = new java.util.ArrayList<>();
-                        for (com.cocode.vcode.ide.core.lsp.LspLocation loc : usages) {
-                            File f = new File(loc.uri);
-                            int line = loc.range != null ? loc.range.start.line + 1 : 1;
-                            String label = f.getName() + ":" + line;
-                            String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
-                            int iconResId = com.cocode.vcode.ide.core.model.FileType.fromExtension(ext).getIconResId();
-                            options.add(new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option(
-                                    iconResId, label,
-                                    () -> {
-                                        if (selectionListener != null) {
-                                            selectionListener.onFileSelected(new FileNode(f, 0));
-                                            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
-                                                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
-                                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                                                    editorActivity.jumpToLine(line);
-                                                }, 500);
-                                            }
-                                        }
-                                    }
-                            ));
-                        }
-                        com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet refsSheet = new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet();
-                        refsSheet.setOptions(options);
-                        refsSheet.show(getChildFragmentManager(), "Find Usages");
-                    }
+                    searchSheet.show(getChildFragmentManager(), "FindUsages");
                 });
             }
 
             addDivider(popupBinding.popupContainer);
 
-            View deleteItem = addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_trash, "Delete", () -> showDeleteDialog(file));
+            View deleteItem = addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_trash, getString(R.string.vcode_delete), () -> showDeleteDialog(file));
             TextView tvTitle = deleteItem.findViewById(R.id.tv_title);
             ImageView ivIcon = deleteItem.findViewById(R.id.iv_icon);
             int errorColor = ContextCompat.getColor(requireContext(), R.color.vcode_accent_error);
@@ -357,6 +356,29 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         }
     }
 
+    private void addFindInFilesPopupItem(ViewGroup container, PopupWindow popupWindow, File file, FileNode node) {
+        addPopupItem(container, popupWindow, R.drawable.ic_magnifying_glass, getString(R.string.vcode_find_in_files), () -> {
+            if (file.isDirectory()) {
+                ProjectSearchBottomSheet searchSheet = new ProjectSearchBottomSheet();
+                searchSheet.setProjectRoot(file);
+                searchSheet.setListener((searchedFile, lineNumber) -> {
+                    if (selectionListener != null) {
+                        selectionListener.onFileSelected(new FileNode(searchedFile, 0));
+                        if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
+                            com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
+                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                editorActivity.jumpToLine(lineNumber);
+                            }, 500);
+                        }
+                    }
+                });
+                searchSheet.show(getChildFragmentManager(), "ProjectSearch");
+            } else if (selectionListener != null) {
+                selectionListener.onFindInFile(node);
+            }
+        });
+    }
+
     private void showCopyPathPopup(View anchor, File file) {
         LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(getLayoutInflater());
         int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
@@ -374,11 +396,11 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         popupWindow.setElevation(8f);
         popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
 
-        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Absolute Path", () -> {
+        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_absolute_path), () -> {
             copyToSystemClipboard("Absolute Path", file.getAbsolutePath());
         });
 
-        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Relative Path", () -> {
+        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_relative_path), () -> {
             if (viewModel.getProjectRoot() != null) {
                 String relPath = file.getAbsolutePath().replace(viewModel.getProjectRoot().getAbsolutePath() + File.separator, "");
                 if (relPath.startsWith(File.separator)) relPath = relPath.substring(1);
@@ -491,6 +513,12 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
     @Override
     public void onDestroyView() {
+        if (attachedDrawerLayout != null && drawerListener != null) {
+            attachedDrawerLayout.removeDrawerListener(drawerListener);
+            drawerListener = null;
+            attachedDrawerLayout = null;
+        }
+        clearClipboardState();
         super.onDestroyView();
         binding = null;
     }

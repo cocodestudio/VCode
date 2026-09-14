@@ -1,8 +1,12 @@
 package com.cocode.vcode.ide.utils;
 
-import android.graphics.Color;
+
+import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
+
+import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -13,159 +17,52 @@ import java.util.regex.Pattern;
  */
 public class ColorParser {
 
+    private static final Object lock = new Object();
+    private static volatile boolean loaded = false;
     private static final Map<String, Integer> NAMED_COLORS = new HashMap<>();
     private static final Pattern RGB_PATTERN = Pattern.compile("rgba?\\(\\s*([\\d.]+)(%?)\\s*[, ]\\s*([\\d.]+)(%?)\\s*[, ]\\s*([\\d.]+)(%?)(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
     private static final Pattern HSL_PATTERN = Pattern.compile("hsla?\\(\\s*([\\d.]+)(deg|rad|grad|turn)?\\s*[, ]\\s*([\\d.]+)%\\s*[, ]\\s*([\\d.]+)%(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
 
-    static {
-        NAMED_COLORS.put("aliceblue", 0xFFF0F8FF);
-        NAMED_COLORS.put("antiquewhite", 0xFFFAEBD7);
-        NAMED_COLORS.put("aqua", 0xFF00FFFF);
-        NAMED_COLORS.put("aquamarine", 0xFF7FFFD4);
-        NAMED_COLORS.put("azure", 0xFFF0FFFF);
-        NAMED_COLORS.put("beige", 0xFFF5F5DC);
-        NAMED_COLORS.put("bisque", 0xFFFFE4C4);
+    private static void ensureLoaded() {
+        if (loaded) return;
+        synchronized (lock) {
+            if (loaded) return;
+            loadNamedColors();
+            loaded = true;
+        }
+    }
+
+    private static void loadNamedColors() {
+        String jsonStr = StaticAssetReader.readAsset("completions/css_colors.json");
+        if (jsonStr == null || jsonStr.trim().isEmpty()) {
+            loadFallback();
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(jsonStr);
+            if (root.has("named_hex")) {
+                JSONObject obj = root.getJSONObject("named_hex");
+                Iterator<String> keys = obj.keys();
+                while (keys.hasNext()) {
+                    String name = keys.next();
+                    String hex = obj.getString(name);
+                    Integer val = parseHex(hex);
+                    if (val != null) {
+                        NAMED_COLORS.put(name, val);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            loadFallback();
+        }
+    }
+
+    private static void loadFallback() {
         NAMED_COLORS.put("black", 0xFF000000);
-        NAMED_COLORS.put("blanchedalmond", 0xFFFFEBCD);
-        NAMED_COLORS.put("blue", 0xFF0000FF);
-        NAMED_COLORS.put("blueviolet", 0xFF8A2BE2);
-        NAMED_COLORS.put("brown", 0xFFA52A2A);
-        NAMED_COLORS.put("burlywood", 0xFFDEB887);
-        NAMED_COLORS.put("cadetblue", 0xFF5F9EA0);
-        NAMED_COLORS.put("chartreuse", 0xFF7FFF00);
-        NAMED_COLORS.put("chocolate", 0xFFD2691E);
-        NAMED_COLORS.put("coral", 0xFFFF7F50);
-        NAMED_COLORS.put("cornflowerblue", 0xFF6495ED);
-        NAMED_COLORS.put("cornsilk", 0xFFFFF8DC);
-        NAMED_COLORS.put("crimson", 0xFFDC143C);
-        NAMED_COLORS.put("cyan", 0xFF00FFFF);
-        NAMED_COLORS.put("darkblue", 0xFF00008B);
-        NAMED_COLORS.put("darkcyan", 0xFF008B8B);
-        NAMED_COLORS.put("darkgoldenrod", 0xFFB8860B);
-        NAMED_COLORS.put("darkgray", 0xFFA9A9A9);
-        NAMED_COLORS.put("darkgreen", 0xFF006400);
-        NAMED_COLORS.put("darkgrey", 0xFFA9A9A9);
-        NAMED_COLORS.put("darkkhaki", 0xFFBDB76B);
-        NAMED_COLORS.put("darkmagenta", 0xFF8B008B);
-        NAMED_COLORS.put("darkolivegreen", 0xFF556B2F);
-        NAMED_COLORS.put("darkorange", 0xFFFF8C00);
-        NAMED_COLORS.put("darkorchid", 0xFF9932CC);
-        NAMED_COLORS.put("darkred", 0xFF8B0000);
-        NAMED_COLORS.put("darksalmon", 0xFFE9967A);
-        NAMED_COLORS.put("darkseagreen", 0xFF8FBC8F);
-        NAMED_COLORS.put("darkslateblue", 0xFF483D8B);
-        NAMED_COLORS.put("darkslategray", 0xFF2F4F4F);
-        NAMED_COLORS.put("darkslategrey", 0xFF2F4F4F);
-        NAMED_COLORS.put("darkturquoise", 0xFF00CED1);
-        NAMED_COLORS.put("darkviolet", 0xFF9400D3);
-        NAMED_COLORS.put("deeppink", 0xFFFF1493);
-        NAMED_COLORS.put("deepskyblue", 0xFF00BFFF);
-        NAMED_COLORS.put("dimgray", 0xFF696969);
-        NAMED_COLORS.put("dimgrey", 0xFF696969);
-        NAMED_COLORS.put("dodgerblue", 0xFF1E90FF);
-        NAMED_COLORS.put("firebrick", 0xFFB22222);
-        NAMED_COLORS.put("floralwhite", 0xFFFFFAF0);
-        NAMED_COLORS.put("forestgreen", 0xFF228B22);
-        NAMED_COLORS.put("fuchsia", 0xFFFF00FF);
-        NAMED_COLORS.put("gainsboro", 0xFFDCDCDC);
-        NAMED_COLORS.put("ghostwhite", 0xFFF8F8FF);
-        NAMED_COLORS.put("gold", 0xFFFFD700);
-        NAMED_COLORS.put("goldenrod", 0xFFDAA520);
-        NAMED_COLORS.put("gray", 0xFF808080);
-        NAMED_COLORS.put("green", 0xFF008000);
-        NAMED_COLORS.put("greenyellow", 0xFFADFF2F);
-        NAMED_COLORS.put("grey", 0xFF808080);
-        NAMED_COLORS.put("honeydew", 0xFFF0FFF0);
-        NAMED_COLORS.put("hotpink", 0xFFFF69B4);
-        NAMED_COLORS.put("indianred", 0xFFCD5C5C);
-        NAMED_COLORS.put("indigo", 0xFF4B0082);
-        NAMED_COLORS.put("ivory", 0xFFFFFFF0);
-        NAMED_COLORS.put("khaki", 0xFFF0E68C);
-        NAMED_COLORS.put("lavender", 0xFFE6E6FA);
-        NAMED_COLORS.put("lavenderblush", 0xFFFFF0F5);
-        NAMED_COLORS.put("lawngreen", 0xFF7CFC00);
-        NAMED_COLORS.put("lemonchiffon", 0xFFFFFACD);
-        NAMED_COLORS.put("lightblue", 0xFFADD8E6);
-        NAMED_COLORS.put("lightcoral", 0xFFF08080);
-        NAMED_COLORS.put("lightcyan", 0xFFE0FFFF);
-        NAMED_COLORS.put("lightgoldenrodyellow", 0xFFFAFAD2);
-        NAMED_COLORS.put("lightgray", 0xFFD3D3D3);
-        NAMED_COLORS.put("lightgreen", 0xFF90EE90);
-        NAMED_COLORS.put("lightgrey", 0xFFD3D3D3);
-        NAMED_COLORS.put("lightpink", 0xFFFFB6C1);
-        NAMED_COLORS.put("lightsalmon", 0xFFFFA07A);
-        NAMED_COLORS.put("lightseagreen", 0xFF20B2AA);
-        NAMED_COLORS.put("lightskyblue", 0xFF87CEFA);
-        NAMED_COLORS.put("lightslategray", 0xFF778899);
-        NAMED_COLORS.put("lightslategrey", 0xFF778899);
-        NAMED_COLORS.put("lightsteelblue", 0xFFB0C4DE);
-        NAMED_COLORS.put("lightyellow", 0xFFFFFFE0);
-        NAMED_COLORS.put("lime", 0xFF00FF00);
-        NAMED_COLORS.put("limegreen", 0xFF32CD32);
-        NAMED_COLORS.put("linen", 0xFFFAF0E6);
-        NAMED_COLORS.put("magenta", 0xFFFF00FF);
-        NAMED_COLORS.put("maroon", 0xFF800000);
-        NAMED_COLORS.put("mediumaquamarine", 0xFF66CDAA);
-        NAMED_COLORS.put("mediumblue", 0xFF0000CD);
-        NAMED_COLORS.put("mediumorchid", 0xFFBA55D3);
-        NAMED_COLORS.put("mediumpurple", 0xFF9370DB);
-        NAMED_COLORS.put("mediumseagreen", 0xFF3CB371);
-        NAMED_COLORS.put("mediumslateblue", 0xFF7B68EE);
-        NAMED_COLORS.put("mediumspringgreen", 0xFF00FA9A);
-        NAMED_COLORS.put("mediumturquoise", 0xFF48D1CC);
-        NAMED_COLORS.put("mediumvioletred", 0xFFC71585);
-        NAMED_COLORS.put("midnightblue", 0xFF191970);
-        NAMED_COLORS.put("mintcream", 0xFFF5FFFA);
-        NAMED_COLORS.put("mistyrose", 0xFFFFE4E1);
-        NAMED_COLORS.put("moccasin", 0xFFFFE4B5);
-        NAMED_COLORS.put("navajowhite", 0xFFFFDEAD);
-        NAMED_COLORS.put("navy", 0xFF000080);
-        NAMED_COLORS.put("oldlace", 0xFFFDF5E6);
-        NAMED_COLORS.put("olive", 0xFF808000);
-        NAMED_COLORS.put("olivedrab", 0xFF6B8E23);
-        NAMED_COLORS.put("orange", 0xFFFFA500);
-        NAMED_COLORS.put("orangered", 0xFFFF4500);
-        NAMED_COLORS.put("orchid", 0xFFDA70D6);
-        NAMED_COLORS.put("palegoldenrod", 0xFFEEE8AA);
-        NAMED_COLORS.put("palegreen", 0xFF98FB98);
-        NAMED_COLORS.put("paleturquoise", 0xFFAFEEEE);
-        NAMED_COLORS.put("palevioletred", 0xFFDB7093);
-        NAMED_COLORS.put("papayawhip", 0xFFFFEFD5);
-        NAMED_COLORS.put("peachpuff", 0xFFFFDAB9);
-        NAMED_COLORS.put("peru", 0xFFCD853F);
-        NAMED_COLORS.put("pink", 0xFFFFC0CB);
-        NAMED_COLORS.put("plum", 0xFFDDA0DD);
-        NAMED_COLORS.put("powderblue", 0xFFB0E0E6);
-        NAMED_COLORS.put("purple", 0xFF800080);
-        NAMED_COLORS.put("rebeccapurple", 0xFF663399);
-        NAMED_COLORS.put("red", 0xFFFF0000);
-        NAMED_COLORS.put("rosybrown", 0xFFBC8F8F);
-        NAMED_COLORS.put("royalblue", 0xFF4169E1);
-        NAMED_COLORS.put("saddlebrown", 0xFF8B4513);
-        NAMED_COLORS.put("salmon", 0xFFFA8072);
-        NAMED_COLORS.put("sandybrown", 0xFFF4A460);
-        NAMED_COLORS.put("seagreen", 0xFF2E8B57);
-        NAMED_COLORS.put("seashell", 0xFFFFF5EE);
-        NAMED_COLORS.put("sienna", 0xFFA0522D);
-        NAMED_COLORS.put("silver", 0xFFC0C0C0);
-        NAMED_COLORS.put("skyblue", 0xFF87CEEB);
-        NAMED_COLORS.put("slateblue", 0xFF6A5ACD);
-        NAMED_COLORS.put("slategray", 0xFF708090);
-        NAMED_COLORS.put("slategrey", 0xFF708090);
-        NAMED_COLORS.put("snow", 0xFFFFFAFA);
-        NAMED_COLORS.put("springgreen", 0xFF00FF7F);
-        NAMED_COLORS.put("steelblue", 0xFF4682B4);
-        NAMED_COLORS.put("tan", 0xFFD2B48C);
-        NAMED_COLORS.put("teal", 0xFF008080);
-        NAMED_COLORS.put("thistle", 0xFFD8BFD8);
-        NAMED_COLORS.put("tomato", 0xFFFF6347);
-        NAMED_COLORS.put("turquoise", 0xFF40E0D0);
-        NAMED_COLORS.put("violet", 0xFFEE82EE);
-        NAMED_COLORS.put("wheat", 0xFFF5DEB3);
         NAMED_COLORS.put("white", 0xFFFFFFFF);
-        NAMED_COLORS.put("whitesmoke", 0xFFF5F5F5);
-        NAMED_COLORS.put("yellow", 0xFFFFFF00);
-        NAMED_COLORS.put("yellowgreen", 0xFF9ACD32);
+        NAMED_COLORS.put("red", 0xFFFF0000);
+        NAMED_COLORS.put("green", 0xFF008000);
+        NAMED_COLORS.put("blue", 0xFF0000FF);
         NAMED_COLORS.put("transparent", 0x00000000);
     }
 
@@ -173,6 +70,7 @@ public class ColorParser {
         if (colorStr == null) return null;
         colorStr = colorStr.trim().toLowerCase();
 
+        ensureLoaded();
         if (NAMED_COLORS.containsKey(colorStr)) {
             return NAMED_COLORS.get(colorStr);
         }
@@ -192,25 +90,30 @@ public class ColorParser {
         return null;
     }
 
+    private static int argb(int a, int r, int g, int b) {
+        return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+    }
+
     private static Integer parseHex(String hex) {
         try {
             if (hex.length() == 4) { // #RGB
                 int r = Integer.parseInt(hex.substring(1, 2), 16);
                 int g = Integer.parseInt(hex.substring(2, 3), 16);
                 int b = Integer.parseInt(hex.substring(3, 4), 16);
-                return Color.argb(255, r | (r << 4), g | (g << 4), b | (b << 4));
+                return argb(255, r | (r << 4), g | (g << 4), b | (b << 4));
             } else if (hex.length() == 5) { // #RGBA
                 int r = Integer.parseInt(hex.substring(1, 2), 16);
                 int g = Integer.parseInt(hex.substring(2, 3), 16);
                 int b = Integer.parseInt(hex.substring(3, 4), 16);
                 int a = Integer.parseInt(hex.substring(4, 5), 16);
-                return Color.argb(a | (a << 4), r | (r << 4), g | (g << 4), b | (b << 4));
+                return argb(a | (a << 4), r | (r << 4), g | (g << 4), b | (b << 4));
             } else if (hex.length() == 7) { // #RRGGBB
-                return Color.parseColor(hex);
+                long val = Long.parseLong(hex.substring(1), 16);
+                return (int) (0xFF000000L | val);
             } else if (hex.length() == 9) { // #RRGGBBAA
-                String a = hex.substring(7, 9);
-                String rgb = hex.substring(1, 7);
-                return Color.parseColor("#" + a + rgb);
+                long rgb = Long.parseLong(hex.substring(1, 7), 16);
+                long a = Long.parseLong(hex.substring(7, 9), 16);
+                return (int) ((a << 24) | rgb);
             }
         } catch (IllegalArgumentException e) {
             // Ignore
@@ -229,7 +132,7 @@ public class ColorParser {
                 if (matcher.group(7) != null) {
                     a = parseAlpha(matcher.group(7), "%".equals(matcher.group(8)));
                 }
-                return Color.argb((int) a, (int) r, (int) g, (int) b);
+                return argb((int) a, (int) r, (int) g, (int) b);
             } catch (Exception e) {
                 // Ignore
             }
@@ -280,7 +183,7 @@ public class ColorParser {
                     b = x;
                 }
 
-                return Color.argb((int) a, (int) ((r + m) * 255), (int) ((g + m) * 255), (int) ((b + m) * 255));
+                return argb((int) a, (int) ((r + m) * 255), (int) ((g + m) * 255), (int) ((b + m) * 255));
             } catch (Exception e) {
                 // Ignore
             }

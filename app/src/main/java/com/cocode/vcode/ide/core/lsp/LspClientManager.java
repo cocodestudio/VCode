@@ -117,8 +117,8 @@ public final class LspClientManager {
                 }
                 List<Problem> diags = server.diagnostics(doc);
                 deliverResult(callback, diags != null ? diags : Collections.emptyList());
-            } catch (Exception e) {
-                deliverError(callback, e.getMessage());
+            } catch (Throwable t) {
+                deliverError(callback, t.getMessage());
             }
         });
     }
@@ -164,6 +164,30 @@ public final class LspClientManager {
                     return;
                 }
                 List<LspLocation> refs = server.references(doc, pos);
+                deliverResult(callback, refs != null ? refs : Collections.emptyList());
+            } catch (Exception e) {
+                deliverError(callback, e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Requests all locations of the symbol to be renamed.
+     *
+     * @param doc      current document snapshot
+     * @param pos      caret position
+     * @param callback result delivered on the main thread
+     */
+    public void requestRename(LspDocument doc, LspPosition pos,
+                              LspCallback<List<LspLocation>> callback) {
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                LspServer server = getOrStartServer(doc.languageId);
+                if (server == null || !server.isReady()) {
+                    deliverError(callback, "Language server not ready");
+                    return;
+                }
+                List<LspLocation> refs = server.rename(doc, pos);
                 deliverResult(callback, refs != null ? refs : Collections.emptyList());
             } catch (Exception e) {
                 deliverError(callback, e.getMessage());
@@ -253,6 +277,25 @@ public final class LspClientManager {
             // Initialise on the current IO thread
             newServer.initialize(ProjectIndex.getInstance());
             return newServer;
+        }
+    }
+
+    /**
+     * Checks if an LSP server is registered and supported for the given language id.
+     */
+    public boolean hasServerForLanguage(String languageId) {
+        if (languageId == null || "plaintext".equals(languageId)) return false;
+        switch (languageId) {
+            case "html":
+            case "css":
+            case "scss":
+            case "javascript":
+            case "typescript":
+            case "json":
+            case "markdown":
+                return true;
+            default:
+                return false;
         }
     }
 

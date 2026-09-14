@@ -8,7 +8,9 @@ import android.view.KeyEvent;
 import org.robolectric.RuntimeEnvironment;
 
 import com.cocode.vcode.ide.core.editor.text.ContentPosition;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
+import org.robolectric.shadows.ShadowLooper;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -164,5 +166,218 @@ public class CodeEditTextTest {
         // The next line should be auto-indented with 4 spaces (default)
         String expected = "function test() {\n    ";
         assertEquals(expected, editor.getText().toString());
+    }
+
+    @Test
+    public void testCursorPaintStrokeWidthUsesDensity() {
+        float expectedWidth = 2f * editor.getDensity();
+        assertEquals(expectedWidth, editor.getCursorPaint().getStrokeWidth(), 0.001f);
+    }
+
+    @Test
+    public void testSelectWordAtDoesNotSelectDistantWordsOnPunctuation() {
+        editor.setText("body {\n  margin: 0;\n}");
+        // "  margin: 0;" -> col 10 is '0', col 11 is ';', col 12 is after ';'
+        assertFalse("Holding after ';' should not select '0'",
+                editor.selectWordAt(new ContentPosition(1, 12)));
+        assertFalse("Holding on ';' should not select '0'",
+                editor.selectWordAt(new ContentPosition(1, 11)));
+        assertFalse("Holding on '{' should not select word",
+                editor.selectWordAt(new ContentPosition(0, 5)));
+    }
+
+    @Test
+    public void testSelectWordAtBetweenTagsDoesNotSelectTag() {
+        editor.setText("<div></div>");
+        // "<div></div>" -> '<'(0), 'd'(1), 'i'(2), 'v'(3), '>'(4), '<'(5), '/'(6), 'd'(7), 'i'(8), 'v'(9), '>'(10)
+        // Position 5 is between '>' and '<'
+        assertFalse("Holding between tags should not select closing div",
+                editor.selectWordAt(new ContentPosition(0, 5)));
+    }
+
+    @Test
+    public void testSelectWordAtSelectsWordDirectly() {
+        editor.setText("<div></div>");
+        // Opening tag "div" is from col 1 to 4
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 2)));
+        assertEquals(1, editor.getSelectionStart());
+        assertEquals(4, editor.getSelectionEnd());
+
+        // Closing tag "div" is from col 7 to 10
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 8)));
+        assertEquals(7, editor.getSelectionStart());
+        assertEquals(10, editor.getSelectionEnd());
+    }
+
+    @Test
+    public void testSelectWordAtEndOfWordBoundary() {
+        editor.setText("hello world");
+        // Col 5 is space right after 'hello'
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 5)));
+        assertEquals(0, editor.getSelectionStart());
+        assertEquals(5, editor.getSelectionEnd());
+
+        // Col 11 is end of line right after 'world'
+        assertTrue(editor.selectWordAt(new ContentPosition(0, 11)));
+        assertEquals(6, editor.getSelectionStart());
+        assertEquals(11, editor.getSelectionEnd());
+    }
+
+    @Test
+    public void testAutoCloseBracketSkipOver() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("");
+
+        // Type 'p' then '{'
+        inputConnection.commitText("p", 1);
+        inputConnection.commitText("{", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        // Should be "p{}" with cursor at index 2 (between { and })
+        assertEquals("p{}", editor.getText().toString());
+        assertEquals(2, editor.getSelectionStart());
+
+        // Type '}' -> should skip over existing '}' without duplicating to "p{}}"
+        inputConnection.commitText("}", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("p{}", editor.getText().toString());
+        assertEquals(3, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testAutoCloseQuoteSkipOver() {
+        editor.setAutoCloseQuotes(true);
+        editor.setText("");
+
+        // Type '"' -> auto-close inserts '"'
+        inputConnection.commitText("\"", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("\"\"", editor.getText().toString());
+        assertEquals(1, editor.getSelectionStart());
+
+        // Type '"' -> should skip over without creating triple quotes
+        inputConnection.commitText("\"", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("\"\"", editor.getText().toString());
+        assertEquals(2, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testAutoCloseBracketPairBackspace() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("");
+
+        // Type '{' -> auto-close inserts '}'
+        inputConnection.commitText("{", 1);
+        ShadowLooper.runUiThreadTasks();
+        assertEquals("{}", editor.getText().toString());
+        assertEquals(1, editor.getSelectionStart());
+
+        // Delete between pair -> deletes both '{' and '}'
+        inputConnection.deleteSurroundingText(1, 0);
+        ShadowLooper.runUiThreadTasks();
+        assertEquals("", editor.getText().toString());
+        assertEquals(0, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testInsertCompletionWithReplaceAfterLength() {
+        // Document has "p{}" with cursor at 2 (between { and })
+        editor.setText("p{}");
+        inputConnection.setSelection(2, 2);
+        assertEquals(2, editor.getSelectionStart());
+
+        CompletionItem emmetItem = new CompletionItem("p{}", "<p>|</p>", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(2); // replace "p{" before cursor
+        emmetItem.setReplaceAfterLength(1); // replace "}" after cursor
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        // Trailing '}' must be cleanly consumed, leaving "<p></p>" with cursor at pipe (col 3)
+        assertEquals("<p></p>", editor.getText().toString());
+        assertEquals(3, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testInsertCompletionConsumesStrayBraceWithoutExplicitReplaceAfterLength() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("p{hello}");
+        inputConnection.setSelection(7, 7); // between 'o' and '}'
+
+        CompletionItem emmetItem = new CompletionItem("p{hello}", "<p>hello</p>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(7); // "p{hello"
+        emmetItem.setReplaceAfterLength(0); // 0, but editor should detect trailing '}'
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("<p>hello</p>", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionConsumesStrayBracketWithoutExplicitReplaceAfterLength() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("a[href=\"#\"]");
+        inputConnection.setSelection(10, 10); // between '"' and ']'
+
+        CompletionItem emmetItem = new CompletionItem("a[href=\"#\"]", "<a href=\"#\"></a>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(10);
+        emmetItem.setReplaceAfterLength(0);
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("<a href=\"#\"></a>", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionConsumesDuplicateBracket() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("p{hello}}");
+        inputConnection.setSelection(8, 8); // between the first and second '}'
+
+        CompletionItem emmetItem = new CompletionItem("p{hello}", "<p>hello</p>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(8);
+        emmetItem.setReplaceAfterLength(0);
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("<p>hello</p>", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionPreservesOuterBracesWhenAutoCloseDisabled() {
+        editor.setAutoCloseBrackets(false);
+        editor.setText("p{hello}\n}");
+        inputConnection.setSelection(8, 8); // after '}'
+
+        CompletionItem emmetItem = new CompletionItem("p{hello}", "<p>hello</p>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(8);
+        emmetItem.setReplaceAfterLength(0);
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        // Outer brace on next line should NOT be deleted
+        assertEquals("<p>hello</p>\n}", editor.getText().toString());
+    }
+
+    @Test
+    public void testComposingTextSkipOverClosingBracket() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("p{}");
+        inputConnection.setSelection(2, 2);
+
+        inputConnection.setComposingText("hello", 1);
+        inputConnection.commitText("}", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("p{hello}", editor.getText().toString());
+        assertEquals(8, editor.getSelectionStart());
     }
 }

@@ -1,174 +1,326 @@
 package com.cocode.vcode.ide.core.language.js;
 
+import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Standard library definitions and built-in objects for JavaScript autocompletion and linting.
+ * Loaded lazily from assets/types/js_standard_library.json on first access.
  */
 public class JsStandardLibrary {
 
-    public static final String[][] DOT_METHODS = {
-            {"console", "log,warn,error,info,table,time,timeEnd,timeLog,assert,clear,count,countReset,group,groupEnd,groupCollapsed,dir,dirxml,trace,debug,profile,profileEnd"},
-            {"Math", "floor,ceil,round,abs,max,min,random,sqrt,pow,PI,E,LN2,LN10,LOG2E,SQRT2,log,log2,log10,sign,trunc,sin,cos,tan,asin,acos,atan,atan2,sinh,cosh,tanh,cbrt,hypot,clz32,imul,fround"},
-            {"JSON", "parse,stringify"},
-            {"Array", "from,isArray,of"},
-            {"Object", "keys,values,entries,assign,create,freeze,seal,isFrozen,isSealed,defineProperty,defineProperties,getOwnPropertyNames,getOwnPropertyDescriptors,getPrototypeOf,setPrototypeOf,hasOwn,fromEntries,is,groupBy"},
-            {"Promise", "all,race,resolve,reject,allSettled,any,withResolvers"},
-            {"Number", "isFinite,isInteger,isNaN,isSafeInteger,parseInt,parseFloat,MAX_VALUE,MIN_VALUE,MAX_SAFE_INTEGER,MIN_SAFE_INTEGER,EPSILON,POSITIVE_INFINITY,NEGATIVE_INFINITY,NaN"},
-            {"String", "fromCharCode,fromCodePoint,raw"},
-            {"Date", "now,parse,UTC"},
-            {"Map", "groupBy"},
-            {"Set", ""},
-            {"WeakMap", ""},
-            {"WeakSet", ""},
-            {"RegExp", ""},
-            {"Symbol", "iterator,asyncIterator,hasInstance,toPrimitive,toStringTag,for,keyFor"},
-            {"Reflect", "apply,construct,defineProperty,deleteProperty,get,getOwnPropertyDescriptor,getPrototypeOf,has,isExtensible,ownKeys,preventExtensions,set,setPrototypeOf"},
-            {"Proxy", "revocable"},
-            {"document", "getElementById,querySelector,querySelectorAll,createElement,createTextNode,createDocumentFragment,createComment,addEventListener,removeEventListener,body,head,title,cookie,write,writeln,readyState,documentElement,activeElement,forms,images,links,scripts,styleSheets,hidden,visibilityState,fullscreenElement,pointerLockElement,designMode,execCommand,getSelection,hasFocus,open,close,importNode,adoptNode,createEvent,createRange,createTreeWalker,elementsFromPoint,elementFromPoint,exitFullscreen,exitPointerLock,scrollingElement"},
-            {"window", "location,history,navigator,alert,confirm,prompt,open,close,scrollTo,scrollBy,setTimeout,setInterval,clearTimeout,clearInterval,requestAnimationFrame,cancelAnimationFrame,requestIdleCallback,cancelIdleCallback,fetch,addEventListener,removeEventListener,getComputedStyle,matchMedia,innerWidth,innerHeight,outerWidth,outerHeight,devicePixelRatio,performance,screen,crypto,indexedDB,caches,customElements,visualViewport,structuredClone,atob,btoa,queueMicrotask,reportError,postMessage,focus,blur,print,stop,getSelection"},
-            {"navigator", "userAgent,language,languages,onLine,geolocation,clipboard,mediaDevices,permissions,serviceWorker,hardwareConcurrency,cookieEnabled,platform,maxTouchPoints,connection,storage,locks,credentials,sendBeacon,vibrate,share,canShare,getBattery,getGamepads,requestMIDIAccess,wakeLock"},
-            {"location", "href,pathname,search,hash,hostname,port,protocol,host,origin,reload,replace,assign,toString"},
-            {"history", "back,forward,go,pushState,replaceState,length,state,scrollRestoration"},
-            {"localStorage", "getItem,setItem,removeItem,clear,length,key"},
-            {"sessionStorage", "getItem,setItem,removeItem,clear,length,key"},
-            {"performance", "now,mark,measure,clearMarks,clearMeasures,getEntries,getEntriesByName,getEntriesByType,timeOrigin,navigation,timing"},
-            {"crypto", "subtle,getRandomValues,randomUUID"},
-            {"screen", "width,height,availWidth,availHeight,colorDepth,pixelDepth,orientation"},
-            {"URL", "createObjectURL,revokeObjectURL,canParse"},
-            {"URLSearchParams", "append,delete,get,getAll,has,set,sort,toString,entries,keys,values,forEach,size"},
-            {"FormData", "append,delete,get,getAll,has,set,entries,keys,values,forEach"},
-            {"Headers", "append,delete,get,has,set,entries,keys,values,forEach"},
-            {"Request", "clone,arrayBuffer,blob,formData,json,text,url,method,headers,body,mode,credentials,cache,redirect,referrer,integrity,signal"},
-            {"Response", "clone,arrayBuffer,blob,formData,json,text,ok,status,statusText,headers,url,type,redirected,error,redirect"},
-            {"AbortController", "abort,signal"},
-            {"IntersectionObserver", "observe,unobserve,disconnect,takeRecords,root,rootMargin,thresholds"},
-            {"ResizeObserver", "observe,unobserve,disconnect"},
-            {"MutationObserver", "observe,disconnect,takeRecords"},
-            {"EventTarget", "addEventListener,removeEventListener,dispatchEvent"},
-            {"CustomEvent", "detail"},
-            {"WebSocket", "send,close,onopen,onclose,onmessage,onerror,readyState,url,protocol,binaryType,bufferedAmount,CONNECTING,OPEN,CLOSING,CLOSED"},
-            {"Worker", "postMessage,terminate,onmessage,onerror"},
-            {"BroadcastChannel", "postMessage,close,onmessage,name"},
-            {"Intl", "DateTimeFormat,NumberFormat,Collator,PluralRules,RelativeTimeFormat,ListFormat,Segmenter,DisplayNames,Locale"},
-            {"TextEncoder", "encode,encodeInto,encoding"},
-            {"TextDecoder", "decode,encoding,fatal,ignoreBOM"},
-            {"DOMParser", "parseFromString"},
-            {"XMLSerializer", "serializeToString"},
-    };
+    private static final Object lock = new Object();
+    private static volatile boolean loaded = false;
 
-    public static final String[] EVENT_NAMES = {
-            "click", "dblclick", "mousedown", "mouseup", "mousemove", "mouseover", "mouseout",
-            "mouseenter", "mouseleave", "contextmenu", "wheel",
-            "keydown", "keyup", "keypress",
-            "focus", "blur", "focusin", "focusout",
-            "input", "change", "submit", "reset", "invalid",
-            "touchstart", "touchmove", "touchend", "touchcancel",
-            "pointerdown", "pointerup", "pointermove", "pointerenter", "pointerleave",
-            "pointerover", "pointerout", "pointercancel", "gotpointercapture", "lostpointercapture",
-            "scroll", "scrollend", "resize",
-            "load", "error", "abort", "unload", "beforeunload",
-            "DOMContentLoaded", "readystatechange",
-            "animationstart", "animationend", "animationiteration", "animationcancel",
-            "transitionstart", "transitionend", "transitionrun", "transitioncancel",
-            "drag", "dragstart", "dragend", "dragover", "dragenter", "dragleave", "drop",
-            "copy", "cut", "paste",
-            "play", "pause", "ended", "timeupdate", "volumechange", "seeking", "seeked",
-            "canplay", "canplaythrough", "loadeddata", "loadedmetadata", "progress", "waiting", "stalled",
-            "fullscreenchange", "fullscreenerror",
-            "visibilitychange", "online", "offline", "storage",
-            "hashchange", "popstate", "pagehide", "pageshow",
-            "message", "messageerror",
-            "open", "close",
-            "toggle", "beforetoggle",
-            "select", "selectstart", "selectionchange",
-            "slotchange",
-            "formdata",
-    };
-
+    public static String[][] DOT_METHODS;
+    public static String[] EVENT_NAMES;
     public static final Map<String, String[]> PROTOTYPE_METHODS = new HashMap<>();
     public static final Map<String, String> CHAIN_RETURN_TYPES = new HashMap<>();
     public static final Set<String> PROMISE_FUNCTIONS = new HashSet<>();
 
+    public static final Map<String, Map<String, SignatureInfo>> SIGNATURES_BY_CONTAINER = new HashMap<>();
+    public static final Map<String, SignatureInfo> GLOBAL_SIGNATURES = new HashMap<>();
+    public static final Map<String, SignatureInfo> PROTOTYPE_SIGNATURES_BY_NAME = new HashMap<>();
+
+    public static final class SignatureInfo {
+        public final String name;
+        public final String detail;
+        public final String doc;
+        public final java.util.List<String> parameters;
+
+        public SignatureInfo(String name, String detail, String doc, java.util.List<String> parameters) {
+            this.name = name;
+            this.detail = detail != null ? detail : name;
+            this.doc = doc != null ? doc : "";
+            this.parameters = parameters != null ? Collections.unmodifiableList(parameters) : Collections.emptyList();
+        }
+    }
+
     static {
-        PROTOTYPE_METHODS.put("array", new String[]{
-                "push", "pop", "shift", "unshift", "splice", "slice", "concat", "join", "reverse", "sort",
-                "indexOf", "lastIndexOf", "includes", "find", "findIndex", "findLast", "findLastIndex",
-                "filter", "map", "reduce", "reduceRight", "forEach", "some", "every", "flat", "flatMap",
-                "fill", "copyWithin", "entries", "keys", "values", "at", "toReversed", "toSorted", "toSpliced",
-                "with", "toString", "toLocaleString", "length", "group", "groupToMap"
-        });
-        PROTOTYPE_METHODS.put("string", new String[]{
-                "charAt", "charCodeAt", "codePointAt", "at", "concat", "includes", "startsWith", "endsWith",
-                "indexOf", "lastIndexOf", "search", "match", "matchAll", "replace", "replaceAll", "split",
-                "slice", "substring", "padStart", "padEnd", "trimStart", "trimEnd", "trim",
-                "toUpperCase", "toLowerCase", "toLocaleLowerCase", "toLocaleUpperCase", "normalize",
-                "repeat", "valueOf", "toString", "length", "isWellFormed", "toWellFormed", "localeCompare"
-        });
-        PROTOTYPE_METHODS.put("number", new String[]{"toFixed", "toPrecision", "toExponential", "toString", "valueOf", "toLocaleString"});
-        PROTOTYPE_METHODS.put("promise", new String[]{"then", "catch", "finally"});
-        PROTOTYPE_METHODS.put("map", new String[]{"set", "get", "has", "delete", "clear", "forEach", "keys", "values", "entries", "size"});
-        PROTOTYPE_METHODS.put("set", new String[]{"add", "has", "delete", "clear", "forEach", "values", "keys", "entries", "size", "union", "intersection", "difference", "symmetricDifference", "isSubsetOf", "isSupersetOf"});
-        PROTOTYPE_METHODS.put("date", new String[]{"getTime", "getFullYear", "getMonth", "getDate", "getDay", "getHours", "getMinutes", "getSeconds", "getMilliseconds", "setTime", "setFullYear", "setMonth", "setDate", "setHours", "setMinutes", "setSeconds", "toISOString", "toLocaleDateString", "toLocaleTimeString", "toLocaleString", "toJSON", "toString", "valueOf", "getTimezoneOffset"});
-        PROTOTYPE_METHODS.put("regexp", new String[]{"test", "exec", "toString", "source", "flags", "global", "ignoreCase", "multiline", "sticky", "unicode", "lastIndex"});
-        PROTOTYPE_METHODS.put("element", new String[]{
-                "addEventListener", "removeEventListener", "setAttribute", "getAttribute", "removeAttribute",
-                "hasAttribute", "toggleAttribute", "closest", "matches", "querySelector", "querySelectorAll",
-                "classList", "style", "dataset", "innerHTML", "textContent", "innerText", "outerHTML", "outerText",
-                "appendChild", "removeChild", "insertBefore", "replaceChild", "replaceChildren", "cloneNode",
-                "contains", "remove", "before", "after", "prepend", "append", "insertAdjacentHTML",
-                "insertAdjacentElement", "insertAdjacentText", "getBoundingClientRect", "getClientRects",
-                "scrollIntoView", "scroll", "scrollTo", "scrollBy", "focus", "blur", "click",
-                "animate", "getAnimations", "requestFullscreen", "attachShadow",
-                "id", "className", "tagName", "localName", "parentElement", "parentNode",
-                "children", "childNodes", "childElementCount", "firstChild", "lastChild",
-                "firstElementChild", "lastElementChild", "nextSibling", "previousSibling",
-                "nextElementSibling", "previousElementSibling",
-                "offsetWidth", "offsetHeight", "offsetTop", "offsetLeft", "offsetParent",
-                "clientWidth", "clientHeight", "clientTop", "clientLeft",
-                "scrollWidth", "scrollHeight", "scrollTop", "scrollLeft",
-                "hidden", "isConnected", "slot", "assignedSlot",
-                "value", "type", "checked", "disabled", "readOnly", "name", "form",
-                "min", "max", "step", "placeholder", "required", "maxLength", "minLength",
-                "play", "pause", "load", "currentTime", "duration", "paused", "muted", "volume", "src", "playbackRate"
-        });
-        PROTOTYPE_METHODS.put("nodelist", new String[]{"forEach", "entries", "keys", "values", "item", "length"});
-        PROTOTYPE_METHODS.put("response", new String[]{"json", "text", "blob", "arrayBuffer", "formData", "clone", "ok", "status", "statusText", "headers", "url", "type", "redirected"});
-        PROTOTYPE_METHODS.put("event", new String[]{"preventDefault", "stopPropagation", "stopImmediatePropagation", "target", "currentTarget", "type", "bubbles", "cancelable", "composed", "timeStamp", "isTrusted", "defaultPrevented", "eventPhase"});
-        PROTOTYPE_METHODS.put("classlist", new String[]{"add", "remove", "toggle", "contains", "replace", "item", "length", "value", "entries", "keys", "values", "forEach", "supports"});
-        PROTOTYPE_METHODS.put("style", new String[]{"getPropertyValue", "setProperty", "removeProperty", "cssText", "length", "item"});
-        PROTOTYPE_METHODS.put("canvascontext", new String[]{"arc", "arcTo", "beginPath", "bezierCurveTo", "clearRect", "clip", "closePath", "createImageData", "createLinearGradient", "createPattern", "createRadialGradient", "drawFocusIfNeeded", "drawImage", "ellipse", "fill", "fillRect", "fillText", "getImageData", "getLineDash", "isPointInPath", "isPointInStroke", "lineTo", "measureText", "moveTo", "putImageData", "quadraticCurveTo", "rect", "restore", "rotate", "save", "scale", "setLineDash", "setTransform", "stroke", "strokeRect", "strokeText", "transform", "translate", "fillStyle", "font", "globalAlpha", "globalCompositeOperation", "imageSmoothingEnabled", "lineCap", "lineDashOffset", "lineJoin", "lineWidth", "miterLimit", "shadowBlur", "shadowColor", "shadowOffsetX", "shadowOffsetY", "strokeStyle", "textAlign", "textBaseline"});
-        PROTOTYPE_METHODS.put("blob", new String[]{"size", "type", "arrayBuffer", "slice", "stream", "text"});
-        PROTOTYPE_METHODS.put("file", new String[]{"name", "lastModified", "size", "type", "arrayBuffer", "slice", "stream", "text"});
-        PROTOTYPE_METHODS.put("filereader", new String[]{"readAsArrayBuffer", "readAsBinaryString", "readAsDataURL", "readAsText", "abort", "error", "readyState", "result", "onload", "onloadstart", "onloadend", "onprogress", "onabort", "onerror"});
+        ensureLoaded();
+    }
 
-        for (String m : new String[]{"filter", "map", "slice", "concat", "flat", "flatMap", "sort", "reverse", "toReversed", "toSorted", "splice", "copyWithin", "fill", "from", "of", "keys", "values", "entries"}) {
-            CHAIN_RETURN_TYPES.put(m, "array");
+    public static void ensureLoaded() {
+        if (loaded) return;
+        synchronized (lock) {
+            if (loaded) return;
+            loadFromAssets();
+            loaded = true;
         }
-        for (String m : new String[]{"trim", "trimStart", "trimEnd", "toLowerCase", "toUpperCase", "replace", "replaceAll", "slice", "substring", "padStart", "padEnd", "repeat", "normalize", "concat", "charAt", "at", "toLocaleLowerCase", "toLocaleUpperCase"}) {
-            CHAIN_RETURN_TYPES.put(m, "string");
-        }
-        for (String m : new String[]{"then", "catch", "finally", "all", "race", "allSettled", "any", "resolve", "reject"}) {
-            CHAIN_RETURN_TYPES.put(m, "promise");
-        }
-        for (String m : new String[]{"querySelector", "getElementById", "createElement", "closest", "parentElement", "firstElementChild", "lastElementChild", "nextElementSibling", "previousElementSibling", "cloneNode"}) {
-            CHAIN_RETURN_TYPES.put(m, "element");
-        }
-        for (String m : new String[]{"querySelectorAll", "getElementsByClassName", "getElementsByTagName", "childNodes", "children"}) {
-            CHAIN_RETURN_TYPES.put(m, "nodelist");
-        }
-        CHAIN_RETURN_TYPES.put("classList", "classlist");
-        CHAIN_RETURN_TYPES.put("style", "style");
-        CHAIN_RETURN_TYPES.put("json", "promise");
-        CHAIN_RETURN_TYPES.put("text", "promise");
-        CHAIN_RETURN_TYPES.put("blob", "promise");
-        CHAIN_RETURN_TYPES.put("arrayBuffer", "promise");
-        CHAIN_RETURN_TYPES.put("formData", "promise");
+    }
 
-        Collections.addAll(PROMISE_FUNCTIONS, "fetch", "axios", "axios.get", "axios.post", "axios.put", "axios.delete");
+    public static void reloadForTest() {
+        synchronized (lock) {
+            loaded = false;
+            ensureLoaded();
+        }
+    }
+
+    private static void loadFromAssets() {
+        String jsonStr = StaticAssetReader.readAsset("types/js_standard_library.json");
+        if (jsonStr == null || jsonStr.trim().isEmpty()) {
+            loadFallback();
+            return;
+        }
+
+        PROTOTYPE_METHODS.clear();
+        CHAIN_RETURN_TYPES.clear();
+        PROMISE_FUNCTIONS.clear();
+        SIGNATURES_BY_CONTAINER.clear();
+        GLOBAL_SIGNATURES.clear();
+        PROTOTYPE_SIGNATURES_BY_NAME.clear();
+
+        try {
+            JSONObject root = new JSONObject(jsonStr);
+
+            // 1. dotMethods
+            if (root.has("dotMethods")) {
+                JSONObject dotObj = root.getJSONObject("dotMethods");
+                int size = dotObj.length();
+                String[][] dotMethods = new String[size][2];
+                Iterator<String> keys = dotObj.keys();
+                int idx = 0;
+                while (keys.hasNext()) {
+                    String objName = keys.next();
+                    JSONArray arr = dotObj.getJSONArray(objName);
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < arr.length(); i++) {
+                        if (i > 0) sb.append(',');
+                        sb.append(arr.getString(i));
+                    }
+                    dotMethods[idx][0] = objName;
+                    dotMethods[idx][1] = sb.toString();
+                    idx++;
+                }
+                DOT_METHODS = dotMethods;
+            } else {
+                DOT_METHODS = new String[0][0];
+            }
+
+            // 2. eventNames
+            if (root.has("eventNames")) {
+                JSONArray evArr = root.getJSONArray("eventNames");
+                String[] eventNames = new String[evArr.length()];
+                for (int i = 0; i < evArr.length(); i++) {
+                    eventNames[i] = evArr.getString(i);
+                }
+                EVENT_NAMES = eventNames;
+            } else {
+                EVENT_NAMES = new String[0];
+            }
+
+            // 3. prototypeMethods
+            PROTOTYPE_METHODS.clear();
+            if (root.has("prototypeMethods")) {
+                JSONObject protoObj = root.getJSONObject("prototypeMethods");
+                Iterator<String> keys = protoObj.keys();
+                while (keys.hasNext()) {
+                    String typeName = keys.next();
+                    JSONArray arr = protoObj.getJSONArray(typeName);
+                    String[] methods = new String[arr.length()];
+                    for (int i = 0; i < arr.length(); i++) {
+                        methods[i] = arr.getString(i);
+                    }
+                    PROTOTYPE_METHODS.put(typeName, methods);
+                }
+            }
+
+            // 4. chainReturnTypes
+            CHAIN_RETURN_TYPES.clear();
+            if (root.has("chainReturnTypes")) {
+                JSONObject chainObj = root.getJSONObject("chainReturnTypes");
+                Iterator<String> keys = chainObj.keys();
+                while (keys.hasNext()) {
+                    String method = keys.next();
+                    CHAIN_RETURN_TYPES.put(method, chainObj.getString(method));
+                }
+            }
+
+            // 5. promiseFunctions
+            PROMISE_FUNCTIONS.clear();
+            if (root.has("promiseFunctions")) {
+                JSONArray pfArr = root.getJSONArray("promiseFunctions");
+                for (int i = 0; i < pfArr.length(); i++) {
+                    PROMISE_FUNCTIONS.add(pfArr.getString(i));
+                }
+            }
+
+            // 6. lspMembers & signatures
+            SIGNATURES_BY_CONTAINER.clear();
+            GLOBAL_SIGNATURES.clear();
+            PROTOTYPE_SIGNATURES_BY_NAME.clear();
+            if (root.has("lspMembers")) {
+                JSONObject lspObj = root.getJSONObject("lspMembers");
+                Iterator<String> containerKeys = lspObj.keys();
+                while (containerKeys.hasNext()) {
+                    String container = containerKeys.next();
+                    JSONArray members = lspObj.getJSONArray(container);
+                    Map<String, SignatureInfo> containerMap = SIGNATURES_BY_CONTAINER.computeIfAbsent(container, k -> new HashMap<>());
+
+                    for (int i = 0; i < members.length(); i++) {
+                        JSONObject m = members.getJSONObject(i);
+                        String name = m.optString("name", "");
+                        if (name.isEmpty()) continue;
+                        String kind = m.optString("kind", "fn");
+                        if (!"fn".equals(kind)) continue;
+
+                        String detail = m.optString("detail", name);
+                        String doc = m.optString("doc", "");
+                        java.util.List<String> params = new java.util.ArrayList<>();
+
+                        if (m.has("params")) {
+                            JSONArray pArr = m.getJSONArray("params");
+                            for (int p = 0; p < pArr.length(); p++) {
+                                params.add(pArr.getString(p));
+                            }
+                        } else {
+                            int open = detail.indexOf('(');
+                            int close = detail.lastIndexOf(')');
+                            if (open >= 0 && close > open) {
+                                String paramStr = detail.substring(open + 1, close).trim();
+                                if (!paramStr.isEmpty()) {
+                                    String[] parts = paramStr.split(",");
+                                    for (String part : parts) {
+                                        params.add(part.trim());
+                                    }
+                                }
+                            }
+                        }
+
+                        SignatureInfo sig = new SignatureInfo(name, detail, doc, params);
+                        containerMap.put(name, sig);
+
+                        if ("__global__".equals(container) || "window".equals(container)) {
+                            GLOBAL_SIGNATURES.putIfAbsent(name, sig);
+                        }
+                        if (container.startsWith("__")) {
+                            PROTOTYPE_SIGNATURES_BY_NAME.putIfAbsent(name, sig);
+                        }
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            loadFallback();
+        }
+    }
+
+    /**
+     * Resolves built-in signature info for a function or method invocation.
+     *
+     * @param funcName full function or member expression string (e.g. "console.log", "fetch", "arr.push")
+     * @param receiverType optional inferred receiver type (e.g. "@ARRAY", "@STRING", "element")
+     * @return matching SignatureInfo or null if not found
+     */
+    public static SignatureInfo getBuiltinSignature(String funcName, String receiverType) {
+        if (funcName == null || funcName.isEmpty()) return null;
+        ensureLoaded();
+
+        int dotIdx = funcName.lastIndexOf('.');
+        if (dotIdx >= 0) {
+            String container = funcName.substring(0, dotIdx);
+            String method = funcName.substring(dotIdx + 1);
+
+            // 1. Direct container lookup (e.g. "console", "Math", "document", "JSON", "URL")
+            Map<String, SignatureInfo> cMap = SIGNATURES_BY_CONTAINER.get(container);
+            if (cMap != null && cMap.containsKey(method)) {
+                return cMap.get(method);
+            }
+
+            // 2. Inferred receiver type lookup
+            if (receiverType != null) {
+                String protoContainer = mapTypeToContainer(receiverType);
+                if (protoContainer != null) {
+                    Map<String, SignatureInfo> pMap = SIGNATURES_BY_CONTAINER.get(protoContainer);
+                    if (pMap != null && pMap.containsKey(method)) {
+                        return pMap.get(method);
+                    }
+                }
+            }
+
+            // 3. Fallback to well-known prototype method by name (e.g. "push", "slice", "replace", "addEventListener")
+            SignatureInfo protoSig = PROTOTYPE_SIGNATURES_BY_NAME.get(method);
+            if (protoSig != null) {
+                return protoSig;
+            }
+
+            // 4. If container is window, check globals
+            if ("window".equals(container)) {
+                return GLOBAL_SIGNATURES.get(method);
+            }
+
+            return null;
+        } else {
+            // Standalone function or constructor call (e.g. "fetch", "setTimeout", "Promise", "Date")
+            SignatureInfo globalSig = GLOBAL_SIGNATURES.get(funcName);
+            if (globalSig != null) {
+                return globalSig;
+            }
+            // Fallback to prototype method (e.g. if invoked directly or bound)
+            return PROTOTYPE_SIGNATURES_BY_NAME.get(funcName);
+        }
+    }
+
+    private static String mapTypeToContainer(String type) {
+        if (type == null) return null;
+        switch (type.toUpperCase()) {
+            case "@ARRAY":
+            case "ARRAY":
+                return "__array__";
+            case "@STRING":
+            case "STRING":
+                return "__string__";
+            case "@NUMBER":
+            case "NUMBER":
+                return "__number__";
+            case "@DATE":
+            case "DATE":
+                return "__date__";
+            case "@MAP":
+            case "MAP":
+                return "__map__";
+            case "@SET":
+            case "SET":
+                return "__set__";
+            case "@PROMISE":
+            case "PROMISE":
+                return "__promise__";
+            case "ELEMENT":
+            case "HTMLELEMENT":
+                return "__element__";
+            case "RESPONSE":
+                return "__response__";
+            case "EVENT":
+                return "__event__";
+            case "CLASSLIST":
+                return "__classlist__";
+            case "STYLE":
+                return "__style__";
+            case "CANVASCONTEXT":
+                return "__canvascontext__";
+            case "FILEREADER":
+                return "__filereader__";
+            case "REGEXP":
+                return "__regexp__";
+            default:
+                return null;
+        }
+    }
+
+    private static void loadFallback() {
+        if (DOT_METHODS == null) DOT_METHODS = new String[0][0];
+        if (EVENT_NAMES == null) EVENT_NAMES = new String[0];
+        if (PROMISE_FUNCTIONS.isEmpty()) {
+            Collections.addAll(PROMISE_FUNCTIONS, "fetch", "axios", "axios.get", "axios.post", "axios.put", "axios.delete");
+        }
     }
 }

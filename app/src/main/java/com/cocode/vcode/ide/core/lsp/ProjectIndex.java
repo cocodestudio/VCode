@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * Project-wide symbol index.
  * <p>
@@ -45,6 +44,18 @@ public final class ProjectIndex {
      * Updated after a file is (re-)indexed.
      */
     private final ConcurrentHashMap<String, List<SymbolEntry>> fileSymbols = new ConcurrentHashMap<>();
+    
+    /**
+     * Cache of the latest ParseResult for each file, keyed by absolute file path.
+     */
+    private final ConcurrentHashMap<String, com.cocode.vcode.ide.core.language.js.ParseResult> parseResults = new ConcurrentHashMap<>();
+
+    /**
+     * Per-file export table, keyed by absolute file path. Populated
+     * from {@code parseResults} on every parse cycle.
+     * Never read from disk.
+     */
+    private final ConcurrentHashMap<String, com.cocode.vcode.ide.core.language.js.JsExportTable> exportTables = new ConcurrentHashMap<>();
     /**
      * Absolute path of the currently indexed project root.
      */
@@ -157,7 +168,133 @@ public final class ProjectIndex {
         projectRoot = null;
         documents.clear();
         fileSymbols.clear();
+        parseResults.clear();
+        exportTables.clear();
         LspEditorBridge.resetProjectSession();
+    }
+    
+    public void updateParseResult(String uri, com.cocode.vcode.ide.core.language.js.ParseResult result) {
+        if (uri == null) return;
+        // Canonicalize the key so that look-ups by
+        // {@code new File(...).getAbsolutePath()} (used by callers
+        // like the completion engine) match the stored key.
+        String key = canonicalize(uri);
+        if (result == null) {
+            parseResults.remove(key);
+            exportTables.remove(key);
+        } else {
+            parseResults.put(key, result);
+            // rebuild the per-file export table from the
+            // freshly-parsed tree. This runs on the calling thread
+            // (the diagnostic thread); the old table is replaced
+            // atomically by the concurrent map's put.
+            exportTables.put(key,
+                    com.cocode.vcode.ide.core.language.js.JsExportTable.build(
+                            result.tree, key));
+        }
+    }
+
+    /**
+     * Convert a possibly-relative path into the canonical
+     * {@code File.getAbsolutePath()} form so that all readers
+     * (callers using {@code new File(uri).getAbsolutePath()}) and
+     * writers (the parse pipeline, the file scanner) compare equal.
+     * Returns {@code null} for null input; returns the input as-is
+     * if it cannot be canonicalized.
+     */
+    private static String canonicalize(String uri) {
+        if (uri == null) return null;
+        try {
+            return new java.io.File(uri).getAbsolutePath();
+        } catch (Exception e) {
+            return uri;
+        }
+    }
+
+    public com.cocode.vcode.ide.core.language.js.ParseResult getParseResult(String uri) {
+        if (uri == null) return null;
+        return parseResults.get(canonicalize(uri));
+    }
+
+    /**
+     * Retrieves the ParseResult for the given JS/TS file, or parses it on demand if not
+     * yet cached. If the file is open in the editor, its live document snapshot is used.
+     *
+     * @param file the file to get or parse
+     * @return the ParseResult, or null if file cannot be read
+     */
+    public com.cocode.vcode.ide.core.language.js.ParseResult getOrParseJsFile(File file) {
+        if (file == null || file.length() > 500 * 1024) return null; // 500 KB safety limit
+        String uri = file.getAbsolutePath();
+        com.cocode.vcode.ide.core.language.js.ParseResult cached = getParseResult(uri);
+        if (cached != null && cached.tree != null) {
+            return cached;
+        }
+
+        try {
+            LspDocument doc = getDocument(uri);
+            String content = (doc != null && doc.text != null) ? doc.text : com.cocode.vcode.ide.utils.FileUtils.readFile(file);
+            if (content != null) {
+                com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(content);
+                com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(content, tokens);
+                if (tree != null) {
+                    tree.buildNodesByOffset();
+                }
+                com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree = com.cocode.vcode.ide.core.language.js.ScopeTree.build(tree);
+                com.cocode.vcode.ide.core.language.js.ParseResult pr = new com.cocode.vcode.ide.core.language.js.ParseResult(
+                        file, content, tokens, tree, scopeTree, com.cocode.vcode.ide.core.language.js.ParseResult.MODE_FULL);
+                updateParseResult(uri, pr);
+                return pr;
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /**
+     * Returns the export table for a single file, or null if the
+     * file's parse result has not been published yet.
+     */
+    public com.cocode.vcode.ide.core.language.js.JsExportTable getExportTable(String uri) {
+        if (uri == null) return null;
+        return exportTables.get(canonicalize(uri));
+    }
+
+    /**
+     * Project-wide prefix query: returns every export
+     * across the project whose name starts with {@code prefix} (case
+     * sensitive). The {@code ExportRef} carries the source file URI
+     * so callers can compute the import path.
+     *
+     * <p>Allocations: one {@link ArrayList} per call. Each table's
+     * prefix scan is O(N) in the table's size, so the total is
+     * O(sum of table sizes) bounded by the cap of 50 results.
+     */
+    public List<ExportRef> getExportsByPrefix(String prefix) {
+        if (prefix == null) prefix = "";
+        List<ExportRef> out = new ArrayList<>();
+        for (com.cocode.vcode.ide.core.language.js.JsExportTable table : exportTables.values()) {
+            for (int i = 0; i < table.count; i++) {
+                String name = table.exportName[i];
+                if (name == null) continue;
+                if (name.startsWith(prefix)) {
+                    out.add(new ExportRef(name, table.exportSourceUri[i]));
+                    if (out.size() >= 50) return out;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A (name, sourceUri) pair returned by
+     *  {@link #getExportsByPrefix(String)}. The sourceUri is the
+     *  absolute path of the file that declared the export. */
+    public static final class ExportRef {
+        public final String name;
+        public final String sourceUri;
+        public ExportRef(String name, String sourceUri) {
+            this.name = name;
+            this.sourceUri = sourceUri;
+        }
     }
 
     /**
@@ -220,6 +357,8 @@ public final class ProjectIndex {
     public LspDocument getDocument(String uri) {
         return documents.get(uri);
     }
+
+
 
     /**
      * Finds all symbols whose name starts with the given prefix (case-insensitive).
@@ -318,14 +457,18 @@ public final class ProjectIndex {
         return projectRoot;
     }
 
+    private static boolean isIgnoredDirectory(String name) {
+        return name.startsWith(".") || name.equals("node_modules") || name.equals("build")
+                || name.equals("dist") || name.equals("out") || name.equals("vendor")
+                || name.equals(".next") || name.equals(".nuxt") || name.equals("target");
+    }
+
     private void indexDirectory(File dir) {
         File[] files = dir.listFiles();
         if (files == null) return;
         for (File f : files) {
             if (f.isDirectory()) {
-                // Skip hidden dirs and common build artefact directories
-                String name = f.getName();
-                if (!name.startsWith(".") && !name.equals("node_modules") && !name.equals("build")) {
+                if (!isIgnoredDirectory(f.getName())) {
                     indexDirectory(f);
                 }
             } else if (isSupportedFile(f)) {
@@ -344,8 +487,7 @@ public final class ProjectIndex {
         if (files == null) return;
         for (File f : files) {
             if (f.isDirectory()) {
-                String name = f.getName();
-                if (!name.startsWith(".") && !name.equals("node_modules") && !name.equals("build")) {
+                if (!isIgnoredDirectory(f.getName())) {
                     indexDirectoryIncremental(f);
                 }
             } else if (isSupportedFile(f)) {
@@ -376,6 +518,16 @@ public final class ProjectIndex {
             documents.put(uri, doc);
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
             fileSymbols.put(uri, symbols);
+
+            if ("javascript".equals(languageId) || "typescript".equals(languageId)) {
+                try {
+                    com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(text);
+                    com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseTopLevel(text, tokens);
+                    com.cocode.vcode.ide.core.language.js.ParseResult pr = new com.cocode.vcode.ide.core.language.js.ParseResult(file, text, tokens, tree, null, com.cocode.vcode.ide.core.language.js.ParseResult.MODE_FULL);
+                    updateParseResult(uri, pr);
+                } catch (Exception ignored) {
+                }
+            }
         } catch (Exception ignored) {
             // Skip files that cannot be read
         }

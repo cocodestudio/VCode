@@ -31,6 +31,32 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         colorBracket = getColor(R.color.vcode_color_html_bracket);
     }
 
+    public static CssSyntaxHighlighter forTest() {
+        return new CssSyntaxHighlighter((Void) null);
+    }
+
+    public static CssSyntaxHighlighter forTestWithColors(int comment, int selector, int property, int value, int atRule, int bracket) {
+        return new CssSyntaxHighlighter(comment, selector, property, value, atRule, bracket);
+    }
+
+    CssSyntaxHighlighter(Void unusedForTest) {
+        super((Void) null);
+        this.colorSelector = 0;
+        this.colorProperty = 0;
+        this.colorValue = 0;
+        this.colorAtRule = 0;
+        this.colorBracket = 0;
+    }
+
+    CssSyntaxHighlighter(int comment, int selector, int property, int value, int atRule, int bracket) {
+        super(comment, value, 0, value, 0);
+        this.colorSelector = selector;
+        this.colorProperty = property;
+        this.colorValue = value;
+        this.colorAtRule = atRule;
+        this.colorBracket = bracket;
+    }
+
     protected boolean isWordStart(char c) {
         return Character.isLetter(c) || c == '-' || c == '_';
     }
@@ -45,8 +71,14 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         int len = lineStr.length();
         int i = 0;
 
-        boolean inBracket = (startState & 1) != 0;
         boolean inComment = (startState & 2) != 0;
+        boolean inValue = (startState & 4) != 0;
+        int bracketDepth = (startState >>> 5) & 0xFF;
+        if (bracketDepth == 0 && (startState & 1) != 0) {
+            bracketDepth = 1;
+        }
+        boolean inStringDouble = (startState & (1 << 13)) != 0;
+        boolean inStringSingle = (startState & (1 << 14)) != 0;
 
         while (i < len) {
             char quote = lineStr.charAt(i);
@@ -61,6 +93,29 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                     tokens.add(new HighlightToken(lineIndex, i, len, colorComment, false));
                     i = len;
                 }
+                continue;
+            }
+
+            if (inStringDouble || inStringSingle) {
+                char q = inStringDouble ? '"' : '\'';
+                int j = i;
+                while (j < len) {
+                    if (lineStr.charAt(j) == '\\') {
+                        j += 2;
+                        continue;
+                    }
+                    if (lineStr.charAt(j) == q) {
+                        j++;
+                        break;
+                    }
+                    j++;
+                }
+                tokens.add(new HighlightToken(lineIndex, i, Math.min(j, len), colorValue, false));
+                if (j < len || (j == len && lineStr.charAt(len - 1) == q && (len < 2 || lineStr.charAt(len - 2) != '\\'))) {
+                    inStringDouble = false;
+                    inStringSingle = false;
+                }
+                i = j;
                 continue;
             }
 
@@ -79,14 +134,23 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
             }
 
             if (quote == '{') {
-                inBracket = true;
+                bracketDepth++;
+                inValue = false;
                 tokens.add(new HighlightToken(lineIndex, i, i + 1, colorBracket, false));
                 i++;
                 continue;
             }
 
             if (quote == '}') {
-                inBracket = false;
+                bracketDepth = Math.max(0, bracketDepth - 1);
+                inValue = false;
+                tokens.add(new HighlightToken(lineIndex, i, i + 1, colorBracket, false));
+                i++;
+                continue;
+            }
+
+            if (quote == ';') {
+                inValue = false;
                 tokens.add(new HighlightToken(lineIndex, i, i + 1, colorBracket, false));
                 i++;
                 continue;
@@ -106,6 +170,10 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                     j++;
                 }
                 tokens.add(new HighlightToken(lineIndex, i, Math.min(j, len), colorValue, false));
+                if (j >= len && (len < 1 || lineStr.charAt(len - 1) != quote || (len >= 2 && lineStr.charAt(len - 2) == '\\'))) {
+                    if (quote == '"') inStringDouble = true;
+                    else inStringSingle = true;
+                }
                 i = j;
                 continue;
             }
@@ -125,7 +193,7 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                 while (j < len && (Character.isLetterOrDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '-')) {
                     j++;
                 }
-                if (inBracket) {
+                if (inValue) {
                     Integer colorVal = ColorParser.parse(lineStr.substring(i, j));
                     if (colorVal != null) {
                         tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, colorVal));
@@ -140,18 +208,16 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
             }
 
             if (quote == '.') {
-                if (i + 1 < len && Character.isDigit(lineStr.charAt(i + 1))) {
+                if (inValue) {
                     int j = i + 1;
                     while (j < len && Character.isDigit(lineStr.charAt(j))) j++;
-                    tokens.add(new HighlightToken(lineIndex, i, j, inBracket ? colorValue : colorSelector, false));
+                    tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
                     i = j;
                     continue;
                 } else {
                     int j = i + 1;
-                    while (j < len && isWordPart(lineStr.charAt(j))) {
-                        j++;
-                    }
-                    tokens.add(new HighlightToken(lineIndex, i, j, inBracket ? colorValue : colorSelector, false));
+                    while (j < len && isWordPart(lineStr.charAt(j))) j++;
+                    tokens.add(new HighlightToken(lineIndex, i, j, colorSelector, false));
                     i = j;
                     continue;
                 }
@@ -162,7 +228,7 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                 while (j < len && (Character.isLetterOrDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '.' || lineStr.charAt(j) == '%')) {
                     j++;
                 }
-                tokens.add(new HighlightToken(lineIndex, i, j, inBracket ? colorValue : colorSelector, false));
+                tokens.add(new HighlightToken(lineIndex, i, j, inValue ? colorValue : colorSelector, false));
                 i = j;
                 continue;
             }
@@ -173,25 +239,38 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                     j++;
                 }
 
-                if (inBracket) {
-                    int k = j;
-                    while (k < len && Character.isWhitespace(lineStr.charAt(k))) k++;
-                    if (k < len && lineStr.charAt(k) == ':') {
-                        tokens.add(new HighlightToken(lineIndex, i, j, colorProperty, false));
+                if (inValue) {
+                    String word = lineStr.substring(i, j);
+                    Integer colorVal = ColorParser.parse(word);
+                    if (colorVal != null) {
+                        tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, colorVal));
                     } else {
-                        String word = lineStr.substring(i, j);
-                        Integer colorVal = ColorParser.parse(word);
-                        if (colorVal != null) {
-                            tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, colorVal));
-                        } else {
-                            tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
-                        }
+                        tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
                     }
                 } else {
-                    tokens.add(new HighlightToken(lineIndex, i, j, colorSelector, false));
+                    int k = j;
+                    while (k < len && Character.isWhitespace(lineStr.charAt(k))) k++;
+                    if (bracketDepth > 0 && k < len && lineStr.charAt(k) == ':') {
+                        int nextBrace = lineStr.indexOf('{', k + 1);
+                        int nextSemi = lineStr.indexOf(';', k + 1);
+                        if (nextBrace != -1 && (nextSemi == -1 || nextBrace < nextSemi)) {
+                            tokens.add(new HighlightToken(lineIndex, i, j, colorSelector, false));
+                        } else {
+                            tokens.add(new HighlightToken(lineIndex, i, j, colorProperty, false));
+                            inValue = true;
+                        }
+                    } else {
+                        tokens.add(new HighlightToken(lineIndex, i, j, colorSelector, false));
+                    }
                 }
 
                 i = j;
+                continue;
+            }
+
+            if (quote == ':' && inValue) {
+                tokens.add(new HighlightToken(lineIndex, i, i + 1, colorBracket, false));
+                i++;
                 continue;
             }
 
@@ -199,8 +278,12 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         }
 
         int endState = 0;
-        if (inBracket) endState |= 1;
+        if (bracketDepth > 0) endState |= 1;
         if (inComment) endState |= 2;
+        if (inValue) endState |= 4;
+        endState |= ((bracketDepth & 0xFF) << 5);
+        if (inStringDouble) endState |= (1 << 13);
+        if (inStringSingle) endState |= (1 << 14);
         lastLineState = endState;
         return tokens;
     }
@@ -210,8 +293,14 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         int len = line.length();
         int i = 0;
 
-        boolean inBracket = (startState & 1) != 0;
         boolean inComment = (startState & 2) != 0;
+        boolean inValue = (startState & 4) != 0;
+        int bracketDepth = (startState >>> 5) & 0xFF;
+        if (bracketDepth == 0 && (startState & 1) != 0) {
+            bracketDepth = 1;
+        }
+        boolean inStringDouble = (startState & (1 << 13)) != 0;
+        boolean inStringSingle = (startState & (1 << 14)) != 0;
 
         while (i < len) {
             char quote = line.charAt(i);
@@ -230,6 +319,22 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                 } else {
                     i = len;
                 }
+                continue;
+            }
+
+            if (inStringDouble || inStringSingle) {
+                char q = inStringDouble ? '"' : '\'';
+                int j = i;
+                while (j < len) {
+                    if (line.charAt(j) == '\\') { j += 2; continue; }
+                    if (line.charAt(j) == q) { j++; break; }
+                    j++;
+                }
+                if (j < len || (j == len && line.charAt(len - 1) == q && (len < 2 || line.charAt(len - 2) != '\\'))) {
+                    inStringDouble = false;
+                    inStringSingle = false;
+                }
+                i = j;
                 continue;
             }
 
@@ -252,13 +357,21 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
             }
 
             if (quote == '{') {
-                inBracket = true;
+                bracketDepth++;
+                inValue = false;
                 i++;
                 continue;
             }
 
             if (quote == '}') {
-                inBracket = false;
+                bracketDepth = Math.max(0, bracketDepth - 1);
+                inValue = false;
+                i++;
+                continue;
+            }
+
+            if (quote == ';') {
+                inValue = false;
                 i++;
                 continue;
             }
@@ -266,15 +379,27 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
             if (quote == '"' || quote == '\'') {
                 int j = i + 1;
                 while (j < len) {
-                    if (line.charAt(j) == '\\') {
-                        j += 2;
-                        continue;
-                    }
-                    if (line.charAt(j) == quote) {
-                        j++;
-                        break;
-                    }
+                    if (line.charAt(j) == '\\') { j += 2; continue; }
+                    if (line.charAt(j) == quote) { j++; break; }
                     j++;
+                }
+                if (j >= len && (len < 1 || line.charAt(len - 1) != quote || (len >= 2 && line.charAt(len - 2) == '\\'))) {
+                    if (quote == '"') inStringDouble = true;
+                    else inStringSingle = true;
+                }
+                i = j;
+                continue;
+            }
+
+            if (isWordStart(quote)) {
+                int j = i;
+                while (j < len && isWordPart(line.charAt(j))) j++;
+                if (!inValue && bracketDepth > 0) {
+                    int k = j;
+                    while (k < len && Character.isWhitespace(line.charAt(k))) k++;
+                    if (k < len && line.charAt(k) == ':') {
+                        inValue = true;
+                    }
                 }
                 i = j;
                 continue;
@@ -284,8 +409,12 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         }
 
         int endState = 0;
-        if (inBracket) endState |= 1;
+        if (bracketDepth > 0) endState |= 1;
         if (inComment) endState |= 2;
+        if (inValue) endState |= 4;
+        endState |= ((bracketDepth & 0xFF) << 5);
+        if (inStringDouble) endState |= (1 << 13);
+        if (inStringSingle) endState |= (1 << 14);
         return endState;
     }
 }

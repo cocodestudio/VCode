@@ -99,6 +99,10 @@ public class RenameBottomSheet extends BaseBottomSheetDialogFragment {
             binding.tvRenameProject.setText(context.getString(R.string.vcode_rename_branch));
             binding.tvProjectNameLabel.setText(context.getString(R.string.branch_name));
             binding.etProjectName.setHint(context.getString(R.string.e_g_feature_branch));
+        } else if (renameType == RenameType.SYMBOL) {
+            binding.tvRenameProject.setText(context.getString(R.string.vcode_rename_symbol));
+            binding.tvProjectNameLabel.setText(context.getString(R.string.symbol_name));
+            binding.etProjectName.setHint(context.getString(R.string.e_g_symbol));
         }
     }
 
@@ -181,7 +185,11 @@ public class RenameBottomSheet extends BaseBottomSheetDialogFragment {
      * Enumeration of supported rename operations.
      */
     public enum RenameType {
-        PROJECT, FILE, FOLDER, BRANCH
+        PROJECT,
+        FILE,
+        FOLDER,
+        BRANCH,
+        SYMBOL
     }
 
     /**

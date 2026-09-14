@@ -458,10 +458,10 @@ public class ApiTesterViewer implements IFileViewer {
             int radius = UiUtils.dpToPx(context, 10);
             if (statusCode == -1) {
                 statusText = "ERROR";
-                UiUtils.setViewRounded(binding.tvResponseStatus, radius, Color.parseColor("#F44336"));
+                UiUtils.setViewRounded(binding.tvResponseStatus, radius, ContextCompat.getColor(context, R.color.vcode_status_error));
             } else {
                 statusText = statusCode + " " + (statusMessage != null ? statusMessage : "OK");
-                int color = success ? Color.parseColor("#4CAF50") : Color.parseColor("#F44336");
+                int color = ContextCompat.getColor(context, success ? R.color.vcode_status_success : R.color.vcode_status_error);
                 UiUtils.setViewRounded(binding.tvResponseStatus, radius, color);
             }
 

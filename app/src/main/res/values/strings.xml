@@ -71,9 +71,7 @@
 <!--    Bottom Sheet: Diff Viewer-->
     <string name="vcode_go_to_file">Go to file</string>
 
-<!--    Bottom Sheet: Git Action Confirmed-->
-    <string name="vcode_confirm_action">Confirm Action</string>
-    <string name="vcode_commit_ref_hint">HEAD~1 or SHA-1...</string>
+    <!--    Bottom Sheet: Git Action Confirmed-->
     <string name="vcode_confirm_btn">Confirm</string>
 
     <!--    Bottom Sheet: Create Project-->
@@ -100,6 +98,9 @@
     <string name="vcode_rename_branch">Rename Branch</string>
     <string name="branch_name">Branch Name</string>
     <string name="e_g_feature_branch">e.g., feature/login-flow</string>
+    <string name="vcode_rename_symbol">Rename Symbol</string>
+    <string name="symbol_name">SYMBOL NAME</string>
+    <string name="e_g_symbol">e.g., myVariable</string>
 
     <!--    Bottom Sheet: Create Folder-->
     <string name="vcode_create_folder">Create Folder</string>
@@ -116,18 +117,24 @@
 
     <!--    Bottom Sheet: GitHub Login-->
     <string name="vcode_connect_your_github">Connect your GitHub</string>
-    <string name="vcode_how_to_get_github_token">Enter your personal access token to connect VCode IDE with your GitHub Profile.</string>
     <string name="vcode_pat">Personal Access Token</string>
-    <string name="vcode_pat_hint">(ghp_...)</string>
     <string name="vcode_connect">Connect</string>
     <string name="vcode_connecting">Connecting...</string>
-    <string name="vcode_visit_token_page">Visit Token Page</string>
 
     <!--    Bottom Sheet: Create New File-->
     <string name="vcode_create_new_file">Create New File</string>
     <string name="vcode_choose_name_extension">Choose a name and extension for your new workspace item</string>
     <string name="vcode_quick_select_template">Quick Select Template</string>
     <string name="vcode_action_create_file">Create File</string>
+
+    <!--    Bottom Sheet: Extract Tags-->
+    <string name="vcode_extract_inline_styles">Extract Inline Styles</string>
+    <string name="vcode_extract_inline_scripts">Extract Inline Scripts</string>
+    <string name="vcode_target_file_name">TARGET FILE NAME</string>
+    <string name="vcode_action_extract">Extract</string>
+    <string name="vcode_hint_extract_styles">e.g., styles.css</string>
+    <string name="vcode_hint_extract_scripts">e.g., script.js</string>
+    <string name="vcode_file_name_is_required">File name is required</string>
 
     <!--    Bottom Sheet: Snippet Manager-->
     <string name="vcode_snippet_manager">Snippet Manager</string>
@@ -158,10 +165,9 @@
 
     <!--    LSP Navigation Actions-->
     <string name="vcode_lsp_go_to_definition">Go to Definition</string>
-    <string name="vcode_lsp_find_references">Find References</string>
+    <string name="vcode_find_usages">Find Usages</string>
     <string name="vcode_lsp_no_definition_found">No definition found</string>
-    <string name="vcode_lsp_no_references_found">No references found</string>
-    <string name="vcode_lsp_references_title">References</string>
+    <string name="vcode_no_usages_found">No usages found</string>
 
 <!--    Bottom Sheet: New Branch-->
     <string name="vcode_new_branch">New Branch</string>
@@ -185,8 +191,6 @@
     <string name="vcode_project_display_name_label">PROJECT DISPLAY NAME</string>
     <string name="vcode_project_display_name_hint">e.g., My Cloned App</string>
     <string name="vcode_clone_workspace_btn">Clone Workspace</string>
-    <string name="vcode_initialize_remote_workspace">Initializing remote workspace...</string>
-    <string name="vcode_resolving_delta_objects">Resolving delta objects...</string>
     <string name="vcode_run_in_background_btn">Run in Background</string>
 
 <!--    Dialog: Hard Reset Confirmed-->
@@ -207,6 +211,13 @@
     <string name="vcode_file_explorer">File Explorer</string>
     <string name="vcode_import_files">Import Files</string>
     <string name="vcode_import_folder">Import Folder</string>
+    <string name="vcode_rename">Rename</string>
+    <string name="vcode_cut">Cut</string>
+    <string name="vcode_paste">Paste</string>
+    <string name="vcode_copy_path">Copy Path</string>
+    <string name="vcode_delete">Delete</string>
+    <string name="vcode_absolute_path">Absolute Path</string>
+    <string name="vcode_relative_path">Relative Path</string>
 
     <!--    Fragment: Git History-->
     <string name="vcode_no_commits_yet">No Commits Yet</string>
@@ -265,9 +276,6 @@
     <string name="vcode_publish_btn">Publish</string>
 
 
-    <string name="vcode_git_changes_count">• %d changes</string>
-
-
     <!--    Empty State: Projects Activity-->
     <string name="vcode_no_projects_yet">No projects yet</string>
     <string name="vcode_create_project_hint">Tap the button below to create your first project</string>
@@ -297,10 +305,6 @@
     <!--    Custom View: Editor Tab-->
     <string name="vcode_action_cancel">Cancel</string>
 
-    <!--    Custom View: JsonStatusBar-->
-    <string name="vcode_valid_json">Valid JSON</string>
-    <string name="vcode_invalid_json">Invalid JSON</string>
-    <string name="vcode_validating_json">Validating…</string>
 
     <!--    Custom View: Selection Toolbar-->
     <string name="vcode_action_cut">Cut</string>
@@ -318,10 +322,8 @@
     <string name="vcode_find_regex">.*</string>
     <string name="vcode_ssh_key">SSH Key</string>
     <string name="vcode_generate_ssh_key_desc">Generate and view public key</string>
-    <string name="vcode_login">Login</string>
     <string name="vcode_clone">Clone</string>
     <string name="vcode_problems">Problems</string>
-    <string name="vcode_global_search">Global Search</string>
     <string name="vcode_search_across_project">Search across this project</string>
     <string name="vcode_ssh_public_key">SSH Public Key</string>
     <string name="vcode_ssh_key_desc">Add this key to your Git provider (GitHub, GitLab, etc.) to authenticate via SSH.</string>
@@ -397,6 +399,7 @@
     <string name="vcode_find_in_files">Find in Files</string>
     <string name="vcode_formatting">Formatting...</string>
     <string name="vcode_cannot_format_a_media_asset">Cannot format a media asset.</string>
+    <string name="vcode_cannot_format_minified">Cannot format minified files.</string>
     <string name="vcode_no_file_open_to_format">No file open to format</string>
     <string name="vcode_saving_all_files">Saving all files...</string>
     <string name="vcode_error_project_directory_not_loaded">Error: Project directory not loaded.</string>
@@ -419,7 +422,6 @@
     <string name="vcode_the_quick_brown_fox_jumps">The quick brown fox jumps over the lazy dog\n0123456789</string>
     <string name="vcode_path_copied_to_clipboard">Path copied to clipboard.</string>
     <string name="vcode_project_is_still_loading_please">Project is still loading. Please wait.</string>
-    <string name="vcode_project_root_not_loaded">Project root not loaded</string>
     <string name="vcode_uncommitted_changes">Uncommitted Changes</string>
     <string name="vcode_you_have_uncommitted_modifications_inside">You have uncommitted modifications inside your workspace tracking area. Leave anyway?</string>
     <string name="vcode_leave">Leave</string>
@@ -442,4 +444,19 @@
     <string name="vcode_merge_aborted_repository_restored_to">Merge aborted. Repository restored to state before pull.</string>
     <string name="vcode_unable_to_create_folder_please">Unable to create folder. Please try again.</string>
     <string name="vcode_ssh_key_copied_to_clipboard">SSH Key copied to clipboard</string>
+    
+    <!--    Toast Messages-->
+    <string name="vcode_no_app_found_to_open_file">No app found to open this file.</string>
+    <string name="vcode_replaced_in_files">Replaced in %1$d files</string>
+    <string name="vcode_signed_in_as">Signed in as @%1$s</string>
+    <string name="vcode_failed_to_get_token">Failed to get token: %1$s</string>
+    <string name="vcode_connect_github_to_action">Connect your GitHub account to %1$s.</string>
+    <string name="vcode_revert_successful">Revert successful</string>
+    <string name="vcode_extracted_to_file">Extracted to %1$s</string>
+    <string name="vcode_failed_to_write_file">Failed to write file: %1$s</string>
+    <string name="vcode_conflicts_resolved">Conflicts resolved using %1$s version. Stage and commit to finish.</string>
+    <string name="vcode_version_local">local</string>
+    <string name="vcode_version_remote">remote</string>
+    <string name="vcode_failed_to_resolve">Failed to resolve: %1$s</string>
+    <string name="vcode_failed_to_abort">Failed to abort: %1$s</string>
 </resources>

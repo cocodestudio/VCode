@@ -20,9 +20,17 @@ public class BracketMatcher {
     private boolean hasCache = false;
 
     public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth) {
+        applyRainbowBrackets(tokens, text, colors, initialDepth, 0, 0);
+    }
+
+    public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState) {
+        applyRainbowBrackets(tokens, text, colors, initialDepth, startState, 0);
+    }
+
+    public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState, int lineIndex) {
         if (text == null || colors == null || colors.length == 0 || tokens == null) return;
 
-        boolean[] mask = computeStringCommentMask(text, 0, text.length());
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
         int depth = initialDepth;
 
         for (int i = 0; i < text.length(); i++) {
@@ -34,20 +42,24 @@ public class BracketMatcher {
             if (!isOpen && !isClose) continue;
 
             if (isOpen) {
-                int colorIdx = depth % colors.length;
-                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(0, i, i + 1, colors[colorIdx], false));
+                int colorIdx = Math.abs(depth) % colors.length;
+                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
                 depth++;
             } else {
                 depth = Math.max(0, depth - 1);
-                int colorIdx = depth % colors.length;
-                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(0, i, i + 1, colors[colorIdx], false));
+                int colorIdx = Math.abs(depth) % colors.length;
+                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
             }
         }
     }
 
-    public static int computeBracketDepth(String text, int initialDepth) {
+    public static int computeBracketDepth(CharSequence text, int initialDepth) {
+        return computeBracketDepth(text, initialDepth, 0);
+    }
+
+    public static int computeBracketDepth(CharSequence text, int initialDepth, int startState) {
         if (text == null) return initialDepth;
-        boolean[] mask = computeStringCommentMask(text, 0, text.length());
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
         int depth = initialDepth;
         for (int i = 0; i < text.length(); i++) {
             if (mask[i]) continue;
@@ -62,6 +74,8 @@ public class BracketMatcher {
         java.util.List<Problem> problems = new java.util.ArrayList<>();
         if (text == null || text.isEmpty()) return problems;
 
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), 0);
+
         java.util.Stack<int[]> parenStack = new java.util.Stack<>();
         java.util.Stack<int[]> bracketStack = new java.util.Stack<>();
         java.util.Stack<int[]> braceStack = new java.util.Stack<>();
@@ -71,21 +85,23 @@ public class BracketMatcher {
 
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '(') parenStack.push(new int[]{line, col});
-            else if (c == '[') bracketStack.push(new int[]{line, col});
-            else if (c == '{') braceStack.push(new int[]{line, col});
-            else if (c == ')') {
-                if (parenStack.isEmpty()) {
-                    problems.add(new Problem(file, line, col, 1, "Unmatched closing parenthesis ')'", Problem.Severity.ERROR));
-                } else parenStack.pop();
-            } else if (c == ']') {
-                if (bracketStack.isEmpty()) {
-                    problems.add(new Problem(file, line, col, 1, "Unmatched closing bracket ']'", Problem.Severity.ERROR));
-                } else bracketStack.pop();
-            } else if (c == '}') {
-                if (braceStack.isEmpty()) {
-                    problems.add(new Problem(file, line, col, 1, "Unmatched closing brace '}'", Problem.Severity.ERROR));
-                } else braceStack.pop();
+            if (!mask[i]) {
+                if (c == '(') parenStack.push(new int[]{line, col});
+                else if (c == '[') bracketStack.push(new int[]{line, col});
+                else if (c == '{') braceStack.push(new int[]{line, col});
+                else if (c == ')') {
+                    if (parenStack.isEmpty()) {
+                        problems.add(new Problem(file, line, col, 1, "Unmatched closing parenthesis ')'", Problem.Severity.ERROR));
+                    } else parenStack.pop();
+                } else if (c == ']') {
+                    if (bracketStack.isEmpty()) {
+                        problems.add(new Problem(file, line, col, 1, "Unmatched closing bracket ']'", Problem.Severity.ERROR));
+                    } else bracketStack.pop();
+                } else if (c == '}') {
+                    if (braceStack.isEmpty()) {
+                        problems.add(new Problem(file, line, col, 1, "Unmatched closing brace '}'", Problem.Severity.ERROR));
+                    } else braceStack.pop();
+                }
             }
 
             if (c == '\n') {
@@ -115,6 +131,7 @@ public class BracketMatcher {
     private static boolean isInStringOrComment(CharSequence text, int pos) {
         boolean inSingle = false, inDouble = false, inTemplate = false;
         boolean inLineComment = false, inBlockComment = false;
+        int templateBraceDepth = 0;
 
         for (int i = 0; i < pos && i < text.length(); i++) {
             char c = text.charAt(i);
@@ -131,7 +148,7 @@ public class BracketMatcher {
                 }
                 continue;
             }
-            if (!inSingle && !inDouble && !inTemplate) {
+            if (!inSingle && !inDouble && (!inTemplate || templateBraceDepth > 0)) {
                 if (c == '/' && n == '/') {
                     inLineComment = true;
                     i++;
@@ -147,20 +164,50 @@ public class BracketMatcher {
                 i++;
                 continue;
             } // skip escaped chars
-            if (c == '\'' && !inDouble && !inTemplate) inSingle = !inSingle;
-            else if (c == '"' && !inSingle && !inTemplate) inDouble = !inDouble;
-            else if (c == '`' && !inSingle && !inDouble) inTemplate = !inTemplate;
+            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
+            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;
+            else if (!inSingle && !inDouble) {
+                if (!inTemplate) {
+                    if (c == '`') inTemplate = true;
+                } else {
+                    if (templateBraceDepth == 0) {
+                        if (c == '$' && n == '{') {
+                            templateBraceDepth = 1;
+                            i++;
+                            continue;
+                        } else if (c == '`') {
+                            inTemplate = false;
+                        }
+                    } else {
+                        if (c == '{') templateBraceDepth++;
+                        else if (c == '}') templateBraceDepth--;
+                    }
+                }
+            }
         }
-        return inSingle || inDouble || inTemplate || inLineComment || inBlockComment;
+        return inSingle || inDouble || inLineComment || inBlockComment || (inTemplate && templateBraceDepth == 0);
     }
 
     private static boolean[] computeStringCommentMask(CharSequence text, int from, int to) {
+        return computeStringCommentMask(text, from, to, 0);
+    }
+
+    private static boolean[] computeStringCommentMask(CharSequence text, int from, int to, int startState) {
         boolean[] mask = new boolean[to - from];
-        boolean inSingle = false, inDouble = false, inTemplate = false;
-        boolean inLineComment = false, inBlockComment = false;
+        int mode = startState & 0x7;
+        int templateDepth = (startState >>> 3) & 0x7;
+        int braceDepth = (startState >>> 6) & 0x3FF;
+
+        boolean inSingle = (mode == 3);
+        boolean inDouble = (mode == 2);
+        boolean inBlockComment = (mode == 1);
+        boolean inTemplate = (mode == 4 || mode == 5 || templateDepth > 0);
+        boolean inLineComment = false;
+        boolean inHtmlComment = false;
+        int templateBraceDepth = (mode == 5) ? Math.max(1, braceDepth) : 0;
 
         for (int i = from; i < to; i++) {
-            mask[i - from] = inSingle || inDouble || inTemplate || inLineComment || inBlockComment;
+            mask[i - from] = inSingle || inDouble || inLineComment || inBlockComment || inHtmlComment || (inTemplate && templateBraceDepth == 0);
 
             char c = text.charAt(i);
             char n = (i + 1 < text.length()) ? text.charAt(i + 1) : '\0';
@@ -172,18 +219,43 @@ public class BracketMatcher {
             if (inBlockComment) {
                 if (c == '*' && n == '/') {
                     inBlockComment = false;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
                     i++;
                 }
                 continue;
             }
-            if (!inSingle && !inDouble && !inTemplate) {
+            if (inHtmlComment) {
+                if (c == '-' && n == '-' && i + 2 < text.length() && text.charAt(i + 2) == '>') {
+                    inHtmlComment = false;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
+                    if (i + 2 < to) mask[i + 2 - from] = true;
+                    i += 2;
+                }
+                continue;
+            }
+            if (!inSingle && !inDouble && (!inTemplate || templateBraceDepth > 0)) {
+                if (c == '<' && n == '!' && i + 3 < text.length() && text.charAt(i + 2) == '-' && text.charAt(i + 3) == '-') {
+                    inHtmlComment = true;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
+                    if (i + 2 < to) mask[i + 2 - from] = true;
+                    if (i + 3 < to) mask[i + 3 - from] = true;
+                    i += 3;
+                    continue;
+                }
                 if (c == '/' && n == '/') {
                     inLineComment = true;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
                     i++;
                     continue;
                 }
                 if (c == '/' && n == '*') {
                     inBlockComment = true;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
                     i++;
                     continue;
                 }
@@ -192,9 +264,34 @@ public class BracketMatcher {
                 i++;
                 continue;
             }
-            if (c == '\'' && !inDouble && !inTemplate) inSingle = !inSingle;
-            else if (c == '"' && !inSingle && !inTemplate) inDouble = !inDouble;
-            else if (c == '`' && !inSingle && !inDouble) inTemplate = !inTemplate;
+            if (c == '\n' && !inTemplate) {
+                inSingle = false;
+                inDouble = false;
+            }
+            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
+            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;
+            else if (!inSingle && !inDouble) {
+                if (!inTemplate) {
+                    if (c == '`') inTemplate = true;
+                } else {
+                    if (templateBraceDepth == 0) {
+                        if (c == '$' && n == '{') {
+                            templateBraceDepth = 1;
+                            mask[i - from] = true;
+                            if (i + 1 < to) {
+                                mask[i + 1 - from] = false;
+                            }
+                            i++;
+                            continue;
+                        } else if (c == '`') {
+                            inTemplate = false;
+                        }
+                    } else {
+                        if (c == '{') templateBraceDepth++;
+                        else if (c == '}') templateBraceDepth--;
+                    }
+                }
+            }
         }
         return mask;
     }

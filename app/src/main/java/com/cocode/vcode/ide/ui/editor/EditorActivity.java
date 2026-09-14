@@ -14,6 +14,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -34,6 +36,7 @@ import com.cocode.vcode.ide.ui.filetree.FileTreeFragment;
 import com.cocode.vcode.ide.ui.sheets.editor.GoToLineBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.editor.ProblemsBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.editor.SnippetsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -198,6 +201,16 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void setupListeners() {
+        binding.drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerClosed(@NonNull View drawerView) {
+                Fragment fragment = getSupportFragmentManager().findFragmentById(binding.drawerContainer.getId());
+                if (fragment instanceof FileTreeFragment) {
+                    ((FileTreeFragment) fragment).clearClipboardState();
+                }
+            }
+        });
+
         binding.btnMenu.setOnClickListener(v -> {
             UiUtils.hideKeyboard(this);
             CodeEditText codeEditText = getActiveCodeEditor();
@@ -689,9 +702,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 editor.replaceRange(0, editor.length(), result.modifiedHtml);
                                 viewModel.saveAll();
                                 viewModel.refreshFileTree();
-                                android.widget.Toast.makeText(EditorActivity.this, "Extracted to " + filename, android.widget.Toast.LENGTH_SHORT).show();
+                                android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_extracted_to_file, filename), android.widget.Toast.LENGTH_SHORT).show();
                             } catch (java.io.IOException e) {
-                                android.widget.Toast.makeText(EditorActivity.this, "Failed to write file: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+                                android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_failed_to_write_file, e.getMessage()), android.widget.Toast.LENGTH_SHORT).show();
                             }
                         } else {
                             android.widget.Toast.makeText(EditorActivity.this, result.errorMessage, android.widget.Toast.LENGTH_SHORT).show();
@@ -790,8 +803,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         CodeEditText codeEditText = getActiveCodeEditor();
         if (codeEditText == null || codeEditText.getText() == null) return;
 
-        int maxLines = codeEditText.getLineCount();
-        if (maxLines == 0) maxLines = codeEditText.getText().toString().split("\n", -1).length;
+        int maxLines = Math.max(1, codeEditText.getLineCount());
 
         GoToLineBottomSheet sheet = new GoToLineBottomSheet();
         sheet.setMaxLines(maxLines);
@@ -822,11 +834,17 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return;
         }
 
+        String fileName = activeFile.getFile().getName().toLowerCase();
+        if (fileName.endsWith(".min.js") || fileName.endsWith(".min.css")) {
+            Toast.makeText(this, R.string.vcode_cannot_format_minified, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String rawCode = java.util.Objects.requireNonNull(codeEditText.getText()).toString();
         FileType lang = activeFile.getFileType();
         int originalCursor = codeEditText.getSelectionStart();
 
-        java.util.List<com.cocode.vcode.ide.core.model.Problem> bracketProblems = com.cocode.vcode.ide.core.diagnostic.BracketLinter.analyze(activeFile.getFile(), rawCode);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> bracketProblems = com.cocode.vcode.ide.core.editor.indent.BracketMatcher.findMismatches(activeFile.getFile(), rawCode);
         if (bracketProblems != null && !bracketProblems.isEmpty()) {
             Toast.makeText(this, R.string.vcode_cannot_format_unbalanced_brackets, Toast.LENGTH_SHORT).show();
             return;
@@ -946,37 +964,28 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     public void showReferences(List<com.cocode.vcode.ide.core.lsp.LspLocation> result) {
         if (result == null || result.isEmpty()) {
-            Toast.makeText(this, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.vcode_no_usages_found, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (result.size() == 1) {
-            navigateToLocation(result.get(0));
-        } else {
-            List<com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option> refOptions = new java.util.ArrayList<>();
-            for (com.cocode.vcode.ide.core.lsp.LspLocation loc : result) {
-                String path = loc.uri;
-                if (path.startsWith("file://")) {
-                    try {
-                        path = new java.net.URI(loc.uri).getPath();
-                    } catch (Exception e) {
-                        path = path.substring(7);
-                    }
-                }
-                File f = new File(path);
-                int line = loc.range != null ? loc.range.start.line + 1 : 1;
-                String label = f.getName() + ":" + line;
 
-                String ext = com.cocode.vcode.ide.utils.FileUtils.getExtension(f.getName());
-                int iconResId = FileType.fromExtension(ext).getIconResId();
-
-                refOptions.add(new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet.Option(
-                        iconResId, label,
-                        () -> navigateToLocation(loc)
-                ));
-            }
-            com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet refsSheet = new com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet();
-            refsSheet.setOptions(refOptions);
-            refsSheet.show(getSupportFragmentManager(), getString(R.string.vcode_lsp_references_title));
+        CodeEditText editor = getActiveCodeEditor();
+        String query = "";
+        if (editor != null && editor.getText() != null) {
+            query = com.cocode.vcode.ide.core.lsp.SymbolExtractor.extractWord(
+                    editor.getText().toString(), editor.getSelectionStart());
         }
+
+        ProjectSearchBottomSheet sheet = new ProjectSearchBottomSheet();
+        sheet.setUsages(getString(R.string.vcode_find_usages), query, result);
+        sheet.setListener((file, line) -> {
+            viewModel.openFile(file);
+            binding.viewerContainer.postDelayed(() -> {
+                CodeEditText targetEditor = getActiveCodeEditor();
+                if (targetEditor != null && line > 0) {
+                    targetEditor.goToLine(line);
+                }
+            }, 300);
+        });
+        sheet.show(getSupportFragmentManager(), "FindUsages");
     }
 }

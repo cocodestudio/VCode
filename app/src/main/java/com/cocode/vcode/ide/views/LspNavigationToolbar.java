@@ -37,11 +37,13 @@ public class LspNavigationToolbar {
     public interface NavigationListener {
         void onNavigate(LspLocation loc);
         void onShowReferences(List<LspLocation> refs);
+        void onRenameSymbol(String newName, List<LspLocation> locations);
     }
     private NavigationListener navigationListener;
 
     private LspLocation cachedDefinition = null;
     private List<LspLocation> cachedReferences = null;
+    private List<LspLocation> cachedRename = null;
     
     private int probeGeneration = 0;
 
@@ -100,8 +102,10 @@ public class LspNavigationToolbar {
         // We run both checks asynchronously and wait for both to complete before showing.
         final boolean[] defChecked = {false};
         final boolean[] refChecked = {false};
+        final boolean[] renameChecked = {false};
         final boolean[] hasDef = {false};
         final boolean[] hasRef = {false};
+        final boolean[] hasRename = {false};
 
         LspCallback<LspLocation> defCallback = new LspCallback<LspLocation>() {
             @Override
@@ -111,7 +115,7 @@ public class LspNavigationToolbar {
                 cachedDefinition = result;
                 hasDef[0] = result != null;
                 defChecked[0] = true;
-                if (refChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0]);
+                if (refChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
             @Override
             public void onError(String errorMessage) {
@@ -119,7 +123,7 @@ public class LspNavigationToolbar {
                 if (editor.getSelectionStart() != flatOffset) return;
                 cachedDefinition = null;
                 defChecked[0] = true;
-                if (refChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0]);
+                if (refChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
         };
 
@@ -131,7 +135,7 @@ public class LspNavigationToolbar {
                 cachedReferences = result;
                 hasRef[0] = result != null && !result.isEmpty();
                 refChecked[0] = true;
-                if (defChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0]);
+                if (defChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
             @Override
             public void onError(String errorMessage) {
@@ -139,22 +143,44 @@ public class LspNavigationToolbar {
                 if (editor.getSelectionStart() != flatOffset) return;
                 cachedReferences = null;
                 refChecked[0] = true;
-                if (defChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0]);
+                if (defChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+            }
+        };
+
+        LspCallback<List<LspLocation>> renameCallback = new LspCallback<List<LspLocation>>() {
+            @Override
+            public void onResult(List<LspLocation> result) {
+                if (myGeneration != probeGeneration) return;
+                if (editor.getSelectionStart() != flatOffset) return;
+                cachedRename = result;
+                hasRename[0] = result != null && !result.isEmpty();
+                renameChecked[0] = true;
+                if (defChecked[0] && refChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+            }
+            @Override
+            public void onError(String errorMessage) {
+                if (myGeneration != probeGeneration) return;
+                if (editor.getSelectionStart() != flatOffset) return;
+                cachedRename = null;
+                renameChecked[0] = true;
+                if (defChecked[0] && refChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
         };
 
         bridge.requestDefinition(defCallback);
         bridge.requestReferences(refCallback);
+        bridge.requestRename(renameCallback);
     }
 
-    private void showIfAvailable(int flatOffset, boolean hasDef, boolean hasRef) {
-        if (!hasDef && !hasRef) {
+    private void showIfAvailable(int flatOffset, boolean hasDef, boolean hasRef, boolean hasRename) {
+        if (!hasDef && !hasRef && !hasRename) {
             dismissAndClear();
             return;
         }
 
         binding.btnDefinition.setVisibility(hasDef ? View.VISIBLE : View.GONE);
         binding.btnReferences.setVisibility(hasRef ? View.VISIBLE : View.GONE);
+        binding.btnRename.setVisibility(hasRename ? View.VISIBLE : View.GONE);
         
         currentOffset = flatOffset;
 
@@ -171,6 +197,7 @@ public class LspNavigationToolbar {
         currentOffset = -1;
         cachedDefinition = null;
         cachedReferences = null;
+        cachedRename = null;
     }
 
     public void hide() {
@@ -267,13 +294,34 @@ public class LspNavigationToolbar {
                 if (refs != null && !refs.isEmpty()) {
                     navigationListener.onShowReferences(refs);
                 } else if (context != null) {
-                    Toast.makeText(context, R.string.vcode_lsp_no_references_found, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(context, R.string.vcode_no_usages_found, Toast.LENGTH_SHORT).show();
                 }
             }
         });
 
         if (context != null) {
-            TooltipCompat.setTooltipText(binding.btnReferences, context.getString(R.string.vcode_lsp_find_references));
+            TooltipCompat.setTooltipText(binding.btnReferences, context.getString(R.string.vcode_find_usages));
+        }
+
+        binding.btnRename.setOnClickListener(v -> {
+            List<LspLocation> locs = cachedRename;
+            hide();
+            if (navigationListener != null && locs != null && !locs.isEmpty() && context instanceof androidx.appcompat.app.AppCompatActivity) {
+                String currentWord = "";
+                if (editor != null && editor.getText() != null) {
+                    currentWord = com.cocode.vcode.ide.core.lsp.SymbolExtractor.extractWord(editor.getText().toString(), currentOffset);
+                }
+                com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet.show(
+                        ((androidx.appcompat.app.AppCompatActivity) context).getSupportFragmentManager(),
+                        com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet.RenameType.SYMBOL,
+                        currentWord,
+                        newName -> navigationListener.onRenameSymbol(newName, locs)
+                );
+            }
+        });
+
+        if (context != null) {
+            TooltipCompat.setTooltipText(binding.btnRename, context.getString(R.string.vcode_action_rename));
         }
     }
 }

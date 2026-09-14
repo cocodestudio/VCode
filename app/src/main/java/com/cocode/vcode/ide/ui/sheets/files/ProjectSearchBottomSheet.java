@@ -24,16 +24,29 @@ import com.cocode.vcode.ide.views.span.SolidHighlightSpan;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
+import com.cocode.vcode.ide.core.lsp.LspDocument;
+import com.cocode.vcode.ide.core.lsp.LspLocation;
+import com.cocode.vcode.ide.core.lsp.ProjectIndex;
+
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Bottom sheet dialog for searching and replacing text across all files in the project.
  */
 public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
+    public enum Mode {
+        FIND_IN_FILES,
+        FIND_USAGES
+    }
+
+    private Mode mode = Mode.FIND_IN_FILES;
     private File projectRoot;
     private SearchEngine searchEngine;
     private SearchAdapter adapter;
@@ -49,12 +62,25 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
     // Store latest results for replace all
     private List<FileGroup> currentResults = new ArrayList<>();
 
+    // Usages mode state
+    private String customTitle;
+    private String queryWord;
+    private List<LspLocation> locations;
+
     public void setProjectRoot(File root) {
         this.projectRoot = root;
+        this.mode = Mode.FIND_IN_FILES;
     }
 
     public void setListener(ProjectSearchListener listener) {
         this.listener = listener;
+    }
+
+    public void setUsages(String title, String query, List<LspLocation> locations) {
+        this.mode = Mode.FIND_USAGES;
+        this.customTitle = title;
+        this.queryWord = query;
+        this.locations = locations;
     }
 
     @Nullable
@@ -67,40 +93,49 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        searchEngine = new SearchEngine();
-
-        UiUtils.setViewRounded(binding.etSearchQuery, UiUtils.dpToPx(requireContext(), 10), androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_bg_elevated));
-        UiUtils.setViewRounded(binding.etReplaceQuery, UiUtils.dpToPx(requireContext(), 10), androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_bg_elevated));
-        binding.etSearchQuery.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
-        binding.etReplaceQuery.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
-
         binding.tvTitle.setTypeface(FontManager.getInstance().getUiSemiBold(requireContext()));
-
         binding.rvSearchResults.setLayoutManager(new LinearLayoutManager(requireContext()));
         adapter = new SearchAdapter();
         binding.rvSearchResults.setAdapter(adapter);
 
-        setupToggles();
-        setupReplaceAll();
+        if (mode == Mode.FIND_USAGES) {
+            binding.llSearchInputsContainer.setVisibility(View.GONE);
+            binding.tvTitle.setText(customTitle != null && !customTitle.isEmpty()
+                    ? customTitle
+                    : getString(R.string.vcode_find_usages));
+            loadUsages();
+        } else {
+            binding.llSearchInputsContainer.setVisibility(View.VISIBLE);
+            binding.tvTitle.setText(R.string.vcode_find_in_files);
+            searchEngine = new SearchEngine();
 
-        binding.etSearchQuery.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+            UiUtils.setViewRounded(binding.etSearchQuery, UiUtils.dpToPx(requireContext(), 10), androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_bg_elevated));
+            UiUtils.setViewRounded(binding.etReplaceQuery, UiUtils.dpToPx(requireContext(), 10), androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_bg_elevated));
+            binding.etSearchQuery.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
+            binding.etReplaceQuery.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if (pendingSearch != null) {
-                    binding.etSearchQuery.removeCallbacks(pendingSearch);
+            setupToggles();
+            setupReplaceAll();
+
+            binding.etSearchQuery.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
                 }
-                pendingSearch = () -> performSearch(s.toString());
-                binding.etSearchQuery.postDelayed(pendingSearch, 300);
-            }
 
-            @Override
-            public void afterTextChanged(Editable s) {
-            }
-        });
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    if (pendingSearch != null) {
+                        binding.etSearchQuery.removeCallbacks(pendingSearch);
+                    }
+                    pendingSearch = () -> performSearch(s.toString());
+                    binding.etSearchQuery.postDelayed(pendingSearch, 300);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                }
+            });
+        }
     }
 
     private void setupToggles() {
@@ -204,7 +239,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
             ExecutorProvider.getInstance().runOnMain(() -> {
                 binding.progressSearch.setVisibility(View.INVISIBLE);
-                android.widget.Toast.makeText(requireContext(), "Replaced in " + currentResults.size() + " files", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(requireContext(), getString(R.string.vcode_replaced_in_files, currentResults.size()), android.widget.Toast.LENGTH_SHORT).show();
                 performSearch(query);
             });
         });
@@ -214,6 +249,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
         if (query == null || query.trim().isEmpty() || projectRoot == null) {
             currentResults.clear();
             adapter.setResults(new ArrayList<>());
+            updateEmptyState(false);
             return;
         }
 
@@ -223,11 +259,184 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
             searchInDirectory(projectRoot, query, allResults);
 
             ExecutorProvider.getInstance().runOnMain(() -> {
+                if (!isAdded()) return;
                 binding.progressSearch.setVisibility(View.INVISIBLE);
                 currentResults = allResults;
                 adapter.setResults(allResults);
+                updateEmptyState(allResults.isEmpty());
             });
         });
+    }
+
+    private void updateEmptyState(boolean isEmpty) {
+        if (binding != null && binding.tvEmptyState != null) {
+            binding.tvEmptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void loadUsages() {
+        if (locations == null || locations.isEmpty()) {
+            adapter.setResults(new ArrayList<>());
+            updateEmptyState(true);
+            return;
+        }
+
+        binding.progressSearch.setVisibility(View.VISIBLE);
+        updateEmptyState(false);
+
+        List<LspLocation> locCopy = new ArrayList<>(locations);
+        String targetQuery = queryWord != null ? queryWord : "";
+
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            List<FileGroup> groups = buildUsagesGroups(locCopy, targetQuery);
+
+            ExecutorProvider.getInstance().runOnMain(() -> {
+                if (!isAdded()) return;
+                binding.progressSearch.setVisibility(View.INVISIBLE);
+                currentResults = groups;
+                adapter.setResults(groups);
+                updateEmptyState(groups.isEmpty());
+            });
+        });
+    }
+
+    private List<FileGroup> buildUsagesGroups(List<LspLocation> locList, String query) {
+        Map<String, List<LspLocation>> byFile = new LinkedHashMap<>();
+        for (LspLocation loc : locList) {
+            if (loc == null || loc.uri == null) continue;
+            String path = loc.uri;
+            if (path.startsWith("file://")) {
+                try {
+                    path = new java.net.URI(loc.uri).getPath();
+                } catch (Exception e) {
+                    path = path.substring(7);
+                }
+            }
+            List<LspLocation> list = byFile.get(path);
+            if (list == null) {
+                list = new ArrayList<>();
+                byFile.put(path, list);
+            }
+            list.add(loc);
+        }
+
+        List<FileGroup> groups = new ArrayList<>();
+        String effectiveQuery = query;
+
+        for (Map.Entry<String, List<LspLocation>> entry : byFile.entrySet()) {
+            File file = new File(entry.getKey());
+            if (!file.exists()) continue;
+
+            List<String> lines = getFileLines(file);
+            if (lines.isEmpty()) continue;
+
+            if (effectiveQuery.isEmpty() && !entry.getValue().isEmpty()) {
+                LspLocation firstLoc = entry.getValue().get(0);
+                if (firstLoc.range != null && firstLoc.range.start != null) {
+                    int l0 = firstLoc.range.start.line;
+                    if (l0 >= 0 && l0 < lines.size()) {
+                        String sampleLine = lines.get(l0);
+                        int sc = firstLoc.range.start.character;
+                        int ec = firstLoc.range.end != null && firstLoc.range.end.character > sc
+                                ? firstLoc.range.end.character
+                                : sc;
+                        if (sc >= 0 && sc < sampleLine.length()) {
+                            effectiveQuery = sampleLine.substring(sc, Math.min(ec, sampleLine.length()));
+                        }
+                    }
+                }
+            }
+
+            FileGroup group = new FileGroup();
+            group.file = file;
+            group.expanded = true;
+
+            for (LspLocation loc : entry.getValue()) {
+                int line0 = loc.range != null && loc.range.start != null ? loc.range.start.line : 0;
+                int lineNum = line0 + 1;
+                String rawLine = (line0 >= 0 && line0 < lines.size()) ? lines.get(line0) : "";
+
+                int colStart = loc.range != null && loc.range.start != null ? loc.range.start.character : -1;
+                int colEnd = loc.range != null && loc.range.end != null ? loc.range.end.character : -1;
+
+                ProjectSearchResult match = createMatchSnippet(file, lineNum, rawLine, colStart, colEnd, effectiveQuery);
+                group.matches.add(match);
+            }
+
+            if (!group.matches.isEmpty()) {
+                groups.add(group);
+            }
+        }
+        return groups;
+    }
+
+    private List<String> getFileLines(File file) {
+        LspDocument doc = ProjectIndex.getInstance().getDocument(file.getAbsolutePath());
+        if (doc != null && doc.text != null) {
+            String[] split = doc.text.split("\r?\n", -1);
+            return Arrays.asList(split);
+        }
+
+        List<String> lines = new ArrayList<>();
+        if (file.length() > 5 * 1024 * 1024) return lines;
+        try (java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.InputStreamReader(new java.io.FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                lines.add(line);
+            }
+        } catch (Exception ignored) {
+        }
+        return lines;
+    }
+
+    static ProjectSearchResult createMatchSnippet(File file, int lineNum, String rawLine,
+                                                  int colStart, int colEnd, String query) {
+        String line = rawLine != null ? rawLine.replace('\r', ' ').replace('\n', ' ') : "";
+
+        if (colStart < 0 || colEnd <= colStart || colStart >= line.length()) {
+            if (query != null && !query.isEmpty()) {
+                int idx = line.indexOf(query);
+                if (idx < 0) {
+                    idx = line.toLowerCase().indexOf(query.toLowerCase());
+                }
+                if (idx >= 0) {
+                    colStart = idx;
+                    colEnd = idx + query.length();
+                }
+            }
+        }
+
+        if (colEnd < colStart) {
+            colEnd = colStart;
+        }
+
+        int indent = 0;
+        while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
+            indent++;
+        }
+
+        String snippet;
+        int matchStart;
+        int matchEnd;
+
+        int trimmedLen = line.length() - indent;
+        if (trimmedLen <= 120) {
+            snippet = line.substring(indent);
+            matchStart = Math.max(0, colStart - indent);
+            matchEnd = Math.min(snippet.length(), Math.max(matchStart, colEnd - indent));
+        } else {
+            int winStart = Math.max(indent, colStart - 25);
+            int winEnd = Math.min(line.length(), Math.max(colEnd + 35, winStart + 80));
+            String prefix = winStart > indent ? "..." : "";
+            String suffix = winEnd < line.length() ? "..." : "";
+            snippet = prefix + line.substring(winStart, winEnd) + suffix;
+            matchStart = prefix.length() + Math.max(0, colStart - winStart);
+            matchEnd = matchStart + Math.max(0, colEnd - colStart);
+            matchEnd = Math.min(snippet.length(), matchEnd);
+        }
+
+        return new ProjectSearchResult(file, lineNum, snippet, matchStart, matchEnd);
     }
 
     private void searchInDirectory(File dir, String query, List<FileGroup> outResults) {
@@ -297,7 +506,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
         void onSearchResultSelected(File file, int lineNumber);
     }
 
-    private class ProjectSearchResult {
+    static class ProjectSearchResult {
         File file;
         int line;
         String snippet;

@@ -19,7 +19,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * RecyclerView adapter for displaying commit history as a visual timeline graph.
+ * RecyclerView adapter rendering Git commit history as an interactive timeline.
+ * Binds {@link CommitItem} entries with commit messages, author metadata, shortened SHAs,
+ * visual commit graph nodes, and click handlers for viewing commit diff details.
  */
 public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryAdapter.ViewHolder> {
 

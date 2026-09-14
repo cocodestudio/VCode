@@ -76,16 +76,15 @@ public class ExtractTagsBottomSheet extends BaseBottomSheetDialogFragment {
     }
 
     private void setupDynamicUI() {
-        Context context = requireContext();
         if (extractType == TagExtractor.Type.STYLE) {
-            binding.tvRenameProject.setText("Extract Inline Styles");
-            binding.etProjectName.setHint("e.g. styles.css");
+            binding.tvRenameProject.setText(R.string.vcode_extract_inline_styles);
+            binding.etProjectName.setHint(R.string.vcode_hint_extract_styles);
         } else {
-            binding.tvRenameProject.setText("Extract Inline Scripts");
-            binding.etProjectName.setHint("e.g. script.js");
+            binding.tvRenameProject.setText(R.string.vcode_extract_inline_scripts);
+            binding.etProjectName.setHint(R.string.vcode_hint_extract_scripts);
         }
-        binding.tvProjectNameLabel.setText("Target File Name");
-        binding.btnRenameProject.setText("Extract");
+        binding.tvProjectNameLabel.setText(R.string.vcode_target_file_name);
+        binding.btnRenameProject.setText(R.string.vcode_action_extract);
     }
 
     private void setupInitialState() {
@@ -109,7 +108,7 @@ public class ExtractTagsBottomSheet extends BaseBottomSheetDialogFragment {
             String filename = binding.etProjectName.getText() != null ? binding.etProjectName.getText().toString().trim() : "";
 
             if (filename.isEmpty()) {
-                binding.etProjectName.setError("File name is required");
+                binding.etProjectName.setError(getString(R.string.vcode_file_name_is_required));
                 binding.etProjectName.requestFocus();
                 return;
             }

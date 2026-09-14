@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.core.language.ts;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.js.JsKeywords;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 
 import java.util.ArrayList;
@@ -15,32 +16,37 @@ import java.util.List;
  */
 public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
 
-    private static final String[] TS_KEYWORDS = {
-            "interface", "type", "enum", "namespace", "module", "declare", "abstract",
-            "implements", "readonly", "override", "as", "satisfies", "asserts",
-            "any", "unknown", "never", "void", "string", "number", "boolean",
-            "bigint", "symbol", "object", "undefined", "null",
-            "public", "private", "protected", "static",
-            "keyof", "typeof", "infer", "extends", "is"
-    };
-
     public TsAutoCompleteEngine(Context context) {
         super(context);
     }
 
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
-        List<CompletionItem> base = super.getSuggestions(fullText, cursorPos);
+        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length()) return new ArrayList<>();
 
-        // Inject TS-specific keyword completions before the JS base results
         String word = getWordBeforeCursor(fullText, cursorPos);
+
+        // Check if cursor is after '.' (member access)
+        int dotCheckPos = cursorPos - word.length() - 1;
+        boolean isMemberAccess = (dotCheckPos >= 0 && fullText.charAt(dotCheckPos) == '.')
+                || (dotCheckPos >= 1 && fullText.charAt(dotCheckPos) == '.' && fullText.charAt(dotCheckPos - 1) == '?');
+
+        // If after dot, NEVER suggest TS keywords (prevents 's.s' suggesting satisfies, string, symbol)
+        if (isMemberAccess) {
+            return super.getSuggestions(fullText, cursorPos);
+        }
+
+        List<CompletionItem> base = super.getSuggestions(fullText, cursorPos);
         if (word.isEmpty()) return base;
 
         List<CompletionItem> tsItems = new ArrayList<>();
         String lower = word.toLowerCase();
-        for (String kw : TS_KEYWORDS) {
+        for (String kw : JsKeywords.TS_KEYWORDS) {
             if (kw.startsWith(lower)) {
-                tsItems.add(new CompletionItem(kw, kw, "TypeScript", CompletionItem.Type.KEYWORD, 100));
+                CompletionItem item = new CompletionItem(kw, kw, "TypeScript", CompletionItem.Type.KEYWORD, 0);
+                item.setSortScore(100);
+                item.setReplaceLength(word.length());
+                tsItems.add(item);
             }
         }
 

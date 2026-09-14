@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.cocode.vcode.ide.R;
@@ -31,6 +32,10 @@ import java.util.Set;
  * supporting folder expansion/collapse, specialized file icons, and Git status indicators.
  */
 public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileViewHolder> {
+
+    public static final float CUT_OPACITY = 0.5f;
+    public static final float NORMAL_OPACITY = 1.0f;
+    public static final Object PAYLOAD_CLIPBOARD = new Object();
 
     private final List<FileNode> flatNodes = new ArrayList<>();
     private final FileTreeListener listener;
@@ -72,19 +77,114 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
         // Apply captured state to the new node tree
         restoreExpandedState(rootNodes, expandedPaths);
 
-        flatNodes.clear();
+        List<FileNode> newFlatNodes = new ArrayList<>();
         // Transform the nested tree into a flat list for the adapter
-        flatten(rootNodes, flatNodes);
-        notifyDataSetChanged();
+        flatten(rootNodes, newFlatNodes);
+
+        DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return flatNodes.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return newFlatNodes.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                FileNode oldNode = flatNodes.get(oldItemPosition);
+                FileNode newNode = newFlatNodes.get(newItemPosition);
+                return oldNode.getFile().equals(newNode.getFile());
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                FileNode oldNode = flatNodes.get(oldItemPosition);
+                FileNode newNode = newFlatNodes.get(newItemPosition);
+                return oldNode.isExpanded() == newNode.isExpanded()
+                        && oldNode.getDepth() == newNode.getDepth()
+                        && oldNode.isDirectory() == newNode.isDirectory()
+                        && oldNode.getName().equals(newNode.getName());
+            }
+        });
+
+        flatNodes.clear();
+        flatNodes.addAll(newFlatNodes);
+        diffResult.dispatchUpdatesTo(this);
     }
 
     /**
      * Updates the clipboard state to visualize cut/copy operations.
      */
     public void setClipboardState(File file, boolean isCut) {
+        File oldFile = this.clipboardFile;
         this.clipboardFile = file;
         this.isCutAction = isCut;
-        notifyDataSetChanged();
+
+        String oldPath = normalizePath(oldFile != null ? oldFile.getAbsolutePath() : null);
+        String newPath = normalizePath(file != null ? file.getAbsolutePath() : null);
+
+        try {
+            if (hasObservers()) {
+                // Targeted notify with PAYLOAD_CLIPBOARD so ViewHolder updates in-place without DefaultItemAnimator resetting alpha
+                for (int i = 0; i < flatNodes.size(); i++) {
+                    File f = flatNodes.get(i).getFile();
+                    if (f != null) {
+                        String nodePath = normalizePath(f.getAbsolutePath());
+                        boolean affectsOld = oldPath != null && (nodePath.equals(oldPath) || nodePath.startsWith(oldPath + "/"));
+                        boolean affectsNew = newPath != null && (nodePath.equals(newPath) || nodePath.startsWith(newPath + "/"));
+                        if (affectsOld || affectsNew) {
+                            notifyItemChanged(i, PAYLOAD_CLIPBOARD);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Resets the clipboard state and restores normal node opacity.
+     */
+    public void clearClipboardState() {
+        if (clipboardFile != null || isCutAction) {
+            setClipboardState(null, false);
+            try {
+                if (hasObservers()) {
+                    notifyDataSetChanged();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /**
+     * Returns true if the given node is currently marked as cut (including descendants of cut folders).
+     */
+    public boolean isNodeCut(FileNode node) {
+        if (!isCutAction || clipboardFile == null || node == null || node.getFile() == null) {
+            return false;
+        }
+        if (node.getFile().equals(clipboardFile)) {
+            return true;
+        }
+        String nodePath = normalizePath(node.getFile().getAbsolutePath());
+        String cutPath = normalizePath(clipboardFile.getAbsolutePath());
+        if (nodePath == null || cutPath == null) {
+            return false;
+        }
+        return nodePath.equals(cutPath) || nodePath.startsWith(cutPath + "/");
+    }
+
+    private static String normalizePath(String path) {
+        if (path == null) return null;
+        String normalized = path.replace('\\', '/');
+        if (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     public File getClipboardFile() {
@@ -164,6 +264,15 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
     @Override
     public void onBindViewHolder(@NonNull FileViewHolder holder, int position) {
         holder.bind(flatNodes.get(position));
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull FileViewHolder holder, int position, @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty() && payloads.contains(PAYLOAD_CLIPBOARD)) {
+            holder.updateCutOpacity(flatNodes.get(position));
+        } else {
+            super.onBindViewHolder(holder, position, payloads);
+        }
     }
 
     @Override
@@ -287,6 +396,11 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
             }
         }
 
+        public void updateCutOpacity(FileNode node) {
+            float alpha = adapter.isNodeCut(node) ? CUT_OPACITY : NORMAL_OPACITY;
+            binding.getRoot().setAlpha(alpha);
+        }
+
         /**
          * Binds the file node data to the view components.
          */
@@ -306,15 +420,7 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
             binding.ivIcon.setImageTintList(null);
 
             // Apply opacity if node is cut
-            boolean isCut = false;
-            if (adapter.isCutAction && adapter.clipboardFile != null) {
-                String nodePath = node.getFile().getAbsolutePath();
-                String cutPath = adapter.clipboardFile.getAbsolutePath();
-                if (nodePath.equals(cutPath) || nodePath.startsWith(cutPath + File.separator)) {
-                    isCut = true;
-                }
-            }
-            binding.getRoot().setAlpha(isCut ? 0.7f : 1.0f);
+            updateCutOpacity(node);
 
             if (node.isDirectory()) {
                 bindDirectory(node);

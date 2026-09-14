@@ -112,7 +112,6 @@ public enum FileType {
             case MARKDOWN:
                 return "markdown";
             case SVG:
-                return "svg";
             default:
                 return "plaintext";
         }

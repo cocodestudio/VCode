@@ -2,7 +2,23 @@ package com.cocode.vcode.ide.core.autocomplete;
 
 import androidx.annotation.NonNull;
 
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
+import com.cocode.vcode.ide.core.language.css.CssLexer;
+import com.cocode.vcode.ide.core.language.css.CssParser;
+import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
+import com.cocode.vcode.ide.core.language.css.CssTokenStream;
+import com.cocode.vcode.ide.core.language.html.HtmlLexer;
+import com.cocode.vcode.ide.core.language.html.HtmlParser;
+import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
+import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
+import com.cocode.vcode.ide.core.language.js.JsExportTable;
+import com.cocode.vcode.ide.core.language.js.JsLexer;
+import com.cocode.vcode.ide.core.language.js.JsParser;
+import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
+import com.cocode.vcode.ide.core.language.js.ParseResult;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -15,36 +31,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import com.cocode.vcode.ide.utils.ExecutorProvider;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Global project indexer that extracts CSS classes, IDs, and HTML IDs
- * for cross-file intellisense.
+ * Global project indexer that extracts CSS classes, IDs, HTML IDs, and JS/TS exports
+ * and class members for cross-file intellisense using pure AST parsing.
  */
 public class ProjectSymbolIndex {
-    // CSS class regex: .my-class
-    private static final Pattern PAT_CSS_CLASS = Pattern.compile("\\.([a-zA-Z_][a-zA-Z0-9_-]*)");
-    // CSS ID regex: #my-id
-    private static final Pattern PAT_CSS_ID = Pattern.compile("#([a-zA-Z_][a-zA-Z0-9_-]*)");
-    // HTML ID regex: id="my-id" or id='my-id'
-    private static final Pattern PAT_HTML_ID = Pattern.compile("id\\s*=\\s*[\"']([a-zA-Z0-9_-]+)[\"']");
-    // JS Exports
-    private static final Pattern PAT_JS_EXPORT_DECL = Pattern.compile("export\\s+(?:const|let|var|function|class|interface|type)\\s+([a-zA-Z_$][\\w$]*)");
-    private static final Pattern PAT_JS_EXPORT_DEFAULT = Pattern.compile("export\\s+default\\s+(?:class\\s+|function\\s+)?([a-zA-Z_$][\\w$]*)?");
-    private static final Pattern PAT_JS_EXPORT_BLOCK = Pattern.compile("export\\s*\\{\\s*([^}]+)\\s*\\}");
-    private static final Pattern PAT_JS_EXPORT_DESTRUCT = Pattern.compile("export\\s+(?:const|let|var)\\s*\\{\\s*([^}]+)\\s*\\}");
-    private static final Pattern PAT_MODULE_EXPORTS = Pattern.compile("module\\.exports\\s*=\\s*(?:[a-zA-Z_$][\\w$]*|\\{([^}]+)\\})");
-    private static final Pattern PAT_CLASS_DECL = Pattern.compile(
-            "(?:export\\s+)?(?:default\\s+)?class\\s+([a-zA-Z_$][\\w$]*)(?:\\s+extends\\s+([a-zA-Z_$][\\w$]*))?");
-    private static final Pattern PAT_CLASS_METHOD = Pattern.compile(
-            "(?:(?:static|async|get|set|#)\\s+)*([a-zA-Z_$][\\w$]*)\\s*\\(([^)]*)\\)\\s*\\{");
-    private static final Pattern PAT_CLASS_PROP = Pattern.compile(
-            "(?:(?:static|readonly|#)\\s+)?([a-zA-Z_$][\\w$]*)\\s*(?:=[^{;\\n]+)?;");
-    private static final Pattern PAT_FUNC_SIG = Pattern.compile("(?:export\\s+)?(?:default\\s+)?function\\s+([a-zA-Z_$][\\w$]*)\\s*(\\([^)]*\\))");
-    private static final Pattern PAT_ARROW_FUNC = Pattern.compile("(?:export\\s+)?(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s*=\\s*(\\([^)]*\\)|[a-zA-Z_$][\\w$]*)\\s*=>");
     private static ProjectSymbolIndex instance;
     // Maps class name → list of member CompletionItems (methods + properties)
     private final Map<String, List<CompletionItem>> classMembers = new HashMap<>();
@@ -111,8 +103,6 @@ public class ProjectSymbolIndex {
     }
 
     private void indexDirectoryRecursively(File dir, Set<String> classNames, Set<String> cssIds, Set<String> htmlIds) {
-
-
         List<File> files = com.cocode.vcode.ide.core.autocomplete.VFSManager.getInstance().listCachedFiles(dir);
         if (files == null) {
             // Fallback if VFS isn't built yet
@@ -146,19 +136,47 @@ public class ProjectSymbolIndex {
         String content = readFile(file);
         if (content == null) return;
 
-        Matcher mClass = PAT_CSS_CLASS.matcher(content);
-        while (mClass.find()) {
-            classNames.add(mClass.group(1));
-        }
+        CssTokenStream stream = CssLexer.tokenize(content);
+        CssSyntaxTree tree = CssParser.parse(stream, content);
 
-        Matcher mId = PAT_CSS_ID.matcher(content);
-        while (mId.find()) {
-            String id = mId.group(1);
-            // Ignore hex colors matching exactly 3, 4, 6, or 8 hex digits
-            if (id.matches("^([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")) {
-                continue;
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
+                String sel = tree.nodeName[i];
+                if (sel != null && !sel.isEmpty()) {
+                    extractCssClassesAndIds(sel, classNames, cssIds);
+                }
             }
-            cssIds.add(id);
+        }
+    }
+
+    private static void extractCssClassesAndIds(String selector, Set<String> classNames, Set<String> cssIds) {
+        int len = selector.length();
+        int i = 0;
+        while (i < len) {
+            char c = selector.charAt(i);
+            if (c == '.' || c == '#') {
+                boolean isClass = (c == '.');
+                i++;
+                int start = i;
+                while (i < len) {
+                    char ch = selector.charAt(i);
+                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                if (i > start) {
+                    String name = selector.substring(start, i);
+                    if (isClass) {
+                        classNames.add(name);
+                    } else {
+                        cssIds.add(name);
+                    }
+                }
+            } else {
+                i++;
+            }
         }
     }
 
@@ -166,102 +184,117 @@ public class ProjectSymbolIndex {
         String content = readFile(file);
         if (content == null) return;
 
-        Matcher m = PAT_HTML_ID.matcher(content);
-        while (m.find()) {
-            htmlIds.add(m.group(1));
-        }
-
-        Matcher mClass = Pattern.compile("class\\s*=\\s*[\"']([^\"']+)[\"']").matcher(content);
-        while (mClass.find()) {
-            String[] classes = mClass.group(1).split("\\s+");
-            for (String c : classes) {
-                if (!c.isEmpty()) {
-                    classNames.add(c);
+        HtmlTokenStream stream = HtmlLexer.tokenize(content);
+        ParseResult result = HtmlParser.parse(content, stream);
+        HtmlSyntaxTree tree = result != null ? result.htmlTree : null;
+        if (tree == null) return;
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == HtmlSyntaxTree.N_ATTRIBUTE) {
+                String attrName = tree.nodeName[i];
+                String attrValue = tree.nodeValue[i];
+                if (attrName == null || attrValue == null) continue;
+                if ("id".equalsIgnoreCase(attrName)) {
+                    String id = stripQuotes(attrValue).trim();
+                    if (!id.isEmpty()) {
+                        htmlIds.add(id);
+                    }
+                } else if ("class".equalsIgnoreCase(attrName)) {
+                    String unquoted = stripQuotes(attrValue);
+                    int vLen = unquoted.length();
+                    int start = 0;
+                    for (int j = 0; j <= vLen; j++) {
+                        if (j == vLen || Character.isWhitespace(unquoted.charAt(j))) {
+                            if (j > start) {
+                                classNames.add(unquoted.substring(start, j));
+                            }
+                            start = j + 1;
+                        }
+                    }
                 }
             }
         }
     }
 
+    private static String stripQuotes(String str) {
+        if (str == null || str.length() < 2) return str != null ? str : "";
+        char first = str.charAt(0);
+        char last = str.charAt(str.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return str.substring(1, str.length() - 1);
+        }
+        return str;
+    }
+
     private void indexJsFile(File file) {
         String content = readFile(file);
         if (content == null) return;
+
+        TokenStream stream = JsLexer.tokenize(content);
+        JsSyntaxTree tree = JsParser.parseTopLevel(content, stream);
+
         List<CompletionItem> exports = new ArrayList<>();
-        Map<String, String> signatures = getSignatures(content);
+        Map<String, String> signatures = new HashMap<>();
 
-        // 2. Standard exports: export const foo ...
-        Matcher mDecl = PAT_JS_EXPORT_DECL.matcher(content);
-        while (mDecl.find()) {
-            String name = mDecl.group(1);
-            String sig = signatures.getOrDefault(name, "");
-            exports.add(new CompletionItem(name + sig, name, "Export", CompletionItem.Type.VALUE, 0));
+        // 1. Gather signatures for functions and arrow functions from AST
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int type = tree.nodeType[i];
+            if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC) {
+                String name = tree.nodeName[i];
+                if (name != null && !name.isEmpty()) {
+                    StringBuilder sig = new StringBuilder("(");
+                    boolean first = true;
+                    int child = tree.nodeChild[i];
+                    while (child != 0) {
+                        if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
+                            if (!first) sig.append(", ");
+                            sig.append(tree.nodeName[child] != null ? tree.nodeName[child] : "arg");
+                            first = false;
+                        }
+                        child = tree.nodeSibling[child];
+                    }
+                    sig.append(")");
+                    signatures.put(name, sig.toString());
+                }
+            }
         }
 
-        // 3. Export default
-        Matcher mDefault = PAT_JS_EXPORT_DEFAULT.matcher(content);
-        while (mDefault.find()) {
-            String name = mDefault.group(1);
-            if (name != null && !name.isEmpty()) {
+        // 2. Gather named exports using JsExportTable
+        Set<String> seenExports = new HashSet<>();
+        JsExportTable exportTable = JsExportTable.build(tree, file.getAbsolutePath());
+        for (int e = 0; e < exportTable.count; e++) {
+            String name = exportTable.exportName[e];
+            if (name != null && !name.isEmpty() && seenExports.add(name)) {
                 String sig = signatures.getOrDefault(name, "");
-                exports.add(new CompletionItem(name + sig, name, "Default Export", CompletionItem.Type.VALUE, 0));
-            } else {
-                // Anonymous default export, try to guess from filename
-                String fileName = file.getName();
-                int dotIdx = fileName.lastIndexOf('.');
-                if (dotIdx > 0) fileName = fileName.substring(0, dotIdx);
-                exports.add(new CompletionItem(fileName, fileName, "Default Export", CompletionItem.Type.VALUE, 0));
+                exports.add(new CompletionItem(name + sig, name, "Export", CompletionItem.Type.VALUE, 0));
             }
         }
 
-        // 4. Export blocks: export { a, b as c }
-        Matcher mBlock = PAT_JS_EXPORT_BLOCK.matcher(content);
-        while (mBlock.find()) {
-            String[] names = mBlock.group(1).split(",");
-            for (String n : names) {
-                String name = n.trim();
-                if (name.contains(" as ")) {
-                    name = name.split(" as ")[1].trim();
+        // 3. Handle default export from AST
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT && "default".equals(tree.nodeName[i])) {
+                int child = tree.nodeChild[i];
+                String defName = null;
+                if (child != 0 && tree.nodeName[child] != null) {
+                    defName = tree.nodeName[child];
                 }
-                if (!name.isEmpty()) {
-                    String sig = signatures.getOrDefault(name, "");
-                    exports.add(new CompletionItem(name + sig, name, "Export", CompletionItem.Type.VALUE, 0));
-                }
-            }
-        }
-
-        // 5. Destructured exports: export const { a, b } = ...
-        Matcher mDestruct = PAT_JS_EXPORT_DESTRUCT.matcher(content);
-        while (mDestruct.find()) {
-            String[] names = mDestruct.group(1).split(",");
-            for (String n : names) {
-                String name = n.trim().split(":")[0].trim(); // Handle aliases { a: b }
-                if (!name.isEmpty()) {
-                    exports.add(new CompletionItem(name, name, "Export", CompletionItem.Type.VALUE, 0));
-                }
-            }
-        }
-
-        // 6. module.exports
-        Matcher mModExp = PAT_MODULE_EXPORTS.matcher(content);
-        while (mModExp.find()) {
-            String block = mModExp.group(1);
-            if (block != null && !block.isEmpty()) {
-                // It's a block: module.exports = { a, b }
-                String[] names = block.split(",");
-                for (String n : names) {
-                    String name = n.trim().split(":")[0].trim();
-                    if (!name.isEmpty()) {
-                        String sig = signatures.getOrDefault(name, "");
-                        exports.add(new CompletionItem(name + sig, name, "module.exports", CompletionItem.Type.VALUE, 0));
+                if (defName != null && !defName.isEmpty() && !"default".equals(defName)) {
+                    if (seenExports.add(defName)) {
+                        String sig = signatures.getOrDefault(defName, "");
+                        exports.add(new CompletionItem(defName + sig, defName, "Default Export", CompletionItem.Type.VALUE, 0));
+                    }
+                } else {
+                    String fileName = file.getName();
+                    int dotIdx = fileName.lastIndexOf('.');
+                    if (dotIdx > 0) fileName = fileName.substring(0, dotIdx);
+                    if (seenExports.add(fileName)) {
+                        exports.add(new CompletionItem(fileName, fileName, "Default Export", CompletionItem.Type.VALUE, 0));
                     }
                 }
-            } else {
-                // Just a single assignment (fallback to file name heuristic like default export)
-                String fileName = file.getName();
-                int dotIdx = fileName.lastIndexOf('.');
-                if (dotIdx > 0) fileName = fileName.substring(0, dotIdx);
-                exports.add(new CompletionItem(fileName, fileName, "module.exports", CompletionItem.Type.VALUE, 0));
             }
         }
+
+        // 4. Handle module.exports using fast character scanning
+        scanModuleExports(content, exports, signatures, seenExports, file);
 
         synchronized (this) {
             try {
@@ -270,77 +303,115 @@ public class ProjectSymbolIndex {
                 jsFileExports.put(file.getAbsolutePath(), exports);
             }
         }
-        indexClassMembers(file, content);
+
+        // 5. Index class members using AST
+        indexClassMembersFromTree(file, tree);
     }
 
-    @NonNull
-    private Map<String, String> getSignatures(String content) {
-        Map<String, String> signatures = new HashMap<>();
-
-        // 1. Find signatures first so we can attach them to exports later
-        Matcher mFunc = PAT_FUNC_SIG.matcher(content);
-        while (mFunc.find()) {
-            signatures.put(mFunc.group(1), mFunc.group(2));
-        }
-        Matcher mArrow = PAT_ARROW_FUNC.matcher(content);
-        while (mArrow.find()) {
-            String args = mArrow.group(2);
-            if (!args.startsWith("(")) args = "(" + args + ")";
-            signatures.put(mArrow.group(1), args);
-        }
-        return signatures;
-    }
-
-    private void indexClassMembers(File file, String content) {
-        Map<String, List<CompletionItem>> fileClasses = new HashMap<>();
-        Matcher mClass = PAT_CLASS_DECL.matcher(content);
-        while (mClass.find()) {
-            String className = mClass.group(1);
-            List<CompletionItem> members = new ArrayList<>();
-            // Find the opening brace of the class body
-            int bodyStart = content.indexOf('{', mClass.end());
-            if (bodyStart < 0) continue;
-            // Find the matching closing brace
-            int depth = 1, pos = bodyStart + 1;
-            while (pos < content.length() && depth > 0) {
-                char c = content.charAt(pos);
-                if (c == '{') depth++;
-                else if (c == '}') depth--;
-                pos++;
-            }
-            String body = content.substring(bodyStart + 1, pos - 1);
-            // Skip constructor for members (still add it)
-            Matcher mMethod = PAT_CLASS_METHOD.matcher(body);
-            Set<String> seen = new HashSet<>();
-            while (mMethod.find()) {
-                String name = mMethod.group(1);
-                String params = mMethod.group(2);
-                if (name.equals("constructor") || seen.contains(name)) {
-                    seen.add(name);
-                    continue;
+    private void scanModuleExports(String content, List<CompletionItem> exports, Map<String, String> signatures, Set<String> seen, File file) {
+        int idx = content.indexOf("module.exports");
+        if (idx < 0) return;
+        int eq = content.indexOf('=', idx + 14);
+        if (eq < 0) return;
+        int p = eq + 1;
+        while (p < content.length() && Character.isWhitespace(content.charAt(p))) p++;
+        if (p < content.length() && content.charAt(p) == '{') {
+            int close = content.indexOf('}', p + 1);
+            if (close > p) {
+                String inner = content.substring(p + 1, close);
+                for (String part : inner.split(",")) {
+                    String name = part.trim();
+                    int colon = name.indexOf(':');
+                    if (colon > 0) name = name.substring(0, colon).trim();
+                    if (!name.isEmpty() && seen.add(name)) {
+                        String sig = signatures.getOrDefault(name, "");
+                        exports.add(new CompletionItem(name + sig, name, "module.exports", CompletionItem.Type.VALUE, 0));
+                    }
                 }
-                seen.add(name);
-                members.add(new CompletionItem(name + "(" + params + ")", name, className + " method", CompletionItem.Type.FUNCTION, 0));
             }
-            Matcher mProp = PAT_CLASS_PROP.matcher(body);
-            while (mProp.find()) {
-                String name = mProp.group(1);
-                if (seen.contains(name) || name.length() < 2) continue;
-                seen.add(name);
-                members.add(new CompletionItem(name, name, className + " property", CompletionItem.Type.VALUE, 0));
+        } else {
+            int start = p;
+            while (p < content.length() && (Character.isLetterOrDigit(content.charAt(p)) || content.charAt(p) == '_' || content.charAt(p) == '$')) {
+                p++;
             }
-            fileClasses.put(className, members);
+            String name = (p > start) ? content.substring(start, p) : null;
+            if (name == null || name.isEmpty()) {
+                String fileName = file.getName();
+                int dot = fileName.lastIndexOf('.');
+                name = (dot > 0) ? fileName.substring(0, dot) : fileName;
+            }
+            if (!name.isEmpty() && seen.add(name)) {
+                exports.add(new CompletionItem(name, name, "module.exports", CompletionItem.Type.VALUE, 0));
+            }
         }
+    }
+
+    private void indexClassMembersFromTree(File file, JsSyntaxTree tree) {
+        Map<String, List<CompletionItem>> fileClasses = new HashMap<>();
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int nodeType = tree.nodeType[i];
+            if (nodeType == JsSyntaxTree.N_CLASS_DECL || nodeType == JsSyntaxTree.N_INTERFACE || nodeType == JsSyntaxTree.N_ENUM) {
+                String className = tree.nodeName[i];
+                if (className == null || className.isEmpty()) continue;
+
+                List<CompletionItem> members = new ArrayList<>();
+                Set<String> seen = new HashSet<>();
+
+                // Traverse explicit AST member children
+                int child = tree.nodeChild[i];
+                while (child != 0) {
+                    int cType = tree.nodeType[child];
+                    String name = tree.nodeName[child];
+                    if (name != null && !name.isEmpty() && !seen.contains(name) && !isIgnoredProp(name)) {
+                        if (cType == JsSyntaxTree.N_METHOD || cType == JsSyntaxTree.N_GETTER || cType == JsSyntaxTree.N_SETTER) {
+                            seen.add(name);
+                            members.add(new CompletionItem(name, name + "(|)", className + " method", CompletionItem.Type.FUNCTION, 0));
+                        } else if (cType == JsSyntaxTree.N_PROPERTY) {
+                            seen.add(name);
+                            members.add(new CompletionItem(name, name, className + " property", CompletionItem.Type.VALUE, 0));
+                        }
+                    }
+                    child = tree.nodeSibling[child];
+                }
+
+                // Add constructor assignments (e.g. this.x = 1) from shapeTable
+                String[] shapes = tree.shapeTable.get(i);
+                if (shapes != null) {
+                    for (String key : shapes) {
+                        if (key != null && !key.isEmpty() && !seen.contains(key) && !isIgnoredProp(key)) {
+                            seen.add(key);
+                            members.add(new CompletionItem(key, key, className + " property", CompletionItem.Type.VALUE, 0));
+                        }
+                    }
+                }
+
+                fileClasses.put(className, members);
+            }
+        }
+
         synchronized (this) {
             try {
                 fileClassMembers.put(file.getCanonicalPath(), fileClasses);
-                // Merge into global classMembers map
                 classMembers.putAll(fileClasses);
             } catch (Exception e) {
                 fileClassMembers.put(file.getAbsolutePath(), fileClasses);
                 classMembers.putAll(fileClasses);
             }
         }
+    }
+
+    private static boolean isIgnoredProp(String name) {
+        return "constructor".equals(name) || "prototype".equals(name) || "function".equals(name);
+    }
+
+    private boolean hasDocument(File file) {
+        if (file == null) return false;
+        if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath()) != null) return true;
+        try {
+            if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getCanonicalPath()) != null) return true;
+        } catch (Exception ignored) {}
+        return false;
     }
 
     private String readFile(File file) {
@@ -350,6 +421,9 @@ public class ProjectSymbolIndex {
         } catch (Exception ignored) {}
         
         com.cocode.vcode.ide.core.lsp.LspDocument doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(queryPath);
+        if (doc == null && !queryPath.equals(file.getAbsolutePath())) {
+            doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath());
+        }
         if (doc != null && doc.text != null) {
             return doc.text;
         }
@@ -394,9 +468,13 @@ public class ProjectSymbolIndex {
         if (parent == null) return new ArrayList<>();
 
         File targetFile = new File(parent, importPath);
-        if (!targetFile.exists() && !importPath.endsWith(".js") && !importPath.endsWith(".ts")) {
-            targetFile = new File(parent, importPath + ".js");
-            if (!targetFile.exists()) targetFile = new File(parent, importPath + ".ts");
+        if (!targetFile.exists() && !hasDocument(targetFile) && !importPath.endsWith(".js") && !importPath.endsWith(".ts")) {
+            File jsTarget = new File(parent, importPath + ".js");
+            if (jsTarget.exists() || hasDocument(jsTarget)) {
+                targetFile = jsTarget;
+            } else {
+                targetFile = new File(parent, importPath + ".ts");
+            }
         }
 
         List<CompletionItem> exports = null;
@@ -406,8 +484,9 @@ public class ProjectSymbolIndex {
             exports = jsFileExports.get(targetFile.getAbsolutePath());
         }
 
-        // If not indexed yet but file exists, index it now (on-demand, synchronous)
-        if ((exports == null || exports.isEmpty()) && targetFile.exists()) {
+        // If not indexed yet but file exists or has in-memory document, index it now (on-demand, synchronous)
+        boolean canRead = targetFile.exists() || hasDocument(targetFile);
+        if ((exports == null || exports.isEmpty()) && canRead) {
             indexJsFile(targetFile);
             try {
                 exports = jsFileExports.get(targetFile.getCanonicalPath());

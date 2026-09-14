@@ -309,7 +309,7 @@ public class ProjectsActivity extends BaseActivity {
                                         updater.onResult(true, null);
                                     } catch (Exception ignored) {
                                     }
-                                    Toast.makeText(ProjectsActivity.this, "Signed in as @" + username, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(ProjectsActivity.this, getString(R.string.vcode_signed_in_as, username), Toast.LENGTH_SHORT).show();
                                 });
                             } catch (Exception e) {
                                 // Notify the UI of authentication failure

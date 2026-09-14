@@ -6,6 +6,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,7 +45,9 @@ import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.json.JsonSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.markdown.MarkdownSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.md.MarkdownSyntaxHighlighter;
+import com.cocode.vcode.ide.core.language.svg.SvgAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsSyntaxHighlighter;
@@ -74,7 +77,7 @@ public class CodeEditText extends View {
 
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
-    private static final String TRIGGER_CHARS = ".</:'\"@#!(";
+    private static final String TRIGGER_CHARS = ".</:'\"@#!({&>+^*[]})%";
 
     // Selection handle drag states
     private static final int HANDLE_DRAG_NONE = 0;
@@ -206,6 +209,40 @@ public class CodeEditText extends View {
     private int searchActiveIndex = -1;
     private volatile long textLoadToken = 0;
 
+    // Full text cache for autocomplete and search
+    private String cachedFullText;
+    private long cachedFullTextVersion = -1;
+
+    private String getCachedFullText() {
+        long currentVersion = content.getVersion();
+        if (cachedFullText == null || cachedFullTextVersion != currentVersion) {
+            cachedFullText = content.getText();
+            cachedFullTextVersion = currentVersion;
+        }
+        return cachedFullText;
+    }
+
+    // Reusable objects and cached metrics for 60fps rendering
+    private final Path reusableDiagnosticPath = new Path();
+    private float density = 1f;
+    private float handleRadiusPx = 10f;
+    private float handleThresholdPx = 40f;
+    private int tabSize = 2;
+    private String tabSpaces = "  ";
+
+    public void setTabSize(int size) {
+        if (size <= 0) size = 2;
+        this.tabSize = size;
+        StringBuilder sb = new StringBuilder(size);
+        for (int i = 0; i < size; i++) sb.append(' ');
+        this.tabSpaces = sb.toString();
+        this.indentEngine = new IndentationEngine(size);
+    }
+
+    public int getTabSize() {
+        return tabSize;
+    }
+
     // Cursor blink runnable
     private final Runnable blinkRunnable = () -> {
         cursorVisible = !cursorVisible;
@@ -243,9 +280,10 @@ public class CodeEditText extends View {
 
     @SuppressLint("ClickableViewAccessibility")
     private void init(Context context) {
+        density = context.getResources().getDisplayMetrics().density;
         Typeface codeFont = FontManager.getInstance().getCodeFont(context);
 
-        // Fix #4: Restore the editor background colour (previously inherited from AppCompatEditText).
+        // Apply theme-specific surface background color
         setBackgroundColor(ContextCompat.getColor(context, R.color.vcode_bg_surface));
 
         textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -264,7 +302,7 @@ public class CodeEditText extends View {
 
         cursorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         cursorPaint.setColor(ContextCompat.getColor(context, R.color.vcode_accent_primary));
-        cursorPaint.setStrokeWidth(dpToPx(2, context));
+        cursorPaint.setStrokeWidth(dpToPx(2f));
         cursorPaint.setStyle(Paint.Style.STROKE);
 
         selectionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -293,17 +331,19 @@ public class CodeEditText extends View {
         overScroller = new OverScroller(context);
 
         searchMatchPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        searchMatchPaint.setColor(0x55FFD700);
+        searchMatchPaint.setColor(ContextCompat.getColor(context, R.color.vcode_search_match_bg));
         searchMatchPaint.setStyle(Paint.Style.FILL);
         searchActivePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        searchActivePaint.setColor(0xAAFF9800);
+        searchActivePaint.setColor(ContextCompat.getColor(context, R.color.vcode_search_active_bg));
         searchActivePaint.setStyle(Paint.Style.FILL);
 
         bracketHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         bracketHighlightPaint.setStyle(Paint.Style.STROKE);
         bracketHighlightPaint.setStrokeWidth(3f);
 
-        indentEngine = new IndentationEngine(new AppSettings().tabSize);
+        handleRadiusPx = dpToPx(5);
+        handleThresholdPx = dpToPx(20);
+        setTabSize(new AppSettings().tabSize);
 
         setFocusable(true);
         setFocusableInTouchMode(true);
@@ -311,7 +351,7 @@ public class CodeEditText extends View {
         setLongClickable(true); // allow long-press just like EditText
         setVerticalScrollBarEnabled(true);
         setHorizontalScrollBarEnabled(true);
-        // Fix #1: OVER_SCROLL_NEVER prevents the "rubber-band" effect that misaligns
+        // Disable overscroll to prevent rubber-band bounce effects that misalign
         // the line-number gutter when content is shorter than the viewport.
         setOverScrollMode(View.OVER_SCROLL_NEVER);
 
@@ -371,8 +411,8 @@ public class CodeEditText extends View {
                 // Always notify the IME of the new cursor position so it syncs
                 // its internal state regardless of whether there was a selection.
                 notifySelectionChanged();
-                // Fix #2: Show the keyboard only on a confirmed tap (not on every ACTION_DOWN).
-                // This prevents the IME from popping up when the user just wants to scroll.
+                // Request soft keyboard display on confirmed single-tap rather than touch-down,
+                // preventing unintentional keyboard popups during scroll gestures.
                 showKeyboard();
                 return true;
             }
@@ -389,6 +429,19 @@ public class CodeEditText extends View {
                     performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
                     notifySelectionChanged();
                     invalidate();
+                } else {
+                    if (hasSelection() || cursor == null || cursor.line != pressed.line || Math.abs(cursor.column - pressed.column) > 1) {
+                        cursor = pressed;
+                    }
+                    selectionAnchor = null;
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                    showKeyboard();
+                    cursorVisible = true;
+                    scheduleBlink();
+                    invalidate();
+                    if (selectionChangeListener != null && !isSettingSelectionFromIme) {
+                        selectionChangeListener.onEmptyLongPress();
+                    }
                 }
             }
 
@@ -505,8 +558,9 @@ public class CodeEditText extends View {
                 int state = contentLine.getTokenizerStartState();
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
-                contentLine.tokens = syntaxHighlighter.tokenizeLine(contentLine.toLineString(), line, internalState);
-                BracketMatcher.applyRainbowBrackets(contentLine.tokens, contentLine.toLineString(), rainbowColors, depth);
+                String lineStr = contentLine.toLineString();
+                contentLine.tokens = syntaxHighlighter.tokenizeLine(lineStr, line, internalState);
+                BracketMatcher.applyRainbowBrackets(contentLine.tokens, lineStr, rainbowColors, depth, internalState, line);
             }
             List<HighlightToken> lineTokens = contentLine.tokens;
 
@@ -548,7 +602,7 @@ public class CodeEditText extends View {
                 } else {
                     Arrays.fill(colorBuffer, 0, renderLen, defaultTextColor);
                     Arrays.fill(underlineBuffer, 0, renderLen, false);
-                    for (int i = 0; i < renderLen; i++) previewBuffer[i] = false;
+                    Arrays.fill(previewBuffer, 0, renderLen, false);
 
                     // Apply tokens (later tokens overwrite earlier ones)
                     for (HighlightToken tok : lineTokens) {
@@ -679,8 +733,29 @@ public class CodeEditText extends View {
         if (searchDecorations == null || searchDecorations.isEmpty()) return;
 
         int total = content.totalLength();
-        for (int i = 0; i < searchDecorations.size(); i++) {
+        int firstLineFlat = content.flatOffset(new ContentPosition(firstLine, 0));
+        int lastLineEndCol = content.lineLength(lastLine);
+        int lastLineFlat = content.flatOffset(new ContentPosition(lastLine, lastLineEndCol));
+
+        // Binary search for first decoration whose absoluteEnd >= firstLineFlat
+        int low = 0;
+        int high = searchDecorations.size() - 1;
+        int startIndex = searchDecorations.size();
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            if (searchDecorations.get(mid).absoluteEnd >= firstLineFlat) {
+                startIndex = mid;
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+
+        for (int i = startIndex; i < searchDecorations.size(); i++) {
             SearchResult r = searchDecorations.get(i);
+            if (r.absoluteStart > lastLineFlat) {
+                break; // Ordered by start offset — no subsequent match can be visible
+            }
             if (r.absoluteStart < 0 || r.absoluteEnd > total || r.absoluteStart >= r.absoluteEnd)
                 continue;
 
@@ -774,10 +849,10 @@ public class CodeEditText extends View {
                 color = cachedInfoColor;
             diagnosticPaint.setColor(color);
 
-            if (problem.getCachedPath() == null || wordWrap) {
+            if (wordWrap) {
                 float x0 = paddingLeft + getCursorX(lineIdx, colStart);
                 float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
-                if (wordWrap && colEnd > colStart && colInSubRow(colEnd) < colInSubRow(colStart)) {
+                if (colEnd > colStart && colInSubRow(colEnd) < colInSubRow(colStart)) {
                     // problem spans multiple subrows, just draw for the first subrow
                     x1 = paddingLeft + getWidth() - getPaddingRight();
                 }
@@ -786,19 +861,40 @@ public class CodeEditText extends View {
                 float period = 8f;
                 float half = period / 2f;
 
-                android.graphics.Path path = new android.graphics.Path();
-                path.moveTo(x0, waveY);
+                reusableDiagnosticPath.reset();
+                reusableDiagnosticPath.moveTo(x0, waveY);
                 boolean up = true;
                 for (float cx2 = x0; cx2 < x1; cx2 += half) {
                     float ex = Math.min(cx2 + half, x1);
                     float mid = (cx2 + ex) / 2f;
                     float ctlY = up ? waveY - amp : waveY + amp;
-                    path.quadTo(mid, ctlY, ex, waveY);
+                    reusableDiagnosticPath.quadTo(mid, ctlY, ex, waveY);
                     up = !up;
                 }
-                problem.setCachedPath(path);
+                canvas.drawPath(reusableDiagnosticPath, diagnosticPaint);
+            } else {
+                if (problem.getCachedPath() == null) {
+                    float x0 = paddingLeft + getCursorX(lineIdx, colStart);
+                    float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
+                    float waveY = paddingTop + absoluteVisualRow(lineIdx, colStart) * lineHeightPx + lineHeightPx + 2;
+                    float amp = 2.5f;
+                    float period = 8f;
+                    float half = period / 2f;
+
+                    Path path = new Path();
+                    path.moveTo(x0, waveY);
+                    boolean up = true;
+                    for (float cx2 = x0; cx2 < x1; cx2 += half) {
+                        float ex = Math.min(cx2 + half, x1);
+                        float mid = (cx2 + ex) / 2f;
+                        float ctlY = up ? waveY - amp : waveY + amp;
+                        path.quadTo(mid, ctlY, ex, waveY);
+                        up = !up;
+                    }
+                    problem.setCachedPath(path);
+                }
+                canvas.drawPath(problem.getCachedPath(), diagnosticPaint);
             }
-            canvas.drawPath(problem.getCachedPath(), diagnosticPaint);
         }
     }
 
@@ -813,12 +909,12 @@ public class CodeEditText extends View {
         // Draw the cursor line at this position
         canvas.drawLine(cx, cy, cx, cy + lineHeightPx, cursorPaint);
         // Draw a small filled circle as the drag handle
-        canvas.drawCircle(cx, handleY, dpToPx(5, getContext()), handlePaint);
+        canvas.drawCircle(cx, handleY, handleRadiusPx, handlePaint);
     }
 
     private int hitTestHandle(float touchX, float touchY) {
         if (selectionAnchor == null) return HANDLE_DRAG_NONE;
-        float threshold = dpToPx(20, getContext());
+        float threshold = handleThresholdPx;
 
         ContentPosition startPos = ContentPosition.min(cursor, selectionAnchor);
         ContentPosition endPos = ContentPosition.max(cursor, selectionAnchor);
@@ -851,6 +947,9 @@ public class CodeEditText extends View {
                 int hitHandle = hitTestHandle(event.getX(), event.getY());
                 if (hitHandle != HANDLE_DRAG_NONE) {
                     activeDragHandle = hitHandle;
+                    if (selectionChangeListener != null) {
+                        selectionChangeListener.onSelectionChanged(false);
+                    }
                     return true;
                 }
             }
@@ -858,8 +957,8 @@ public class CodeEditText extends View {
 
             requestFocus();
             overScroller.abortAnimation();
-            // Fix #2: Do NOT call showKeyboard() here. It is called in onSingleTapUp() instead,
-            // so a scroll gesture (ACTION_DOWN + MOVE) never pops the keyboard.
+            // Soft keyboard is triggered in onSingleTapUp() once a stationary tap is confirmed,
+            // ensuring scroll gestures (ACTION_DOWN followed by MOVE) do not open the IME.
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         } else if (action == MotionEvent.ACTION_MOVE) {
             if (activeDragHandle != HANDLE_DRAG_NONE) {
@@ -1149,10 +1248,30 @@ public class CodeEditText extends View {
         } else {
             deleted = "\n";
         }
+
+        boolean deletePair = false;
+        if (newPos.line == cursor.line
+                && cursor.column < content.lineLength(cursor.line)
+                && (autoCloseBrackets || autoCloseQuotes)) {
+            char before = deleted.charAt(0);
+            char after = content.charAt(cursor.line, cursor.column);
+            if ((before == '{' && after == '}')
+                    || (before == '[' && after == ']')
+                    || (before == '(' && after == ')')
+                    || (before == '"' && after == '"')
+                    || (before == '\'' && after == '\'')
+                    || (before == '`' && after == '`')) {
+                deletePair = true;
+            }
+        }
+
         ContentPosition oldCursor = cursor;
-        content.delete(newPos.line, newPos.column, cursor.line, cursor.column);
-        undoStack.recordDelete(newPos.line, newPos.column, oldCursor.line, oldCursor.column,
-                deleted, snapshotAt(oldCursor, null), snapshotAt(newPos, null));
+        ContentPosition delEnd = deletePair ? content.positionAt(cursorFlat + 1) : oldCursor;
+        String totalDeleted = deletePair ? (deleted + content.charAt(cursor.line, cursor.column)) : deleted;
+
+        content.delete(newPos.line, newPos.column, delEnd.line, delEnd.column);
+        undoStack.recordDelete(newPos.line, newPos.column, delEnd.line, delEnd.column,
+                totalDeleted, snapshotAt(oldCursor, null), snapshotAt(newPos, null));
         cursor = newPos;
         selectionAnchor = null;
         cursorVisible = true;
@@ -1363,6 +1482,20 @@ public class CodeEditText extends View {
     }
 
     /**
+     * Returns true if the editor currently has a non-empty text selection.
+     */
+    public boolean hasSelection() {
+        return selectionAnchor != null && getSelectionStart() != getSelectionEnd();
+    }
+
+    /**
+     * Returns true if the entire document is currently selected.
+     */
+    public boolean isAllSelected() {
+        return hasSelection() && getSelectionStart() == 0 && getSelectionEnd() >= length();
+    }
+
+    /**
      * Collapses the selection to the cursor position (clears selection without moving cursor).
      */
     public void collapseSelection() {
@@ -1547,24 +1680,38 @@ public class CodeEditText extends View {
             });
         }
         ExecutorProvider.getInstance().runOnCpu(() -> {
-            Content.LoadedLines loaded = Content.prepareLoad(textStr);
+            Content.LoadedLines loaded;
+            try {
+                loaded = Content.prepareLoad(textStr);
+            } catch (Throwable t) {
+                mainHandler.post(() -> {
+                    if (myToken == textLoadToken) {
+                        isSettingText = false;
+                        for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
+                    }
+                });
+                return;
+            }
             mainHandler.post(() -> {
                 if (myToken != textLoadToken) return;
-                content.applyLoaded(loaded);
-                cursor = ContentPosition.ZERO;
-                selectionAnchor = null;
-                undoStack.reset();
-                longestLineLength = loaded.longestLineLength;
-                longestLineDirty = false;
-                isSettingText = false;
-                for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
-                dirtyTracker.reset();
-                dirtyTracker.addEdit(0, 0, content.totalLength());
-                rebuildVisualLayout();
-                requestLayout();
-                invalidate();
-                scheduleHighlight();
-                notifySelectionChanged();
+                try {
+                    content.applyLoaded(loaded);
+                    cursor = ContentPosition.ZERO;
+                    selectionAnchor = null;
+                    undoStack.reset();
+                    longestLineLength = loaded.longestLineLength;
+                    longestLineDirty = false;
+                    dirtyTracker.reset();
+                    dirtyTracker.addEdit(0, 0, content.totalLength());
+                    rebuildVisualLayout();
+                    requestLayout();
+                    invalidate();
+                    scheduleHighlight();
+                    notifySelectionChanged();
+                } finally {
+                    isSettingText = false;
+                    for (OnTextLoadListener l : textLoadListeners) l.onTextLoadStateChanged(false);
+                }
             });
         });
     }
@@ -1746,7 +1893,9 @@ public class CodeEditText extends View {
                     break;
                 case MARKDOWN:
                     this.syntaxHighlighter = new MarkdownSyntaxHighlighter(ctx);
-                    this.autoCompleteEngine = null;
+                    MarkdownAutoCompleteEngine mdEngine = new MarkdownAutoCompleteEngine(ctx);
+                    if (currentFile != null) mdEngine.setCurrentFile(currentFile);
+                    this.autoCompleteEngine = mdEngine;
                     break;
                 case GITIGNORE:
                     this.syntaxHighlighter = null; // Assuming no syntax highlighter for gitignore
@@ -1756,7 +1905,9 @@ public class CodeEditText extends View {
                     break;
                 case SVG:
                     this.syntaxHighlighter = new SvgSyntaxHighlighter(ctx);
-                    this.autoCompleteEngine = null;
+                    SvgAutoCompleteEngine svgEngine = new SvgAutoCompleteEngine(ctx);
+                    if (currentFile != null) svgEngine.setCurrentFile(currentFile);
+                    this.autoCompleteEngine = svgEngine;
                     break;
                 default:
                     this.syntaxHighlighter = null;
@@ -1771,16 +1922,8 @@ public class CodeEditText extends View {
 
     public void setCurrentFile(File file) {
         this.currentFile = file;
-        if (autoCompleteEngine instanceof HtmlAutoCompleteEngine) {
-            ((HtmlAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof JsAutoCompleteEngine) {
-            ((JsAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof JsonAutoCompleteEngine) {
-            ((JsonAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof CssAutoCompleteEngine) {
-            ((CssAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
-        } else if (autoCompleteEngine instanceof com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine) {
-            ((com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine) autoCompleteEngine).setCurrentFile(file);
+        if (autoCompleteEngine != null) {
+            autoCompleteEngine.setCurrentFile(file);
         }
     }
 
@@ -1909,10 +2052,11 @@ public class CodeEditText extends View {
         int flatCursor = content.flatOffset(cursor);
         String formattedSnippet = getFormattedSnippet(snippetTemplate, flatCursor, currentText);
 
-        int pipeIndex = formattedSnippet.indexOf('|');
+        boolean isMarkdownTable = formattedSnippet.contains("| ---") || formattedSnippet.contains("|---");
+        int pipeIndex = isMarkdownTable ? -1 : formattedSnippet.indexOf('|');
         if (pipeIndex != -1) {
             formattedSnippet = formattedSnippet.substring(0, pipeIndex)
-                    + formattedSnippet.substring(pipeIndex + 1);
+                    + formattedSnippet.substring(pipeIndex + 1).replace("|", "");
         }
 
         isApplyingHighlight = true;
@@ -1921,6 +2065,9 @@ public class CodeEditText extends View {
         content.insert(cursor.line, cursor.column, formattedSnippet);
         if (pipeIndex != -1) {
             cursor = content.positionAt(flatCursor + pipeIndex);
+        } else if (isMarkdownTable) {
+            int firstCell = formattedSnippet.indexOf("| ");
+            cursor = content.positionAt(flatCursor + (firstCell != -1 ? firstCell + 2 : 0));
         } else {
             cursor = content.positionAt(flatCursor + formattedSnippet.length());
         }
@@ -2050,7 +2197,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth);
+                int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState);
                 int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
                 line.setTokenizerEndState(newState);
@@ -2078,7 +2225,7 @@ public class CodeEditText extends View {
                             int depth = (bgState >>> 16) & 0xFFFF;
 
                             int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                            int newDepth = BracketMatcher.computeBracketDepth(line.toLineString(), depth);
+                            int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState);
 
                             int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
@@ -2116,27 +2263,30 @@ public class CodeEditText extends View {
         // LSP bridge has taken over completions for this language — skip legacy engine.
         if (lspCompletionActive) return;
 
+        int totalLen = content.totalLength();
         int flatCursor = content.flatOffset(cursor);
-        String text = content.getSubstring(0, flatCursor);
 
-        if (flatCursor <= 0 || flatCursor > text.length()) {
+        if (flatCursor <= 0 || flatCursor > totalLen) {
             autoCompletePopup.dismiss();
             return;
         }
 
-        if (isCursorInComment(text, flatCursor)) {
-            autoCompletePopup.dismiss();
-            return;
-        }
-
-        char lastChar = text.charAt(flatCursor - 1);
+        // Fast character checks directly without allocating or fetching full text
+        char lastChar = (cursor.column > 0)
+                ? content.charAt(cursor.line, cursor.column - 1)
+                : '\n';
 
         if (Character.isWhitespace(lastChar)) {
             autoCompletePopup.dismiss();
             return;
         }
 
-        boolean isTriggerChar = TRIGGER_CHARS.indexOf(lastChar) >= 0;
+        char prevChar = (cursor.column >= 2)
+                ? content.charAt(cursor.line, cursor.column - 2)
+                : (flatCursor >= 2 ? content.getSubstring(flatCursor - 2, flatCursor - 1).charAt(0) : '\0');
+
+        boolean isTriggerChar = TRIGGER_CHARS.indexOf(lastChar) >= 0
+                || (lastChar == '{' && flatCursor >= 2 && prevChar == '$');
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$'
                 || (lastChar == '-' && (fileType == FileType.CSS || fileType == FileType.HTML));
@@ -2146,8 +2296,15 @@ public class CodeEditText extends View {
             return;
         }
 
+        String fullText = getCachedFullText();
+
+        if (isCursorInComment(fullText, flatCursor)) {
+            autoCompletePopup.dismiss();
+            return;
+        }
+
         final int capturedCursor = flatCursor;
-        final String capturedText = text;
+        final String capturedText = fullText;
 
         ExecutorProvider.getInstance().runOnCpu(() -> {
             List<CompletionItem> items = autoCompleteEngine.getSuggestions(capturedText, capturedCursor);
@@ -2174,7 +2331,7 @@ public class CodeEditText extends View {
     /**
      * Injects selected autocomplete text, properly computing replace range.
      */
-    private void insertCompletion(CompletionItem item) {
+    void insertCompletion(CompletionItem item) {
         if (item == null) return;
         String insertText = item.getEffectiveInsertText();
         if (insertText == null) return;
@@ -2182,75 +2339,124 @@ public class CodeEditText extends View {
         isInsertingCompletion = true;
         try {
             int flatCursor = content.flatOffset(cursor);
-            String text = content.getText();
+            int lineStartFlat = flatCursor - cursor.column;
+            String linePrefix = content.getSubstring(lineStartFlat, flatCursor);
 
-        // Compute wordStart
-        int wordStart;
-        if (item.getReplaceLength() >= 0) {
-            wordStart = Math.max(0, flatCursor - item.getReplaceLength());
-        } else {
-            wordStart = flatCursor;
-            while (wordStart > 0) {
-                char c = text.charAt(wordStart - 1);
-                if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '$' || c == '@') {
-                    wordStart--;
-                } else break;
+            // Compute wordStart
+            int col = cursor.column;
+            if (item.getReplaceLength() >= 0) {
+                col = Math.max(0, cursor.column - item.getReplaceLength());
+            } else {
+                while (col > 0) {
+                    char c = linePrefix.charAt(col - 1);
+                    if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '$' || c == '@') {
+                        col--;
+                    } else break;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '<' && insertText.startsWith("<")) {
+                    col--;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '&' && insertText.startsWith("&")) {
+                    col--;
+                }
             }
-            if (wordStart > 0 && text.charAt(wordStart - 1) == '<' && insertText.startsWith("<")) {
-                wordStart--;
+            int wordStart = lineStartFlat + col;
+
+            // Handle indentation for multi-line insertions
+            StringBuilder baseIndent = new StringBuilder();
+            for (int i = 0; i < col; i++) {
+                char c = linePrefix.charAt(i);
+                if (c == ' ' || c == '\t') baseIndent.append(c);
+                else break;
             }
-        }
+            String rawInsertText = insertText;
+            if (insertText.contains("\n")) {
+                insertText = insertText.replace("\n", "\n" + baseIndent);
+            }
 
-        // Handle indentation for multi-line insertions
-        int lineStart = wordStart;
-        while (lineStart > 0 && text.charAt(lineStart - 1) != '\n') lineStart--;
-        StringBuilder baseIndent = new StringBuilder();
-        for (int i = lineStart; i < wordStart; i++) {
-            char c = text.charAt(i);
-            if (c == ' ' || c == '\t') baseIndent.append(c);
-            else break;
-        }
-        if (insertText.contains("\n")) {
-            insertText = insertText.replace("\n", "\n" + baseIndent);
-        }
+            // Check if this is a Markdown table snippet
+            boolean isMarkdownTable = insertText.contains("| ---") || insertText.contains("|---");
 
-        // Handle pipe cursor marker
-        int pipeIdx = insertText.indexOf('|');
-        String cleanInsert;
-        int finalCursorFlat;
-        if (pipeIdx >= 0) {
-            cleanInsert = insertText.substring(0, pipeIdx) + insertText.substring(pipeIdx + 1);
-            finalCursorFlat = wordStart + pipeIdx;
-        } else {
-            cleanInsert = insertText;
-            finalCursorFlat = wordStart + cleanInsert.length() + item.getCursorOffset();
-        }
-
-        // Deduplicate trailing bracket/quote
-        if (!cleanInsert.isEmpty() && flatCursor < text.length()) {
-            char lastInserted = cleanInsert.charAt(cleanInsert.length() - 1);
-            char nextInDoc = text.charAt(flatCursor);
-            if (item.getCursorOffset() == 0 && pipeIdx < 0
-                    && (lastInserted == ')' || lastInserted == ']' || lastInserted == '}'
-                    || lastInserted == '"' || lastInserted == '\'')
-                    && lastInserted == nextInDoc) {
-                cleanInsert = cleanInsert.substring(0, cleanInsert.length() - 1);
+            // Handle cursor marker or offset
+            int pipeIdx = isMarkdownTable ? -1 : insertText.indexOf('|');
+            String cleanInsert;
+            int finalCursorFlat;
+            if (pipeIdx >= 0) {
+                // Strip the cursor pipe and any subsequent marker pipes
+                cleanInsert = insertText.substring(0, pipeIdx)
+                        + insertText.substring(pipeIdx + 1).replace("|", "");
+                finalCursorFlat = wordStart + pipeIdx;
+            } else if (isMarkdownTable) {
+                cleanInsert = insertText;
+                int firstCell = insertText.indexOf("| ");
+                finalCursorFlat = wordStart + (firstCell != -1 ? firstCell + 2 : 0);
+            } else if (item.getCursorOffset() > 0) {
+                cleanInsert = insertText;
+                // Count newlines before cursorOffset in rawInsertText to adjust for baseIndent
+                int targetOffset = Math.min(rawInsertText.length(), item.getCursorOffset());
+                int newlinesBefore = 0;
+                for (int i = 0; i < targetOffset; i++) {
+                    if (rawInsertText.charAt(i) == '\n') newlinesBefore++;
+                }
+                int adjustedOffset = item.getCursorOffset() + (newlinesBefore * baseIndent.length());
+                finalCursorFlat = wordStart + Math.min(cleanInsert.length(), adjustedOffset);
+            } else if (item.getCursorOffset() < 0) {
+                cleanInsert = insertText;
+                finalCursorFlat = wordStart + Math.max(0, cleanInsert.length() + item.getCursorOffset());
+            } else {
+                cleanInsert = insertText;
                 finalCursorFlat = wordStart + cleanInsert.length();
             }
-        }
+
+            // Deduplicate trailing bracket/quote
+            int docLen = content.totalLength();
+            if (!cleanInsert.isEmpty() && flatCursor < docLen) {
+                char lastInserted = cleanInsert.charAt(cleanInsert.length() - 1);
+                char nextInDoc = (cursor.column < content.lineLength(cursor.line))
+                        ? content.charAt(cursor.line, cursor.column)
+                        : '\n';
+                if ((lastInserted == ')' || lastInserted == ']' || lastInserted == '}'
+                        || lastInserted == '"' || lastInserted == '\'')
+                        && lastInserted == nextInDoc) {
+                    cleanInsert = cleanInsert.substring(0, cleanInsert.length() - 1);
+                    finalCursorFlat = Math.min(finalCursorFlat, wordStart + cleanInsert.length());
+                }
+            }
         ContentPosition wordStartPos = content.positionAt(wordStart);
         ContentPosition beforeCursor = cursor;
         UndoStack.EditorSnapshot before = snapshotAt(beforeCursor, selectionAnchor);
         String deletedText = "";
+        int deleteEnd = flatCursor + Math.max(0, item.getReplaceAfterLength());
+        deleteEnd = Math.min(deleteEnd, content.totalLength());
+
+        // Clean up redundant trailing delimiter left by auto-close or duplicate bracket
+        if (deleteEnd < content.totalLength() && wordStart < flatCursor) {
+            String replacedPrefix = content.getSubstring(wordStart, flatCursor);
+            ContentPosition nextPos = content.positionAt(deleteEnd);
+            if (nextPos.column < content.lineLength(nextPos.line)) {
+                char nextCharInDoc = content.charAt(nextPos.line, nextPos.column);
+                if (nextCharInDoc == '}') {
+                    boolean hadBrace = replacedPrefix.contains("{");
+                    if (hadBrace && (autoCloseBrackets || item.getReplaceAfterLength() > 0 || isUnclosedDelimiter(replacedPrefix, '{', '}'))) {
+                        deleteEnd++;
+                    }
+                } else if (nextCharInDoc == ']') {
+                    boolean hadBracket = replacedPrefix.contains("[");
+                    if (hadBracket && (autoCloseBrackets || item.getReplaceAfterLength() > 0 || isUnclosedDelimiter(replacedPrefix, '[', ']'))) {
+                        deleteEnd++;
+                    }
+                }
+            }
+        }
         try {
-            int deleteEnd = content.flatOffset(cursor);
             if (deleteEnd > wordStart) {
                 deletedText = content.getSubstring(wordStart, deleteEnd);
             }
         } catch (Exception ignored) {
         }
+        ContentPosition deleteEndPos = content.positionAt(deleteEnd);
         content.replace(wordStartPos.line, wordStartPos.column,
-                cursor.line, cursor.column, cleanInsert);
+                deleteEndPos.line, deleteEndPos.column, cleanInsert);
         int safeFinal = Math.min(finalCursorFlat, content.totalLength());
         cursor = content.positionAt(safeFinal);
         UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
@@ -2258,7 +2464,7 @@ public class CodeEditText extends View {
         undoStack.commitPending();
         if (!deletedText.isEmpty()) {
             undoStack.recordReplace(wordStartPos.line, wordStartPos.column,
-                    beforeCursor.line, beforeCursor.column, deletedText, cleanInsert, before, after);
+                    deleteEndPos.line, deleteEndPos.column, deletedText, cleanInsert, before, after);
         } else {
             undoStack.recordInsert(wordStartPos.line, wordStartPos.column, cleanInsert, before, after);
         }
@@ -2321,6 +2527,17 @@ public class CodeEditText extends View {
             default:
                 return null;
         }
+    }
+
+    private static boolean isUnclosedDelimiter(String s, char open, char close) {
+        if (s == null) return false;
+        int depth = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == open) depth++;
+            else if (c == close) depth--;
+        }
+        return depth > 0;
     }
 
     private void handleAutoCloseHtmlTag(int cursorAfterGt) {
@@ -2467,8 +2684,20 @@ public class CodeEditText extends View {
 
     // Internal — bracket match
 
+    private float dpToPx(float dp) {
+        return dp * density;
+    }
+
     private float dpToPx(float dp, Context ctx) {
-        return dp * ctx.getResources().getDisplayMetrics().density;
+        return dpToPx(dp);
+    }
+
+    Paint getCursorPaint() {
+        return cursorPaint;
+    }
+
+    float getDensity() {
+        return density;
     }
 
     // Internal — comment detection
@@ -2489,10 +2718,7 @@ public class CodeEditText extends View {
     }
 
     private String buildTabSpaces() {
-        StringBuilder sb = new StringBuilder();
-        int tabSize = new AppSettings().tabSize;
-        for (int i = 0; i < tabSize; i++) sb.append(' ');
-        return sb.toString();
+        return tabSpaces;
     }
 
     private float getCursorX(int line, int col) {
@@ -2562,46 +2788,42 @@ public class CodeEditText extends View {
      * <ul>
      *   <li>Word characters: letter, digit, underscore, dollar sign (same as
      *       {@code android.text.method.WordIterator}).</li>
-     *   <li>If the finger lands in whitespace, the nearest adjacent word is selected.</li>
-     *   <li>If the line is empty, nothing is selected (returns {@code false}).</li>
+     *   <li>If the finger lands on a word character, the enclosing word is selected.</li>
+     *   <li>If the finger lands at the end of a line or whitespace immediately after a word, that word is selected.</li>
+     *   <li>If the line is empty or pos is on punctuation/whitespace not touching a word, returns {@code false}.</li>
      * </ul>
      *
      * @return {@code true} if a non-empty selection was made.
      */
-    private boolean selectWordAt(ContentPosition pos) {
+    boolean selectWordAt(ContentPosition pos) {
+        if (pos == null || pos.line < 0 || pos.line >= content.lineCount()) return false;
         int lineLen = content.lineLength(pos.line);
         if (lineLen == 0) return false;
 
-        // Clamp column to valid range
-        int col = Math.min(pos.column, lineLen - 1);
-
-        int minStart = Math.max(0, col - 100);
-        int maxEnd = Math.min(lineLen, col + 100);
-
-        // If we landed in whitespace, try to shift to the nearest word character
-        if (!isWordChar(content.charAt(pos.line, col))) {
-            int right = col;
-            while (right < maxEnd && !isWordChar(content.charAt(pos.line, right))) right++;
-            int left = col - 1;
-            while (left >= minStart && !isWordChar(content.charAt(pos.line, left))) left--;
-
-            if (right < maxEnd) {
-                col = right;
-            } else if (left >= minStart) {
-                col = left;
-            } else {
-                return false; // entire line is whitespace within bounds
+        int targetCol = -1;
+        if (pos.column < lineLen && isWordChar(content.charAt(pos.line, pos.column))) {
+            targetCol = pos.column;
+        } else if (pos.column > 0 && isWordChar(content.charAt(pos.line, pos.column - 1))) {
+            // Only select preceding word if touch landed on trailing whitespace or at the end of the line
+            // (prevents selecting words across punctuation like ';' or '>')
+            if (pos.column >= lineLen || Character.isWhitespace(content.charAt(pos.line, pos.column))) {
+                targetCol = pos.column - 1;
             }
         }
 
+        if (targetCol == -1) return false;
+
         // Expand left to word start
-        int wordStart = col;
-        while (wordStart > minStart && isWordChar(content.charAt(pos.line, wordStart - 1)))
+        int wordStart = targetCol;
+        while (wordStart > 0 && isWordChar(content.charAt(pos.line, wordStart - 1))) {
             wordStart--;
+        }
 
         // Expand right to word end
-        int wordEnd = col;
-        while (wordEnd < maxEnd && isWordChar(content.charAt(pos.line, wordEnd))) wordEnd++;
+        int wordEnd = targetCol + 1;
+        while (wordEnd < lineLen && isWordChar(content.charAt(pos.line, wordEnd))) {
+            wordEnd++;
+        }
 
         if (wordStart >= wordEnd) return false;
 
@@ -2620,10 +2842,11 @@ public class CodeEditText extends View {
     }
 
     /**
-     * Listener notified when selection becomes active or collapses.
+     * Listener notified when selection becomes active, collapses, or when an empty area is long-pressed.
      */
     public interface OnSelectionChangeListener {
         void onSelectionChanged(boolean hasSelection);
+        void onEmptyLongPress();
     }
 
     public interface OnCursorIdleListener {
@@ -2640,6 +2863,11 @@ public class CodeEditText extends View {
      */
     private static final class ContentCharSequence implements CharSequence {
         private final Content content;
+        private int cachedIndex = -1;
+        private int cachedLine = 0;
+        private int cachedCol = 0;
+        private int cachedLineLen = -1;
+        private long cachedVersion = -1;
 
         ContentCharSequence(Content c) {
             this.content = c;
@@ -2652,16 +2880,46 @@ public class CodeEditText extends View {
 
         @Override
         public char charAt(int index) {
-            ContentPosition pos = content.positionAt(index);
-            if (pos.column < content.lineLength(pos.line))
-                return content.charAt(pos.line, pos.column);
+            long version = content.getVersion();
+            if (version != cachedVersion) {
+                cachedVersion = version;
+                cachedIndex = -1;
+            }
+
+            int line, col;
+            if (cachedIndex >= 0 && index == cachedIndex + 1 && cachedLineLen >= 0) {
+                if (cachedCol < cachedLineLen) {
+                    line = cachedLine;
+                    col = cachedCol + 1;
+                } else {
+                    line = cachedLine + 1;
+                    col = 0;
+                    cachedLineLen = (line < content.lineCount()) ? content.lineLength(line) : 0;
+                }
+            } else if (cachedIndex >= 0 && index == cachedIndex) {
+                line = cachedLine;
+                col = cachedCol;
+            } else {
+                ContentPosition pos = content.positionAt(index);
+                line = pos.line;
+                col = pos.column;
+                cachedLineLen = content.lineLength(line);
+            }
+
+            cachedIndex = index;
+            cachedLine = line;
+            cachedCol = col;
+
+            if (col < cachedLineLen) {
+                return content.charAt(line, col);
+            }
             return '\n';
         }
 
         @NonNull
         @Override
         public CharSequence subSequence(int start, int end) {
-            return content.getText().subSequence(start, end);
+            return content.getSubstring(start, end);
         }
 
         @NonNull
@@ -2724,14 +2982,37 @@ public class CodeEditText extends View {
                 }
                 UndoStack.EditorSnapshot before = editor.snapshotAt(editor.cursor, null);
 
-                editor.content.replace(startPos.line, startPos.column, endPos.line, endPos.column, insertText);
-                ContentPosition after = editor.content.positionAt(start + insertText.length());
-                editor.cursor = after;
-                editor.selectionAnchor = null;
+                // If IME commits text ending with a closing bracket/quote matching the char right after composing range, skip over it
+                boolean skippedOver = false;
+                if (!insertText.isEmpty() && end < total) {
+                    char lastCh = insertText.charAt(insertText.length() - 1);
+                    boolean isBracket = (lastCh == ')' || lastCh == ']' || lastCh == '}') && editor.autoCloseBrackets;
+                    boolean isQuote = (lastCh == '"' || lastCh == '\'' || lastCh == '`') && editor.autoCloseQuotes;
+                    if ((isBracket || isQuote) && endPos.column < editor.content.lineLength(endPos.line)
+                            && editor.content.charAt(endPos.line, endPos.column) == lastCh) {
+                        String cleanInsert = insertText.substring(0, insertText.length() - 1);
+                        editor.content.replace(startPos.line, startPos.column, endPos.line, endPos.column, cleanInsert);
+                        ContentPosition after = editor.content.positionAt(start + cleanInsert.length() + 1);
+                        editor.cursor = after;
+                        editor.selectionAnchor = null;
+                        if (!deleted.isEmpty() || !cleanInsert.isEmpty()) {
+                            editor.undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
+                                    deleted, cleanInsert, before, editor.snapshotAt(after, null));
+                        }
+                        skippedOver = true;
+                    }
+                }
 
-                if (!deleted.isEmpty() || !insertText.isEmpty()) {
-                    editor.undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
-                            deleted, insertText, before, editor.snapshotAt(after, null));
+                if (!skippedOver) {
+                    editor.content.replace(startPos.line, startPos.column, endPos.line, endPos.column, insertText);
+                    ContentPosition after = editor.content.positionAt(start + insertText.length());
+                    editor.cursor = after;
+                    editor.selectionAnchor = null;
+
+                    if (!deleted.isEmpty() || !insertText.isEmpty()) {
+                        editor.undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
+                                deleted, insertText, before, editor.snapshotAt(after, null));
+                    }
                 }
 
                 editor.composingStart = -1;
@@ -2806,6 +3087,25 @@ public class CodeEditText extends View {
 
             int cursorFlat = editor.content.flatOffset(editor.cursor);
             int totalLen = editor.content.totalLength();
+
+            if (beforeLength == 1 && afterLength == 0 && (editor.autoCloseBrackets || editor.autoCloseQuotes)) {
+                int newCursorFlat = editor.content.flatOffset(editor.cursor);
+                if (newCursorFlat > 0 && newCursorFlat < totalLen) {
+                    ContentPosition prevPos = editor.content.positionAt(newCursorFlat - 1);
+                    if (prevPos.line == editor.cursor.line && editor.cursor.column < editor.content.lineLength(editor.cursor.line)) {
+                        char beforeCh = editor.content.charAt(prevPos.line, prevPos.column);
+                        char afterCh = editor.content.charAt(editor.cursor.line, editor.cursor.column);
+                        if ((beforeCh == '{' && afterCh == '}')
+                                || (beforeCh == '[' && afterCh == ']')
+                                || (beforeCh == '(' && afterCh == ')')
+                                || (beforeCh == '"' && afterCh == '"')
+                                || (beforeCh == '\'' && afterCh == '\'')
+                                || (beforeCh == '`' && afterCh == '`')) {
+                            afterLength = 1;
+                        }
+                    }
+                }
+            }
 
             if (afterLength > 0) {
                 int afterEnd = Math.min(cursorFlat + afterLength, totalLen);
@@ -2955,6 +3255,30 @@ public class CodeEditText extends View {
             ContentPosition before = editor.cursor;
             int beforeFlat = editor.content.flatOffset(before);
 
+            // Skip over already closed bracket/quote when typed
+            if (text.length() == 1 && (deletedSel == null || deletedSel.isEmpty())) {
+                char typed = text.charAt(0);
+                boolean isBracket = (typed == ')' || typed == ']' || typed == '}') && editor.autoCloseBrackets;
+                boolean isQuote = (typed == '"' || typed == '\'' || typed == '`') && editor.autoCloseQuotes;
+                if (isBracket || isQuote) {
+                    if (beforeFlat < editor.content.totalLength()
+                            && before.column < editor.content.lineLength(before.line)
+                            && editor.content.charAt(before.line, before.column) == typed) {
+                        editor.cursor = editor.content.positionAt(beforeFlat + 1);
+                        editor.selectionAnchor = null;
+                        editor.post(editor::ensureCursorVisible);
+                        editor.cursorVisible = true;
+                        editor.scheduleBlink();
+                        editor.invalidate();
+                        editor.scheduleHighlight();
+                        editor.scheduleAutoComplete();
+                        editor.mainHandler.removeCallbacks(editor.bracketMatchRunnable);
+                        editor.mainHandler.postDelayed(editor.bracketMatchRunnable, 150);
+                        return;
+                    }
+                }
+            }
+
             // Group the keystroke and its async side effects (auto-close, auto-indent) 
             // into a single undo step. Group is closed via a posted Runnable to ensure 
             // it executes after the async handlers finish.
@@ -3094,17 +3418,37 @@ public class CodeEditText extends View {
             } else {
                 deleted = "\n"; // at end-of-line → deleting the newline
             }
+
+            boolean deletePair = false;
+            if (newCursorPos.line == editor.cursor.line
+                    && editor.cursor.column < editor.content.lineLength(editor.cursor.line)
+                    && (editor.autoCloseBrackets || editor.autoCloseQuotes)) {
+                char before = deleted.charAt(0);
+                char after = editor.content.charAt(editor.cursor.line, editor.cursor.column);
+                if ((before == '{' && after == '}')
+                        || (before == '[' && after == ']')
+                        || (before == '(' && after == ')')
+                        || (before == '"' && after == '"')
+                        || (before == '\'' && after == '\'')
+                        || (before == '`' && after == '`')) {
+                    deletePair = true;
+                }
+            }
+
             int beforeLineCount = editor.content.lineCount();
             ContentPosition oldCursor = editor.cursor;
+            ContentPosition delEnd = deletePair ? editor.content.positionAt(cursorFlat + 1) : oldCursor;
+            String totalDeleted = deletePair ? (deleted + editor.content.charAt(editor.cursor.line, editor.cursor.column)) : deleted;
+
             editor.content.delete(newCursorPos.line, newCursorPos.column,
-                    oldCursor.line, oldCursor.column);
+                    delEnd.line, delEnd.column);
             int afterLineCount = editor.content.lineCount();
             if (afterLineCount != beforeLineCount) {
                 // Tokens now shift implicitly with the lines.
             }
             editor.undoStack.recordDelete(newCursorPos.line, newCursorPos.column,
-                    oldCursor.line, oldCursor.column,
-                    deleted, editor.snapshotAt(oldCursor, null), editor.snapshotAt(newCursorPos, null));
+                    delEnd.line, delEnd.column,
+                    totalDeleted, editor.snapshotAt(oldCursor, null), editor.snapshotAt(newCursorPos, null));
             editor.cursor = newCursorPos;
             editor.selectionAnchor = null;
             editor.post(editor::ensureCursorVisible);
@@ -3149,5 +3493,22 @@ public class CodeEditText extends View {
             editor.scheduleHighlight();
             editor.scheduleAutoComplete();
         }
+    }
+    
+    public Content getContent() {
+        return content;
+    }
+
+    public UndoStack getUndoStack() {
+        return undoStack;
+    }
+
+    public File getCurrentFile() {
+        return currentFile;
+    }
+
+    public int toOffset(com.cocode.vcode.ide.core.lsp.LspPosition pos) {
+        if (pos == null) return -1;
+        return content.flatOffset(new ContentPosition(pos.line, pos.character));
     }
 }

@@ -14,11 +14,11 @@ import com.cocode.vcode.ide.databinding.ViewSelectionToolbarBinding;
 import com.cocode.vcode.ide.utils.FontManager;
 
 /**
- * Floating selection action bar shown whenever the editor has a non-empty selection.
+ * Floating selection and cursor action bar shown for text selections or on empty-line long-presses.
  *
- * <p>Displays as a native-style floating PopupWindow above/below the selection.
- * It does NOT dismiss on outside touch — only when the selection is cleared.
- * It follows the selection as the user scrolls.
+ * <p>Displays as a native-style floating PopupWindow above or below the selection or cursor.
+ * Follows the selection as the user scrolls, dynamically adapts options based on document state,
+ * and maintains visibility when the entire document is selected.
  */
 public class SelectionToolbar {
 
@@ -70,13 +70,54 @@ public class SelectionToolbar {
     }
 
     /**
+     * Checks safely whether the system clipboard has non-empty text content to paste.
+     */
+    private boolean checkHasPasteData() {
+        if (clipboardManager == null) return false;
+        try {
+            if (!clipboardManager.hasPrimaryClip()) return false;
+            android.content.ClipData clip = clipboardManager.getPrimaryClip();
+            if (clip == null || clip.getItemCount() == 0) return false;
+            CharSequence text = clip.getItemAt(0).coerceToText(context);
+            return text != null && text.length() > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Shows or repositions the floating toolbar. Safe to call repeatedly.
      */
     public void show() {
         if (editor == null) return;
 
-        boolean hasPasteData = clipboardManager != null && clipboardManager.hasPrimaryClip();
-        binding.btnPaste.setVisibility(hasPasteData ? View.VISIBLE : View.GONE);
+        boolean hasPasteData = checkHasPasteData();
+        boolean hasSelection = editor.hasSelection();
+        boolean isAllSelected = editor.isAllSelected();
+        int docLength = editor.length();
+
+        if (hasSelection) {
+            binding.btnCut.setVisibility(View.VISIBLE);
+            binding.btnCopy.setVisibility(View.VISIBLE);
+            binding.btnPaste.setVisibility(hasPasteData ? View.VISIBLE : View.GONE);
+            binding.btnSelectAll.setVisibility(isAllSelected ? View.GONE : View.VISIBLE);
+        } else {
+            // Cursor-only / empty-line mode
+            binding.btnCut.setVisibility(View.GONE);
+            binding.btnCopy.setVisibility(View.GONE);
+            binding.btnPaste.setVisibility(hasPasteData ? View.VISIBLE : View.GONE);
+            binding.btnSelectAll.setVisibility(docLength > 0 ? View.VISIBLE : View.GONE);
+        }
+
+        boolean anyActionVisible = (binding.btnCut.getVisibility() == View.VISIBLE)
+                || (binding.btnCopy.getVisibility() == View.VISIBLE)
+                || (binding.btnPaste.getVisibility() == View.VISIBLE)
+                || (binding.btnSelectAll.getVisibility() == View.VISIBLE);
+
+        if (!anyActionVisible) {
+            hide();
+            return;
+        }
 
         if (!popupWindow.isShowing()) {
             // Show off-screen first so the View can measure itself.
@@ -99,6 +140,10 @@ public class SelectionToolbar {
      */
     public boolean isVisible() {
         return popupWindow.isShowing();
+    }
+
+    View findViewById(int id) {
+        return binding.getRoot().findViewById(id);
     }
 
     private void updatePosition() {
@@ -130,31 +175,44 @@ public class SelectionToolbar {
         int graceH = (int) (24 * density); // minimum distance from left/right screen edge
         int graceV = (int) (16 * density); // minimum distance from top/bottom screen edge
 
+        int[] editorLoc = new int[2];
+        editor.getLocationInWindow(editorLoc);
+        int editorTop = editorLoc[1];
+        int editorBottom = editorTop + editor.getHeight();
+
         int firstOffset = Math.min(selStart, selEnd);
         int[] coords = editor.getCursorScreenCoords(firstOffset);
         int anchorX = coords[0];
         int anchorYTop = coords[1];
         int anchorYBot = coords[2];
 
+        // If the selection start is scrolled off-screen above (e.g. after selectAll()),
+        // anchor within the visible editor viewport so the toolbar does not leap off-screen.
+        if (editor.isAllSelected() || anchorYTop < editorTop) {
+            anchorX = screenW / 2;
+            anchorYTop = Math.max(editorTop, graceV) + (int) (12 * density);
+            anchorYBot = anchorYTop + editor.getEditorLineHeight();
+        }
+
         // Horizontal positioning: center over anchor and clamp within screen margins
         int x = anchorX - (popupWidth / 2);
         if (x < graceH) x = graceH;
         if (x + popupWidth > screenW - graceH) x = screenW - popupWidth - graceH;
 
-        // Vertical positioning: prefer above the anchor, fall back to below
+        // Vertical positioning: prefer above the anchor (if space within editor), fall back to below
         int yAbove = anchorYTop - popupHeight - margin;
         int yBelow = anchorYBot + margin;
 
         int y;
-        if (yAbove >= graceV) {
-            // Enough room above — show there.
+        if (yAbove >= Math.max(editorTop, graceV)) {
+            // Enough room above editor boundary — show there.
             y = yAbove;
-        } else if (yBelow + popupHeight <= screenH - graceV) {
-            // Not enough room above — show below.
+        } else if (yBelow + popupHeight <= Math.min(editorBottom, screenH - graceV)) {
+            // Not enough room above — show below anchor if fits inside editor.
             y = yBelow;
         } else {
-            // Neither fits perfectly — prefer above but clamp to grace margin.
-            y = yAbove;
+            // Neither fits perfectly inside editor — place below or above clamped to grace margin.
+            y = Math.max(yAbove, Math.max(editorTop, graceV));
         }
 
         // Hard-clamp: toolbar must ALWAYS stay within screen bounds + grace margin.
@@ -195,7 +253,7 @@ public class SelectionToolbar {
         binding.btnSelectAll.setOnClickListener(v -> {
             if (editor != null) {
                 editor.selectAll();
-                hide();
+                show();
             }
         });
     }

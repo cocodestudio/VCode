@@ -1,7 +1,7 @@
 package com.cocode.vcode.ide.core.language.js;
 
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
-import com.cocode.vcode.ide.core.diagnostic.util.TokenMask;
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
@@ -20,49 +20,60 @@ public class JsLinter {
     }
 
     public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+        return analyze(file, text, null, index);
+    }
+
+    public static class AnalysisContext {
+        public final JsSyntaxTree tree;
+        public final ScopeTree scopeTree;
+        public final TokenStream stream;
+
+        public AnalysisContext(JsSyntaxTree tree, ScopeTree scopeTree, TokenStream stream) {
+            this.tree = tree;
+            this.scopeTree = scopeTree;
+            this.stream = stream;
+        }
+    }
+
+    public static AnalysisContext prepareContext(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+        if (mask == null) {
+            mask = JsLexer.tokenize(text);
+        }
+        JsSyntaxTree tree;
+        ScopeTree scopeTree;
+        if (index != null) {
+            String filePath = file != null ? file.getAbsolutePath() : "";
+            com.cocode.vcode.ide.core.language.js.ParseResult cached = !filePath.isEmpty() ? index.getParseResult(filePath) : null;
+            if (cached != null && cached.tree != null && text.equals(cached.source)) {
+                tree = cached.tree;
+                if (tree.nodesByOffset == null) {
+                    tree.buildNodesByOffset();
+                }
+                scopeTree = (cached.scopeTree != null) ? cached.scopeTree : ScopeTree.build(tree);
+            } else {
+                tree = JsParser.parseFull(text, mask);
+                if (tree != null) {
+                    tree.buildNodesByOffset();
+                }
+                scopeTree = ScopeTree.build(tree);
+            }
+        } else {
+            tree = JsParser.parseFull(text, mask);
+            if (tree != null) {
+                tree.buildNodesByOffset();
+            }
+            scopeTree = ScopeTree.build(tree);
+        }
+        return new AnalysisContext(tree, scopeTree, mask);
+    }
+
+    public static List<Problem> analyze(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.trim().isEmpty()) return java.util.Collections.emptyList();
 
         List<Problem> problems = new ArrayList<>();
-        TokenMask mask = TokenMask.build(text, "js");
-        String[] lines = LinterUtils.splitLines(text);
-
-        JsLinterCoreRules.checkVarUsage(file, text, mask, problems);
-        JsLinterCoreRules.checkConsole(file, text, mask, problems);
-        JsLinterCoreRules.checkDebugger(file, text, mask, problems);
-        JsLinterCoreRules.checkLooseEquality(file, text, mask, problems);
-        JsLinterCoreRules.checkEval(file, text, mask, problems);
-        JsLinterCoreRules.checkSetTimeoutString(file, text, mask, problems);
-        JsLinterCoreRules.checkNewObjectArray(file, text, mask, problems);
-        JsLinterCoreRules.checkWith(file, text, mask, problems);
-        JsLinterCoreRules.checkNaNComparison(file, text, mask, problems);
-        JsLinterCoreRules.checkEmptyCatch(file, text, mask, problems);
-        JsLinterCoreRules.checkInfiniteLoop(file, text, mask, problems);
-        JsLinterCoreRules.checkSwitchDefault(file, text, mask, problems);
-        JsLinterCoreRules.checkPromiseChain(file, text, mask, problems);
-        JsLinterCoreRules.checkMissingAwait(file, text, lines, mask, problems);
-        JsLinterCoreRules.checkAsyncNoAwait(file, text, mask, problems);
-        JsLinterStyleRules.checkTypeofComparison(file, text, mask, problems);
-        JsLinterStyleRules.checkTodoFixme(file, text, problems);
-        JsLinterStyleRules.checkFunctionParams(file, text, mask, problems);
-        JsLinterStyleRules.checkDivisionByZero(file, text, mask, problems);
-        JsLinterStyleRules.checkUnreachableCode(file, text, lines, mask, problems);
-        JsLinterStyleRules.checkConstReassign(file, text, mask, problems);
-        JsLinterStyleRules.checkUnclosedString(file, text, lines, mask, problems);
-        JsLinterStyleRules.checkReturnOutsideFunction(file, text, mask, problems);
-        JsLinterStyleRules.checkBreakContinue(file, text, mask, problems);
-        JsLinterStyleRules.checkUnusedVars(file, text, mask, index, problems);
-        JsLinterStyleRules.checkArrowSimplification(file, text, mask, problems);
-        JsLinterStyleRules.checkStringConcat(file, text, mask, problems);
-        JsLinterStyleRules.checkOptionalChaining(file, text, mask, problems);
-        JsLinterStyleRules.checkNullishCoalescing(file, text, mask, problems);
-        JsLinterStyleRules.checkStringConcatInLoop(file, text, mask, problems);
-
-        if (index != null) {
-            JsSemanticLinter.analyze(file, text, mask, index, problems);
-        }
+        AnalysisContext ctx = prepareContext(file, text, mask, index);
+        JsSemanticLinter.analyze(file, text, ctx.stream, ctx.tree, ctx.scopeTree, index, problems);
 
         return problems;
     }
-
-    // Rule implementations
 }

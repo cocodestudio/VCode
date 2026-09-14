@@ -1,6 +1,9 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
+import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
+import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
@@ -27,11 +30,11 @@ public final class MarkdownLspServer implements LspServer {
 
     private static final Pattern LINK_PATTERN = Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
 
-    private final com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine pathEngine;
+    private final MarkdownAutoCompleteEngine markdownEngine;
     private volatile boolean ready = false;
 
     public MarkdownLspServer(Context context) {
-        this.pathEngine = new com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine(context);
+        this.markdownEngine = new MarkdownAutoCompleteEngine(context);
     }
     
     /**
@@ -68,87 +71,16 @@ public final class MarkdownLspServer implements LspServer {
         int flatOffset = doc.toOffset(pos);
         if (flatOffset < 0) flatOffset = doc.text.length();
 
-        // PathAutoCompleteEngine requires a File for file-relative src/href resolution.
+        // MarkdownAutoCompleteEngine requires a File for file-relative src/href resolution.
         File file = new File(doc.uri);
-        pathEngine.setCurrentFile(file);
+        markdownEngine.setCurrentFile(file);
 
-        List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = pathEngine.getSuggestions(doc.text, flatOffset);
-        List<LspCompletionItem> result = new ArrayList<>();
-        
-        // Convert legacy items
-        if (legacy != null) {
-            for (com.cocode.vcode.ide.core.model.CompletionItem ci : legacy) {
-                String insert = ci.getEffectiveInsertText();
-                int curOffset = ci.getCursorOffset();
-                if (curOffset < 0) {
-                    int pipeIdx = insert.length() + curOffset;
-                    if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                        insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                    }
-                }
-                
-                int kind;
-                if (ci.getType() == com.cocode.vcode.ide.core.model.CompletionItem.Type.FOLDER) {
-                    kind = LspCompletionItem.KIND_FOLDER;
-                } else if (ci.getType() == com.cocode.vcode.ide.core.model.CompletionItem.Type.FILE) {
-                    kind = LspCompletionItem.KIND_FILE;
-                } else {
-                    kind = LspCompletionItem.KIND_TEXT;
-                }
-                
-                result.add(new LspCompletionItem(
-                        ci.getLabel(),
-                        insert,
-                        kind,
-                        ci.getDetail(),
-                        null,
-                        ci.getReplaceLength()
-                ));
-            }
-        }
-        
-        // Add Markdown Snippets if triggered by letters
-        addMarkdownSnippets(doc.text, flatOffset, result);
-        
-        return result;
+        List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = markdownEngine.getSuggestions(doc.text, flatOffset);
+        return convertCompletions(legacy);
     }
 
-    private void addMarkdownSnippets(String text, int flatOffset, List<LspCompletionItem> result) {
-        if (flatOffset <= 0) return;
-        
-        // Walk back to find the prefix
-        int start = flatOffset;
-        while (start > 0 && Character.isLetterOrDigit(text.charAt(start - 1))) {
-            start--;
-        }
-        
-        String prefix = text.substring(start, flatOffset).toLowerCase();
-        if (prefix.isEmpty()) return;
-        
-        String[] snippetLabels = {"link", "image", "bold", "italic", "code", "codeblock", "quote", "table"};
-        String[] snippetInserts = {
-                "[|](url)", 
-                "![alt|](url)", 
-                "**|**", 
-                "*|*", 
-                "`|`", 
-                "```\n|\n```", 
-                "> |", 
-                "| Header | Header |\n|--------|--------|\n| |      | |"
-        };
-        
-        for (int i = 0; i < snippetLabels.length; i++) {
-            if (snippetLabels[i].startsWith(prefix)) {
-                result.add(new LspCompletionItem(
-                        snippetLabels[i],
-                        snippetInserts[i],
-                        LspCompletionItem.KIND_SNIPPET,
-                        "Markdown Snippet",
-                        null,
-                        prefix.length()
-                ));
-            }
-        }
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
+        return LspCompletionConverter.convert(legacy);
     }
 
     @Override
@@ -157,53 +89,57 @@ public final class MarkdownLspServer implements LspServer {
             return Collections.emptyList();
         }
 
-        File docFile = new File(doc.uri);
-        File parent = docFile.getParentFile();
-        if (parent == null) {
+        try {
+            File docFile = new File(doc.uri);
+            File parent = docFile.getParentFile();
+            if (parent == null) {
+                return Collections.emptyList();
+            }
+
+            List<Problem> diagnostics = new ArrayList<>();
+            Matcher matcher = LINK_PATTERN.matcher(doc.text);
+
+            while (matcher.find()) {
+                String linkTarget = matcher.group(2).trim();
+                if (linkTarget.startsWith("http://") || linkTarget.startsWith("https://") || linkTarget.startsWith("#")) {
+                    continue;
+                }
+
+                String filePath = linkTarget.split("\\s+")[0];
+                int anchorIndex = filePath.indexOf('#');
+                if (anchorIndex != -1) {
+                    filePath = filePath.substring(0, anchorIndex);
+                }
+
+                if (filePath.isEmpty()) {
+                    continue;
+                }
+
+                File targetFile = new File(parent, filePath);
+                if (!targetFile.exists()) {
+                    LspPosition start = SymbolExtractor.offsetToPosition(doc.text, matcher.start());
+                    int newlineIdx = doc.text.indexOf('\n', matcher.start());
+                    int length;
+                    if (newlineIdx != -1 && newlineIdx < matcher.end()) {
+                        length = newlineIdx - matcher.start();
+                    } else {
+                        length = matcher.end() - matcher.start();
+                    }
+                    diagnostics.add(new Problem(
+                            docFile,
+                            start.line + 1,
+                            start.character,
+                            Math.max(1, length),
+                            "Broken link: " + linkTarget,
+                            Problem.Severity.WARNING
+                    ));
+                }
+            }
+
+            return diagnostics;
+        } catch (Throwable t) {
             return Collections.emptyList();
         }
-
-        List<Problem> diagnostics = new ArrayList<>();
-        Matcher matcher = LINK_PATTERN.matcher(doc.text);
-
-        while (matcher.find()) {
-            String linkTarget = matcher.group(2).trim();
-            if (linkTarget.startsWith("http://") || linkTarget.startsWith("https://") || linkTarget.startsWith("#")) {
-                continue;
-            }
-
-            String filePath = linkTarget.split("\\s+")[0];
-            int anchorIndex = filePath.indexOf('#');
-            if (anchorIndex != -1) {
-                filePath = filePath.substring(0, anchorIndex);
-            }
-
-            if (filePath.isEmpty()) {
-                continue;
-            }
-
-            File targetFile = new File(parent, filePath);
-            if (!targetFile.exists()) {
-                LspPosition start = SymbolExtractor.offsetToPosition(doc.text, matcher.start());
-                int newlineIdx = doc.text.indexOf('\n', matcher.start());
-                int length;
-                if (newlineIdx != -1 && newlineIdx < matcher.end()) {
-                    length = newlineIdx - matcher.start();
-                } else {
-                    length = matcher.end() - matcher.start();
-                }
-                diagnostics.add(new Problem(
-                        docFile,
-                        start.line + 1,
-                        start.character,
-                        Math.max(1, length),
-                        "Broken link: " + linkTarget,
-                        Problem.Severity.WARNING
-                ));
-            }
-        }
-
-        return diagnostics;
     }
 
     @Override
@@ -259,5 +195,10 @@ public final class MarkdownLspServer implements LspServer {
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return null;
+    }
+
+    @Override
+    public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        return java.util.Collections.emptyList();
     }
 }

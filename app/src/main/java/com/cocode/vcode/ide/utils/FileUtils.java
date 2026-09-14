@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.utils;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Environment;
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.FileNode;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
@@ -226,7 +227,7 @@ public class FileUtils {
             context.startActivity(android.content.Intent.createChooser(intent, "Open " + file.getName() + " with..."));
 
         } catch (Exception e) {
-            android.widget.Toast.makeText(context, "No app found to open this file.", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(context, R.string.vcode_no_app_found_to_open_file, android.widget.Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -363,13 +364,13 @@ public class FileUtils {
         }
 
         if ("content".equalsIgnoreCase(scheme)) {
-            // Step 1: Try to resolve to a real file path (local files from file managers)
+            // Attempt direct file path resolution for local storage providers
             File realFile = resolveContentUriToRealFile(context, uri);
             if (realFile != null && realFile.exists()) {
                 return realFile;
             }
 
-            // Step 2: Cloud / sandboxed providers — copy stream to the app cache
+            // Fallback for sandboxed or cloud storage providers: stream content into application cache
             return copyUriToCache(context, uri);
         }
 

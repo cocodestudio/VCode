@@ -23,6 +23,7 @@ public class SyntaxHighlighter {
     protected final int colorString;
     protected final int colorKeyword;
     protected final int colorNumber;
+    protected final int colorOperator;
     protected int lastLineState = 0;
 
     public SyntaxHighlighter(Context context) {
@@ -31,6 +32,33 @@ public class SyntaxHighlighter {
         colorString = getColor(R.color.vcode_color_js_string);
         colorKeyword = getColor(R.color.vcode_color_js_keyword);
         colorNumber = getColor(R.color.vcode_color_js_number);
+        colorOperator = getColor(R.color.vcode_color_js_operator);
+    }
+
+    /**
+     * Test-only constructor: skips {@code getColor} resolution so
+     * unit tests can construct a highlighter without a real Android
+     * {@code Context}. The colour fields are left at {@code 0};
+     * callers that need actual colours must use the resolver-supplied
+     * overload of the method under test (e.g.
+     * {@code JsSyntaxHighlighter.highlightViewport(..., resolver)}).
+     */
+    protected SyntaxHighlighter(Void unusedForTest) {
+        this.context = null;
+        this.colorComment = 0;
+        this.colorString = 0;
+        this.colorKeyword = 0;
+        this.colorNumber = 0;
+        this.colorOperator = 0;
+    }
+
+    protected SyntaxHighlighter(int comment, int string, int keyword, int number, int operator) {
+        this.context = null;
+        this.colorComment = comment;
+        this.colorString = string;
+        this.colorKeyword = keyword;
+        this.colorNumber = number;
+        this.colorOperator = operator;
     }
 
     public android.text.SpannableStringBuilder highlight(String code) {
@@ -184,6 +212,9 @@ public class SyntaxHighlighter {
             if (Character.isDigit(c)) {
                 int j = i;
                 while (j < len && (Character.isLetterOrDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '.')) {
+                    if (lineStr.charAt(j) == '.' && (j + 1 >= len || !Character.isDigit(lineStr.charAt(j + 1)))) {
+                        break;
+                    }
                     j++;
                 }
                 tokens.add(new HighlightToken(lineIndex, i, j, colorNumber, false));
@@ -196,22 +227,22 @@ public class SyntaxHighlighter {
                 while (j < len && (Character.isLetterOrDigit(lineStr.charAt(j)) || lineStr.charAt(j) == '_' || lineStr.charAt(j) == '$')) {
                     j++;
                 }
-                String word = lineStr.substring(i, j);
-                if (isKeyword(word)) {
+                if (isKeyword(lineStr, i, j)) {
                     tokens.add(new HighlightToken(lineIndex, i, j, colorKeyword, false));
+                } else if ((match(lineStr, i, j, "rgb") || match(lineStr, i, j, "rgba") || match(lineStr, i, j, "hsl") || match(lineStr, i, j, "hsla")) && j < len && lineStr.charAt(j) == '(') {
+                    int closeIdx = lineStr.indexOf(')', j);
+                    if (closeIdx != -1) {
+                        Integer fnColor = ColorParser.parse(lineStr.substring(i, closeIdx + 1));
+                        if (fnColor != null) {
+                            tokens.add(new HighlightToken(lineIndex, i, closeIdx + 1, colorNumber, false, true, fnColor));
+                            j = closeIdx + 1;
+                        }
+                    }
                 } else {
+                    String word = lineStr.substring(i, j);
                     Integer cssColor = ColorParser.parse(word);
                     if (cssColor != null) {
                         tokens.add(new HighlightToken(lineIndex, i, j, colorNumber, false, true, cssColor));
-                    } else if ((word.equals("rgb") || word.equals("rgba") || word.equals("hsl") || word.equals("hsla")) && j < len && lineStr.charAt(j) == '(') {
-                        int closeIdx = lineStr.indexOf(')', j);
-                        if (closeIdx != -1) {
-                            Integer fnColor = ColorParser.parse(lineStr.substring(i, closeIdx + 1));
-                            if (fnColor != null) {
-                                tokens.add(new HighlightToken(lineIndex, i, closeIdx + 1, colorNumber, false, true, fnColor));
-                                j = closeIdx + 1;
-                            }
-                        }
                     }
                 }
                 i = j;
@@ -319,50 +350,83 @@ public class SyntaxHighlighter {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 
-    protected boolean isKeyword(String w) {
-        switch (w) {
-            case "var":
-            case "let":
-            case "const":
-            case "function":
-            case "return":
-            case "if":
-            case "else":
-            case "for":
-            case "while":
-            case "do":
-            case "switch":
-            case "case":
-            case "break":
-            case "continue":
-            case "new":
-            case "delete":
-            case "typeof":
-            case "instanceof":
-            case "in":
-            case "of":
-            case "class":
-            case "extends":
-            case "import":
-            case "export":
-            case "default":
-            case "async":
-            case "await":
-            case "try":
-            case "catch":
-            case "finally":
-            case "throw":
-            case "void":
-            case "yield":
-            case "this":
-            case "super":
-            case "true":
-            case "false":
-            case "null":
-            case "undefined":
-                return true;
+    public static boolean match(CharSequence cs, int start, int end, String target) {
+        int len = end - start;
+        if (len != target.length()) return false;
+        for (int i = 0; i < len; i++) {
+            if (cs.charAt(start + i) != target.charAt(i)) return false;
         }
-        return false;
+        return true;
+    }
+
+    public boolean isKeyword(CharSequence cs, int start, int end) {
+        int len = end - start;
+        if (len < 2 || len > 10) return false;
+        char c0 = cs.charAt(start);
+        switch (len) {
+            case 2:
+                if (c0 == 'i') return match(cs, start, end, "if") || match(cs, start, end, "in");
+                if (c0 == 'd') return match(cs, start, end, "do");
+                if (c0 == 'o') return match(cs, start, end, "of");
+                if (c0 == 'a') return match(cs, start, end, "as");
+                return false;
+            case 3:
+                if (c0 == 'v') return match(cs, start, end, "var");
+                if (c0 == 'l') return match(cs, start, end, "let");
+                if (c0 == 'f') return match(cs, start, end, "for");
+                if (c0 == 'n') return match(cs, start, end, "new");
+                if (c0 == 't') return match(cs, start, end, "try");
+                if (c0 == 's') return match(cs, start, end, "set");
+                if (c0 == 'g') return match(cs, start, end, "get");
+                return false;
+            case 4:
+                if (c0 == 'e') return match(cs, start, end, "else");
+                if (c0 == 'c') return match(cs, start, end, "case");
+                if (c0 == 'v') return match(cs, start, end, "void");
+                if (c0 == 't') return match(cs, start, end, "this") || match(cs, start, end, "true");
+                if (c0 == 'n') return match(cs, start, end, "null");
+                if (c0 == 'f') return match(cs, start, end, "from");
+                return false;
+            case 5:
+                if (c0 == 'c') return match(cs, start, end, "const") || match(cs, start, end, "class") || match(cs, start, end, "catch");
+                if (c0 == 'w') return match(cs, start, end, "while");
+                if (c0 == 'b') return match(cs, start, end, "break");
+                if (c0 == 'a') return match(cs, start, end, "async") || match(cs, start, end, "await");
+                if (c0 == 't') return match(cs, start, end, "throw");
+                if (c0 == 'y') return match(cs, start, end, "yield");
+                if (c0 == 's') return match(cs, start, end, "super");
+                if (c0 == 'f') return match(cs, start, end, "false");
+                return false;
+            case 6:
+                if (c0 == 'r') return match(cs, start, end, "return");
+                if (c0 == 's') return match(cs, start, end, "switch") || match(cs, start, end, "static");
+                if (c0 == 'd') return match(cs, start, end, "delete");
+                if (c0 == 't') return match(cs, start, end, "typeof");
+                if (c0 == 'e') return match(cs, start, end, "export");
+                if (c0 == 'i') return match(cs, start, end, "import");
+                return false;
+            case 7:
+                if (c0 == 'e') return match(cs, start, end, "extends");
+                if (c0 == 'd') return match(cs, start, end, "default");
+                if (c0 == 'f') return match(cs, start, end, "finally");
+                return false;
+            case 8:
+                if (c0 == 'f') return match(cs, start, end, "function");
+                if (c0 == 'c') return match(cs, start, end, "continue");
+                if (c0 == 'd') return match(cs, start, end, "debugger");
+                return false;
+            case 9:
+                return match(cs, start, end, "undefined");
+            case 10:
+                return match(cs, start, end, "instanceof");
+            default:
+                return false;
+        }
+    }
+
+    protected boolean isKeyword(String w) {
+        if (w == null) return false;
+        return isKeyword((CharSequence) w, 0, w.length());
     }
 
     protected int getColor(int resId) {

@@ -1,4 +1,5 @@
-[
+{
+  "tags": [
   {"tag": "html", "selfClosing": false, "snippet": "<html lang=\"en\">|</html>", "detail": "Root element", "attributes": ["lang", "xmlns", "dir"]},
   {"tag": "head", "selfClosing": false, "snippet": "<head>|</head>", "detail": "Document metadata", "attributes": []},
   {"tag": "title", "selfClosing": false, "snippet": "<title>|</title>", "detail": "Document title", "attributes": []},
@@ -34,7 +35,7 @@
   {"tag": "track", "selfClosing": true, "snippet": "<track src=\"|\" kind=\"subtitles\" srclang=\"en\" label=\"English\">", "detail": "Text track", "attributes": ["src", "kind", "srclang", "label", "default"]},
   {"tag": "iframe", "selfClosing": false, "snippet": "<iframe src=\"|\" frameborder=\"0\"></iframe>", "detail": "Inline frame", "attributes": ["src", "width", "height", "allow", "allowfullscreen", "loading", "sandbox", "name", "srcdoc", "referrerpolicy"]},
   {"tag": "canvas", "selfClosing": false, "snippet": "<canvas id=\"|\" width=\"\" height=\"\"></canvas>", "detail": "Graphics canvas", "attributes": ["width", "height", "id"]},
-  {"tag": "svg", "selfClosing": false, "snippet": "<svg viewBox=\"0 0 | |\" xmlns=\"http://www.w3.org/2000/svg\">\n  \n</svg>", "detail": "Scalable Vector Graphics", "attributes": ["viewBox", "width", "height", "xmlns", "fill", "stroke", "stroke-width"]},
+  {"tag": "svg", "selfClosing": false, "snippet": "<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  |\n</svg>", "detail": "Scalable Vector Graphics", "attributes": ["viewBox", "width", "height", "xmlns", "fill", "stroke", "stroke-width"]},
   {"tag": "path", "selfClosing": true, "snippet": "<path d=\"|\" fill=\"\" stroke=\"\"/>", "detail": "SVG path", "attributes": ["d", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "opacity", "transform"]},
   {"tag": "circle", "selfClosing": true, "snippet": "<circle cx=\"|\" cy=\"\" r=\"\"/>", "detail": "SVG circle", "attributes": ["cx", "cy", "r", "fill", "stroke", "stroke-width"]},
   {"tag": "rect", "selfClosing": true, "snippet": "<rect x=\"|\" y=\"\" width=\"\" height=\"\"/>", "detail": "SVG rectangle", "attributes": ["x", "y", "width", "height", "rx", "ry", "fill", "stroke"]},
@@ -43,6 +44,7 @@
   {"tag": "g", "selfClosing": false, "snippet": "<g>|</g>", "detail": "SVG group", "attributes": ["transform", "fill", "stroke", "opacity"]},
   {"tag": "embed", "selfClosing": true, "snippet": "<embed src=\"|\" type=\"\">", "detail": "External application", "attributes": ["src", "type", "width", "height"]},
   {"tag": "object", "selfClosing": false, "snippet": "<object data=\"|\" type=\"\"></object>", "detail": "External resource", "attributes": ["data", "type", "width", "height", "name", "form"]},
+  {"tag": "param", "selfClosing": true, "snippet": "<param name=\"|\" value=\"\">", "detail": "Object parameter", "attributes": ["name", "value"]},
   {"tag": "form", "selfClosing": false, "snippet": "<form action=\"|\" method=\"post\">\n  \n</form>", "detail": "Form", "attributes": ["action", "method", "enctype", "target", "autocomplete", "novalidate", "accept-charset", "name", "rel"]},
   {"tag": "input", "selfClosing": true, "snippet": "<input type=\"text\" name=\"|\" id=\"\">", "detail": "Input control", "attributes": ["type", "name", "id", "value", "placeholder", "required", "disabled", "readonly", "checked", "min", "max", "step", "maxlength", "minlength", "pattern", "size", "autofocus", "autocomplete", "form", "formaction", "formmethod", "multiple", "accept", "list", "inputmode", "aria-label"]},
   {"tag": "button", "selfClosing": false, "snippet": "<button type=\"button\">|</button>", "detail": "Button", "attributes": ["type", "name", "value", "disabled", "autofocus", "form", "formaction", "formmethod", "formtarget", "formnovalidate", "popovertarget"]},
@@ -118,5 +120,11 @@
   {"tag": "area", "selfClosing": true, "snippet": "<area shape=\"|\" coords=\"\" href=\"\" alt=\"\">", "detail": "Image map area", "attributes": ["shape", "coords", "href", "alt", "target", "rel", "download"]},
   {"tag": "search", "selfClosing": false, "snippet": "<search>|</search>", "detail": "Search section", "attributes": []},
   {"tag": "hgroup", "selfClosing": false, "snippet": "<hgroup>\n  <h1>|</h1>\n  <p></p>\n</hgroup>", "detail": "Heading group", "attributes": []}
-]
+  ],
+  "globalAttributes": [
+    "id", "class", "style", "title", "dir", "lang", "tabindex", "hidden",
+    "draggable", "contenteditable", "spellcheck", "translate", "role"
+  ],
+  "globalAttributePrefixes": ["data-", "aria-"]
+}
 

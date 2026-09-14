@@ -1,0 +1,3705 @@
+{
+  "dotMethods": {
+    "console": [
+      "log",
+      "warn",
+      "error",
+      "info",
+      "table",
+      "time",
+      "timeEnd",
+      "timeLog",
+      "assert",
+      "clear",
+      "count",
+      "countReset",
+      "group",
+      "groupEnd",
+      "groupCollapsed",
+      "dir",
+      "dirxml",
+      "trace",
+      "debug",
+      "profile",
+      "profileEnd"
+    ],
+    "Math": [
+      "floor",
+      "ceil",
+      "round",
+      "abs",
+      "max",
+      "min",
+      "random",
+      "sqrt",
+      "pow",
+      "PI",
+      "E",
+      "LN2",
+      "LN10",
+      "LOG2E",
+      "SQRT2",
+      "log",
+      "log2",
+      "log10",
+      "sign",
+      "trunc",
+      "sin",
+      "cos",
+      "tan",
+      "asin",
+      "acos",
+      "atan",
+      "atan2",
+      "sinh",
+      "cosh",
+      "tanh",
+      "cbrt",
+      "hypot",
+      "clz32",
+      "imul",
+      "fround"
+    ],
+    "JSON": [
+      "parse",
+      "stringify"
+    ],
+    "Array": [
+      "from",
+      "isArray",
+      "of"
+    ],
+    "Object": [
+      "keys",
+      "values",
+      "entries",
+      "assign",
+      "create",
+      "freeze",
+      "seal",
+      "isFrozen",
+      "isSealed",
+      "defineProperty",
+      "defineProperties",
+      "getOwnPropertyNames",
+      "getOwnPropertyDescriptors",
+      "getPrototypeOf",
+      "setPrototypeOf",
+      "hasOwn",
+      "fromEntries",
+      "is",
+      "groupBy"
+    ],
+    "Promise": [
+      "all",
+      "race",
+      "resolve",
+      "reject",
+      "allSettled",
+      "any",
+      "withResolvers"
+    ],
+    "Number": [
+      "isFinite",
+      "isInteger",
+      "isNaN",
+      "isSafeInteger",
+      "parseInt",
+      "parseFloat",
+      "MAX_VALUE",
+      "MIN_VALUE",
+      "MAX_SAFE_INTEGER",
+      "MIN_SAFE_INTEGER",
+      "EPSILON",
+      "POSITIVE_INFINITY",
+      "NEGATIVE_INFINITY",
+      "NaN"
+    ],
+    "String": [
+      "fromCharCode",
+      "fromCodePoint",
+      "raw"
+    ],
+    "Date": [
+      "now",
+      "parse",
+      "UTC"
+    ],
+    "Map": [
+      "groupBy"
+    ],
+    "Set": [],
+    "WeakMap": [],
+    "WeakSet": [],
+    "RegExp": [],
+    "Symbol": [
+      "iterator",
+      "asyncIterator",
+      "hasInstance",
+      "toPrimitive",
+      "toStringTag",
+      "for",
+      "keyFor"
+    ],
+    "Reflect": [
+      "apply",
+      "construct",
+      "defineProperty",
+      "deleteProperty",
+      "get",
+      "getOwnPropertyDescriptor",
+      "getPrototypeOf",
+      "has",
+      "isExtensible",
+      "ownKeys",
+      "preventExtensions",
+      "set",
+      "setPrototypeOf"
+    ],
+    "Proxy": [
+      "revocable"
+    ],
+    "document": [
+      "getElementById",
+      "querySelector",
+      "querySelectorAll",
+      "createElement",
+      "createTextNode",
+      "createDocumentFragment",
+      "createComment",
+      "addEventListener",
+      "removeEventListener",
+      "body",
+      "head",
+      "title",
+      "cookie",
+      "write",
+      "writeln",
+      "readyState",
+      "documentElement",
+      "activeElement",
+      "forms",
+      "images",
+      "links",
+      "scripts",
+      "styleSheets",
+      "hidden",
+      "visibilityState",
+      "fullscreenElement",
+      "pointerLockElement",
+      "designMode",
+      "execCommand",
+      "getSelection",
+      "hasFocus",
+      "open",
+      "close",
+      "importNode",
+      "adoptNode",
+      "createEvent",
+      "createRange",
+      "createTreeWalker",
+      "elementsFromPoint",
+      "elementFromPoint",
+      "exitFullscreen",
+      "exitPointerLock",
+      "scrollingElement"
+    ],
+    "window": [
+      "location",
+      "history",
+      "navigator",
+      "alert",
+      "confirm",
+      "prompt",
+      "open",
+      "close",
+      "scrollTo",
+      "scrollBy",
+      "setTimeout",
+      "setInterval",
+      "clearTimeout",
+      "clearInterval",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "requestIdleCallback",
+      "cancelIdleCallback",
+      "fetch",
+      "addEventListener",
+      "removeEventListener",
+      "getComputedStyle",
+      "matchMedia",
+      "innerWidth",
+      "innerHeight",
+      "outerWidth",
+      "outerHeight",
+      "devicePixelRatio",
+      "performance",
+      "screen",
+      "crypto",
+      "indexedDB",
+      "caches",
+      "customElements",
+      "visualViewport",
+      "structuredClone",
+      "atob",
+      "btoa",
+      "queueMicrotask",
+      "reportError",
+      "postMessage",
+      "focus",
+      "blur",
+      "print",
+      "stop",
+      "getSelection"
+    ],
+    "navigator": [
+      "userAgent",
+      "language",
+      "languages",
+      "onLine",
+      "geolocation",
+      "clipboard",
+      "mediaDevices",
+      "permissions",
+      "serviceWorker",
+      "hardwareConcurrency",
+      "cookieEnabled",
+      "platform",
+      "maxTouchPoints",
+      "connection",
+      "storage",
+      "locks",
+      "credentials",
+      "sendBeacon",
+      "vibrate",
+      "share",
+      "canShare",
+      "getBattery",
+      "getGamepads",
+      "requestMIDIAccess",
+      "wakeLock"
+    ],
+    "location": [
+      "href",
+      "pathname",
+      "search",
+      "hash",
+      "hostname",
+      "port",
+      "protocol",
+      "host",
+      "origin",
+      "reload",
+      "replace",
+      "assign",
+      "toString"
+    ],
+    "history": [
+      "back",
+      "forward",
+      "go",
+      "pushState",
+      "replaceState",
+      "length",
+      "state",
+      "scrollRestoration"
+    ],
+    "localStorage": [
+      "getItem",
+      "setItem",
+      "removeItem",
+      "clear",
+      "length",
+      "key"
+    ],
+    "sessionStorage": [
+      "getItem",
+      "setItem",
+      "removeItem",
+      "clear",
+      "length",
+      "key"
+    ],
+    "performance": [
+      "now",
+      "mark",
+      "measure",
+      "clearMarks",
+      "clearMeasures",
+      "getEntries",
+      "getEntriesByName",
+      "getEntriesByType",
+      "timeOrigin",
+      "navigation",
+      "timing"
+    ],
+    "crypto": [
+      "subtle",
+      "getRandomValues",
+      "randomUUID"
+    ],
+    "screen": [
+      "width",
+      "height",
+      "availWidth",
+      "availHeight",
+      "colorDepth",
+      "pixelDepth",
+      "orientation"
+    ],
+    "URL": [
+      "createObjectURL",
+      "revokeObjectURL",
+      "canParse"
+    ],
+    "URLSearchParams": [
+      "append",
+      "delete",
+      "get",
+      "getAll",
+      "has",
+      "set",
+      "sort",
+      "toString",
+      "entries",
+      "keys",
+      "values",
+      "forEach",
+      "size"
+    ],
+    "FormData": [
+      "append",
+      "delete",
+      "get",
+      "getAll",
+      "has",
+      "set",
+      "entries",
+      "keys",
+      "values",
+      "forEach"
+    ],
+    "Headers": [
+      "append",
+      "delete",
+      "get",
+      "has",
+      "set",
+      "entries",
+      "keys",
+      "values",
+      "forEach"
+    ],
+    "Request": [
+      "clone",
+      "arrayBuffer",
+      "blob",
+      "formData",
+      "json",
+      "text",
+      "url",
+      "method",
+      "headers",
+      "body",
+      "mode",
+      "credentials",
+      "cache",
+      "redirect",
+      "referrer",
+      "integrity",
+      "signal"
+    ],
+    "Response": [
+      "clone",
+      "arrayBuffer",
+      "blob",
+      "formData",
+      "json",
+      "text",
+      "ok",
+      "status",
+      "statusText",
+      "headers",
+      "url",
+      "type",
+      "redirected",
+      "error",
+      "redirect"
+    ],
+    "AbortController": [
+      "abort",
+      "signal"
+    ],
+    "IntersectionObserver": [
+      "observe",
+      "unobserve",
+      "disconnect",
+      "takeRecords",
+      "root",
+      "rootMargin",
+      "thresholds"
+    ],
+    "ResizeObserver": [
+      "observe",
+      "unobserve",
+      "disconnect"
+    ],
+    "MutationObserver": [
+      "observe",
+      "disconnect",
+      "takeRecords"
+    ],
+    "EventTarget": [
+      "addEventListener",
+      "removeEventListener",
+      "dispatchEvent"
+    ],
+    "CustomEvent": [
+      "detail"
+    ],
+    "WebSocket": [
+      "send",
+      "close",
+      "onopen",
+      "onclose",
+      "onmessage",
+      "onerror",
+      "readyState",
+      "url",
+      "protocol",
+      "binaryType",
+      "bufferedAmount",
+      "CONNECTING",
+      "OPEN",
+      "CLOSING",
+      "CLOSED"
+    ],
+    "Worker": [
+      "postMessage",
+      "terminate",
+      "onmessage",
+      "onerror"
+    ],
+    "BroadcastChannel": [
+      "postMessage",
+      "close",
+      "onmessage",
+      "name"
+    ],
+    "Intl": [
+      "DateTimeFormat",
+      "NumberFormat",
+      "Collator",
+      "PluralRules",
+      "RelativeTimeFormat",
+      "ListFormat",
+      "Segmenter",
+      "DisplayNames",
+      "Locale"
+    ],
+    "TextEncoder": [
+      "encode",
+      "encodeInto",
+      "encoding"
+    ],
+    "TextDecoder": [
+      "decode",
+      "encoding",
+      "fatal",
+      "ignoreBOM"
+    ],
+    "DOMParser": [
+      "parseFromString"
+    ],
+    "XMLSerializer": [
+      "serializeToString"
+    ]
+  },
+  "eventNames": [
+    "click",
+    "dblclick",
+    "mousedown",
+    "mouseup",
+    "mousemove",
+    "mouseover",
+    "mouseout",
+    "mouseenter",
+    "mouseleave",
+    "contextmenu",
+    "wheel",
+    "keydown",
+    "keyup",
+    "keypress",
+    "focus",
+    "blur",
+    "focusin",
+    "focusout",
+    "input",
+    "change",
+    "submit",
+    "reset",
+    "invalid",
+    "touchstart",
+    "touchmove",
+    "touchend",
+    "touchcancel",
+    "pointerdown",
+    "pointerup",
+    "pointermove",
+    "pointerenter",
+    "pointerleave",
+    "pointerover",
+    "pointerout",
+    "pointercancel",
+    "gotpointercapture",
+    "lostpointercapture",
+    "scroll",
+    "scrollend",
+    "resize",
+    "load",
+    "error",
+    "abort",
+    "unload",
+    "beforeunload",
+    "DOMContentLoaded",
+    "readystatechange",
+    "animationstart",
+    "animationend",
+    "animationiteration",
+    "animationcancel",
+    "transitionstart",
+    "transitionend",
+    "transitionrun",
+    "transitioncancel",
+    "drag",
+    "dragstart",
+    "dragend",
+    "dragover",
+    "dragenter",
+    "dragleave",
+    "drop",
+    "copy",
+    "cut",
+    "paste",
+    "play",
+    "pause",
+    "ended",
+    "timeupdate",
+    "volumechange",
+    "seeking",
+    "seeked",
+    "canplay",
+    "canplaythrough",
+    "loadeddata",
+    "loadedmetadata",
+    "progress",
+    "waiting",
+    "stalled",
+    "fullscreenchange",
+    "fullscreenerror",
+    "visibilitychange",
+    "online",
+    "offline",
+    "storage",
+    "hashchange",
+    "popstate",
+    "pagehide",
+    "pageshow",
+    "message",
+    "messageerror",
+    "open",
+    "close",
+    "toggle",
+    "beforetoggle",
+    "select",
+    "selectstart",
+    "selectionchange",
+    "slotchange",
+    "formdata"
+  ],
+  "prototypeMethods": {
+    "array": [
+      "push",
+      "pop",
+      "shift",
+      "unshift",
+      "splice",
+      "slice",
+      "concat",
+      "join",
+      "reverse",
+      "sort",
+      "indexOf",
+      "lastIndexOf",
+      "includes",
+      "find",
+      "findIndex",
+      "findLast",
+      "findLastIndex",
+      "filter",
+      "map",
+      "reduce",
+      "reduceRight",
+      "forEach",
+      "some",
+      "every",
+      "flat",
+      "flatMap",
+      "fill",
+      "copyWithin",
+      "entries",
+      "keys",
+      "values",
+      "at",
+      "toReversed",
+      "toSorted",
+      "toSpliced",
+      "with",
+      "toString",
+      "toLocaleString",
+      "length",
+      "group",
+      "groupToMap"
+    ],
+    "string": [
+      "charAt",
+      "charCodeAt",
+      "codePointAt",
+      "at",
+      "concat",
+      "includes",
+      "startsWith",
+      "endsWith",
+      "indexOf",
+      "lastIndexOf",
+      "search",
+      "match",
+      "matchAll",
+      "replace",
+      "replaceAll",
+      "split",
+      "slice",
+      "substring",
+      "padStart",
+      "padEnd",
+      "trimStart",
+      "trimEnd",
+      "trim",
+      "toUpperCase",
+      "toLowerCase",
+      "toLocaleLowerCase",
+      "toLocaleUpperCase",
+      "normalize",
+      "repeat",
+      "valueOf",
+      "toString",
+      "length",
+      "isWellFormed",
+      "toWellFormed",
+      "localeCompare"
+    ],
+    "number": [
+      "toFixed",
+      "toPrecision",
+      "toExponential",
+      "toString",
+      "valueOf",
+      "toLocaleString"
+    ],
+    "boolean": [
+      "toString",
+      "valueOf"
+    ],
+    "promise": [
+      "then",
+      "catch",
+      "finally"
+    ],
+    "map": [
+      "set",
+      "get",
+      "has",
+      "delete",
+      "clear",
+      "forEach",
+      "keys",
+      "values",
+      "entries",
+      "size"
+    ],
+    "set": [
+      "add",
+      "has",
+      "delete",
+      "clear",
+      "forEach",
+      "values",
+      "keys",
+      "entries",
+      "size",
+      "union",
+      "intersection",
+      "difference",
+      "symmetricDifference",
+      "isSubsetOf",
+      "isSupersetOf"
+    ],
+    "date": [
+      "getTime",
+      "getFullYear",
+      "getMonth",
+      "getDate",
+      "getDay",
+      "getHours",
+      "getMinutes",
+      "getSeconds",
+      "getMilliseconds",
+      "setTime",
+      "setFullYear",
+      "setMonth",
+      "setDate",
+      "setHours",
+      "setMinutes",
+      "setSeconds",
+      "toISOString",
+      "toLocaleDateString",
+      "toLocaleTimeString",
+      "toLocaleString",
+      "toJSON",
+      "toString",
+      "valueOf",
+      "getTimezoneOffset"
+    ],
+    "regexp": [
+      "test",
+      "exec",
+      "toString",
+      "source",
+      "flags",
+      "global",
+      "ignoreCase",
+      "multiline",
+      "sticky",
+      "unicode",
+      "lastIndex"
+    ],
+    "element": [
+      "addEventListener",
+      "removeEventListener",
+      "setAttribute",
+      "getAttribute",
+      "removeAttribute",
+      "hasAttribute",
+      "toggleAttribute",
+      "closest",
+      "matches",
+      "querySelector",
+      "querySelectorAll",
+      "classList",
+      "style",
+      "dataset",
+      "innerHTML",
+      "textContent",
+      "innerText",
+      "outerHTML",
+      "outerText",
+      "appendChild",
+      "removeChild",
+      "insertBefore",
+      "replaceChild",
+      "replaceChildren",
+      "cloneNode",
+      "contains",
+      "remove",
+      "before",
+      "after",
+      "prepend",
+      "append",
+      "insertAdjacentHTML",
+      "insertAdjacentElement",
+      "insertAdjacentText",
+      "getBoundingClientRect",
+      "getClientRects",
+      "scrollIntoView",
+      "scroll",
+      "scrollTo",
+      "scrollBy",
+      "focus",
+      "blur",
+      "click",
+      "animate",
+      "getAnimations",
+      "requestFullscreen",
+      "attachShadow",
+      "id",
+      "className",
+      "tagName",
+      "localName",
+      "parentElement",
+      "parentNode",
+      "children",
+      "childNodes",
+      "childElementCount",
+      "firstChild",
+      "lastChild",
+      "firstElementChild",
+      "lastElementChild",
+      "nextSibling",
+      "previousSibling",
+      "nextElementSibling",
+      "previousElementSibling",
+      "offsetWidth",
+      "offsetHeight",
+      "offsetTop",
+      "offsetLeft",
+      "offsetParent",
+      "clientWidth",
+      "clientHeight",
+      "clientTop",
+      "clientLeft",
+      "scrollWidth",
+      "scrollHeight",
+      "scrollTop",
+      "scrollLeft",
+      "hidden",
+      "isConnected",
+      "slot",
+      "assignedSlot",
+      "value",
+      "type",
+      "checked",
+      "disabled",
+      "readOnly",
+      "name",
+      "form",
+      "min",
+      "max",
+      "step",
+      "placeholder",
+      "required",
+      "maxLength",
+      "minLength",
+      "play",
+      "pause",
+      "load",
+      "currentTime",
+      "duration",
+      "paused",
+      "muted",
+      "volume",
+      "src",
+      "playbackRate"
+    ],
+    "nodelist": [
+      "forEach",
+      "entries",
+      "keys",
+      "values",
+      "item",
+      "length"
+    ],
+    "response": [
+      "json",
+      "text",
+      "blob",
+      "arrayBuffer",
+      "formData",
+      "clone",
+      "ok",
+      "status",
+      "statusText",
+      "headers",
+      "url",
+      "type",
+      "redirected"
+    ],
+    "event": [
+      "preventDefault",
+      "stopPropagation",
+      "stopImmediatePropagation",
+      "target",
+      "currentTarget",
+      "type",
+      "bubbles",
+      "cancelable",
+      "composed",
+      "timeStamp",
+      "isTrusted",
+      "defaultPrevented",
+      "eventPhase"
+    ],
+    "classlist": [
+      "add",
+      "remove",
+      "toggle",
+      "contains",
+      "replace",
+      "item",
+      "length",
+      "value",
+      "entries",
+      "keys",
+      "values",
+      "forEach",
+      "supports"
+    ],
+    "style": [
+      "getPropertyValue",
+      "setProperty",
+      "removeProperty",
+      "cssText",
+      "length",
+      "item"
+    ],
+    "canvascontext": [
+      "arc",
+      "arcTo",
+      "beginPath",
+      "bezierCurveTo",
+      "clearRect",
+      "clip",
+      "closePath",
+      "createImageData",
+      "createLinearGradient",
+      "createPattern",
+      "createRadialGradient",
+      "drawFocusIfNeeded",
+      "drawImage",
+      "ellipse",
+      "fill",
+      "fillRect",
+      "fillText",
+      "getImageData",
+      "getLineDash",
+      "isPointInPath",
+      "isPointInStroke",
+      "lineTo",
+      "measureText",
+      "moveTo",
+      "putImageData",
+      "quadraticCurveTo",
+      "rect",
+      "restore",
+      "rotate",
+      "save",
+      "scale",
+      "setLineDash",
+      "setTransform",
+      "stroke",
+      "strokeRect",
+      "strokeText",
+      "transform",
+      "translate",
+      "fillStyle",
+      "font",
+      "globalAlpha",
+      "globalCompositeOperation",
+      "imageSmoothingEnabled",
+      "lineCap",
+      "lineDashOffset",
+      "lineJoin",
+      "lineWidth",
+      "miterLimit",
+      "shadowBlur",
+      "shadowColor",
+      "shadowOffsetX",
+      "shadowOffsetY",
+      "strokeStyle",
+      "textAlign",
+      "textBaseline"
+    ],
+    "blob": [
+      "size",
+      "type",
+      "arrayBuffer",
+      "slice",
+      "stream",
+      "text"
+    ],
+    "file": [
+      "name",
+      "lastModified",
+      "size",
+      "type",
+      "arrayBuffer",
+      "slice",
+      "stream",
+      "text"
+    ],
+    "filereader": [
+      "readAsArrayBuffer",
+      "readAsBinaryString",
+      "readAsDataURL",
+      "readAsText",
+      "abort",
+      "error",
+      "readyState",
+      "result",
+      "onload",
+      "onloadstart",
+      "onloadend",
+      "onprogress",
+      "onabort",
+      "onerror"
+    ]
+  },
+  "chainReturnTypes": {
+    "filter": "array",
+    "map": "array",
+    "slice": "array",
+    "concat": "array",
+    "flat": "array",
+    "flatMap": "array",
+    "sort": "array",
+    "reverse": "array",
+    "toReversed": "array",
+    "toSorted": "array",
+    "toSpliced": "array",
+    "copyWithin": "array",
+    "fill": "array",
+    "from": "array",
+    "of": "array",
+    "keys": "array",
+    "values": "array",
+    "entries": "array",
+    "trim": "string",
+    "trimStart": "string",
+    "trimEnd": "string",
+    "toLowerCase": "string",
+    "toUpperCase": "string",
+    "replace": "string",
+    "replaceAll": "string",
+    "substring": "string",
+    "padStart": "string",
+    "padEnd": "string",
+    "repeat": "string",
+    "normalize": "string",
+    "charAt": "string",
+    "at": "string",
+    "toLocaleLowerCase": "string",
+    "toLocaleUpperCase": "string",
+    "then": "promise",
+    "catch": "promise",
+    "finally": "promise",
+    "all": "promise",
+    "race": "promise",
+    "allSettled": "promise",
+    "any": "promise",
+    "resolve": "promise",
+    "reject": "promise",
+    "json": "promise",
+    "text": "promise",
+    "blob": "promise",
+    "arrayBuffer": "promise",
+    "formData": "promise",
+    "querySelector": "element",
+    "getElementById": "element",
+    "createElement": "element",
+    "closest": "element",
+    "parentElement": "element",
+    "firstElementChild": "element",
+    "lastElementChild": "element",
+    "nextElementSibling": "element",
+    "previousElementSibling": "element",
+    "cloneNode": "element",
+    "querySelectorAll": "nodelist",
+    "getElementsByClassName": "nodelist",
+    "getElementsByTagName": "nodelist",
+    "childNodes": "nodelist",
+    "children": "nodelist",
+    "classList": "classlist",
+    "style": "style"
+  },
+  "promiseFunctions": [
+    "fetch",
+    "axios",
+    "axios.get",
+    "axios.post",
+    "axios.put",
+    "axios.delete"
+  ],
+  "lspMembers": {
+    "document": [
+      {
+        "name": "getElementById",
+        "detail": "getElementById(id)",
+        "doc": "Returns element by ID",
+        "kind": "fn"
+      },
+      {
+        "name": "querySelector",
+        "detail": "querySelector(selector)",
+        "doc": "First matching element",
+        "kind": "fn"
+      },
+      {
+        "name": "querySelectorAll",
+        "detail": "querySelectorAll(selector)",
+        "doc": "NodeList of matches",
+        "kind": "fn"
+      },
+      {
+        "name": "createElement",
+        "detail": "createElement(tag)",
+        "doc": "Creates HTML element",
+        "kind": "fn"
+      },
+      {
+        "name": "createTextNode",
+        "detail": "createTextNode(text)",
+        "doc": "Creates text node",
+        "kind": "fn"
+      },
+      {
+        "name": "addEventListener",
+        "detail": "addEventListener(type, handler)",
+        "doc": "Adds event listener",
+        "kind": "fn"
+      },
+      {
+        "name": "removeEventListener",
+        "detail": "removeEventListener(type, handler)",
+        "doc": "Removes event listener",
+        "kind": "fn"
+      },
+      {
+        "name": "getElementsByClassName",
+        "detail": "getElementsByClassName(name)",
+        "doc": "Find by class name",
+        "kind": "fn"
+      },
+      {
+        "name": "getElementsByTagName",
+        "detail": "getElementsByTagName(tag)",
+        "doc": "Find by tag name",
+        "kind": "fn"
+      },
+      {
+        "name": "write",
+        "detail": "write(content)",
+        "doc": "Write to document",
+        "kind": "fn"
+      },
+      {
+        "name": "close",
+        "detail": "close()",
+        "doc": "Close document stream",
+        "kind": "fn"
+      },
+      {
+        "name": "body",
+        "detail": "HTMLBodyElement",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "head",
+        "detail": "HTMLHeadElement",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "title",
+        "detail": "string",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "URL",
+        "detail": "string – current URL",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "cookie",
+        "detail": "string – cookies",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "readyState",
+        "detail": "string – loading state",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "documentElement",
+        "detail": "HTMLElement – root element",
+        "doc": "",
+        "kind": "prop"
+      }
+    ],
+    "console": [
+      {
+        "name": "log",
+        "detail": "log(...data)",
+        "doc": "General log",
+        "kind": "fn"
+      },
+      {
+        "name": "warn",
+        "detail": "warn(...data)",
+        "doc": "Warning log",
+        "kind": "fn"
+      },
+      {
+        "name": "error",
+        "detail": "error(...data)",
+        "doc": "Error log",
+        "kind": "fn"
+      },
+      {
+        "name": "info",
+        "detail": "info(...data)",
+        "doc": "Info log",
+        "kind": "fn"
+      },
+      {
+        "name": "debug",
+        "detail": "debug(...data)",
+        "doc": "Debug log",
+        "kind": "fn"
+      },
+      {
+        "name": "table",
+        "detail": "table(data)",
+        "doc": "Tabular output",
+        "kind": "fn"
+      },
+      {
+        "name": "group",
+        "detail": "group(label)",
+        "doc": "Start group",
+        "kind": "fn"
+      },
+      {
+        "name": "groupEnd",
+        "detail": "groupEnd()",
+        "doc": "End group",
+        "kind": "fn"
+      },
+      {
+        "name": "time",
+        "detail": "time(label)",
+        "doc": "Start timer",
+        "kind": "fn"
+      },
+      {
+        "name": "timeEnd",
+        "detail": "timeEnd(label)",
+        "doc": "Stop timer",
+        "kind": "fn"
+      },
+      {
+        "name": "count",
+        "detail": "count(label)",
+        "doc": "Count calls",
+        "kind": "fn"
+      },
+      {
+        "name": "clear",
+        "detail": "clear()",
+        "doc": "Clear console",
+        "kind": "fn"
+      },
+      {
+        "name": "assert",
+        "detail": "assert(condition, msg)",
+        "doc": "Assert condition",
+        "kind": "fn"
+      },
+      {
+        "name": "dir",
+        "detail": "dir(obj)",
+        "doc": "List properties",
+        "kind": "fn"
+      }
+    ],
+    "Math": [
+      {
+        "name": "floor",
+        "detail": "Math.floor(x)",
+        "doc": "Round down",
+        "kind": "fn"
+      },
+      {
+        "name": "ceil",
+        "detail": "Math.ceil(x)",
+        "doc": "Round up",
+        "kind": "fn"
+      },
+      {
+        "name": "round",
+        "detail": "Math.round(x)",
+        "doc": "Round to nearest",
+        "kind": "fn"
+      },
+      {
+        "name": "random",
+        "detail": "Math.random()",
+        "doc": "Random 0–1",
+        "kind": "fn"
+      },
+      {
+        "name": "max",
+        "detail": "Math.max(...values)",
+        "doc": "Maximum value",
+        "kind": "fn"
+      },
+      {
+        "name": "min",
+        "detail": "Math.min(...values)",
+        "doc": "Minimum value",
+        "kind": "fn"
+      },
+      {
+        "name": "abs",
+        "detail": "Math.abs(x)",
+        "doc": "Absolute value",
+        "kind": "fn"
+      },
+      {
+        "name": "sqrt",
+        "detail": "Math.sqrt(x)",
+        "doc": "Square root",
+        "kind": "fn"
+      },
+      {
+        "name": "pow",
+        "detail": "Math.pow(base, exp)",
+        "doc": "Power",
+        "kind": "fn"
+      },
+      {
+        "name": "log",
+        "detail": "Math.log(x)",
+        "doc": "Natural log",
+        "kind": "fn"
+      },
+      {
+        "name": "log2",
+        "detail": "Math.log2(x)",
+        "doc": "Log base 2",
+        "kind": "fn"
+      },
+      {
+        "name": "log10",
+        "detail": "Math.log10(x)",
+        "doc": "Log base 10",
+        "kind": "fn"
+      },
+      {
+        "name": "sin",
+        "detail": "Math.sin(x)",
+        "doc": "Sine",
+        "kind": "fn"
+      },
+      {
+        "name": "cos",
+        "detail": "Math.cos(x)",
+        "doc": "Cosine",
+        "kind": "fn"
+      },
+      {
+        "name": "tan",
+        "detail": "Math.tan(x)",
+        "doc": "Tangent",
+        "kind": "fn"
+      },
+      {
+        "name": "sign",
+        "detail": "Math.sign(x)",
+        "doc": "Sign (-1/0/1)",
+        "kind": "fn"
+      },
+      {
+        "name": "trunc",
+        "detail": "Math.trunc(x)",
+        "doc": "Integer part",
+        "kind": "fn"
+      },
+      {
+        "name": "hypot",
+        "detail": "Math.hypot(...values)",
+        "doc": "Hypotenuse",
+        "kind": "fn"
+      },
+      {
+        "name": "PI",
+        "detail": "number – 3.14159...",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "E",
+        "detail": "number – 2.71828...",
+        "doc": "",
+        "kind": "prop"
+      }
+    ],
+    "JSON": [
+      {
+        "name": "parse",
+        "detail": "JSON.parse(text)",
+        "doc": "JSON string → object",
+        "kind": "fn"
+      },
+      {
+        "name": "stringify",
+        "detail": "JSON.stringify(value, replacer, space)",
+        "doc": "Object → JSON string",
+        "kind": "fn"
+      }
+    ],
+    "Object": [
+      {
+        "name": "keys",
+        "detail": "Object.keys(obj)",
+        "doc": "Array of own property names",
+        "kind": "fn"
+      },
+      {
+        "name": "values",
+        "detail": "Object.values(obj)",
+        "doc": "Array of own values",
+        "kind": "fn"
+      },
+      {
+        "name": "entries",
+        "detail": "Object.entries(obj)",
+        "doc": "Array of [key, value] pairs",
+        "kind": "fn"
+      },
+      {
+        "name": "assign",
+        "detail": "Object.assign(target, ...sources)",
+        "doc": "Merge objects",
+        "kind": "fn"
+      },
+      {
+        "name": "freeze",
+        "detail": "Object.freeze(obj)",
+        "doc": "Make immutable",
+        "kind": "fn"
+      },
+      {
+        "name": "isFrozen",
+        "detail": "Object.isFrozen(obj)",
+        "doc": "Check if frozen",
+        "kind": "fn"
+      },
+      {
+        "name": "create",
+        "detail": "Object.create(proto)",
+        "doc": "Create with prototype",
+        "kind": "fn"
+      },
+      {
+        "name": "defineProperty",
+        "detail": "Object.defineProperty(obj, prop, descriptor)",
+        "doc": "Define property",
+        "kind": "fn"
+      },
+      {
+        "name": "getOwnPropertyNames",
+        "detail": "Object.getOwnPropertyNames(obj)",
+        "doc": "All own property names",
+        "kind": "fn"
+      },
+      {
+        "name": "fromEntries",
+        "detail": "Object.fromEntries(entries)",
+        "doc": "Entries → object",
+        "kind": "fn"
+      },
+      {
+        "name": "hasOwn",
+        "detail": "Object.hasOwn(obj, key)",
+        "doc": "Has own property",
+        "kind": "fn"
+      }
+    ],
+    "Array": [
+      {
+        "name": "from",
+        "detail": "Array.from(iterable)",
+        "doc": "Create from iterable",
+        "kind": "fn"
+      },
+      {
+        "name": "isArray",
+        "detail": "Array.isArray(value)",
+        "doc": "Check if array",
+        "kind": "fn"
+      },
+      {
+        "name": "of",
+        "detail": "Array.of(...items)",
+        "doc": "Create from arguments",
+        "kind": "fn"
+      }
+    ],
+    "Promise": [
+      {
+        "name": "resolve",
+        "detail": "Promise.resolve(value)",
+        "doc": "Fulfilled promise",
+        "kind": "fn"
+      },
+      {
+        "name": "reject",
+        "detail": "Promise.reject(reason)",
+        "doc": "Rejected promise",
+        "kind": "fn"
+      },
+      {
+        "name": "all",
+        "detail": "Promise.all([...promises])",
+        "doc": "Wait for all",
+        "kind": "fn"
+      },
+      {
+        "name": "allSettled",
+        "detail": "Promise.allSettled([...promises])",
+        "doc": "Wait for all, any outcome",
+        "kind": "fn"
+      },
+      {
+        "name": "race",
+        "detail": "Promise.race([...promises])",
+        "doc": "First to settle",
+        "kind": "fn"
+      },
+      {
+        "name": "any",
+        "detail": "Promise.any([...promises])",
+        "doc": "First to fulfill",
+        "kind": "fn"
+      }
+    ],
+    "localStorage": [
+      {
+        "name": "getItem",
+        "detail": "getItem(key)",
+        "doc": "Read value",
+        "kind": "fn"
+      },
+      {
+        "name": "setItem",
+        "detail": "setItem(key, value)",
+        "doc": "Write value",
+        "kind": "fn"
+      },
+      {
+        "name": "removeItem",
+        "detail": "removeItem(key)",
+        "doc": "Delete entry",
+        "kind": "fn"
+      },
+      {
+        "name": "clear",
+        "detail": "clear()",
+        "doc": "Clear all",
+        "kind": "fn"
+      },
+      {
+        "name": "key",
+        "detail": "key(index)",
+        "doc": "Get key by index",
+        "kind": "fn"
+      },
+      {
+        "name": "length",
+        "detail": "number – entries count",
+        "doc": "",
+        "kind": "prop"
+      }
+    ],
+    "sessionStorage": [
+      {
+        "name": "getItem",
+        "detail": "getItem(key)",
+        "doc": "Read value",
+        "kind": "fn"
+      },
+      {
+        "name": "setItem",
+        "detail": "setItem(key, value)",
+        "doc": "Write value",
+        "kind": "fn"
+      },
+      {
+        "name": "removeItem",
+        "detail": "removeItem(key)",
+        "doc": "Delete entry",
+        "kind": "fn"
+      },
+      {
+        "name": "clear",
+        "detail": "clear()",
+        "doc": "Clear all",
+        "kind": "fn"
+      },
+      {
+        "name": "key",
+        "detail": "key(index)",
+        "doc": "Get key by index",
+        "kind": "fn"
+      },
+      {
+        "name": "length",
+        "detail": "number – entries count",
+        "doc": "",
+        "kind": "prop"
+      }
+    ],
+    "window": [
+      {
+        "name": "setTimeout",
+        "detail": "setTimeout(fn, ms)",
+        "doc": "Delayed call",
+        "kind": "fn"
+      },
+      {
+        "name": "setInterval",
+        "detail": "setInterval(fn, ms)",
+        "doc": "Repeating call",
+        "kind": "fn"
+      },
+      {
+        "name": "clearTimeout",
+        "detail": "clearTimeout(id)",
+        "doc": "Cancel timeout",
+        "kind": "fn"
+      },
+      {
+        "name": "clearInterval",
+        "detail": "clearInterval(id)",
+        "doc": "Cancel interval",
+        "kind": "fn"
+      },
+      {
+        "name": "fetch",
+        "detail": "fetch(url, options)",
+        "doc": "HTTP request",
+        "kind": "fn"
+      },
+      {
+        "name": "alert",
+        "detail": "alert(message)",
+        "doc": "Show alert",
+        "kind": "fn"
+      },
+      {
+        "name": "confirm",
+        "detail": "confirm(message)",
+        "doc": "Show confirm",
+        "kind": "fn"
+      },
+      {
+        "name": "prompt",
+        "detail": "prompt(message, default)",
+        "doc": "Show input",
+        "kind": "fn"
+      },
+      {
+        "name": "addEventListener",
+        "detail": "addEventListener(type, handler)",
+        "doc": "Listen to events",
+        "kind": "fn"
+      },
+      {
+        "name": "scrollTo",
+        "detail": "scrollTo(x, y)",
+        "doc": "Scroll to position",
+        "kind": "fn"
+      },
+      {
+        "name": "open",
+        "detail": "open(url, target)",
+        "doc": "Open window",
+        "kind": "fn"
+      },
+      {
+        "name": "localStorage",
+        "detail": "Storage object",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "sessionStorage",
+        "detail": "Storage object",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "location",
+        "detail": "Location object",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "history",
+        "detail": "History object",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "navigator",
+        "detail": "Navigator object",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "document",
+        "detail": "Document object",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "innerWidth",
+        "detail": "number – viewport width",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "innerHeight",
+        "detail": "number – viewport height",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "scrollX",
+        "detail": "number – horizontal scroll",
+        "doc": "",
+        "kind": "prop"
+      },
+      {
+        "name": "scrollY",
+        "detail": "number – vertical scroll",
+        "doc": "",
+        "kind": "prop"
+      }
+    ],
+    "__array__": [
+      {
+        "name": "push",
+        "detail": "push(...items)",
+        "doc": "Appends new elements to the end of an array, and returns the new length",
+        "kind": "fn"
+      },
+      {
+        "name": "pop",
+        "detail": "pop()",
+        "doc": "Removes the last element from an array and returns it",
+        "kind": "fn"
+      },
+      {
+        "name": "shift",
+        "detail": "shift()",
+        "doc": "Removes the first element from an array and returns it",
+        "kind": "fn"
+      },
+      {
+        "name": "unshift",
+        "detail": "unshift(...items)",
+        "doc": "Inserts new elements at the start of an array, and returns the new length",
+        "kind": "fn"
+      },
+      {
+        "name": "map",
+        "detail": "map(callbackFn, thisArg)",
+        "doc": "Calls a defined callback function on each element of an array, and returns an array of results",
+        "kind": "fn"
+      },
+      {
+        "name": "filter",
+        "detail": "filter(predicate, thisArg)",
+        "doc": "Returns the elements of an array that meet the condition specified in a callback function",
+        "kind": "fn"
+      },
+      {
+        "name": "reduce",
+        "detail": "reduce(callbackFn, initialValue)",
+        "doc": "Calls the specified callback function for all the elements in an array. The return value is the accumulated result",
+        "kind": "fn"
+      },
+      {
+        "name": "reduceRight",
+        "detail": "reduceRight(callbackFn, initialValue)",
+        "doc": "Calls the specified callback function for all the elements in an array, in descending order",
+        "kind": "fn"
+      },
+      {
+        "name": "find",
+        "detail": "find(predicate, thisArg)",
+        "doc": "Returns the value of the first element in the array where predicate is true",
+        "kind": "fn"
+      },
+      {
+        "name": "findIndex",
+        "detail": "findIndex(predicate, thisArg)",
+        "doc": "Returns the index of the first element in the array where predicate is true, and -1 otherwise",
+        "kind": "fn"
+      },
+      {
+        "name": "findLast",
+        "detail": "findLast(predicate, thisArg)",
+        "doc": "Returns the value of the last element in the array where predicate is true",
+        "kind": "fn"
+      },
+      {
+        "name": "findLastIndex",
+        "detail": "findLastIndex(predicate, thisArg)",
+        "doc": "Returns the index of the last element in the array where predicate is true, and -1 otherwise",
+        "kind": "fn"
+      },
+      {
+        "name": "includes",
+        "detail": "includes(searchElement, fromIndex)",
+        "doc": "Determines whether an array includes a certain element, returning true or false",
+        "kind": "fn"
+      },
+      {
+        "name": "indexOf",
+        "detail": "indexOf(searchElement, fromIndex)",
+        "doc": "Returns the index of the first occurrence of a value in an array, or -1 if not present",
+        "kind": "fn"
+      },
+      {
+        "name": "lastIndexOf",
+        "detail": "lastIndexOf(searchElement, fromIndex)",
+        "doc": "Returns the index of the last occurrence of a specified value in an array, or -1 if not present",
+        "kind": "fn"
+      },
+      {
+        "name": "forEach",
+        "detail": "forEach(callbackFn, thisArg)",
+        "doc": "Performs the specified action for each element in an array",
+        "kind": "fn"
+      },
+      {
+        "name": "sort",
+        "detail": "sort(compareFn)",
+        "doc": "Sorts an array in place and returns it",
+        "kind": "fn"
+      },
+      {
+        "name": "reverse",
+        "detail": "reverse()",
+        "doc": "Reverses the elements in an array in place",
+        "kind": "fn"
+      },
+      {
+        "name": "splice",
+        "detail": "splice(start, deleteCount, ...items)",
+        "doc": "Removes elements from an array and, if necessary, inserts new elements in their place",
+        "kind": "fn"
+      },
+      {
+        "name": "slice",
+        "detail": "slice(start, end)",
+        "doc": "Returns a copy of a section of an array",
+        "kind": "fn"
+      },
+      {
+        "name": "join",
+        "detail": "join(separator)",
+        "doc": "Adds all the elements of an array into a string, separated by the specified separator string",
+        "kind": "fn"
+      },
+      {
+        "name": "concat",
+        "detail": "concat(...items)",
+        "doc": "Combines two or more arrays or items",
+        "kind": "fn"
+      },
+      {
+        "name": "flat",
+        "detail": "flat(depth)",
+        "doc": "Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth",
+        "kind": "fn"
+      },
+      {
+        "name": "flatMap",
+        "detail": "flatMap(callbackFn, thisArg)",
+        "doc": "Calls a defined callback function on each element of an array then flattens the result into a new array",
+        "kind": "fn"
+      },
+      {
+        "name": "every",
+        "detail": "every(predicate, thisArg)",
+        "doc": "Determines whether all the members of an array satisfy the specified test",
+        "kind": "fn"
+      },
+      {
+        "name": "some",
+        "detail": "some(predicate, thisArg)",
+        "doc": "Determines whether the specified callback function returns true for any element of an array",
+        "kind": "fn"
+      },
+      {
+        "name": "fill",
+        "detail": "fill(value, start, end)",
+        "doc": "Changes all array elements from start to end index to a static value and returns the modified array",
+        "kind": "fn"
+      },
+      {
+        "name": "copyWithin",
+        "detail": "copyWithin(target, start, end)",
+        "doc": "Shallow copies part of an array to another location in the same array and returns it",
+        "kind": "fn"
+      },
+      {
+        "name": "at",
+        "detail": "at(index)",
+        "doc": "Takes an integer value and returns the item at that index, allowing positive and negative integers",
+        "kind": "fn"
+      },
+      {
+        "name": "entries",
+        "detail": "entries()",
+        "doc": "Returns an iterable of key, value pairs for every entry in the array",
+        "kind": "fn"
+      },
+      {
+        "name": "keys",
+        "detail": "keys()",
+        "doc": "Returns an iterable of keys in the array",
+        "kind": "fn"
+      },
+      {
+        "name": "values",
+        "detail": "values()",
+        "doc": "Returns an iterable of values in the array",
+        "kind": "fn"
+      },
+      {
+        "name": "length",
+        "detail": "number – array length",
+        "doc": "",
+        "kind": "prop"
+      }
+    ],
+    "__string__": [
+      {
+        "name": "charAt",
+        "detail": "charAt(index)",
+        "doc": "Returns the character at the specified index",
+        "kind": "fn"
+      },
+      {
+        "name": "charCodeAt",
+        "detail": "charCodeAt(index)",
+        "doc": "Returns the Unicode value of the character at the specified location",
+        "kind": "fn"
+      },
+      {
+        "name": "codePointAt",
+        "detail": "codePointAt(pos)",
+        "doc": "Returns a nonnegative integer Number that is the code point value of the UTF-16 encoded code point starting at pos",
+        "kind": "fn"
+      },
+      {
+        "name": "at",
+        "detail": "at(index)",
+        "doc": "Takes an integer value and returns the item at that index, allowing positive and negative integers",
+        "kind": "fn"
+      },
+      {
+        "name": "concat",
+        "detail": "concat(...strings)",
+        "doc": "Returns a string that contains the concatenation of two or more strings",
+        "kind": "fn"
+      },
+      {
+        "name": "includes",
+        "detail": "includes(searchString, position)",
+        "doc": "Returns true if searchString appears as a substring of the result of converting this object to a String",
+        "kind": "fn"
+      },
+      {
+        "name": "startsWith",
+        "detail": "startsWith(searchString, position)",
+        "doc": "Returns true if the sequence of elements begins with searchString",
+        "kind": "fn"
+      },
+      {
+        "name": "endsWith",
+        "detail": "endsWith(searchString, length)",
+        "doc": "Returns true if the sequence of elements ends with searchString",
+        "kind": "fn"
+      },
+      {
+        "name": "indexOf",
+        "detail": "indexOf(searchString, fromIndex)",
+        "doc": "Returns the position of the first occurrence of a substring",
+        "kind": "fn"
+      },
+      {
+        "name": "lastIndexOf",
+        "detail": "lastIndexOf(searchString, fromIndex)",
+        "doc": "Returns the last occurrence of a substring in the string",
+        "kind": "fn"
+      },
+      {
+        "name": "search",
+        "detail": "search(regexp)",
+        "doc": "Finds the first substring match in a regular expression search",
+        "kind": "fn"
+      },
+      {
+        "name": "match",
+        "detail": "match(regexp)",
+        "doc": "Matches a string with a regular expression, and returns an array containing the results of that search",
+        "kind": "fn"
+      },
+      {
+        "name": "matchAll",
+        "detail": "matchAll(regexp)",
+        "doc": "Matches a string with a regular expression, and returns an iterable of matches",
+        "kind": "fn"
+      },
+      {
+        "name": "replace",
+        "detail": "replace(pattern, replacement)",
+        "doc": "Replaces text in a string, using a regular expression or search string",
+        "kind": "fn"
+      },
+      {
+        "name": "replaceAll",
+        "detail": "replaceAll(pattern, replacement)",
+        "doc": "Replaces all text in a string matching a regular expression or search string",
+        "kind": "fn"
+      },
+      {
+        "name": "split",
+        "detail": "split(separator, limit)",
+        "doc": "Splits a String object into an array of strings by separating the string into substrings",
+        "kind": "fn"
+      },
+      {
+        "name": "slice",
+        "detail": "slice(start, end)",
+        "doc": "Returns a section of a string",
+        "kind": "fn"
+      },
+      {
+        "name": "substring",
+        "detail": "substring(start, end)",
+        "doc": "Returns the substring at the specified location within a String object",
+        "kind": "fn"
+      },
+      {
+        "name": "padStart",
+        "detail": "padStart(targetLength, padString)",
+        "doc": "Pads the current string with a given string (repeated, if needed) so that the resulting string reaches a given length",
+        "kind": "fn"
+      },
+      {
+        "name": "padEnd",
+        "detail": "padEnd(targetLength, padString)",
+        "doc": "Pads the current string with a given string (repeated, if needed) so that the resulting string reaches a given length",
+        "kind": "fn"
+      },
+      {
+        "name": "trim",
+        "detail": "trim()",
+        "doc": "Removes the leading and trailing white space and line terminator characters from a string",
+        "kind": "fn"
+      },
+      {
+        "name": "trimStart",
+        "detail": "trimStart()",
+        "doc": "Removes the leading white space and line terminator characters from a string",
+        "kind": "fn"
+      },
+      {
+        "name": "trimEnd",
+        "detail": "trimEnd()",
+        "doc": "Removes the trailing white space and line terminator characters from a string",
+        "kind": "fn"
+      },
+      {
+        "name": "toUpperCase",
+        "detail": "toUpperCase()",
+        "doc": "Converts all the alphabetic characters in a string to uppercase",
+        "kind": "fn"
+      },
+      {
+        "name": "toLowerCase",
+        "detail": "toLowerCase()",
+        "doc": "Converts all the alphabetic characters in a string to lowercase",
+        "kind": "fn"
+      },
+      {
+        "name": "toLocaleUpperCase",
+        "detail": "toLocaleUpperCase(locales)",
+        "doc": "Converts all the alphabetic characters in a string to uppercase considering the host environment's current locale",
+        "kind": "fn"
+      },
+      {
+        "name": "toLocaleLowerCase",
+        "detail": "toLocaleLowerCase(locales)",
+        "doc": "Converts all the alphabetic characters in a string to lowercase considering the host environment's current locale",
+        "kind": "fn"
+      },
+      {
+        "name": "repeat",
+        "detail": "repeat(count)",
+        "doc": "Returns a String value that is made from count copies appended together",
+        "kind": "fn"
+      },
+      {
+        "name": "normalize",
+        "detail": "normalize(form)",
+        "doc": "Returns the String value result of normalizing the string into the normalization form named by form as specified in Unicode Standard Annex #15, Unicode Normalization Forms",
+        "kind": "fn"
+      }
+    ],
+    "__global__": [
+      {
+        "name": "fetch",
+        "detail": "fetch(input, init)",
+        "doc": "Initiates the process of fetching a resource from the network, returning a promise which is fulfilled once the response is available",
+        "kind": "fn"
+      },
+      {
+        "name": "setTimeout",
+        "detail": "setTimeout(handler, timeout, ...args)",
+        "doc": "Sets a timer which executes a function or specified piece of code once the timer expires",
+        "kind": "fn"
+      },
+      {
+        "name": "setInterval",
+        "detail": "setInterval(handler, timeout, ...args)",
+        "doc": "Repeatedly calls a function or executes a code snippet, with a fixed time delay between each call",
+        "kind": "fn"
+      },
+      {
+        "name": "clearTimeout",
+        "detail": "clearTimeout(id)",
+        "doc": "Cancels a timeout previously established by calling setTimeout()",
+        "kind": "fn"
+      },
+      {
+        "name": "clearInterval",
+        "detail": "clearInterval(id)",
+        "doc": "Cancels a timed, repeating action which was previously established by a call to setInterval()",
+        "kind": "fn"
+      },
+      {
+        "name": "parseInt",
+        "detail": "parseInt(string, radix)",
+        "doc": "Parses a string argument and returns an integer of the specified radix (the base in mathematical numeral systems)",
+        "kind": "fn"
+      },
+      {
+        "name": "parseFloat",
+        "detail": "parseFloat(string)",
+        "doc": "Parses an argument and returns a floating point number",
+        "kind": "fn"
+      },
+      {
+        "name": "isNaN",
+        "detail": "isNaN(value)",
+        "doc": "Determines whether a value is NaN, first converting the value to a number if necessary",
+        "kind": "fn"
+      },
+      {
+        "name": "isFinite",
+        "detail": "isFinite(value)",
+        "doc": "Determines whether the passed value is a finite number",
+        "kind": "fn"
+      },
+      {
+        "name": "encodeURIComponent",
+        "detail": "encodeURIComponent(uriComponent)",
+        "doc": "Encodes a text string as a valid component of a Uniform Resource Identifier (URI)",
+        "kind": "fn"
+      },
+      {
+        "name": "decodeURIComponent",
+        "detail": "decodeURIComponent(encodedURI)",
+        "doc": "Decodes a Uniform Resource Identifier (URI) component previously created by encodeURIComponent",
+        "kind": "fn"
+      },
+      {
+        "name": "encodeURI",
+        "detail": "encodeURI(uri)",
+        "doc": "Encodes a text string as a valid Uniform Resource Identifier (URI)",
+        "kind": "fn"
+      },
+      {
+        "name": "decodeURI",
+        "detail": "decodeURI(encodedURI)",
+        "doc": "Decodes a Uniform Resource Identifier (URI) previously created by encodeURI",
+        "kind": "fn"
+      },
+      {
+        "name": "atob",
+        "detail": "atob(encodedData)",
+        "doc": "Decodes a string of data which has been encoded using Base64 encoding",
+        "kind": "fn"
+      },
+      {
+        "name": "btoa",
+        "detail": "btoa(stringToEncode)",
+        "doc": "Creates a Base64-encoded ASCII string from a binary string",
+        "kind": "fn"
+      },
+      {
+        "name": "alert",
+        "detail": "alert(message)",
+        "doc": "Instructs the browser to display a dialog with an optional message, and to wait until the user dismisses the dialog",
+        "kind": "fn"
+      },
+      {
+        "name": "confirm",
+        "detail": "confirm(message)",
+        "doc": "Instructs the browser to display a dialog with an optional message, and to wait until the user either confirms or cancels the dialog",
+        "kind": "fn"
+      },
+      {
+        "name": "prompt",
+        "detail": "prompt(message, default)",
+        "doc": "Instructs the browser to display a dialog with an optional message prompting the user to input some text, and to wait until the user either submits the text or cancels the dialog",
+        "kind": "fn"
+      },
+      {
+        "name": "structuredClone",
+        "detail": "structuredClone(value, options)",
+        "doc": "Creates a deep clone of a given value using the structured clone algorithm",
+        "kind": "fn"
+      },
+      {
+        "name": "queueMicrotask",
+        "detail": "queueMicrotask(callback)",
+        "doc": "Queues a microtask to be executed at a safe time prior to control returning to the event loop",
+        "kind": "fn"
+      },
+      {
+        "name": "requestAnimationFrame",
+        "detail": "requestAnimationFrame(callback)",
+        "doc": "Tells the browser that you wish to perform an animation and requests that the browser calls a specified function to update an animation right before the next repaint",
+        "kind": "fn"
+      },
+      {
+        "name": "cancelAnimationFrame",
+        "detail": "cancelAnimationFrame(handle)",
+        "doc": "Cancels an animation frame request previously scheduled through a call to requestAnimationFrame()",
+        "kind": "fn"
+      },
+      {
+        "name": "requestIdleCallback",
+        "detail": "requestIdleCallback(callback, options)",
+        "doc": "Queues a function to be called during a browser's idle periods",
+        "kind": "fn"
+      },
+      {
+        "name": "cancelIdleCallback",
+        "detail": "cancelIdleCallback(handle)",
+        "doc": "Cancels a callback previously scheduled with requestIdleCallback()",
+        "kind": "fn"
+      },
+      {
+        "name": "addEventListener",
+        "detail": "addEventListener(type, listener, options)",
+        "doc": "Sets up a function that will be called whenever the specified event is delivered to the target",
+        "kind": "fn"
+      },
+      {
+        "name": "removeEventListener",
+        "detail": "removeEventListener(type, listener, options)",
+        "doc": "Removes an event listener previously registered with addEventListener()",
+        "kind": "fn"
+      },
+      {
+        "name": "dispatchEvent",
+        "detail": "dispatchEvent(event)",
+        "doc": "Dispatches an Event at the specified EventTarget, invoking the affected EventListeners in the appropriate order",
+        "kind": "fn"
+      },
+      {
+        "name": "matchMedia",
+        "detail": "matchMedia(mediaQueryString)",
+        "doc": "Returns a new MediaQueryList object that can then be used to determine if the document matches the media query string",
+        "kind": "fn"
+      },
+      {
+        "name": "getComputedStyle",
+        "detail": "getComputedStyle(element, pseudoElt)",
+        "doc": "Returns an object containing the values of all CSS properties of an element, after applying active stylesheets and resolving any basic computation those values may contain",
+        "kind": "fn"
+      },
+      {
+        "name": "reportError",
+        "detail": "reportError(error)",
+        "doc": "Reports an error to the global event handlers, simulating an uncaught JavaScript exception",
+        "kind": "fn"
+      },
+      {
+        "name": "Promise",
+        "detail": "Promise(executor)",
+        "doc": "Creates a new Promise object. The executor is a function that is passed other functions to resolve or reject the promise",
+        "kind": "fn"
+      },
+      {
+        "name": "Date",
+        "detail": "Date(value)",
+        "doc": "Creates a JavaScript Date instance that represents a single moment in time in a platform-independent format",
+        "kind": "fn"
+      },
+      {
+        "name": "RegExp",
+        "detail": "RegExp(pattern, flags)",
+        "doc": "Creates a regular expression object for matching text with a pattern",
+        "kind": "fn"
+      },
+      {
+        "name": "Map",
+        "detail": "Map(iterable)",
+        "doc": "Creates a new Map object, which holds key-value pairs and remembers the original insertion order of the keys",
+        "kind": "fn"
+      },
+      {
+        "name": "Set",
+        "detail": "Set(iterable)",
+        "doc": "Creates a new Set object, which lets you store unique values of any type, whether primitive values or object references",
+        "kind": "fn"
+      },
+      {
+        "name": "WeakMap",
+        "detail": "WeakMap(iterable)",
+        "doc": "Creates a new WeakMap object, which is a collection of key/value pairs in which the keys are weakly referenced objects",
+        "kind": "fn"
+      },
+      {
+        "name": "WeakSet",
+        "detail": "WeakSet(iterable)",
+        "doc": "Creates a new WeakSet object, which allows you to store weakly held objects in a collection",
+        "kind": "fn"
+      },
+      {
+        "name": "Error",
+        "detail": "Error(message, options)",
+        "doc": "Creates a new Error instance",
+        "kind": "fn"
+      },
+      {
+        "name": "TypeError",
+        "detail": "TypeError(message)",
+        "doc": "Creates a new TypeError instance representing an error when a value is not of the expected type",
+        "kind": "fn"
+      },
+      {
+        "name": "RangeError",
+        "detail": "RangeError(message)",
+        "doc": "Creates a new RangeError instance indicating an error when a value is not in the set or range of allowed values",
+        "kind": "fn"
+      },
+      {
+        "name": "SyntaxError",
+        "detail": "SyntaxError(message)",
+        "doc": "Creates a new SyntaxError instance representing an error when trying to interpret syntactically invalid code",
+        "kind": "fn"
+      },
+      {
+        "name": "ReferenceError",
+        "detail": "ReferenceError(message)",
+        "doc": "Creates a new ReferenceError instance representing an error when a non-existent variable is referenced",
+        "kind": "fn"
+      },
+      {
+        "name": "URL",
+        "detail": "URL(url, base)",
+        "doc": "Creates and returns a URL object representing the URL defined by the parameters",
+        "kind": "fn"
+      },
+      {
+        "name": "URLSearchParams",
+        "detail": "URLSearchParams(init)",
+        "doc": "Creates and returns a new URLSearchParams object",
+        "kind": "fn"
+      },
+      {
+        "name": "FormData",
+        "detail": "FormData(form)",
+        "doc": "Creates a new FormData object",
+        "kind": "fn"
+      },
+      {
+        "name": "Blob",
+        "detail": "Blob(blobParts, options)",
+        "doc": "Creates a new Blob object whose contents are made of the concatenation of the array of values passed in",
+        "kind": "fn"
+      },
+      {
+        "name": "File",
+        "detail": "File(fileBits, fileName, options)",
+        "doc": "Creates a new File instance",
+        "kind": "fn"
+      },
+      {
+        "name": "FileReader",
+        "detail": "FileReader()",
+        "doc": "Creates a new FileReader object which lets web applications asynchronously read the contents of files",
+        "kind": "fn"
+      },
+      {
+        "name": "Worker",
+        "detail": "Worker(scriptURL, options)",
+        "doc": "Creates a dedicated web worker that executes the script at the specified URL",
+        "kind": "fn"
+      },
+      {
+        "name": "WebSocket",
+        "detail": "WebSocket(url, protocols)",
+        "doc": "Creates a new WebSocket object to connect to a WebSocket server",
+        "kind": "fn"
+      },
+      {
+        "name": "BroadcastChannel",
+        "detail": "BroadcastChannel(name)",
+        "doc": "Creates a new BroadcastChannel object to communicate with other browsing contexts with the same origin",
+        "kind": "fn"
+      },
+      {
+        "name": "TextEncoder",
+        "detail": "TextEncoder()",
+        "doc": "Creates a new TextEncoder object that takes a stream of code points as input and emits a stream of UTF-8 bytes",
+        "kind": "fn"
+      },
+      {
+        "name": "TextDecoder",
+        "detail": "TextDecoder(label, options)",
+        "doc": "Creates a new TextDecoder object for decoding a stream of bytes into a string",
+        "kind": "fn"
+      },
+      {
+        "name": "DOMParser",
+        "detail": "DOMParser()",
+        "doc": "Creates a new DOMParser object to parse XML or HTML source code from a string into a DOM Document",
+        "kind": "fn"
+      },
+      {
+        "name": "XMLSerializer",
+        "detail": "XMLSerializer()",
+        "doc": "Creates a new XMLSerializer object to serialize DOM trees to XML or HTML strings",
+        "kind": "fn"
+      },
+      {
+        "name": "IntersectionObserver",
+        "detail": "IntersectionObserver(callback, options)",
+        "doc": "Creates a new IntersectionObserver object which will execute a specified callback function when it detects that target visibility has crossed one or more thresholds",
+        "kind": "fn"
+      },
+      {
+        "name": "ResizeObserver",
+        "detail": "ResizeObserver(callback)",
+        "doc": "Creates and returns a new ResizeObserver object",
+        "kind": "fn"
+      },
+      {
+        "name": "MutationObserver",
+        "detail": "MutationObserver(callback)",
+        "doc": "Creates and returns a new MutationObserver which will invoke a specified callback function when DOM changes occur",
+        "kind": "fn"
+      },
+      {
+        "name": "AbortController",
+        "detail": "AbortController()",
+        "doc": "Creates a new AbortController object instance",
+        "kind": "fn"
+      },
+      {
+        "name": "CustomEvent",
+        "detail": "CustomEvent(type, eventInitDict)",
+        "doc": "Creates a new CustomEvent object",
+        "kind": "fn"
+      },
+      {
+        "name": "Array",
+        "detail": "Array(...items)",
+        "doc": "Creates a new JavaScript Array instance",
+        "kind": "fn"
+      },
+      {
+        "name": "Object",
+        "detail": "Object(value)",
+        "doc": "Creates a JavaScript object wrapper for the given value",
+        "kind": "fn"
+      },
+      {
+        "name": "Number",
+        "detail": "Number(value)",
+        "doc": "Converts the specified parameter to a number",
+        "kind": "fn"
+      },
+      {
+        "name": "String",
+        "detail": "String(value)",
+        "doc": "Converts the specified parameter to a string",
+        "kind": "fn"
+      },
+      {
+        "name": "Boolean",
+        "detail": "Boolean(value)",
+        "doc": "Converts the specified parameter to a boolean",
+        "kind": "fn"
+      }
+    ],
+    "__element__": [
+      {
+        "name": "setAttribute",
+        "detail": "setAttribute(name, value)",
+        "doc": "Sets the value of an attribute on the specified element",
+        "kind": "fn"
+      },
+      {
+        "name": "getAttribute",
+        "detail": "getAttribute(name)",
+        "doc": "Returns the value of a specified attribute on the element",
+        "kind": "fn"
+      },
+      {
+        "name": "removeAttribute",
+        "detail": "removeAttribute(name)",
+        "doc": "Removes the attribute with the specified name from the element",
+        "kind": "fn"
+      },
+      {
+        "name": "hasAttribute",
+        "detail": "hasAttribute(name)",
+        "doc": "Returns a boolean value indicating whether the element has the specified attribute",
+        "kind": "fn"
+      },
+      {
+        "name": "toggleAttribute",
+        "detail": "toggleAttribute(name, force)",
+        "doc": "Toggles a boolean attribute on the given element",
+        "kind": "fn"
+      },
+      {
+        "name": "closest",
+        "detail": "closest(selectors)",
+        "doc": "Traverses the element and its parents (heading toward the document root) until it finds a node that matches the specified CSS selector",
+        "kind": "fn"
+      },
+      {
+        "name": "matches",
+        "detail": "matches(selectors)",
+        "doc": "Checks whether the element would be selected by the specified selector string",
+        "kind": "fn"
+      },
+      {
+        "name": "querySelector",
+        "detail": "querySelector(selectors)",
+        "doc": "Returns the first element that is a descendant of the element on which it is invoked that matches the specified group of selectors",
+        "kind": "fn"
+      },
+      {
+        "name": "querySelectorAll",
+        "detail": "querySelectorAll(selectors)",
+        "doc": "Returns a static NodeList representing a list of elements that match the specified group of selectors",
+        "kind": "fn"
+      },
+      {
+        "name": "appendChild",
+        "detail": "appendChild(node)",
+        "doc": "Adds a node to the end of the list of children of a specified parent node",
+        "kind": "fn"
+      },
+      {
+        "name": "removeChild",
+        "detail": "removeChild(child)",
+        "doc": "Removes a child node from the DOM and returns the removed node",
+        "kind": "fn"
+      },
+      {
+        "name": "insertBefore",
+        "detail": "insertBefore(newNode, referenceNode)",
+        "doc": "Inserts a node before a reference node as a child of a specified parent node",
+        "kind": "fn"
+      },
+      {
+        "name": "replaceChild",
+        "detail": "replaceChild(newChild, oldChild)",
+        "doc": "Replaces a child node within the given parent node",
+        "kind": "fn"
+      },
+      {
+        "name": "replaceChildren",
+        "detail": "replaceChildren(...nodes)",
+        "doc": "Replaces the existing children of a Node with a specified new set of children",
+        "kind": "fn"
+      },
+      {
+        "name": "cloneNode",
+        "detail": "cloneNode(deep)",
+        "doc": "Returns a duplicate of the node on which this method was called",
+        "kind": "fn"
+      },
+      {
+        "name": "contains",
+        "detail": "contains(otherNode)",
+        "doc": "Returns a boolean value indicating whether a node is a descendant of a given node",
+        "kind": "fn"
+      },
+      {
+        "name": "remove",
+        "detail": "remove()",
+        "doc": "Removes the element from the DOM tree it belongs to",
+        "kind": "fn"
+      },
+      {
+        "name": "before",
+        "detail": "before(...nodes)",
+        "doc": "Inserts a set of Node or string objects in the children list of this Element's parent, just before this Element",
+        "kind": "fn"
+      },
+      {
+        "name": "after",
+        "detail": "after(...nodes)",
+        "doc": "Inserts a set of Node or string objects in the children list of this Element's parent, just after this Element",
+        "kind": "fn"
+      },
+      {
+        "name": "prepend",
+        "detail": "prepend(...nodes)",
+        "doc": "Inserts a set of Node objects or string objects before the first child of the Element",
+        "kind": "fn"
+      },
+      {
+        "name": "append",
+        "detail": "append(...nodes)",
+        "doc": "Inserts a set of Node objects or string objects after the last child of the Element",
+        "kind": "fn"
+      },
+      {
+        "name": "insertAdjacentHTML",
+        "detail": "insertAdjacentHTML(position, text)",
+        "doc": "Parses the specified text as HTML or XML and inserts the resulting nodes into the DOM tree at a specified position",
+        "kind": "fn"
+      },
+      {
+        "name": "insertAdjacentElement",
+        "detail": "insertAdjacentElement(position, element)",
+        "doc": "Inserts a given element node at a given position relative to the element it is invoked upon",
+        "kind": "fn"
+      },
+      {
+        "name": "insertAdjacentText",
+        "detail": "insertAdjacentText(position, text)",
+        "doc": "Inserts a given text node at a given position relative to the element it is invoked upon",
+        "kind": "fn"
+      },
+      {
+        "name": "getBoundingClientRect",
+        "detail": "getBoundingClientRect()",
+        "doc": "Returns a DOMRect object providing information about the size of an element and its position relative to the viewport",
+        "kind": "fn"
+      },
+      {
+        "name": "getClientRects",
+        "detail": "getClientRects()",
+        "doc": "Returns a collection of DOMRect objects that indicate the bounding rectangles for each CSS border box in a client",
+        "kind": "fn"
+      },
+      {
+        "name": "scrollIntoView",
+        "detail": "scrollIntoView(alignToTop)",
+        "doc": "Scrolls the element's ancestor containers such that the element on which scrollIntoView() is called is visible to the user",
+        "kind": "fn"
+      },
+      {
+        "name": "scroll",
+        "detail": "scroll(x, y)",
+        "doc": "Scrolls to a particular set of coordinates inside a given element",
+        "kind": "fn"
+      },
+      {
+        "name": "scrollTo",
+        "detail": "scrollTo(x, y)",
+        "doc": "Scrolls to a particular set of coordinates inside a given element",
+        "kind": "fn"
+      },
+      {
+        "name": "scrollBy",
+        "detail": "scrollBy(x, y)",
+        "doc": "Scrolls an element by the given amount",
+        "kind": "fn"
+      },
+      {
+        "name": "focus",
+        "detail": "focus(options)",
+        "doc": "Sets focus on the specified element, if it can be focused",
+        "kind": "fn"
+      },
+      {
+        "name": "blur",
+        "detail": "blur()",
+        "doc": "Removes keyboard focus from the current element",
+        "kind": "fn"
+      },
+      {
+        "name": "click",
+        "detail": "click()",
+        "doc": "Simulates a mouse click on an element",
+        "kind": "fn"
+      },
+      {
+        "name": "animate",
+        "detail": "animate(keyframes, options)",
+        "doc": "Creates and starts a new Animation that is applied to the element",
+        "kind": "fn"
+      },
+      {
+        "name": "addEventListener",
+        "detail": "addEventListener(type, listener, options)",
+        "doc": "Sets up a function that will be called whenever the specified event is delivered to the target",
+        "kind": "fn"
+      },
+      {
+        "name": "removeEventListener",
+        "detail": "removeEventListener(type, listener, options)",
+        "doc": "Removes an event listener previously registered with addEventListener()",
+        "kind": "fn"
+      },
+      {
+        "name": "requestFullscreen",
+        "detail": "requestFullscreen(options)",
+        "doc": "Issues an asynchronous request to make the element be displayed in fullscreen mode",
+        "kind": "fn"
+      },
+      {
+        "name": "attachShadow",
+        "detail": "attachShadow(init)",
+        "doc": "Attaches a shadow DOM tree to the specified element and returns a reference to its ShadowRoot",
+        "kind": "fn"
+      }
+    ],
+    "__map__": [
+      {
+        "name": "get",
+        "detail": "get(key)",
+        "doc": "Returns a specified element from a Map object",
+        "kind": "fn"
+      },
+      {
+        "name": "set",
+        "detail": "set(key, value)",
+        "doc": "Adds or updates an element with a specified key and a value to a Map object",
+        "kind": "fn"
+      },
+      {
+        "name": "has",
+        "detail": "has(key)",
+        "doc": "Returns a boolean indicating whether an element with the specified key exists or not",
+        "kind": "fn"
+      },
+      {
+        "name": "delete",
+        "detail": "delete(key)",
+        "doc": "Removes the specified element from a Map object by key",
+        "kind": "fn"
+      },
+      {
+        "name": "clear",
+        "detail": "clear()",
+        "doc": "Removes all elements from a Map object",
+        "kind": "fn"
+      },
+      {
+        "name": "forEach",
+        "detail": "forEach(callbackFn, thisArg)",
+        "doc": "Executes a provided function once per each key/value pair in the Map object, in insertion order",
+        "kind": "fn"
+      },
+      {
+        "name": "keys",
+        "detail": "keys()",
+        "doc": "Returns a new map iterator object that contains the keys for each element in the Map object in insertion order",
+        "kind": "fn"
+      },
+      {
+        "name": "values",
+        "detail": "values()",
+        "doc": "Returns a new map iterator object that contains the values for each element in the Map object in insertion order",
+        "kind": "fn"
+      },
+      {
+        "name": "entries",
+        "detail": "entries()",
+        "doc": "Returns a new map iterator object that contains an array of [key, value] for each element in the Map object in insertion order",
+        "kind": "fn"
+      }
+    ],
+    "__set__": [
+      {
+        "name": "add",
+        "detail": "add(value)",
+        "doc": "Inserts a new element with a specified value in to a Set object",
+        "kind": "fn"
+      },
+      {
+        "name": "has",
+        "detail": "has(value)",
+        "doc": "Returns a boolean asserting whether an element is present with the given value in the Set object or not",
+        "kind": "fn"
+      },
+      {
+        "name": "delete",
+        "detail": "delete(value)",
+        "doc": "Removes a specified value from a Set object, if it is in the set",
+        "kind": "fn"
+      },
+      {
+        "name": "clear",
+        "detail": "clear()",
+        "doc": "Removes all elements from a Set object",
+        "kind": "fn"
+      },
+      {
+        "name": "forEach",
+        "detail": "forEach(callbackFn, thisArg)",
+        "doc": "Executes a provided function once per each value in the Set object, in insertion order",
+        "kind": "fn"
+      },
+      {
+        "name": "union",
+        "detail": "union(other)",
+        "doc": "Takes a set and returns a new set containing elements which are in this set, or the given set, or both",
+        "kind": "fn"
+      },
+      {
+        "name": "intersection",
+        "detail": "intersection(other)",
+        "doc": "Takes a set and returns a new set containing elements which are in both this set and the given set",
+        "kind": "fn"
+      },
+      {
+        "name": "difference",
+        "detail": "difference(other)",
+        "doc": "Takes a set and returns a new set containing elements in this set but not the given set",
+        "kind": "fn"
+      },
+      {
+        "name": "isSubsetOf",
+        "detail": "isSubsetOf(other)",
+        "doc": "Takes a set and returns a boolean indicating if all elements of this set are in the given set",
+        "kind": "fn"
+      }
+    ],
+    "__promise__": [
+      {
+        "name": "then",
+        "detail": "then(onFulfilled, onRejected)",
+        "doc": "Appends fulfillment and rejection handlers to the promise, and returns a new promise resolving to the return value of the called handler",
+        "kind": "fn"
+      },
+      {
+        "name": "catch",
+        "detail": "catch(onRejected)",
+        "doc": "Appends a rejection handler callback to the promise, and returns a new promise resolving to the return value of the callback if it is called",
+        "kind": "fn"
+      },
+      {
+        "name": "finally",
+        "detail": "finally(onFinally)",
+        "doc": "Appends a handler to the promise, and returns a new promise that is resolved when the original promise is resolved",
+        "kind": "fn"
+      }
+    ],
+    "__date__": [
+      {
+        "name": "getTime",
+        "detail": "getTime()",
+        "doc": "Returns the numeric value of the specified date as the number of milliseconds since January 1, 1970, 00:00:00 UTC",
+        "kind": "fn"
+      },
+      {
+        "name": "getFullYear",
+        "detail": "getFullYear()",
+        "doc": "Returns the year of the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getMonth",
+        "detail": "getMonth()",
+        "doc": "Returns the month (0–11) in the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getDate",
+        "detail": "getDate()",
+        "doc": "Returns the day of the month (1–31) for the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getDay",
+        "detail": "getDay()",
+        "doc": "Returns the day of the week (0–6) for the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getHours",
+        "detail": "getHours()",
+        "doc": "Returns the hour (0–23) in the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getMinutes",
+        "detail": "getMinutes()",
+        "doc": "Returns the minutes (0–59) in the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getSeconds",
+        "detail": "getSeconds()",
+        "doc": "Returns the seconds (0–59) in the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "getMilliseconds",
+        "detail": "getMilliseconds()",
+        "doc": "Returns the milliseconds (0–999) in the specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "setTime",
+        "detail": "setTime(time)",
+        "doc": "Sets the Date object to the time represented by a number of milliseconds since January 1, 1970, 00:00:00 UTC",
+        "kind": "fn"
+      },
+      {
+        "name": "setFullYear",
+        "detail": "setFullYear(year, month, date)",
+        "doc": "Sets the full year for a specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "setMonth",
+        "detail": "setMonth(month, date)",
+        "doc": "Sets the month for a specified date according to the currently set year",
+        "kind": "fn"
+      },
+      {
+        "name": "setDate",
+        "detail": "setDate(date)",
+        "doc": "Sets the day of the month for a specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "setHours",
+        "detail": "setHours(hours, min, sec, ms)",
+        "doc": "Sets the hours for a specified date according to local time",
+        "kind": "fn"
+      },
+      {
+        "name": "toISOString",
+        "detail": "toISOString()",
+        "doc": "Returns a string in simplified extended ISO format (ISO 8601)",
+        "kind": "fn"
+      },
+      {
+        "name": "toLocaleDateString",
+        "detail": "toLocaleDateString(locales, options)",
+        "doc": "Returns a string with a language-sensitive representation of the date portion of this date",
+        "kind": "fn"
+      },
+      {
+        "name": "toLocaleTimeString",
+        "detail": "toLocaleTimeString(locales, options)",
+        "doc": "Returns a string with a language-sensitive representation of the time portion of this date",
+        "kind": "fn"
+      },
+      {
+        "name": "toLocaleString",
+        "detail": "toLocaleString(locales, options)",
+        "doc": "Returns a string with a language-sensitive representation of this date",
+        "kind": "fn"
+      },
+      {
+        "name": "toJSON",
+        "detail": "toJSON()",
+        "doc": "Returns a string representing the Date object using toISOString()",
+        "kind": "fn"
+      },
+      {
+        "name": "toString",
+        "detail": "toString()",
+        "doc": "Returns a string representing the specified Date object",
+        "kind": "fn"
+      }
+    ],
+    "__number__": [
+      {
+        "name": "toFixed",
+        "detail": "toFixed(digits)",
+        "doc": "Formats a number using fixed-point notation",
+        "kind": "fn"
+      },
+      {
+        "name": "toPrecision",
+        "detail": "toPrecision(precision)",
+        "doc": "Returns a string representing the Number object to the specified precision",
+        "kind": "fn"
+      },
+      {
+        "name": "toExponential",
+        "detail": "toExponential(fractionDigits)",
+        "doc": "Returns a string representing the Number object in exponential notation",
+        "kind": "fn"
+      },
+      {
+        "name": "toString",
+        "detail": "toString(radix)",
+        "doc": "Returns a string representing the specified Number object in the given radix (base)",
+        "kind": "fn"
+      },
+      {
+        "name": "toLocaleString",
+        "detail": "toLocaleString(locales, options)",
+        "doc": "Returns a string with a language-sensitive representation of this number",
+        "kind": "fn"
+      }
+    ],
+    "__response__": [
+      {
+        "name": "json",
+        "detail": "json()",
+        "doc": "Takes a Response stream and reads it to completion. It returns a promise that resolves with the result of parsing the body text as JSON",
+        "kind": "fn"
+      },
+      {
+        "name": "text",
+        "detail": "text()",
+        "doc": "Takes a Response stream and reads it to completion. It returns a promise that resolves with a String",
+        "kind": "fn"
+      },
+      {
+        "name": "blob",
+        "detail": "blob()",
+        "doc": "Takes a Response stream and reads it to completion. It returns a promise that resolves with a Blob",
+        "kind": "fn"
+      },
+      {
+        "name": "arrayBuffer",
+        "detail": "arrayBuffer()",
+        "doc": "Takes a Response stream and reads it to completion. It returns a promise that resolves with an ArrayBuffer",
+        "kind": "fn"
+      },
+      {
+        "name": "formData",
+        "detail": "formData()",
+        "doc": "Takes a Response stream and reads it to completion. It returns a promise that resolves with a FormData object",
+        "kind": "fn"
+      },
+      {
+        "name": "clone",
+        "detail": "clone()",
+        "doc": "Creates a clone of a Response object, identical in every way, but stored in a different variable",
+        "kind": "fn"
+      }
+    ],
+    "__classlist__": [
+      {
+        "name": "add",
+        "detail": "add(...tokens)",
+        "doc": "Adds the specified tokens to the list",
+        "kind": "fn"
+      },
+      {
+        "name": "remove",
+        "detail": "remove(...tokens)",
+        "doc": "Removes the specified tokens from the list",
+        "kind": "fn"
+      },
+      {
+        "name": "toggle",
+        "detail": "toggle(token, force)",
+        "doc": "Toggles the token in the list",
+        "kind": "fn"
+      },
+      {
+        "name": "contains",
+        "detail": "contains(token)",
+        "doc": "Returns true if the list contains the given token, otherwise false",
+        "kind": "fn"
+      },
+      {
+        "name": "replace",
+        "detail": "replace(oldToken, newToken)",
+        "doc": "Replaces an existing token with a new token",
+        "kind": "fn"
+      },
+      {
+        "name": "item",
+        "detail": "item(index)",
+        "doc": "Returns the item in the list by its index",
+        "kind": "fn"
+      }
+    ],
+    "__event__": [
+      {
+        "name": "preventDefault",
+        "detail": "preventDefault()",
+        "doc": "Tells the user agent that if the event does not get explicitly handled, its default action should not be taken as it normally would be",
+        "kind": "fn"
+      },
+      {
+        "name": "stopPropagation",
+        "detail": "stopPropagation()",
+        "doc": "Prevents further propagation of the current event in the capturing and bubbling phases",
+        "kind": "fn"
+      },
+      {
+        "name": "stopImmediatePropagation",
+        "detail": "stopImmediatePropagation()",
+        "doc": "Prevents other listeners of the same event from being called",
+        "kind": "fn"
+      }
+    ],
+    "__style__": [
+      {
+        "name": "getPropertyValue",
+        "detail": "getPropertyValue(property)",
+        "doc": "Returns the value of a specified CSS property",
+        "kind": "fn"
+      },
+      {
+        "name": "setProperty",
+        "detail": "setProperty(property, value, priority)",
+        "doc": "Sets a new value for a property on a CSS style declaration object",
+        "kind": "fn"
+      },
+      {
+        "name": "removeProperty",
+        "detail": "removeProperty(property)",
+        "doc": "Removes a property from a CSS style declaration object",
+        "kind": "fn"
+      }
+    ],
+    "__canvascontext__": [
+      {
+        "name": "arc",
+        "detail": "arc(x, y, radius, startAngle, endAngle, counterclockwise)",
+        "doc": "Adds a circular arc to the current sub-path",
+        "kind": "fn"
+      },
+      {
+        "name": "beginPath",
+        "detail": "beginPath()",
+        "doc": "Starts a new path by emptying the list of sub-paths",
+        "kind": "fn"
+      },
+      {
+        "name": "closePath",
+        "detail": "closePath()",
+        "doc": "Attempts to add a straight line from the current point to the start of the current sub-path",
+        "kind": "fn"
+      },
+      {
+        "name": "clearRect",
+        "detail": "clearRect(x, y, w, h)",
+        "doc": "Erases the pixels in a rectangular area by setting them to transparent black",
+        "kind": "fn"
+      },
+      {
+        "name": "fillRect",
+        "detail": "fillRect(x, y, w, h)",
+        "doc": "Draws a rectangle that is filled according to the current fillStyle",
+        "kind": "fn"
+      },
+      {
+        "name": "strokeRect",
+        "detail": "strokeRect(x, y, w, h)",
+        "doc": "Paints a rectangle which has a starting point at (x, y) and has a w width and an h height onto the canvas, using the current stroke style",
+        "kind": "fn"
+      },
+      {
+        "name": "fillText",
+        "detail": "fillText(text, x, y, maxWidth)",
+        "doc": "Draws a text string at the specified coordinates, filling the string's characters with the current fillStyle",
+        "kind": "fn"
+      },
+      {
+        "name": "strokeText",
+        "detail": "strokeText(text, x, y, maxWidth)",
+        "doc": "Strokes — that is, paints the outlines of — the characters of a text string at the specified coordinates",
+        "kind": "fn"
+      },
+      {
+        "name": "drawImage",
+        "detail": "drawImage(image, dx, dy)",
+        "doc": "Provides different ways to draw an image onto the canvas",
+        "kind": "fn"
+      },
+      {
+        "name": "getImageData",
+        "detail": "getImageData(sx, sy, sw, sh)",
+        "doc": "Returns an ImageData object representing the underlying pixel data for a specified portion of the canvas",
+        "kind": "fn"
+      },
+      {
+        "name": "lineTo",
+        "detail": "lineTo(x, y)",
+        "doc": "Adds a straight line to the current sub-path by connecting the sub-path's last point to the specified (x, y) coordinates",
+        "kind": "fn"
+      },
+      {
+        "name": "moveTo",
+        "detail": "moveTo(x, y)",
+        "doc": "Begins a new sub-path at the point specified by the given (x, y) coordinates",
+        "kind": "fn"
+      },
+      {
+        "name": "rect",
+        "detail": "rect(x, y, w, h)",
+        "doc": "Adds a rectangle to the current path",
+        "kind": "fn"
+      },
+      {
+        "name": "stroke",
+        "detail": "stroke()",
+        "doc": "Strokes (outlines) the current or given path with the current stroke style",
+        "kind": "fn"
+      },
+      {
+        "name": "fill",
+        "detail": "fill()",
+        "doc": "Fills the current or given path with the current fillStyle",
+        "kind": "fn"
+      },
+      {
+        "name": "save",
+        "detail": "save()",
+        "doc": "Saves the entire state of the canvas by pushing the current state onto a stack",
+        "kind": "fn"
+      },
+      {
+        "name": "restore",
+        "detail": "restore()",
+        "doc": "Restores the most recently saved canvas state by popping the top entry in the drawing state stack",
+        "kind": "fn"
+      },
+      {
+        "name": "scale",
+        "detail": "scale(x, y)",
+        "doc": "Adds a scaling transformation to the canvas units horizontally and/or vertically",
+        "kind": "fn"
+      },
+      {
+        "name": "rotate",
+        "detail": "rotate(angle)",
+        "doc": "Adds a rotation to the transformation matrix",
+        "kind": "fn"
+      },
+      {
+        "name": "translate",
+        "detail": "translate(x, y)",
+        "doc": "Adds a translation transformation to the current matrix",
+        "kind": "fn"
+      }
+    ],
+    "__filereader__": [
+      {
+        "name": "readAsArrayBuffer",
+        "detail": "readAsArrayBuffer(blob)",
+        "doc": "Starts reading the contents of the specified Blob or File. When finished, the result attribute contains an ArrayBuffer representing the file's data",
+        "kind": "fn"
+      },
+      {
+        "name": "readAsBinaryString",
+        "detail": "readAsBinaryString(blob)",
+        "doc": "Starts reading the contents of the specified Blob or File. When finished, the result attribute contains the raw binary data from the file as a string",
+        "kind": "fn"
+      },
+      {
+        "name": "readAsDataURL",
+        "detail": "readAsDataURL(blob)",
+        "doc": "Starts reading the contents of the specified Blob or File. When finished, the result attribute contains a data: URL representing the file's data",
+        "kind": "fn"
+      },
+      {
+        "name": "readAsText",
+        "detail": "readAsText(blob, encoding)",
+        "doc": "Starts reading the contents of the specified Blob or File. When finished, the result attribute contains the contents of the file as a text string",
+        "kind": "fn"
+      },
+      {
+        "name": "abort",
+        "detail": "abort()",
+        "doc": "Aborts the read operation",
+        "kind": "fn"
+      }
+    ],
+    "__regexp__": [
+      {
+        "name": "test",
+        "detail": "test(string)",
+        "doc": "Executes a search for a match between a regular expression and a specified string. Returns true if there is a match; false otherwise",
+        "kind": "fn"
+      },
+      {
+        "name": "exec",
+        "detail": "exec(string)",
+        "doc": "Executes a search for a match in a specified string. Returns a result array, or null",
+        "kind": "fn"
+      },
+      {
+        "name": "toString",
+        "detail": "toString()",
+        "doc": "Returns a string representing the regular expression",
+        "kind": "fn"
+      }
+    ],
+    "Number": [
+      {
+        "name": "isFinite",
+        "detail": "Number.isFinite(number)",
+        "doc": "Determines whether the passed value is a finite number",
+        "kind": "fn"
+      },
+      {
+        "name": "isInteger",
+        "detail": "Number.isInteger(number)",
+        "doc": "Determines whether the passed value is an integer",
+        "kind": "fn"
+      },
+      {
+        "name": "isNaN",
+        "detail": "Number.isNaN(number)",
+        "doc": "Determines whether the passed value is NaN and its type is Number",
+        "kind": "fn"
+      },
+      {
+        "name": "isSafeInteger",
+        "detail": "Number.isSafeInteger(number)",
+        "doc": "Determines whether the provided value is a number that is a safe integer",
+        "kind": "fn"
+      },
+      {
+        "name": "parseInt",
+        "detail": "Number.parseInt(string, radix)",
+        "doc": "Parses a string argument and returns an integer of the specified radix",
+        "kind": "fn"
+      },
+      {
+        "name": "parseFloat",
+        "detail": "Number.parseFloat(string)",
+        "doc": "Parses an argument and returns a floating point number",
+        "kind": "fn"
+      }
+    ],
+    "String": [
+      {
+        "name": "fromCharCode",
+        "detail": "String.fromCharCode(...codes)",
+        "doc": "Returns a string created from the specified sequence of UTF-16 code units",
+        "kind": "fn"
+      },
+      {
+        "name": "fromCodePoint",
+        "detail": "String.fromCodePoint(...codePoints)",
+        "doc": "Returns a string created by using the specified sequence of code points",
+        "kind": "fn"
+      },
+      {
+        "name": "raw",
+        "detail": "String.raw(template, ...substitutions)",
+        "doc": "A template literal tag function that returns the raw string form of template strings",
+        "kind": "fn"
+      }
+    ],
+    "Date": [
+      {
+        "name": "now",
+        "detail": "Date.now()",
+        "doc": "Returns the number of milliseconds elapsed since the epoch (January 1, 1970 00:00:00 UTC)",
+        "kind": "fn"
+      },
+      {
+        "name": "parse",
+        "detail": "Date.parse(dateString)",
+        "doc": "Parses a string representation of a date, and returns the number of milliseconds since January 1, 1970, 00:00:00 UTC",
+        "kind": "fn"
+      },
+      {
+        "name": "UTC",
+        "detail": "Date.UTC(year, month, date, hours, minutes, seconds, ms)",
+        "doc": "Accepts parameters similar to the Date constructor, but treats them as UTC. Returns the number of milliseconds since January 1, 1970, 00:00:00 UTC",
+        "kind": "fn"
+      }
+    ],
+    "URL": [
+      {
+        "name": "createObjectURL",
+        "detail": "URL.createObjectURL(obj)",
+        "doc": "Creates a string containing a URL representing the object given in the parameter",
+        "kind": "fn"
+      },
+      {
+        "name": "revokeObjectURL",
+        "detail": "URL.revokeObjectURL(url)",
+        "doc": "Releases an existing object URL which was previously created by calling URL.createObjectURL()",
+        "kind": "fn"
+      },
+      {
+        "name": "canParse",
+        "detail": "URL.canParse(url, base)",
+        "doc": "Returns a boolean indicating whether or not a valid URL can be constructed from the given url and base",
+        "kind": "fn"
+      }
+    ],
+    "URLSearchParams": [
+      {
+        "name": "append",
+        "detail": "append(name, value)",
+        "doc": "Appends a specified key/value pair as a new search parameter",
+        "kind": "fn"
+      },
+      {
+        "name": "delete",
+        "detail": "delete(name)",
+        "doc": "Deletes the given search parameter and its associated value, from the list of all search parameters",
+        "kind": "fn"
+      },
+      {
+        "name": "get",
+        "detail": "get(name)",
+        "doc": "Returns the first value associated to the given search parameter",
+        "kind": "fn"
+      },
+      {
+        "name": "getAll",
+        "detail": "getAll(name)",
+        "doc": "Returns all the values associated with a given search parameter as an array",
+        "kind": "fn"
+      },
+      {
+        "name": "has",
+        "detail": "has(name)",
+        "doc": "Returns a boolean indicating if such a given parameter exists",
+        "kind": "fn"
+      },
+      {
+        "name": "set",
+        "detail": "set(name, value)",
+        "doc": "Sets the value associated with a given search parameter to the given value. If there were several matching values, this method deletes the others",
+        "kind": "fn"
+      },
+      {
+        "name": "sort",
+        "detail": "sort()",
+        "doc": "Sorts all key/value pairs contained in this object in place and returns undefined",
+        "kind": "fn"
+      },
+      {
+        "name": "forEach",
+        "detail": "forEach(callback)",
+        "doc": "Allows iteration through all values contained in this object via a callback function",
+        "kind": "fn"
+      }
+    ],
+    "FormData": [
+      {
+        "name": "append",
+        "detail": "append(name, value, filename)",
+        "doc": "Appends a new value onto an existing key inside a FormData object, or adds the key if it does not already exist",
+        "kind": "fn"
+      },
+      {
+        "name": "delete",
+        "detail": "delete(name)",
+        "doc": "Deletes a key/value pair from a FormData object",
+        "kind": "fn"
+      },
+      {
+        "name": "get",
+        "detail": "get(name)",
+        "doc": "Returns the first value associated with a given key from within a FormData object",
+        "kind": "fn"
+      },
+      {
+        "name": "getAll",
+        "detail": "getAll(name)",
+        "doc": "Returns an array of all the values associated with a given key from within a FormData",
+        "kind": "fn"
+      },
+      {
+        "name": "has",
+        "detail": "has(name)",
+        "doc": "Returns a boolean stating whether a FormData object contains a certain key",
+        "kind": "fn"
+      },
+      {
+        "name": "set",
+        "detail": "set(name, value, filename)",
+        "doc": "Sets a new value for an existing key inside a FormData object, or adds the key/value if it does not already exist",
+        "kind": "fn"
+      },
+      {
+        "name": "forEach",
+        "detail": "forEach(callback)",
+        "doc": "Executes a provided function once for each key/value pair in this FormData object",
+        "kind": "fn"
+      }
+    ],
+    "Headers": [
+      {
+        "name": "append",
+        "detail": "append(name, value)",
+        "doc": "Appends a new value onto an existing header inside a Headers object, or adds the header if it does not already exist",
+        "kind": "fn"
+      },
+      {
+        "name": "delete",
+        "detail": "delete(name)",
+        "doc": "Deletes a header from a Headers object",
+        "kind": "fn"
+      },
+      {
+        "name": "get",
+        "detail": "get(name)",
+        "doc": "Returns a ByteString sequence of all the values of a header within a Headers object with a given name",
+        "kind": "fn"
+      },
+      {
+        "name": "has",
+        "detail": "has(name)",
+        "doc": "Returns a boolean stating whether a Headers object contains a certain header",
+        "kind": "fn"
+      },
+      {
+        "name": "set",
+        "detail": "set(name, value)",
+        "doc": "Sets a new value for an existing header inside a Headers object, or adds the header if it does not already exist",
+        "kind": "fn"
+      },
+      {
+        "name": "forEach",
+        "detail": "forEach(callback)",
+        "doc": "Executes a provided function once for each key/value pair in this Headers object",
+        "kind": "fn"
+      }
+    ],
+    "crypto": [
+      {
+        "name": "getRandomValues",
+        "detail": "crypto.getRandomValues(typedArray)",
+        "doc": "Lets you get cryptographically strong random values into a typed array",
+        "kind": "fn"
+      },
+      {
+        "name": "randomUUID",
+        "detail": "crypto.randomUUID()",
+        "doc": "Generates an RFC 4122 version 4 UUID",
+        "kind": "fn"
+      }
+    ],
+    "history": [
+      {
+        "name": "back",
+        "detail": "history.back()",
+        "doc": "Goes to the previous page in session history",
+        "kind": "fn"
+      },
+      {
+        "name": "forward",
+        "detail": "history.forward()",
+        "doc": "Goes to the next page in session history",
+        "kind": "fn"
+      },
+      {
+        "name": "go",
+        "detail": "history.go(delta)",
+        "doc": "Loads a specific page from the session history",
+        "kind": "fn"
+      },
+      {
+        "name": "pushState",
+        "detail": "history.pushState(state, unused, url)",
+        "doc": "Adds an entry to the browser's session history stack",
+        "kind": "fn"
+      },
+      {
+        "name": "replaceState",
+        "detail": "history.replaceState(state, unused, url)",
+        "doc": "Modifies the current history entry, replacing it with the state object and URL passed in the method parameters",
+        "kind": "fn"
+      }
+    ],
+    "location": [
+      {
+        "name": "assign",
+        "detail": "location.assign(url)",
+        "doc": "Loads the resource at the URL provided in parameter",
+        "kind": "fn"
+      },
+      {
+        "name": "replace",
+        "detail": "location.replace(url)",
+        "doc": "Replaces the current resource with the one at the provided URL",
+        "kind": "fn"
+      },
+      {
+        "name": "reload",
+        "detail": "location.reload()",
+        "doc": "Reloads the current resource, like the Refresh button",
+        "kind": "fn"
+      }
+    ],
+    "Reflect": [
+      {
+        "name": "apply",
+        "detail": "Reflect.apply(target, thisArgument, argumentsList)",
+        "doc": "Calls a target function with arguments as specified by the argumentsList parameter",
+        "kind": "fn"
+      },
+      {
+        "name": "construct",
+        "detail": "Reflect.construct(target, argumentsList, newTarget)",
+        "doc": "Acts like the new operator as a function, equivalent to calling new target(...argumentsList)",
+        "kind": "fn"
+      },
+      {
+        "name": "defineProperty",
+        "detail": "Reflect.defineProperty(target, propertyKey, attributes)",
+        "doc": "Allows precise addition to or modification of a property on an object",
+        "kind": "fn"
+      },
+      {
+        "name": "deleteProperty",
+        "detail": "Reflect.deleteProperty(target, propertyKey)",
+        "doc": "Allows deleting properties, like the delete operator as a function",
+        "kind": "fn"
+      },
+      {
+        "name": "get",
+        "detail": "Reflect.get(target, propertyKey, receiver)",
+        "doc": "Gets the property of target object, like target[propertyKey] as a function",
+        "kind": "fn"
+      },
+      {
+        "name": "set",
+        "detail": "Reflect.set(target, propertyKey, value, receiver)",
+        "doc": "Sets the property of target object, like target[propertyKey] = value as a function",
+        "kind": "fn"
+      },
+      {
+        "name": "has",
+        "detail": "Reflect.has(target, propertyKey)",
+        "doc": "Verifies if the property is in the object, like the in operator as a function",
+        "kind": "fn"
+      },
+      {
+        "name": "ownKeys",
+        "detail": "Reflect.ownKeys(target)",
+        "doc": "Returns an array of the target object's own property keys",
+        "kind": "fn"
+      }
+    ]
+  }
+}

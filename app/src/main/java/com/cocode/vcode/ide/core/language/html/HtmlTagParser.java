@@ -1,4 +1,6 @@
 package com.cocode.vcode.ide.core.language.html;
+ 
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -12,7 +14,7 @@ import java.util.Objects;
 public class HtmlTagParser {
 
     public static boolean isVoidElement(String tagName) {
-        return HtmlTagCache.isVoidElement(tagName);
+        return KnownElements.isVoidElement(tagName);
     }
 
     /**
@@ -27,7 +29,7 @@ public class HtmlTagParser {
      * Performs a blazing-fast O(N) forward scan using a lexical state machine.
      * Extracts exactly where the cursor is, and what the closest unclosed tag is.
      */
-    public HtmlContext parseContext(String text, int cursorPos) {
+    public static HtmlContext parseContext(String text, int cursorPos) {
         HtmlContext ctx = new HtmlContext();
         if (text == null || cursorPos <= 0) return ctx;
 
@@ -214,10 +216,14 @@ public class HtmlTagParser {
 
         ctx.unclosedTag = openTags.isEmpty() ? null : openTags.peek();
 
-        // If the state at the cursor is inside a tag
-        if (state != State.TEXT && state != State.COMMENT && state != State.DOCTYPE
-                && state != State.CLOSE_TAG_OPEN && state != State.CLOSE_TAG_NAME) {
-
+        if (state == State.COMMENT) {
+            ctx.isInsideComment = true;
+        } else if (state == State.CLOSE_TAG_OPEN || state == State.CLOSE_TAG_NAME) {
+            ctx.isInsideCloseTag = true;
+            ctx.currentTagName = currentTag.toString().toLowerCase();
+        } else if (state == State.TEXT) {
+            ctx.isInsideText = true;
+        } else if (state != State.DOCTYPE) {
             ctx.isInsideOpenTag = true;
             ctx.currentTagName = currentTag.toString().toLowerCase();
 
@@ -225,11 +231,29 @@ public class HtmlTagParser {
                 ctx.isTypingTagName = true;
             }
 
-            if (state == State.ATTRIBUTE_VALUE_DOUBLE_QUOTES || state == State.ATTRIBUTE_VALUE_SINGLE_QUOTES || state == State.ATTRIBUTE_VALUE_UNQUOTED) {
+            if (state == State.ATTRIBUTE_VALUE_DOUBLE_QUOTES) {
                 ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = true;
+                ctx.quoteChar = '"';
                 ctx.currentAttributeName = currentAttr.toString().toLowerCase();
                 ctx.currentAttributeValue = currentAttrValue.toString();
-            } else if (state == State.ATTRIBUTE_NAME || state == State.BEFORE_ATTRIBUTE_VALUE) {
+            } else if (state == State.ATTRIBUTE_VALUE_SINGLE_QUOTES) {
+                ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = true;
+                ctx.quoteChar = '\'';
+                ctx.currentAttributeName = currentAttr.toString().toLowerCase();
+                ctx.currentAttributeValue = currentAttrValue.toString();
+            } else if (state == State.ATTRIBUTE_VALUE_UNQUOTED) {
+                ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = false;
+                ctx.currentAttributeName = currentAttr.toString().toLowerCase();
+                ctx.currentAttributeValue = currentAttrValue.toString();
+            } else if (state == State.BEFORE_ATTRIBUTE_VALUE) {
+                ctx.isInsideAttributeValue = true;
+                ctx.isQuotedAttributeValue = false;
+                ctx.currentAttributeName = currentAttr.toString().toLowerCase();
+                ctx.currentAttributeValue = "";
+            } else if (state == State.ATTRIBUTE_NAME) {
                 ctx.currentAttributeName = currentAttr.toString().toLowerCase();
             }
         }
@@ -256,9 +280,14 @@ public class HtmlTagParser {
     public static class HtmlContext {
         public boolean isInsideOpenTag = false;
         public boolean isTypingTagName = false;
+        public boolean isInsideComment = false;
+        public boolean isInsideCloseTag = false;
+        public boolean isInsideText = false;
         public String currentTagName = null;
         public String currentAttributeName = null;
         public boolean isInsideAttributeValue = false;
+        public boolean isQuotedAttributeValue = false;
+        public char quoteChar = 0;
         public String currentAttributeValue = null;
         public String unclosedTag = null;
     }

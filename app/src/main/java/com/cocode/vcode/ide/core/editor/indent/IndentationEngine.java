@@ -1,6 +1,6 @@
 package com.cocode.vcode.ide.core.editor.indent;
 
-import com.cocode.vcode.ide.core.language.html.HtmlTagCache;
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.model.FileType;
 
 /**
@@ -57,7 +57,7 @@ public class IndentationEngine {
 
                     if (endIdx > openAngle + 1) {
                         String tag = trimmedLine.substring(openAngle + 1, endIdx);
-                        return !HtmlTagCache.isVoidElement(tag);
+                        return !KnownElements.isVoidElement(tag);
                     }
                 }
             }

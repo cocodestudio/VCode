@@ -9,6 +9,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.preference.PreferenceManager;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.model.BranchItem;
@@ -289,7 +290,7 @@ public class GitViewModel extends AndroidViewModel {
             try {
                 repository.revertCommit(commitSha, resolvedName, resolvedEmail);
                 ExecutorProvider.getInstance().runOnMain(() -> 
-                    android.widget.Toast.makeText(getApplication(), "Revert successful", android.widget.Toast.LENGTH_SHORT).show());
+                    android.widget.Toast.makeText(getApplication(), R.string.vcode_revert_successful, android.widget.Toast.LENGTH_SHORT).show());
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             }
@@ -301,7 +302,7 @@ public class GitViewModel extends AndroidViewModel {
             try {
                 repository.revertCommit(commitSha, authorName, authorEmail);
                 ExecutorProvider.getInstance().runOnMain(() -> 
-                    android.widget.Toast.makeText(getApplication(), "Revert successful", android.widget.Toast.LENGTH_SHORT).show());
+                    android.widget.Toast.makeText(getApplication(), R.string.vcode_revert_successful, android.widget.Toast.LENGTH_SHORT).show());
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             }

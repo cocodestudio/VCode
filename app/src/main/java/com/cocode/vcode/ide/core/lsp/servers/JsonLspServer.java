@@ -1,9 +1,8 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
 import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
-import com.cocode.vcode.ide.core.language.json.JsonError;
-import com.cocode.vcode.ide.core.language.json.JsonValidator;
-import com.cocode.vcode.ide.core.language.json.ValidationReport;
+import com.cocode.vcode.ide.core.language.json.JsonLinter;
+import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
 import java.io.File;
@@ -28,7 +27,7 @@ import java.util.List;
  *   <li><b>Completions</b>: Delegates to the existing {@link JsonAutoCompleteEngine},
  *       which already provides schema-aware completions for {@code package.json},
  *       {@code tsconfig.json}, etc., as well as generic JSON key/value suggestions.</li>
- *   <li><b>Diagnostics</b>: Uses {@link JsonValidator} to detect syntax errors and
+ *   <li><b>Diagnostics</b>: Uses {@link JsonLinter} to detect syntax errors and
  *       malformed JSON, mapped to {@link Problem} objects.</li>
  *   <li><b>Go to Definition</b>: Resolves file path string values (e.g. {@code "main": "./src/index.js"})
  *       to their corresponding file in the {@link ProjectIndex}.</li>
@@ -38,10 +37,6 @@ import java.util.List;
  */
 public final class JsonLspServer implements LspServer {
 
-    /**
-     * Reusable validator — stateless, safe to call from any thread.
-     */
-    private final JsonValidator validator = new JsonValidator();
     /**
      * Reusable autocomplete engine.
      * {@link JsonAutoCompleteEngine} requires a {@link android.content.Context} only for
@@ -59,78 +54,10 @@ public final class JsonLspServer implements LspServer {
      * Converts the legacy {@link CompletionItem} list (from the existing engine) to LSP
      * {@link LspCompletionItem} list.
      */
-    private static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
-        if (legacy == null || legacy.isEmpty()) return Collections.emptyList();
-        List<LspCompletionItem> result = new ArrayList<>(legacy.size());
-        for (CompletionItem ci : legacy) {
-            String insert = ci.getEffectiveInsertText();
-            int curOffset = ci.getCursorOffset();
-            if (curOffset < 0) {
-                int pipeIdx = insert.length() + curOffset;
-                if (pipeIdx >= 0 && pipeIdx <= insert.length()) {
-                    insert = insert.substring(0, pipeIdx) + "|" + insert.substring(pipeIdx);
-                }
-            }
-            int kind = mapKind(ci.getType());
-            result.add(new LspCompletionItem(
-                    ci.getLabel(),
-                    insert,
-                    kind,
-                    ci.getDetail(),
-                    null,
-                    ci.getReplaceLength()
-            ));
-        }
-        return result;
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
+        return LspCompletionConverter.convert(legacy);
     }
 
-    /**
-     * Maps legacy {@link CompletionItem.Type} to LSP completion item kind constants.
-     */
-    private static int mapKind(CompletionItem.Type type) {
-        if (type == null) return LspCompletionItem.KIND_TEXT;
-        switch (type) {
-            case SNIPPET:
-                return LspCompletionItem.KIND_SNIPPET;
-            case JSON_KEY:
-                return LspCompletionItem.KIND_PROPERTY;
-            case VALUE:
-                return LspCompletionItem.KIND_VALUE;
-            case KEYWORD:
-                return LspCompletionItem.KIND_KEYWORD;
-            default:
-                return LspCompletionItem.KIND_TEXT;
-        }
-    }
-
-    /**
-     * Determines the token length at a 1-based (line, column) position for error range reporting.
-     * Mirrors the logic in the existing {@code JsonLinter.getTokenLength()}.
-     */
-    private static int getTokenLength(String text, int line, int column) {
-        int l = 1;
-        int idx = 0;
-        for (int i = 0; i < text.length(); i++) {
-            if (l == line) {
-                idx = i + column - 1;
-                break;
-            }
-            if (text.charAt(i) == '\n') l++;
-        }
-        if (idx < 0 || idx >= text.length()) return 1;
-        int end = idx;
-        char c = text.charAt(idx);
-        if (c == '"' || c == '\'') {
-            do end++;
-            while (end < text.length() && text.charAt(end) != c && text.charAt(end) != '\n');
-            if (end < text.length()) end++;
-        } else if (Character.isLetterOrDigit(c)) {
-            while (end < text.length() && Character.isLetterOrDigit(text.charAt(end))) end++;
-        } else {
-            end = idx + 1;
-        }
-        return Math.max(1, end - idx);
-    }
 
     /**
      * Extracts the string value of the JSON key or value at the given flat offset.
@@ -214,23 +141,12 @@ public final class JsonLspServer implements LspServer {
             return Collections.emptyList();
         }
 
-        ValidationReport report = validator.validate(doc.text);
-        List<JsonError> errors = report.getErrors();
-        if (errors == null || errors.isEmpty()) return Collections.emptyList();
-
-        List<Problem> result = new ArrayList<>(errors.size());
-        File docFile = new File(doc.uri);
-        for (JsonError err : errors) {
-            int col = Math.max(0, err.column - 1);
-            int tokenLen = getTokenLength(doc.text, err.line, err.column);
-
-            Problem.Severity severity = "WARNING".equalsIgnoreCase(err.severity)
-                    ? Problem.Severity.WARNING
-                    : Problem.Severity.ERROR;
-
-            result.add(new Problem(docFile, err.line, col, tokenLen, err.message, severity));
+        try {
+            File docFile = doc.uri != null ? new File(doc.uri) : null;
+            return JsonLinter.analyze(docFile, doc.text);
+        } catch (Throwable t) {
+            return Collections.emptyList();
         }
-        return result;
     }
 
     @Override
@@ -274,5 +190,10 @@ public final class JsonLspServer implements LspServer {
     @Override
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return null;
+    }
+
+    @Override
+    public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
+        return java.util.Collections.emptyList();
     }
 }

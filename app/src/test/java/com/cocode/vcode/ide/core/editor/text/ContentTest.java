@@ -90,4 +90,38 @@ public class ContentTest {
         assertEquals(2, pos3.line);
         assertEquals(1, pos3.column);
     }
+
+    @Test
+    public void testGetSubstringWithGapBuffer() {
+        content = new Content("hello world");
+        // Insert in the middle to move the gap to column 5
+        content.insert(0, 5, " brave");
+        // Document is now "hello brave world"
+        // Test single line substring across gap
+        assertEquals("lo brave w", content.getSubstring(3, 13));
+        assertEquals("hello", content.getSubstring(0, 5));
+        assertEquals(" brave ", content.getSubstring(5, 12));
+        assertEquals("world", content.getSubstring(12, 17));
+
+        // Test multi-line with mid-line edits
+        content = new Content("line one\nline two\nline three");
+        content.insert(1, 4, " modified");
+        // "line one\nline modified two\nline three"
+        int startFlat = content.flatOffset(new ContentPosition(0, 5)); // "one"
+        int endFlat = content.flatOffset(new ContentPosition(1, 13)); // inside "modified"
+        String sub = content.getSubstring(startFlat, endFlat);
+        assertEquals("one\nline modified", sub);
+    }
+
+    @Test
+    public void testVersionTracking() {
+        content = new Content("initial");
+        long v1 = content.getVersion();
+        content.insert(0, 7, " text");
+        long v2 = content.getVersion();
+        org.junit.Assert.assertTrue(v2 > v1);
+        content.delete(0, 7, 0, 12);
+        long v3 = content.getVersion();
+        org.junit.Assert.assertTrue(v3 > v2);
+    }
 }

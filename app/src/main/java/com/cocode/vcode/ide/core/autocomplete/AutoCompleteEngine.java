@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.core.model.CompletionItem;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,10 +31,15 @@ public abstract class AutoCompleteEngine {
     protected static final int MAX_SUGGESTIONS = 20;
 
     protected final Context context;
+    protected File currentFile;
 
     public AutoCompleteEngine(Context context) {
         // Guard against memory leaks by capturing the application-wide context reference
-        this.context = context.getApplicationContext();
+        this.context = context != null ? context.getApplicationContext() : null;
+    }
+
+    public void setCurrentFile(File file) {
+        this.currentFile = file;
     }
 
     /**
@@ -120,18 +126,7 @@ public abstract class AutoCompleteEngine {
             // Standard Emmet characters
             if (c == '>') {
                 // Distinguish Emmet child operator '>' from HTML tag closing '>'.
-                // An HTML tag closing '>' is preceded by a tag name (letters/digits)
-                // which is itself preceded by '<' or '</'.
-                // Walk back from start-1 to check: if we find a '<' before any
-                // non-tag-name character, this '>' belongs to an HTML tag — stop.
-                int lookahead = start - 1;
-                while (lookahead >= 0 && (Character.isLetterOrDigit(text.charAt(lookahead))
-                        || text.charAt(lookahead) == '-' || text.charAt(lookahead) == '_'
-                        || text.charAt(lookahead) == '/')) {
-                    lookahead--;
-                }
-                if (lookahead >= 0 && text.charAt(lookahead) == '<') {
-                    // This '>' closes an HTML tag like <p>, </p>, <br/> — stop here.
+                if (isHtmlTagClose(text, start)) {
                     break;
                 }
                 // It's an Emmet child operator — include it.
@@ -145,6 +140,47 @@ public abstract class AutoCompleteEngine {
             }
         }
         return text.substring(start + 1, pos);
+    }
+
+    private static boolean isHtmlTagClose(String text, int gtPos) {
+        if (gtPos <= 0 || gtPos >= text.length()) return false;
+        char prev = text.charAt(gtPos - 1);
+        if (prev == ']' || prev == '}' || prev == ')' || prev == '*' || prev == '+' || prev == '^' || prev == '>') {
+            return false;
+        }
+        int i = gtPos - 1;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i < 0) return false;
+
+        if (text.charAt(i) == '/') i--;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i < 0) return false;
+
+        while (i >= 0) {
+            char ch = text.charAt(i);
+            if (ch == '>') {
+                return false;
+            }
+            if (ch == '<') {
+                return true;
+            }
+            if (ch == '"' || ch == '\'') {
+                char quote = ch;
+                i--;
+                while (i >= 0 && text.charAt(i) != quote) {
+                    if (text.charAt(i) == '\n') return false;
+                    i--;
+                }
+                if (i < 0) return false;
+                i--;
+                continue;
+            }
+            if (ch == '\n') {
+                return false;
+            }
+            i--;
+        }
+        return false;
     }
 
     /**
@@ -188,6 +224,7 @@ public abstract class AutoCompleteEngine {
         boolean inDouble = false;
         boolean inSingle = false;
         boolean inBacktick = false;
+        int templateBraceDepth = 0;
 
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
@@ -201,13 +238,77 @@ public abstract class AutoCompleteEngine {
             }
 
             if (!escaped) {
-                if (c == '"' && !inSingle && !inBacktick) inDouble = !inDouble;
-                else if (c == '\'' && !inDouble && !inBacktick) inSingle = !inSingle;
-                else if (c == '`' && !inDouble && !inSingle) inBacktick = !inBacktick;
+                if (c == '"' && !inSingle && (!inBacktick || templateBraceDepth > 0)) inDouble = !inDouble;
+                else if (c == '\'' && !inDouble && (!inBacktick || templateBraceDepth > 0)) inSingle = !inSingle;
+                else if (c == '`' && !inDouble && !inSingle) {
+                    if (!inBacktick) {
+                        inBacktick = true;
+                        templateBraceDepth = 0;
+                    } else if (templateBraceDepth == 0) {
+                        inBacktick = false;
+                    }
+                } else if (inBacktick && !inSingle && !inDouble) {
+                    if (templateBraceDepth == 0) {
+                        if (c == '$' && i + 1 < line.length() && line.charAt(i + 1) == '{') {
+                            templateBraceDepth = 1;
+                            i++;
+                        }
+                    } else {
+                        if (c == '{') templateBraceDepth++;
+                        else if (c == '}') templateBraceDepth--;
+                    }
+                }
             }
         }
 
-        return inDouble || inSingle || inBacktick;
+        return inDouble || inSingle || (inBacktick && templateBraceDepth == 0);
+    }
+
+    /**
+     * Checks if the cursor is inside a line comment or block comment.
+     * Supports //, /* ... * / and <!-- ... --> without regex.
+     */
+    protected boolean isInsideComment(String fullText, int cursorPos) {
+        if (fullText == null || cursorPos <= 0) return false;
+        int limit = Math.min(cursorPos, fullText.length());
+
+        // 1. Check single-line comment // on current line
+        String line = getLineBeforeCursor(fullText, limit);
+        boolean inStr = false;
+        char quote = 0;
+        for (int i = 0; i < line.length() - 1; i++) {
+            char c = line.charAt(i);
+            if (inStr) {
+                if (c == quote && (i == 0 || line.charAt(i - 1) != '\\')) inStr = false;
+                continue;
+            }
+            if (c == '"' || c == '\'' || c == '`') {
+                inStr = true;
+                quote = c;
+                continue;
+            }
+            if (c == '/' && line.charAt(i + 1) == '/') return true;
+        }
+
+        // 2. Check block comment /* ... */
+        int scanStart = Math.max(0, limit - 50000);
+        for (int i = limit - 2; i >= scanStart; i--) {
+            if (fullText.charAt(i) == '/' && fullText.charAt(i + 1) == '*') return true;
+            if (fullText.charAt(i) == '*' && fullText.charAt(i + 1) == '/') break;
+        }
+
+        // 3. Check HTML comment <!-- ... -->
+        for (int i = limit - 4; i >= scanStart; i--) {
+            if (fullText.charAt(i) == '<' && fullText.charAt(i + 1) == '!'
+                    && fullText.charAt(i + 2) == '-' && fullText.charAt(i + 3) == '-') {
+                return true;
+            }
+            if (fullText.charAt(i) == '-' && fullText.charAt(i + 1) == '-' && fullText.charAt(i + 2) == '>') {
+                break;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -344,16 +445,35 @@ public abstract class AutoCompleteEngine {
      * Standard utility to extract and parse string configuration data out of local JSON asset documents.
      */
     protected String loadAssetJson(String assetPath) {
-        try (java.io.InputStream is = context.getAssets().open(assetPath);
-             java.io.BufferedReader reader = new java.io.BufferedReader(
-                     new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            return sb.toString();
-        } catch (Exception e) {
-            return "[]";
+        String data = com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.readAsset(assetPath);
+        if (data != null && !data.isEmpty()) {
+            return data;
         }
+        if (context != null) {
+            try (java.io.InputStream is = context.getAssets().open(assetPath);
+                 java.io.BufferedReader reader = new java.io.BufferedReader(
+                         new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } catch (Exception ignored) { }
+        }
+        // JVM Unit test fallback: read directly from assets directory on disk
+        java.io.File file = new java.io.File("app/src/main/assets/" + assetPath);
+        if (!file.exists()) {
+            file = new java.io.File("src/main/assets/" + assetPath);
+        }
+        if (file.exists()) {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } catch (Exception ignored) { }
+        }
+        return "[]";
     }
 
     /**
