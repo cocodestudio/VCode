@@ -76,9 +76,8 @@ public class BracketMatcher {
 
         boolean[] mask = computeStringCommentMask(text, 0, text.length(), 0);
 
-        java.util.Stack<int[]> parenStack = new java.util.Stack<>();
-        java.util.Stack<int[]> bracketStack = new java.util.Stack<>();
-        java.util.Stack<int[]> braceStack = new java.util.Stack<>();
+        java.util.List<int[]> stack = new java.util.ArrayList<>();
+        // int[]: [type (1='(', 2='[', 3='{'), line, col]
 
         int line = 1;
         int col = 1;
@@ -86,21 +85,18 @@ public class BracketMatcher {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             if (!mask[i]) {
-                if (c == '(') parenStack.push(new int[]{line, col});
-                else if (c == '[') bracketStack.push(new int[]{line, col});
-                else if (c == '{') braceStack.push(new int[]{line, col});
-                else if (c == ')') {
-                    if (parenStack.isEmpty()) {
-                        problems.add(new Problem(file, line, col, 1, "Unmatched closing parenthesis ')'", Problem.Severity.ERROR));
-                    } else parenStack.pop();
+                if (c == '(') {
+                    stack.add(new int[]{1, line, col});
+                } else if (c == '[') {
+                    stack.add(new int[]{2, line, col});
+                } else if (c == '{') {
+                    stack.add(new int[]{3, line, col});
+                } else if (c == ')') {
+                    handleClosing(file, line, col, 1, "parenthesis", ')', '(', stack, problems);
                 } else if (c == ']') {
-                    if (bracketStack.isEmpty()) {
-                        problems.add(new Problem(file, line, col, 1, "Unmatched closing bracket ']'", Problem.Severity.ERROR));
-                    } else bracketStack.pop();
+                    handleClosing(file, line, col, 2, "bracket", ']', '[', stack, problems);
                 } else if (c == '}') {
-                    if (braceStack.isEmpty()) {
-                        problems.add(new Problem(file, line, col, 1, "Unmatched closing brace '}'", Problem.Severity.ERROR));
-                    } else braceStack.pop();
+                    handleClosing(file, line, col, 3, "brace", '}', '{', stack, problems);
                 }
             }
 
@@ -112,20 +108,54 @@ public class BracketMatcher {
             }
         }
 
-        while (!parenStack.isEmpty()) {
-            int[] pos = parenStack.pop();
-            problems.add(new Problem(file, pos[0], pos[1], 1, "Unclosed parenthesis '('", Problem.Severity.ERROR));
-        }
-        while (!bracketStack.isEmpty()) {
-            int[] pos = bracketStack.pop();
-            problems.add(new Problem(file, pos[0], pos[1], 1, "Unclosed bracket '['", Problem.Severity.ERROR));
-        }
-        while (!braceStack.isEmpty()) {
-            int[] pos = braceStack.pop();
-            problems.add(new Problem(file, pos[0], pos[1], 1, "Unclosed brace '{'", Problem.Severity.ERROR));
+        while (!stack.isEmpty()) {
+            int[] pos = stack.remove(stack.size() - 1);
+            String name = (pos[0] == 1) ? "parenthesis '('" : (pos[0] == 2) ? "bracket '['" : "brace '{'";
+            problems.add(new Problem(file, pos[1], pos[2], 1, "Unclosed " + name, Problem.Severity.ERROR));
         }
 
         return problems;
+    }
+
+    private static void handleClosing(java.io.File file, int line, int col, int type, String name, char closeChar, char openChar,
+                                      java.util.List<int[]> stack, java.util.List<Problem> problems) {
+        if (stack.isEmpty()) {
+            problems.add(new Problem(file, line, col, 1, "Unmatched closing " + name + " '" + closeChar + "'", Problem.Severity.ERROR));
+            return;
+        }
+
+        int topIdx = stack.size() - 1;
+        int[] top = stack.get(topIdx);
+        if (top[0] == type) {
+            stack.remove(topIdx);
+            return;
+        }
+
+        // Look deeper in stack to see if the matching open bracket exists
+        int matchIdx = -1;
+        for (int k = topIdx - 1; k >= 0; k--) {
+            if (stack.get(k)[0] == type) {
+                matchIdx = k;
+                break;
+            }
+        }
+
+        if (matchIdx >= 0) {
+            // Unclosed brackets exist between match and current closing
+            while (stack.size() - 1 > matchIdx) {
+                int[] unclosed = stack.remove(stack.size() - 1);
+                String uName = (unclosed[0] == 1) ? "parenthesis '('" : (unclosed[0] == 2) ? "bracket '['" : "brace '{'";
+                problems.add(new Problem(file, unclosed[1], unclosed[2], 1, "Unclosed " + uName, Problem.Severity.ERROR));
+            }
+            // Pop the matching open bracket
+            stack.remove(matchIdx);
+        } else {
+            // Mismatched closing character
+            String expectedClose = (top[0] == 1) ? "')'" : (top[0] == 2) ? "']'" : "'}'";
+            problems.add(new Problem(file, line, col, 1,
+                    "Mismatched closing " + name + " '" + closeChar + "': expected " + expectedClose,
+                    Problem.Severity.ERROR));
+        }
     }
 
     private static boolean isInStringOrComment(CharSequence text, int pos) {

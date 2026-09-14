@@ -7,6 +7,7 @@ import java.io.File;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class JsonLinterTest {
@@ -123,5 +124,31 @@ public class JsonLinterTest {
             }
         }
         assertTrue("Should report duplicate key across normalized quotes", foundDuplicate);
+    }
+
+    @Test
+    public void testCommentsInStandardJsonTriggerWarning() {
+        String source = "{\n  // This is a comment\n  \"key\": 123\n}";
+        List<Problem> problems = JsonLinter.analyze(mockFile, source);
+        boolean foundCommentWarn = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Comments are not permitted in standard JSON")) {
+                foundCommentWarn = true;
+                assertEquals(Problem.Severity.WARNING, p.getSeverity());
+                break;
+            }
+        }
+        assertTrue("Comments in standard .json should trigger warning", foundCommentWarn);
+    }
+
+    @Test
+    public void testCommentsInJsoncAllowed() {
+        File jsoncFile = new File("settings.jsonc");
+        String source = "{\n  // Permitted comment\n  \"key\": 123\n}";
+        List<Problem> problems = JsonLinter.analyze(jsoncFile, source);
+        for (Problem p : problems) {
+            assertFalse("Comments in .jsonc should not be warned against: " + p.getMessage(),
+                    p.getMessage().contains("Comments are not permitted"));
+        }
     }
 }

@@ -32,9 +32,10 @@ public class DiagnosticEngine {
         List<Problem> problems = new ArrayList<>();
 
         try {
-            // BracketMatcher handles () [] {} — skip for CSS/SCSS since CssLinter owns {} there
+            // BracketMatcher handles () [] {} for programming languages — skip for CSS/SCSS, HTML, and Markdown
             if (type != null && type.isTextBased()
-                    && type != FileType.CSS && type != FileType.SCSS) {
+                    && type != FileType.CSS && type != FileType.SCSS
+                    && type != FileType.HTML && type != FileType.MARKDOWN) {
                 problems.addAll(BracketMatcher.findMismatches(file, text));
             }
 

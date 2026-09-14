@@ -311,13 +311,13 @@ public class JsSemanticLinter {
                     String expectedStr = (minParams == totalParams) ? String.valueOf(totalParams) : "at least " + minParams;
                     problems.add(new Problem(file, line, col, identifier.length(),
                             "Too few arguments: '" + identifier + "' expects " + expectedStr + " argument(s), but got " + actualArgs,
-                            Problem.Severity.ERROR));
+                            Problem.Severity.WARNING));
                 } else if (actualArgs > totalParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, identifier.length(),
                             "Too many arguments: '" + identifier + "' expects " + totalParams + " argument(s), but got " + actualArgs,
-                            Problem.Severity.ERROR));
+                            Problem.Severity.WARNING));
                 }
             }
         }
@@ -589,118 +589,115 @@ public class JsSemanticLinter {
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, tree.nodeName[i].length(),
                             "Unexpected console statement",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.INFO));
                 }
             }
         }
         
         // Token stream rules
-        int streamLen = Math.min(mask.length, text.length());
-        for (int i = 0; i < streamLen; i++) {
+        int tokenCount = mask.length;
+        for (int i = 0; i < tokenCount; i++) {
             byte type = mask.types[i];
-            int start = mask.tokenStart[i];
-            int end = start;
-            while (end < streamLen && mask.tokenStart[end] == start && mask.types[end] == type) {
-                end++;
+            if (type != TokenStream.TK_OPERATOR) continue;
+
+            int opStart = i;
+            int opEnd = i;
+            while (opEnd < tokenCount && mask.types[opEnd] == TokenStream.TK_OPERATOR) {
+                opEnd++;
             }
-            
-            if (type == TokenStream.TK_OPERATOR) {
-                int opEnd = end;
-                while (opEnd < streamLen && mask.types[opEnd] == TokenStream.TK_OPERATOR) {
-                    opEnd++;
+            String op = text.substring(opStart, opEnd).trim();
+            i = opEnd - 1;
+
+            if ("/".equals(op)) {
+                int j = opEnd;
+                while (j < tokenCount && (mask.types[j] == TokenStream.TK_WHITESPACE || mask.types[j] == TokenStream.TK_COMMENT)) {
+                    j++;
                 }
-                
-                String op = text.substring(start, opEnd).trim();
-                
-                if ("/".equals(op)) {
-                    for (int j = opEnd; j < streamLen; j++) {
-                        byte nType = mask.types[j];
-                        int nStart = mask.tokenStart[j];
-                        int nEnd = nStart;
-                        while (nEnd < streamLen && mask.tokenStart[nEnd] == nStart && mask.types[nEnd] == nType) nEnd++;
-                        
-                        if (nType == TokenStream.TK_WHITESPACE || nType == TokenStream.TK_COMMENT) {
-                            j = nEnd - 1;
-                            continue;
-                        }
-                        
-                        if (nType == TokenStream.TK_NUMBER) {
-                            if ("0".equals(text.substring(nStart, nEnd).trim())) {
-                                int line = LinterUtils.getLine(text, start);
-                                int col = LinterUtils.getColumn(text, start);
-                                problems.add(new Problem(file, line, col, 1, "Division by zero", Problem.Severity.WARNING));
-                            }
-                        }
-                        break;
+                if (j < tokenCount && mask.types[j] == TokenStream.TK_NUMBER) {
+                    int nStart = mask.tokenStart[j];
+                    int nEnd = nStart;
+                    while (nEnd < tokenCount && mask.tokenStart[nEnd] == nStart) {
+                        nEnd++;
+                    }
+                    String numStr = text.substring(nStart, nEnd).trim();
+                    if ("0".equals(numStr)) {
+                        int line = LinterUtils.getLine(text, opStart);
+                        int col = LinterUtils.getColumn(text, opStart);
+                        problems.add(new Problem(file, line, col, 1, "Division by zero", Problem.Severity.WARNING));
                     }
                 }
-                
-                if ("===".equals(op) || "==".equals(op) || "!==".equals(op) || "!=".equals(op)) {
-                    boolean hasTypeof = false;
-                    boolean hasUndefined = false;
-                    
-                    // Walk backwards
-                    for (int j = start - 1; j >= 0; j--) {
-                        byte pType = mask.types[j];
-                        int pStart = mask.tokenStart[j];
-                        
-                        if (pType == TokenStream.TK_WHITESPACE || pType == TokenStream.TK_COMMENT) {
-                            j = pStart;
-                            continue;
-                        }
-                        
-                        if (pType == TokenStream.TK_PUNCT) {
-                            int pEnd = pStart;
-                            while (pEnd < streamLen && mask.tokenStart[pEnd] == pStart) pEnd++;
-                            String punct = text.substring(pStart, pEnd).trim();
-                            if (punct.equals(";") || punct.equals("{") || punct.equals("}")) break;
-                        }
-                        
-                        if (pType == TokenStream.TK_KEYWORD || pType == TokenStream.TK_IDENTIFIER) {
-                            int pEnd = pStart;
-                            while (pEnd < streamLen && mask.tokenStart[pEnd] == pStart) pEnd++;
-                            String prev = text.substring(pStart, pEnd).trim();
-                            if ("typeof".equals(prev)) hasTypeof = true;
-                            if ("undefined".equals(prev)) hasUndefined = true;
-                        }
-                        j = pStart;
-                    }
-                    
-                    // Walk forwards
-                    for (int j = opEnd; j < streamLen; j++) {
-                        byte nType = mask.types[j];
-                        int nStart = mask.tokenStart[j];
-                        int nEnd = nStart;
-                        while (nEnd < streamLen && mask.tokenStart[nEnd] == nStart && mask.types[nEnd] == nType) nEnd++;
-                        
-                        if (nType == TokenStream.TK_WHITESPACE || nType == TokenStream.TK_COMMENT) {
-                            j = nEnd - 1;
-                            continue;
-                        }
-                        
-                        if (nType == TokenStream.TK_PUNCT) {
-                            String punct = text.substring(nStart, nEnd).trim();
-                            if (punct.equals(";") || punct.equals("{") || punct.equals("}")) break;
-                        }
-                        
-                        if (nType == TokenStream.TK_KEYWORD || nType == TokenStream.TK_IDENTIFIER) {
-                            String next = text.substring(nStart, nEnd).trim();
-                            if ("typeof".equals(next)) hasTypeof = true;
-                            if ("undefined".equals(next)) hasUndefined = true;
-                        }
-                        j = nEnd - 1;
-                    }
-                    
-                    if (hasTypeof && hasUndefined) {
-                        int line = LinterUtils.getLine(text, start);
-                        int col = LinterUtils.getColumn(text, start);
-                        problems.add(new Problem(file, line, col, op.length(), "Comparing typeof to undefined directly; typeof always returns a string (e.g. 'undefined')", Problem.Severity.WARNING));
-                    }
-                }
-                end = opEnd;
             }
-            
-            i = end - 1;
+
+            if ("===".equals(op) || "==".equals(op) || "!==".equals(op) || "!=".equals(op)) {
+                boolean hasTypeof = false;
+                boolean hasUndefined = false;
+
+                // Walk backwards across tokens in the same expression
+                int j = opStart - 1;
+                while (j >= 0) {
+                    byte pType = mask.types[j];
+                    if (pType == TokenStream.TK_WHITESPACE || pType == TokenStream.TK_COMMENT) {
+                        j--;
+                        continue;
+                    }
+                    if (pType == TokenStream.TK_PUNCT) {
+                        char pc = text.charAt(j);
+                        if (pc == ';' || pc == '{' || pc == '}') break;
+                        j--;
+                        continue;
+                    }
+                    if (pType == TokenStream.TK_KEYWORD || pType == TokenStream.TK_IDENTIFIER) {
+                        int wStart = mask.tokenStart[j];
+                        int wEnd = wStart;
+                        while (wEnd < tokenCount && mask.tokenStart[wEnd] == wStart) {
+                            wEnd++;
+                        }
+                        String word = text.substring(wStart, wEnd);
+                        if ("typeof".equals(word)) hasTypeof = true;
+                        if ("undefined".equals(word)) hasUndefined = true;
+                        j = wStart - 1;
+                        continue;
+                    }
+                    j--;
+                }
+
+                // Walk forwards across tokens in the same expression
+                j = opEnd;
+                while (j < tokenCount) {
+                    byte nType = mask.types[j];
+                    if (nType == TokenStream.TK_WHITESPACE || nType == TokenStream.TK_COMMENT) {
+                        j++;
+                        continue;
+                    }
+                    if (nType == TokenStream.TK_PUNCT) {
+                        char nc = text.charAt(j);
+                        if (nc == ';' || nc == '{' || nc == '}') break;
+                        j++;
+                        continue;
+                    }
+                    if (nType == TokenStream.TK_KEYWORD || nType == TokenStream.TK_IDENTIFIER) {
+                        int wStart = mask.tokenStart[j];
+                        int wEnd = wStart;
+                        while (wEnd < tokenCount && mask.tokenStart[wEnd] == wStart) {
+                            wEnd++;
+                        }
+                        String word = text.substring(wStart, wEnd);
+                        if ("typeof".equals(word)) hasTypeof = true;
+                        if ("undefined".equals(word)) hasUndefined = true;
+                        j = wEnd;
+                        continue;
+                    }
+                    j++;
+                }
+
+                if (hasTypeof && hasUndefined) {
+                    int line = LinterUtils.getLine(text, opStart);
+                    int col = LinterUtils.getColumn(text, opStart);
+                    problems.add(new Problem(file, line, col, op.length(),
+                            "Comparing typeof to undefined directly; typeof always returns a string (e.g. 'undefined')",
+                            Problem.Severity.WARNING));
+                }
+            }
         }
     }
 }

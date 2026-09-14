@@ -81,7 +81,7 @@ public class HtmlLinterTest {
         
         boolean found = false;
         for (Problem p : problems) {
-            if (p.getMessage().contains("not a valid HTML5 element") && p.getSeverity() == Problem.Severity.ERROR) {
+            if (p.getMessage().contains("not a valid HTML5 element") && p.getSeverity() == Problem.Severity.WARNING) {
                 found = true;
                 break;
             }
@@ -178,5 +178,60 @@ public class HtmlLinterTest {
             if (p.getMessage().contains("has no header row")) warned2 = true;
         }
         assertFalse("Table with <tbody><tr><th> should not report missing header row", warned2);
+    }
+
+    @Test
+    public void testDuplicateAttributes() {
+        String html = "<div class=\"foo\" id=\"main\" class=\"bar\"></div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        boolean foundDuplicate = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Duplicate attribute 'class'")) {
+                foundDuplicate = true;
+                assertEquals(Problem.Severity.WARNING, p.getSeverity());
+                break;
+            }
+        }
+        assertTrue("Should detect duplicate attribute 'class'", foundDuplicate);
+    }
+
+    @Test
+    public void testEmptyTitleElement() {
+        String html = "<!DOCTYPE html><html><head><title>   </title></head><body>Hello</body></html>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        boolean foundEmptyTitle = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Empty '<title>' element")) {
+                foundEmptyTitle = true;
+                assertEquals(Problem.Severity.WARNING, p.getSeverity());
+                break;
+            }
+        }
+        assertTrue("Should detect whitespace-only <title> element", foundEmptyTitle);
+    }
+
+    @Test
+    public void testInlineStyleIsInfoSeverity() {
+        String html = "<div style=\"color: red;\">Content</div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        boolean foundInline = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Avoid inline styles on")) {
+                foundInline = true;
+                assertEquals(Problem.Severity.INFO, p.getSeverity());
+                break;
+            }
+        }
+        assertTrue("Inline styles should be detected as INFO", foundInline);
+    }
+
+    @Test
+    public void testEmptyTagWithClassOrIdIsNotFlagged() {
+        String html = "<div id=\"app\"></div><div class=\"spinner\"></div>";
+        List<Problem> problems = HtmlLinter.analyze(mockFile, html);
+        for (Problem p : problems) {
+            assertFalse("Tags with id or class should not be flagged as empty tags: " + p.getMessage(),
+                    p.getMessage().contains("Empty '<div"));
+        }
     }
 }

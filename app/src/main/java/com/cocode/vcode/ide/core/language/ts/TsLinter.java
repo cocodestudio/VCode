@@ -101,7 +101,7 @@ public class TsLinter {
                     int col = LinterUtils.getColumn(text, start);
                     out.add(new Problem(file, line, col, name.length(),
                             "Function '" + name + "' returns 'any': specify an explicit return type instead",
-                            Problem.Severity.ERROR));
+                            Problem.Severity.WARNING));
                 }
             }
         }
@@ -230,7 +230,7 @@ public class TsLinter {
                             int col = LinterUtils.getColumn(text, startOffset);
                             out.add(new Problem(file, line, col, name.length(),
                                     "Type '" + declType + "' is inferred: remove the explicit annotation ':" + declType + "' for '" + name + "'",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.INFO));
                         }
                     }
                 }
@@ -386,7 +386,7 @@ public class TsLinter {
                                 int col = LinterUtils.getColumn(text, start);
                                 out.add(new Problem(file, line, col, targetName.length(),
                                         "Type assertion 'as " + targetName + "': make sure the cast is safe",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.INFO));
                             }
                         }
                     }
@@ -416,8 +416,11 @@ public class TsLinter {
         int t = 0;
         while (t < stream.length) {
             if (stream.types[t] == TokenStream.TK_OPERATOR && text.charAt(t) == '!') {
+                // Ignore !=, !==, !!, etc.
+                boolean prevIsOp = (t > 0 && stream.types[t - 1] == TokenStream.TK_OPERATOR);
                 int next = skipToken(stream, t);
-                if (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR && text.charAt(next) == '=') {
+                boolean nextIsOp = (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR);
+                if (prevIsOp || nextIsOp) {
                     t = next;
                     continue;
                 }
@@ -443,7 +446,7 @@ public class TsLinter {
                                 int len = skipToken(stream, t) - start;
                                 out.add(new Problem(file, line, col, len,
                                         "Non-null assertion '!' used on a possibly-null value: ensure this cannot be null",
-                                        Problem.Severity.ERROR));
+                                        Problem.Severity.WARNING));
                             }
                         }
                     }
@@ -460,19 +463,18 @@ public class TsLinter {
     }
 
     private static int findAssignmentOperator(String text, TokenStream stream, int startOffset, int endOffset) {
+        if (startOffset < 0 || startOffset >= stream.length) return -1;
         int t = stream.tokenStart[Math.max(0, Math.min(startOffset, stream.length - 1))];
         while (t < endOffset && t < stream.length) {
             if (stream.types[t] == TokenStream.TK_OPERATOR && text.charAt(t) == '=') {
+                boolean prevIsOp = (t > 0 && stream.types[t - 1] == TokenStream.TK_OPERATOR);
                 int next = skipToken(stream, t);
-                if (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR && text.charAt(next) == '=') {
-                    t = next;
-                    continue;
+                boolean nextIsOp = (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR);
+                if (!prevIsOp && !nextIsOp) {
+                    return t;
                 }
-                if (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR && text.charAt(next) == '>') {
-                    t = next;
-                    continue;
-                }
-                return t;
+                t = next;
+                continue;
             }
             t = skipToken(stream, t);
         }

@@ -21,9 +21,20 @@ import java.util.Set;
  */
 public class CssLinter {
 
-    private static boolean isValidColor(String v) {
+    private static boolean isValidColor(String v, String prop) {
         if (v == null || v.isEmpty()) return true;
         String lo = v.toLowerCase().trim();
+        if ("invert".equals(lo) && "outline-color".equals(prop)) return true;
+        if ("border-color".equals(prop) && lo.contains(" ")) {
+            for (String part : lo.split("\\s+")) {
+                if (!part.isEmpty() && !isSingleColor(part)) return false;
+            }
+            return true;
+        }
+        return isSingleColor(lo);
+    }
+
+    private static boolean isSingleColor(String lo) {
         if (lo.startsWith("#") || lo.startsWith("rgb(") || lo.startsWith("rgba(")
                 || lo.startsWith("hsl(") || lo.startsWith("hsla(") || lo.startsWith("oklch(")
                 || lo.startsWith("oklab(") || lo.startsWith("lch(") || lo.startsWith("lab(")
@@ -102,7 +113,7 @@ public class CssLinter {
                     if (selector.startsWith("@media") && hasPixelValue(selector)) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "'@media' breakpoint in 'px': consider 'em' or 'rem' for accessibility scaling",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.INFO));
                     }
 
                     // ID selector check
@@ -206,20 +217,22 @@ public class CssLinter {
                         int pline = propsInBlock.get(prop);
                         problems.add(new Problem(file, pline, 1, prop.length(),
                                 "'" + prop + "' may need '" + vendor + "' for broader browser support",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.INFO));
                     }
                 }
 
-                // Color without background-color and vice versa
-                if (blockHasColor && !blockHasBgColor) {
-                    problems.add(new Problem(file, ruleLine, 1, 5,
-                            "'color' is set without 'background-color': may cause readability issues on some themes",
-                            Problem.Severity.INFO));
-                }
-                if (blockHasBgColor && !blockHasColor) {
-                    problems.add(new Problem(file, ruleLine, 1, 16,
-                            "'background-color' is set without 'color': may cause readability issues on some themes",
-                            Problem.Severity.INFO));
+                // Color without background-color and vice versa (scoped to root/body/html selectors)
+                if (selector != null && (selector.equals("body") || selector.equals("html") || selector.equals(":root"))) {
+                    if (blockHasColor && !blockHasBgColor) {
+                        problems.add(new Problem(file, ruleLine, 1, 5,
+                                "'color' is set without 'background-color': may cause readability issues on some themes",
+                                Problem.Severity.INFO));
+                    }
+                    if (blockHasBgColor && !blockHasColor) {
+                        problems.add(new Problem(file, ruleLine, 1, 16,
+                                "'background-color' is set without 'color': may cause readability issues on some themes",
+                                Problem.Severity.INFO));
+                    }
                 }
 
                 // Flex/grid without gap
@@ -277,7 +290,7 @@ public class CssLinter {
                 } else {
                     problems.add(new Problem(file, propLine, propCol, propLen,
                             "Unknown CSS property '" + prop + "': not a standard CSS property",
-                            Problem.Severity.ERROR));
+                            Problem.Severity.WARNING));
                 }
             }
         } else if (prop.startsWith("-")) {
@@ -317,34 +330,34 @@ public class CssLinter {
         if (hasZeroPx(valTrimmed)) {
             problems.add(new Problem(file, propLine, propCol, propLen,
                     "'0px' — units are unnecessary on zero values, use '0'",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.INFO));
         }
 
         // pt unit warning
         if (hasPtUnit(valTrimmed)) {
             problems.add(new Problem(file, propLine, propCol, propLen,
                     "Avoid using 'pt' units for screen layouts: prefer 'px', 'em', or 'rem'",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.INFO));
         }
 
         // var() without fallback warning
         if (hasVarWithoutFallback(valTrimmed)) {
             problems.add(new Problem(file, propLine, propCol, propLen,
                     "CSS variable in '" + prop + "' used without a fallback value",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.INFO));
         }
 
         // Invalid color value check
         if (KnownElements.isCssColorProperty(pLo)) {
             String v = valTrimmed.replace("!important", "").trim();
-            if (!v.isEmpty() && !isValidColor(v)) {
+            if (!v.isEmpty() && !isValidColor(v, pLo)) {
                 problems.add(new Problem(file, propLine, propCol, propLen,
                         "Invalid color value '" + v + "' for '" + prop + "'",
                         Problem.Severity.ERROR));
             }
         }
 
-        // Shorthand / longhand ordering
+        // Shorthand / longhand ordering (warn only if shorthand overrides an earlier longhand)
         for (Map.Entry<String, Set<String>> entry : KnownElements.CSS_SHORTHAND_LONGHANDS.entrySet()) {
             String shorthand = entry.getKey();
             Set<String> longhands = entry.getValue();
@@ -357,11 +370,6 @@ public class CssLinter {
                                 Problem.Severity.WARNING));
                     }
                 }
-            } else if (longhands.contains(pLo) && propLineInBlock.containsKey(shorthand)) {
-                int shLine = propLineInBlock.get(shorthand);
-                problems.add(new Problem(file, propLine, propCol, propLen,
-                        "'" + prop + "' is overridden by shorthand '" + shorthand + "' on line " + shLine,
-                        Problem.Severity.WARNING));
             }
         }
     }

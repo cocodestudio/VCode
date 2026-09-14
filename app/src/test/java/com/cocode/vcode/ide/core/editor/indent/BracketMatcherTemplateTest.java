@@ -1,8 +1,10 @@
 package com.cocode.vcode.ide.core.editor.indent;
 
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
+import com.cocode.vcode.ide.core.model.Problem;
 import org.junit.Test;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -75,5 +77,45 @@ public class BracketMatcherTemplateTest {
         // ${b} braces
         assertEquals(17, tokens.get(2).startCol); // { of ${b}
         assertEquals(19, tokens.get(3).startCol); // } of ${b}
+    }
+
+    @Test
+    public void testBalancedBracketsNoMismatches() {
+        File file = new File("Test.js");
+        String code = "function test() { const a = [1, 2, (3 + 4)]; }";
+        List<Problem> problems = BracketMatcher.findMismatches(file, code);
+        assertTrue("Properly balanced code should produce no bracket errors", problems.isEmpty());
+    }
+
+    @Test
+    public void testInterleavedBracketMismatch() {
+        File file = new File("Test.js");
+        // Interleaved: '(' followed by '[', then ')' then ']'
+        String code = "const x = ( [ ) ];";
+        List<Problem> problems = BracketMatcher.findMismatches(file, code);
+        assertFalse("Interleaved delimiters should produce problems", problems.isEmpty());
+        boolean foundMismatchOrUnclosed = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Mismatched closing") || p.getMessage().contains("Unclosed")) {
+                foundMismatchOrUnclosed = true;
+                break;
+            }
+        }
+        assertTrue("Should detect delimiter mismatch or unclosed bracket in interleaved expression", foundMismatchOrUnclosed);
+    }
+
+    @Test
+    public void testUnclosedBrace() {
+        File file = new File("Test.js");
+        String code = "function test() {\n    return 1;\n";
+        List<Problem> problems = BracketMatcher.findMismatches(file, code);
+        boolean foundUnclosed = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Unclosed brace '{'")) {
+                foundUnclosed = true;
+                break;
+            }
+        }
+        assertTrue("Should report unclosed brace", foundUnclosed);
     }
 }

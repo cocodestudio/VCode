@@ -28,6 +28,27 @@ public class JsonLinter {
         if (mode == com.cocode.vcode.ide.core.language.js.ParseResult.MODE_TOKENIZE_ONLY) {
             return problems;
         }
+
+        boolean isJsonc = file != null && file.getName().toLowerCase().endsWith(".jsonc");
+        if (!isJsonc) {
+            int k = 0;
+            while (k < stream.length) {
+                if (stream.types[k] == JsonTokenStream.TK_COMMENT) {
+                    int cStart = stream.tokenStart[k];
+                    int cEnd = cStart;
+                    while (cEnd < stream.length && stream.tokenStart[cEnd] == cStart) {
+                        cEnd++;
+                    }
+                    int line = LinterUtils.getLine(text, cStart);
+                    int col = LinterUtils.getColumn(text, cStart);
+                    problems.add(new Problem(file, line, col, Math.max(1, cEnd - cStart),
+                            "Comments are not permitted in standard JSON", Problem.Severity.WARNING));
+                    k = cEnd;
+                } else {
+                    k++;
+                }
+            }
+        }
         
         JsonSyntaxTree tree = JsonParser.parse(stream, text);
 

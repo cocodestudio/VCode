@@ -38,12 +38,15 @@ public class MarkdownLinter {
             int end = tree.nodeEnd[i];
             int len = Math.max(1, end - start);
 
-            if (type == MdSyntaxTree.N_ERROR) {
+            if (type == MdSyntaxTree.N_LIST) {
+                listMarker = '\0';
+            } else if (type == MdSyntaxTree.N_ERROR) {
                 int line = LinterUtils.getLine(text, start);
                 int col = LinterUtils.getColumn(text, start);
                 String msg = tree.nodeName[i] != null ? tree.nodeName[i] : "Markdown syntax error";
                 problems.add(new Problem(file, line, col, Math.min(len, 3), msg, Problem.Severity.ERROR));
             } else if (type == MdSyntaxTree.N_HEADER) {
+                listMarker = '\0';
                 int level = tree.nodeExtra[i];
                 if (lastHeadingLevel > 0 && level > lastHeadingLevel + 1) {
                     int line = LinterUtils.getLine(text, start);
@@ -54,6 +57,7 @@ public class MarkdownLinter {
                 }
                 lastHeadingLevel = level;
             } else if (type == MdSyntaxTree.N_BLOCKQUOTE) {
+                listMarker = '\0';
                 if (start < end) {
                     String bqText = text.substring(start, end).trim();
                     if (bqText.equals(">") || bqText.isEmpty()) {
@@ -62,6 +66,12 @@ public class MarkdownLinter {
                         problems.add(new Problem(file, line, col, len, "Empty blockquote", Problem.Severity.INFO));
                     }
                 }
+            } else if (type == MdSyntaxTree.N_PARAGRAPH) {
+                if (tree.nodeParent[i] <= 0 || tree.nodeType[tree.nodeParent[i]] != MdSyntaxTree.N_LIST_ITEM) {
+                    listMarker = '\0';
+                }
+            } else if (type == MdSyntaxTree.N_CODE_BLOCK || type == MdSyntaxTree.N_THEMATIC_BREAK) {
+                listMarker = '\0';
             } else if (type == MdSyntaxTree.N_LIST_ITEM) {
                 if (start < text.length()) {
                     int j = start;
@@ -125,19 +135,25 @@ public class MarkdownLinter {
         m = RAW_URL.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Raw URL detected. Enclose in < > or use a standard link format.", Problem.Severity.WARNING));
+            problems.add(createProblem(file, text, m, "Raw URL detected. Enclose in < > or use a standard link format.", Problem.Severity.INFO));
         }
 
         m = TRAILING_WHITESPACE.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Trailing whitespace detected", Problem.Severity.WARNING));
+            int len = m.end() - m.start();
+            // Two trailing spaces followed by newline indicate an intentional hard line break in Markdown
+            if (len == 2 && text.charAt(m.start()) == ' ' && text.charAt(m.start() + 1) == ' '
+                    && m.end() < text.length() && (text.charAt(m.end()) == '\n' || text.charAt(m.end()) == '\r')) {
+                continue;
+            }
+            problems.add(createProblem(file, text, m, "Trailing whitespace detected", Problem.Severity.INFO));
         }
 
         m = HARD_TAB.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Hard tab detected. Use spaces instead.", Problem.Severity.WARNING));
+            problems.add(createProblem(file, text, m, "Hard tab detected. Use spaces instead.", Problem.Severity.INFO));
         }
 
         return problems;

@@ -101,8 +101,17 @@ public class HtmlLinter {
                         String aVal = tree.nodeValue[child];
                         if (aName != null) {
                             String lowerName = aName.toLowerCase();
-                            attrs.put(lowerName, aVal != null ? aVal : "");
-                            attrStarts.put(lowerName, tree.nodeStart[child]);
+                            if (attrs.containsKey(lowerName)) {
+                                int aStart = tree.nodeStart[child];
+                                int aLine = LinterUtils.getLine(text, aStart);
+                                int aCol = LinterUtils.getColumn(text, aStart);
+                                problems.add(new Problem(file, aLine, aCol, aName.length(),
+                                        "Duplicate attribute '" + aName + "' on '<" + tagName + ">'",
+                                        Problem.Severity.WARNING));
+                            } else {
+                                attrs.put(lowerName, aVal != null ? aVal : "");
+                                attrStarts.put(lowerName, tree.nodeStart[child]);
+                            }
                         }
                     } else {
                         nonAttrChildCount++;
@@ -128,7 +137,7 @@ public class HtmlLinter {
                 if (!isKnown) {
                     problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
                             "'<" + tagName + ">' is not a valid HTML5 element",
-                            Problem.Severity.ERROR));
+                            Problem.Severity.WARNING));
                 }
 
                 if (KnownElements.DEPRECATED_ELEMENTS.containsKey(tagName)) {
@@ -184,7 +193,7 @@ public class HtmlLinter {
                     int aCol = LinterUtils.getColumn(text, attrStart);
                     problems.add(new Problem(file, aLine, aCol, 5,
                             "Avoid inline styles on '<" + tagName + ">': prefer CSS classes",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.INFO));
                 }
 
                 // RULE: Event Handler Attributes
@@ -206,8 +215,18 @@ public class HtmlLinter {
                     String parentTagName = parentId > 0 && tree.nodeType[parentId] == HtmlSyntaxTree.N_ELEMENT 
                             ? tree.nodeName[parentId] : "";
                     if (!requiredParents.contains(parentTagName.toLowerCase())) {
+                        StringBuilder sb = new StringBuilder();
+                        int pCount = 0;
+                        for (String rp : requiredParents) {
+                            if (pCount > 0) {
+                                if (pCount == requiredParents.size() - 1) sb.append(requiredParents.size() > 2 ? ", or " : " or ");
+                                else sb.append(", ");
+                            }
+                            sb.append("'<").append(rp).append(">'");
+                            pCount++;
+                        }
                         problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
-                                "'<" + tagName + ">' must be a child of " + requiredParents,
+                                "'<" + tagName + ">' must be a child of " + sb.toString(),
                                 Problem.Severity.ERROR));
                     }
                 }
@@ -252,6 +271,11 @@ public class HtmlLinter {
                         break;
                     case "title":
                         hasTitle = true;
+                        if (!hasNonWhitespaceText) {
+                            problems.add(new Problem(file, tagLine, tagCol, 7,
+                                    "Empty '<title>' element: page title is required for accessibility and SEO",
+                                    Problem.Severity.WARNING));
+                        }
                         break;
                     case "img":
                         boolean hasSrc = attrs.containsKey("src");
@@ -408,10 +432,12 @@ public class HtmlLinter {
 
                 // RULE: Empty Tags Check
                 if (EMPTY_CHECK_TAGS.contains(tagName) && !KnownElements.VOID_ELEMENTS.contains(tagName)) {
-                    if (nonAttrChildCount == 0 || (textChildrenCount == nonAttrChildCount && !hasNonWhitespaceText)) {
+                    boolean hasEssentialAttrs = attrs.containsKey("id") || attrs.containsKey("class")
+                            || attrs.containsKey("role") || attrs.containsKey("aria-label");
+                    if (!hasEssentialAttrs && (nonAttrChildCount == 0 || (textChildrenCount == nonAttrChildCount && !hasNonWhitespaceText))) {
                         problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
                                 "Empty '<" + tagName + ">': likely unintentional",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.INFO));
                     }
                 }
             }

@@ -6,6 +6,7 @@ import org.junit.Test;
 import java.io.File;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -65,6 +66,7 @@ public class TsLinterTest {
         for (Problem p : problems) {
             if (p.getMessage().contains("returns 'any'")) {
                 found = true;
+                assertEquals(Problem.Severity.WARNING, p.getSeverity());
                 break;
             }
         }
@@ -121,6 +123,7 @@ public class TsLinterTest {
         for (Problem p : problems) {
             if (p.getMessage().contains("is inferred: remove the explicit annotation")) {
                 found = true;
+                assertEquals(Problem.Severity.INFO, p.getSeverity());
                 break;
             }
         }
@@ -205,6 +208,7 @@ public class TsLinterTest {
         for (Problem p : problems) {
             if (p.getMessage().contains("Type assertion 'as HTMLDivElement'")) {
                 found = true;
+                assertEquals(Problem.Severity.INFO, p.getSeverity());
                 break;
             }
         }
@@ -220,9 +224,23 @@ public class TsLinterTest {
         for (Problem p : problems) {
             if (p.getMessage().contains("Non-null assertion '!' used on a possibly-null value")) {
                 found = true;
+                assertEquals(Problem.Severity.WARNING, p.getSeverity());
                 break;
             }
         }
         assertTrue("Should detect non-null assertion on nullable target variable", found);
+    }
+
+    @Test
+    public void testOperatorsNotMistakenForNonNullOrAssignment() {
+        String ts = "const check = (x != null && y !== undefined);\n" +
+                    "const arrow = () => true;";
+        List<Problem> problems = TsLinter.analyze(mockFile, ts);
+        for (Problem p : problems) {
+            assertFalse("!= and !== must not be mistaken for non-null assertion '!': " + p.getMessage(),
+                    p.getMessage().contains("Non-null assertion"));
+            assertFalse("=> must not be mistaken for assignment: " + p.getMessage(),
+                    p.getMessage().contains("Type mismatch"));
+        }
     }
 }

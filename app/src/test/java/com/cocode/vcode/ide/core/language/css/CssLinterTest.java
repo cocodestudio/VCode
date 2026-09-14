@@ -6,6 +6,7 @@ import org.junit.Test;
 import java.io.File;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -65,12 +66,12 @@ public class CssLinterTest {
         
         boolean foundUnknown = false;
         for (Problem p : problems) {
-            if (p.getMessage().contains("Unknown CSS property") && p.getSeverity() == Problem.Severity.ERROR) {
+            if (p.getMessage().contains("Unknown CSS property") && p.getSeverity() == Problem.Severity.WARNING) {
                 foundUnknown = true;
                 break;
             }
         }
-        assertTrue("Should report unknown property error", foundUnknown);
+        assertTrue("Should report unknown property warning", foundUnknown);
     }
 
     @Test
@@ -212,5 +213,40 @@ public class CssLinterTest {
             if (p.getMessage().contains("Avoid using ID selectors")) idWarn = true;
         }
         assertFalse("ID selector inside @keyframes should not warn", idWarn);
+    }
+
+    @Test
+    public void testLonghandAfterShorthandNotFlagged() {
+        String css = "div { border: 1px solid #ccc; border-bottom: 2px solid red; }";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("Longhand following shorthand should be allowed as specialization: " + p.getMessage(),
+                    p.getMessage().contains("overridden by shorthand"));
+        }
+    }
+
+    @Test
+    public void testZeroWithUnitIsInfo() {
+        String css = "p { margin: 0px; }";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        boolean foundZero = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("units are unnecessary on zero values")) {
+                foundZero = true;
+                assertEquals(Problem.Severity.INFO, p.getSeverity());
+                break;
+            }
+        }
+        assertTrue("0px should be reported as INFO", foundZero);
+    }
+
+    @Test
+    public void testMultiColorValues() {
+        String css = "div { border-color: red green blue yellow; }";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("Multi-color space-separated border-color should be valid: " + p.getMessage(),
+                    p.getMessage().contains("Invalid color"));
+        }
     }
 }
