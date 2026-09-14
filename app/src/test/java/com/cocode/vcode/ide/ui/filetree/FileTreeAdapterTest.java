@@ -78,4 +78,21 @@ public class FileTreeAdapterTest {
         assertEquals(file, adapter.getClipboardFile());
         assertFalse("Copy operation should NOT mark node as cut for low opacity", adapter.isNodeCut(new FileNode(file, 1)));
     }
+
+    @Test
+    public void testCutOpacityConstants() {
+        assertEquals("CUT_OPACITY should be 0.5f for desktop visual feedback", 0.5f, FileTreeAdapter.CUT_OPACITY, 0.001f);
+        assertEquals("NORMAL_OPACITY should be 1.0f", 1.0f, FileTreeAdapter.NORMAL_OPACITY, 0.001f);
+    }
+
+    @Test
+    public void testCutDirectoryWithTrailingSlash() {
+        File folder = new File("/project/src/components/");
+        File childFile = new File("/project/src/components/Button.jsx");
+
+        adapter.setClipboardState(folder, true);
+
+        assertTrue("Folder with trailing slash should be marked as cut", adapter.isNodeCut(new FileNode(new File("/project/src/components"), 1)));
+        assertTrue("Child of folder with trailing slash should be marked as cut", adapter.isNodeCut(new FileNode(childFile, 2)));
+    }
 }

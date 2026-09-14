@@ -211,6 +211,13 @@
     <string name="vcode_file_explorer">File Explorer</string>
     <string name="vcode_import_files">Import Files</string>
     <string name="vcode_import_folder">Import Folder</string>
+    <string name="vcode_rename">Rename</string>
+    <string name="vcode_cut">Cut</string>
+    <string name="vcode_paste">Paste</string>
+    <string name="vcode_copy_path">Copy Path</string>
+    <string name="vcode_delete">Delete</string>
+    <string name="vcode_absolute_path">Absolute Path</string>
+    <string name="vcode_relative_path">Relative Path</string>
 
     <!--    Fragment: Git History-->
     <string name="vcode_no_commits_yet">No Commits Yet</string>

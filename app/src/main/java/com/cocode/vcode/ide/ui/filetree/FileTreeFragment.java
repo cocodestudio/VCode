@@ -110,6 +110,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         float density = getResources().getDisplayMetrics().density;
         adapter = new FileTreeAdapter(this, 16, density);
         binding.rvFileTree.setLayoutManager(new LinearLayoutManager(getContext()));
+        binding.rvFileTree.setItemAnimator(null);
         binding.rvFileTree.setAdapter(adapter);
 
         // Apply specialized UI fonts
@@ -131,8 +132,22 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     }
 
     private void setupDrawerListener(View view) {
+        if (getActivity() != null) {
+            DrawerLayout dl = getActivity().findViewById(R.id.drawer_layout);
+            if (dl != null) {
+                attachedDrawerLayout = dl;
+                drawerListener = new DrawerLayout.SimpleDrawerListener() {
+                    @Override
+                    public void onDrawerClosed(@NonNull View drawerView) {
+                        clearClipboardState();
+                    }
+                };
+                attachedDrawerLayout.addDrawerListener(drawerListener);
+                return;
+            }
+        }
         view.post(() -> {
-            if (!isAdded()) return;
+            if (!isAdded() || attachedDrawerLayout != null) return;
             ViewParent parent = view.getParent();
             while (parent != null) {
                 if (parent instanceof DrawerLayout) {
@@ -269,22 +284,22 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         if (isRoot) {
             addFindInFilesPopupItem(popupBinding.popupContainer, popupWindow, file, node);
         } else {
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, "Rename", () -> showRenameDialog(file));
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Copy", () -> {
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, getString(R.string.vcode_rename), () -> showRenameDialog(file));
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_copy), () -> {
                 adapter.setClipboardState(file, false);
             });
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_scissors, "Cut", () -> {
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_scissors, getString(R.string.vcode_cut), () -> {
                 adapter.setClipboardState(file, true);
             });
 
             if (canPaste) {
-                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_file_plus, "Paste", () -> {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_file_plus, getString(R.string.vcode_paste), () -> {
                     File destDir = file.isDirectory() ? file : file.getParentFile();
                     performPaste(destDir);
                 });
             }
 
-            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Copy Path", () -> showCopyPathPopup(anchor, file));
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_copy_path), () -> showCopyPathPopup(anchor, file));
 
             addDivider(popupBinding.popupContainer);
 
@@ -316,7 +331,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
             addDivider(popupBinding.popupContainer);
 
-            View deleteItem = addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_trash, "Delete", () -> showDeleteDialog(file));
+            View deleteItem = addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_trash, getString(R.string.vcode_delete), () -> showDeleteDialog(file));
             TextView tvTitle = deleteItem.findViewById(R.id.tv_title);
             ImageView ivIcon = deleteItem.findViewById(R.id.iv_icon);
             int errorColor = ContextCompat.getColor(requireContext(), R.color.vcode_accent_error);
@@ -381,11 +396,11 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         popupWindow.setElevation(8f);
         popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
 
-        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Absolute Path", () -> {
+        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_absolute_path), () -> {
             copyToSystemClipboard("Absolute Path", file.getAbsolutePath());
         });
 
-        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, "Relative Path", () -> {
+        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_relative_path), () -> {
             if (viewModel.getProjectRoot() != null) {
                 String relPath = file.getAbsolutePath().replace(viewModel.getProjectRoot().getAbsolutePath() + File.separator, "");
                 if (relPath.startsWith(File.separator)) relPath = relPath.substring(1);
