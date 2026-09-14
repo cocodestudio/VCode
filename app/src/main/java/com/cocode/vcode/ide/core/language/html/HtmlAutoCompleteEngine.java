@@ -413,6 +413,54 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
+        // 7b. Candidate Emmet abbreviation with trailing auto-closed delimiter ('}' or ']')
+        if (cursorPos < fullText.length()) {
+            char nextChar = fullText.charAt(cursorPos);
+            if (nextChar == '}' && isInsideEmmetBraces(lineBefore)) {
+                int braceIdx = lineBefore.lastIndexOf('{');
+                if (braceIdx >= 0) {
+                    int prefixEnd = Math.max(0, cursorPos - (lineBefore.length() - braceIdx));
+                    String prefix = (prefixEnd > 0) ? getEmmetAbbreviationBeforeCursor(fullText, prefixEnd) : "";
+                    String inside = lineBefore.substring(braceIdx + 1);
+                    String candidateAbbr = prefix + "{" + inside + "}";
+                    if (!candidateAbbr.contains("<")) {
+                        String expanded = EmmetParser.expandHtml(candidateAbbr, htmlBoilerplate);
+                        if (expanded != null) {
+                            CompletionItem emmetItem = new CompletionItem(candidateAbbr, expanded,
+                                    "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
+                            emmetItem.setReplaceLength(prefix.length() + 1 + inside.length());
+                            emmetItem.setReplaceAfterLength(1);
+
+                            List<CompletionItem> res = new ArrayList<>();
+                            res.add(emmetItem);
+                            return res;
+                        }
+                    }
+                }
+            } else if (nextChar == ']') {
+                int bracketIdx = lineBefore.lastIndexOf('[');
+                if (bracketIdx >= 0 && !lineBefore.substring(bracketIdx).contains("]")) {
+                    int prefixEnd = Math.max(0, cursorPos - (lineBefore.length() - bracketIdx));
+                    String prefix = (prefixEnd > 0) ? getEmmetAbbreviationBeforeCursor(fullText, prefixEnd) : "";
+                    String inside = lineBefore.substring(bracketIdx + 1);
+                    String candidateAbbr = prefix + "[" + inside + "]";
+                    if (!candidateAbbr.contains("<")) {
+                        String expanded = EmmetParser.expandHtml(candidateAbbr, htmlBoilerplate);
+                        if (expanded != null) {
+                            CompletionItem emmetItem = new CompletionItem(candidateAbbr, expanded,
+                                    "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
+                            emmetItem.setReplaceLength(prefix.length() + 1 + inside.length());
+                            emmetItem.setReplaceAfterLength(1);
+
+                            List<CompletionItem> res = new ArrayList<>();
+                            res.add(emmetItem);
+                            return res;
+                        }
+                    }
+                }
+            }
+        }
+
         // 8. Tag name completions
         boolean isTagNamePos = pos == com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.TAG_NAME
                 || ctx.isTypingTagName

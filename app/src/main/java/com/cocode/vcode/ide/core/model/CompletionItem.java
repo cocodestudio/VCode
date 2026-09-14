@@ -11,6 +11,7 @@ public class CompletionItem {
     private String detail;
     private Type type;
     private int replaceLength = -1;
+    private int replaceAfterLength = 0;
     private int sortScore = 0;
     /**
      * Absolute URI of the file this completion came from. Used by
@@ -52,6 +53,7 @@ public class CompletionItem {
         this.type = other.type;
         this.cursorOffset = other.cursorOffset;
         this.replaceLength = other.replaceLength;
+        this.replaceAfterLength = other.replaceAfterLength;
         this.sortScore = other.sortScore;
         this.sourceUri = other.sourceUri;
     }
@@ -97,6 +99,14 @@ public class CompletionItem {
 
     public void setReplaceLength(int replaceLength) {
         this.replaceLength = replaceLength;
+    }
+
+    public int getReplaceAfterLength() {
+        return replaceAfterLength;
+    }
+
+    public void setReplaceAfterLength(int replaceAfterLength) {
+        this.replaceAfterLength = replaceAfterLength;
     }
 
     public int getSortScore() {

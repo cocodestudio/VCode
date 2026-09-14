@@ -8,7 +8,9 @@ import android.view.KeyEvent;
 import org.robolectric.RuntimeEnvironment;
 
 import com.cocode.vcode.ide.core.editor.text.ContentPosition;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
+import org.robolectric.shadows.ShadowLooper;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -219,5 +221,84 @@ public class CodeEditTextTest {
         assertTrue(editor.selectWordAt(new ContentPosition(0, 11)));
         assertEquals(6, editor.getSelectionStart());
         assertEquals(11, editor.getSelectionEnd());
+    }
+
+    @Test
+    public void testAutoCloseBracketSkipOver() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("");
+
+        // Type 'p' then '{'
+        inputConnection.commitText("p", 1);
+        inputConnection.commitText("{", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        // Should be "p{}" with cursor at index 2 (between { and })
+        assertEquals("p{}", editor.getText().toString());
+        assertEquals(2, editor.getSelectionStart());
+
+        // Type '}' -> should skip over existing '}' without duplicating to "p{}}"
+        inputConnection.commitText("}", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("p{}", editor.getText().toString());
+        assertEquals(3, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testAutoCloseQuoteSkipOver() {
+        editor.setAutoCloseQuotes(true);
+        editor.setText("");
+
+        // Type '"' -> auto-close inserts '"'
+        inputConnection.commitText("\"", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("\"\"", editor.getText().toString());
+        assertEquals(1, editor.getSelectionStart());
+
+        // Type '"' -> should skip over without creating triple quotes
+        inputConnection.commitText("\"", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("\"\"", editor.getText().toString());
+        assertEquals(2, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testAutoCloseBracketPairBackspace() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("");
+
+        // Type '{' -> auto-close inserts '}'
+        inputConnection.commitText("{", 1);
+        ShadowLooper.runUiThreadTasks();
+        assertEquals("{}", editor.getText().toString());
+        assertEquals(1, editor.getSelectionStart());
+
+        // Delete between pair -> deletes both '{' and '}'
+        inputConnection.deleteSurroundingText(1, 0);
+        ShadowLooper.runUiThreadTasks();
+        assertEquals("", editor.getText().toString());
+        assertEquals(0, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testInsertCompletionWithReplaceAfterLength() {
+        // Document has "p{}" with cursor at 2 (between { and })
+        editor.setText("p{}");
+        inputConnection.setSelection(2, 2);
+        assertEquals(2, editor.getSelectionStart());
+
+        CompletionItem emmetItem = new CompletionItem("p{}", "<p>|</p>", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(2); // replace "p{" before cursor
+        emmetItem.setReplaceAfterLength(1); // replace "}" after cursor
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        // Trailing '}' must be cleanly consumed, leaving "<p></p>" with cursor at pipe (col 3)
+        assertEquals("<p></p>", editor.getText().toString());
+        assertEquals(3, editor.getSelectionStart());
     }
 }

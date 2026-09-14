@@ -1248,10 +1248,30 @@ public class CodeEditText extends View {
         } else {
             deleted = "\n";
         }
+
+        boolean deletePair = false;
+        if (newPos.line == cursor.line
+                && cursor.column < content.lineLength(cursor.line)
+                && (autoCloseBrackets || autoCloseQuotes)) {
+            char before = deleted.charAt(0);
+            char after = content.charAt(cursor.line, cursor.column);
+            if ((before == '{' && after == '}')
+                    || (before == '[' && after == ']')
+                    || (before == '(' && after == ')')
+                    || (before == '"' && after == '"')
+                    || (before == '\'' && after == '\'')
+                    || (before == '`' && after == '`')) {
+                deletePair = true;
+            }
+        }
+
         ContentPosition oldCursor = cursor;
-        content.delete(newPos.line, newPos.column, cursor.line, cursor.column);
-        undoStack.recordDelete(newPos.line, newPos.column, oldCursor.line, oldCursor.column,
-                deleted, snapshotAt(oldCursor, null), snapshotAt(newPos, null));
+        ContentPosition delEnd = deletePair ? content.positionAt(cursorFlat + 1) : oldCursor;
+        String totalDeleted = deletePair ? (deleted + content.charAt(cursor.line, cursor.column)) : deleted;
+
+        content.delete(newPos.line, newPos.column, delEnd.line, delEnd.column);
+        undoStack.recordDelete(newPos.line, newPos.column, delEnd.line, delEnd.column,
+                totalDeleted, snapshotAt(oldCursor, null), snapshotAt(newPos, null));
         cursor = newPos;
         selectionAnchor = null;
         cursorVisible = true;
@@ -2311,7 +2331,7 @@ public class CodeEditText extends View {
     /**
      * Injects selected autocomplete text, properly computing replace range.
      */
-    private void insertCompletion(CompletionItem item) {
+    void insertCompletion(CompletionItem item) {
         if (item == null) return;
         String insertText = item.getEffectiveInsertText();
         if (insertText == null) return;
@@ -2406,15 +2426,17 @@ public class CodeEditText extends View {
         ContentPosition beforeCursor = cursor;
         UndoStack.EditorSnapshot before = snapshotAt(beforeCursor, selectionAnchor);
         String deletedText = "";
+        int deleteEnd = flatCursor + Math.max(0, item.getReplaceAfterLength());
+        deleteEnd = Math.min(deleteEnd, content.totalLength());
         try {
-            int deleteEnd = content.flatOffset(cursor);
             if (deleteEnd > wordStart) {
                 deletedText = content.getSubstring(wordStart, deleteEnd);
             }
         } catch (Exception ignored) {
         }
+        ContentPosition deleteEndPos = content.positionAt(deleteEnd);
         content.replace(wordStartPos.line, wordStartPos.column,
-                cursor.line, cursor.column, cleanInsert);
+                deleteEndPos.line, deleteEndPos.column, cleanInsert);
         int safeFinal = Math.min(finalCursorFlat, content.totalLength());
         cursor = content.positionAt(safeFinal);
         UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
@@ -2422,7 +2444,7 @@ public class CodeEditText extends View {
         undoStack.commitPending();
         if (!deletedText.isEmpty()) {
             undoStack.recordReplace(wordStartPos.line, wordStartPos.column,
-                    beforeCursor.line, beforeCursor.column, deletedText, cleanInsert, before, after);
+                    deleteEndPos.line, deleteEndPos.column, deletedText, cleanInsert, before, after);
         } else {
             undoStack.recordInsert(wordStartPos.line, wordStartPos.column, cleanInsert, before, after);
         }
@@ -3012,6 +3034,25 @@ public class CodeEditText extends View {
             int cursorFlat = editor.content.flatOffset(editor.cursor);
             int totalLen = editor.content.totalLength();
 
+            if (beforeLength == 1 && afterLength == 0 && (editor.autoCloseBrackets || editor.autoCloseQuotes)) {
+                int newCursorFlat = editor.content.flatOffset(editor.cursor);
+                if (newCursorFlat > 0 && newCursorFlat < totalLen) {
+                    ContentPosition prevPos = editor.content.positionAt(newCursorFlat - 1);
+                    if (prevPos.line == editor.cursor.line && editor.cursor.column < editor.content.lineLength(editor.cursor.line)) {
+                        char beforeCh = editor.content.charAt(prevPos.line, prevPos.column);
+                        char afterCh = editor.content.charAt(editor.cursor.line, editor.cursor.column);
+                        if ((beforeCh == '{' && afterCh == '}')
+                                || (beforeCh == '[' && afterCh == ']')
+                                || (beforeCh == '(' && afterCh == ')')
+                                || (beforeCh == '"' && afterCh == '"')
+                                || (beforeCh == '\'' && afterCh == '\'')
+                                || (beforeCh == '`' && afterCh == '`')) {
+                            afterLength = 1;
+                        }
+                    }
+                }
+            }
+
             if (afterLength > 0) {
                 int afterEnd = Math.min(cursorFlat + afterLength, totalLen);
                 if (afterEnd > cursorFlat) {
@@ -3160,6 +3201,30 @@ public class CodeEditText extends View {
             ContentPosition before = editor.cursor;
             int beforeFlat = editor.content.flatOffset(before);
 
+            // Skip over already closed bracket/quote when typed
+            if (text.length() == 1 && (deletedSel == null || deletedSel.isEmpty())) {
+                char typed = text.charAt(0);
+                boolean isBracket = (typed == ')' || typed == ']' || typed == '}') && editor.autoCloseBrackets;
+                boolean isQuote = (typed == '"' || typed == '\'' || typed == '`') && editor.autoCloseQuotes;
+                if (isBracket || isQuote) {
+                    if (beforeFlat < editor.content.totalLength()
+                            && before.column < editor.content.lineLength(before.line)
+                            && editor.content.charAt(before.line, before.column) == typed) {
+                        editor.cursor = editor.content.positionAt(beforeFlat + 1);
+                        editor.selectionAnchor = null;
+                        editor.post(editor::ensureCursorVisible);
+                        editor.cursorVisible = true;
+                        editor.scheduleBlink();
+                        editor.invalidate();
+                        editor.scheduleHighlight();
+                        editor.scheduleAutoComplete();
+                        editor.mainHandler.removeCallbacks(editor.bracketMatchRunnable);
+                        editor.mainHandler.postDelayed(editor.bracketMatchRunnable, 150);
+                        return;
+                    }
+                }
+            }
+
             // Group the keystroke and its async side effects (auto-close, auto-indent) 
             // into a single undo step. Group is closed via a posted Runnable to ensure 
             // it executes after the async handlers finish.
@@ -3299,17 +3364,37 @@ public class CodeEditText extends View {
             } else {
                 deleted = "\n"; // at end-of-line → deleting the newline
             }
+
+            boolean deletePair = false;
+            if (newCursorPos.line == editor.cursor.line
+                    && editor.cursor.column < editor.content.lineLength(editor.cursor.line)
+                    && (editor.autoCloseBrackets || editor.autoCloseQuotes)) {
+                char before = deleted.charAt(0);
+                char after = editor.content.charAt(editor.cursor.line, editor.cursor.column);
+                if ((before == '{' && after == '}')
+                        || (before == '[' && after == ']')
+                        || (before == '(' && after == ')')
+                        || (before == '"' && after == '"')
+                        || (before == '\'' && after == '\'')
+                        || (before == '`' && after == '`')) {
+                    deletePair = true;
+                }
+            }
+
             int beforeLineCount = editor.content.lineCount();
             ContentPosition oldCursor = editor.cursor;
+            ContentPosition delEnd = deletePair ? editor.content.positionAt(cursorFlat + 1) : oldCursor;
+            String totalDeleted = deletePair ? (deleted + editor.content.charAt(editor.cursor.line, editor.cursor.column)) : deleted;
+
             editor.content.delete(newCursorPos.line, newCursorPos.column,
-                    oldCursor.line, oldCursor.column);
+                    delEnd.line, delEnd.column);
             int afterLineCount = editor.content.lineCount();
             if (afterLineCount != beforeLineCount) {
                 // Tokens now shift implicitly with the lines.
             }
             editor.undoStack.recordDelete(newCursorPos.line, newCursorPos.column,
-                    oldCursor.line, oldCursor.column,
-                    deleted, editor.snapshotAt(oldCursor, null), editor.snapshotAt(newCursorPos, null));
+                    delEnd.line, delEnd.column,
+                    totalDeleted, editor.snapshotAt(oldCursor, null), editor.snapshotAt(newCursorPos, null));
             editor.cursor = newCursorPos;
             editor.selectionAnchor = null;
             editor.post(editor::ensureCursorVisible);

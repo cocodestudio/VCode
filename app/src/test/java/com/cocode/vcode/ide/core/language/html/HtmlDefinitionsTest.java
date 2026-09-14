@@ -306,6 +306,42 @@ public class HtmlDefinitionsTest {
         assertEquals(2, comment.getReplaceLength());
     }
 
+    @Test
+    public void testEmmetTextNodeWithAutoClosedBrace() {
+        // 1. Cursor between { and } in p{} (user typed p{ and auto-close inserted })
+        String src1 = "p{}";
+        List<CompletionItem> items1 = engine.getSuggestions(src1, 2);
+        assertNotNull(items1);
+        assertEquals(1, items1.size());
+        CompletionItem pEmpty = items1.get(0);
+        assertEquals("p{}", pEmpty.getLabel());
+        assertEquals("<p>|</p>", pEmpty.getInsertText());
+        assertEquals(2, pEmpty.getReplaceLength()); // "p{"
+        assertEquals(1, pEmpty.getReplaceAfterLength()); // "}"
+
+        // 2. Cursor inside text node before } in p{hello}
+        String src2 = "p{hello}";
+        List<CompletionItem> items2 = engine.getSuggestions(src2, 7);
+        assertNotNull(items2);
+        assertEquals(1, items2.size());
+        CompletionItem pHello = items2.get(0);
+        assertEquals("p{hello}", pHello.getLabel());
+        assertEquals("<p>hello</p>|", pHello.getInsertText());
+        assertEquals(7, pHello.getReplaceLength()); // "p{hello"
+        assertEquals(1, pHello.getReplaceAfterLength()); // "}"
+
+        // 3. Nested expression with attribute before auto-closed text node
+        String src3 = "a[href=\"#\"]{Click}";
+        List<CompletionItem> items3 = engine.getSuggestions(src3, 17);
+        assertNotNull(items3);
+        assertEquals(1, items3.size());
+        CompletionItem aClick = items3.get(0);
+        assertEquals("a[href=\"#\"]{Click}", aClick.getLabel());
+        assertEquals("<a href=\"#\">Click</a>|", aClick.getInsertText());
+        assertEquals(17, aClick.getReplaceLength());
+        assertEquals(1, aClick.getReplaceAfterLength());
+    }
+
     private static CompletionItem findItem(List<CompletionItem> items, String label) {
         if (items == null) return null;
         for (CompletionItem ci : items) {
