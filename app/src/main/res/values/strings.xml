@@ -44,6 +44,33 @@
     <string name="vcode_git_credentials">Git Credentials</string>
     <string name="vcode_not_configured">Not configured</string>
 
+    <!-- Settings Categories -->
+    <string name="vcode_settings_category_editor">Editor</string>
+    <string name="vcode_settings_category_editor_desc">Font size, line numbers, word wrap, auto-closing &amp; indentation</string>
+    <string name="vcode_settings_category_appearance"><![CDATA[Theme & Appearance]]></string>
+    <string name="vcode_settings_category_appearance_desc">Color themes, dark mode, and system display matching</string>
+    <string name="vcode_settings_category_git">Git</string>
+    <string name="vcode_settings_category_git_desc">Default branch, author credentials and reset safety</string>
+    <string name="vcode_settings_category_general">General</string>
+    <string name="vcode_settings_category_general_desc">In-app browser preview, background auto-save</string>
+
+    <!-- Settings Import / Export -->
+    <string name="vcode_settings_actions">Settings Actions</string>
+    <string name="vcode_settings_menu">More options</string>
+    <string name="vcode_settings_import">Import Settings</string>
+    <string name="vcode_settings_import_desc">Load and apply configuration from a JSON file</string>
+    <string name="vcode_settings_export">Export Settings</string>
+    <string name="vcode_settings_export_desc">Save settings.json to VCodeProjects folder</string>
+    <string name="vcode_settings_import_success">Settings successfully imported</string>
+    <string name="vcode_settings_export_success">Settings saved to %1$s</string>
+    <string name="vcode_settings_copy_path">Copy Path</string>
+    <string name="vcode_settings_path_copied">Path copied to clipboard</string>
+    <string name="vcode_settings_import_error_title">Invalid Settings File</string>
+    <string name="vcode_settings_import_error_syntax">The selected file is not valid JSON and could not be parsed.</string>
+    <string name="vcode_settings_import_error_unrecognized">This file does not contain recognized VCode settings. Please select a valid settings.json file.</string>
+    <string name="vcode_settings_export_error">Failed to export settings: %1$s</string>
+    <string name="vcode_settings_import_error_msg">The selected file could not be imported as settings.</string>
+
     <!--    Activity: Debug-->
     <string name="vcode_app_crashed">App Crashed</string>
     <string name="vcode_crash_details">An unexpected error occurred and the app had to close.</string>

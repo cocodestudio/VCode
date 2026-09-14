@@ -1,6 +1,7 @@
 package com.cocode.vcode.ide.ui.settings;
 
 import android.content.Context;
+import android.net.Uri;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
@@ -10,7 +11,10 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
+import com.cocode.vcode.ide.data.settings.SettingsJsonSerializer;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
+
+import java.io.File;
 
 /**
  * SettingsViewModel manages the state and persistence of application-wide preferences.
@@ -195,6 +199,53 @@ public class SettingsViewModel extends ViewModel {
             current.autoSave = value;
             saveSettings(current);
         }
+    }
+
+    public interface ImportCallback {
+        void onResult(SettingsJsonSerializer.ValidationResult result);
+    }
+
+    public interface ExportCallback {
+        void onSuccess(File exportedFile);
+        void onError(Exception error);
+    }
+
+    /**
+     * Imports and applies settings from a user-selected JSON file URI.
+     */
+    public void importSettings(Uri uri, ImportCallback callback) {
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            SettingsJsonSerializer.ValidationResult result = settingsRepo.importSettingsFromUri(uri);
+            if (result.isValid && result.settings != null) {
+                settingsLiveData.postValue(result.settings);
+            }
+            if (callback != null) {
+                ExecutorProvider.getInstance().runOnMain(() -> callback.onResult(result));
+            }
+        });
+    }
+
+    /**
+     * Exports current settings to VCodeProjects/settings.json.
+     */
+    public void exportSettings(ExportCallback callback) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current == null) {
+            current = settingsRepo.loadSettings();
+        }
+        final AppSettings settingsToExport = current;
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                File exported = settingsRepo.exportSettingsToProjects(settingsToExport);
+                if (callback != null) {
+                    ExecutorProvider.getInstance().runOnMain(() -> callback.onSuccess(exported));
+                }
+            } catch (Exception e) {
+                if (callback != null) {
+                    ExecutorProvider.getInstance().runOnMain(() -> callback.onError(e));
+                }
+            }
+        });
     }
 
     /**

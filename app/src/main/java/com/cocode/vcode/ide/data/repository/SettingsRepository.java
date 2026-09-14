@@ -2,11 +2,13 @@ package com.cocode.vcode.ide.data.repository;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 
 import androidx.annotation.Nullable;
 
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.prefs.PreferenceKeys;
+import com.cocode.vcode.ide.data.settings.SettingsJsonSerializer;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
@@ -90,6 +92,21 @@ public class SettingsRepository {
         // Confirmation dialogs
         s.confirmOnTabClose = prefs.getBoolean(PreferenceKeys.CONFIRM_ON_TAB_CLOSE, s.confirmOnTabClose);
         s.confirmOnProjectDelete = prefs.getBoolean(PreferenceKeys.CONFIRM_ON_PROJECT_DEL, s.confirmOnProjectDelete);
+
+        // Sync with external settings.json if present, or seed it
+        File extFile = SettingsJsonSerializer.getExternalSettingsFile(context);
+        if (extFile.exists() && extFile.length() > 0) {
+            SettingsJsonSerializer.ValidationResult result =
+                    SettingsJsonSerializer.readAndValidateFromFile(extFile, s);
+            if (result.isValid && result.settings != null) {
+                s = result.settings;
+            }
+        } else {
+            try {
+                SettingsJsonSerializer.writeSettingsToFile(extFile, s);
+            } catch (Exception ignored) {
+            }
+        }
 
         return s;
     }
@@ -197,6 +214,41 @@ public class SettingsRepository {
                 s.gitAuthorName != null ? s.gitAuthorName : "",
                 s.gitAuthorEmail != null ? s.gitAuthorEmail : ""
         );
+
+        // Sync external settings.json file
+        try {
+            File extFile = SettingsJsonSerializer.getExternalSettingsFile(context);
+            SettingsJsonSerializer.writeSettingsToFile(extFile, s);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Exports settings to settings.json inside VCodeProjects directory.
+     *
+     * @param s The settings to export.
+     * @return The target File where settings were exported.
+     */
+    public File exportSettingsToProjects(AppSettings s) throws IOException, JSONException {
+        File target = SettingsJsonSerializer.getProjectsExportFile();
+        SettingsJsonSerializer.writeSettingsToFile(target, s);
+        return target;
+    }
+
+    /**
+     * Imports settings from a content URI, validates its format, and persists if valid.
+     *
+     * @param uri The URI of the JSON file.
+     * @return ValidationResult containing the imported settings or a human-friendly error message.
+     */
+    public SettingsJsonSerializer.ValidationResult importSettingsFromUri(Uri uri) {
+        AppSettings current = loadSettings();
+        SettingsJsonSerializer.ValidationResult result =
+                SettingsJsonSerializer.readAndValidateFromUri(context, uri, current);
+        if (result.isValid && result.settings != null) {
+            saveSettings(result.settings);
+        }
+        return result;
     }
 
     /**
