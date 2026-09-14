@@ -10,6 +10,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -247,23 +248,57 @@ public class EmmetParser {
                 || ELEMENT_ALIASES.containsKey(abbr);
     }
 
+    private static volatile String defaultIndentUnit = "  ";
+
+    private static final Set<String> STRUCTURAL_CONTAINERS = new HashSet<>(Arrays.asList(
+            "div", "section", "article", "aside", "nav", "header", "footer", "main",
+            "form", "fieldset", "figure", "details", "dialog", "table", "thead",
+            "tbody", "tfoot", "tr", "ul", "ol", "dl", "head", "body", "html"
+    ));
+
+    public static void setDefaultIndentUnit(String indentUnit) {
+        if (indentUnit != null && !indentUnit.isEmpty()) {
+            defaultIndentUnit = indentUnit;
+        }
+    }
+
+    public static String getDefaultIndentUnit() {
+        return defaultIndentUnit;
+    }
+
+    public static boolean isStructuralContainer(String tag) {
+        if (tag == null) return false;
+        return STRUCTURAL_CONTAINERS.contains(tag.toLowerCase());
+    }
+
     /**
-     * Expands an HTML Emmet abbreviation. Returns null if the abbreviation is invalid.
+     * Expands an HTML Emmet abbreviation using the default indentation unit.
      */
     public static String expandHtml(String abbr, String boilerplate) {
+        return expandHtml(abbr, boilerplate, defaultIndentUnit);
+    }
+
+    /**
+     * Expands an HTML Emmet abbreviation with a specified indentation unit.
+     * Returns null if the abbreviation is invalid.
+     */
+    public static String expandHtml(String abbr, String boilerplate, String indentUnit) {
         if (abbr == null || abbr.trim().isEmpty()) return null;
         abbr = abbr.trim();
+        if (indentUnit == null || indentUnit.isEmpty()) {
+            indentUnit = defaultIndentUnit;
+        }
 
         if (abbr.equals("!")) {
-            if (boilerplate != null && !boilerplate.isEmpty()) return boilerplate;
-            return getDefaultBoilerplate();
+            String bp = (boilerplate != null && !boilerplate.isEmpty()) ? boilerplate : getDefaultBoilerplate();
+            return formatSnippetIndent(bp, indentUnit);
         }
 
         if (!PAT_ABBR.matcher(abbr).matches()) return null;
 
         // Check exact snippet aliases (e.g. "ul+", "table+", "select+")
         if (HTML_SNIPPET_ALIASES.containsKey(abbr)) {
-            return HTML_SNIPPET_ALIASES.get(abbr);
+            return formatSnippetIndent(HTML_SNIPPET_ALIASES.get(abbr), indentUnit);
         }
 
         if (abbr.startsWith("lorem")) {
@@ -281,14 +316,14 @@ public class EmmetParser {
 
         // Exact match for static alias without tree operators
         if (HTML_ALIASES.containsKey(abbr) && !hasTreeOperators(abbr)) {
-            return HTML_ALIASES.get(abbr);
+            return formatSnippetIndent(HTML_ALIASES.get(abbr), indentUnit);
         }
 
         try {
-            String result = parseEmmetTree(abbr);
+            String result = parseEmmetTree(abbr, indentUnit);
             if (result == null) return null;
 
-            // If no cursor marker exists, place it inside the first empty attribute or empty tag
+            // Safety check: ensure result has a cursor marker
             if (!result.contains("|")) {
                 int firstEmptyAttr = result.indexOf("=\"\"");
                 if (firstEmptyAttr != -1) {
@@ -306,6 +341,14 @@ public class EmmetParser {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static String formatSnippetIndent(String snippet, String indentUnit) {
+        if (snippet == null || indentUnit == null || indentUnit.equals("    ") || !snippet.contains("    ")) {
+            return snippet;
+        }
+        return snippet.replace("        ", indentUnit + indentUnit)
+                .replace("    ", indentUnit);
     }
 
     private static boolean hasTreeOperators(String s) {
@@ -500,6 +543,8 @@ public class EmmetParser {
         Map<String, String> attributes = new LinkedHashMap<>();
         String textContent;
         boolean isTextOnly = false;
+        boolean cursorInside = false;
+        boolean cursorAfter = false;
         List<EmmetNode> children = new ArrayList<>();
         EmmetNode parent;
 
@@ -514,6 +559,8 @@ public class EmmetParser {
             clone.attributes = new LinkedHashMap<>(this.attributes);
             clone.textContent = this.textContent;
             clone.isTextOnly = this.isTextOnly;
+            clone.cursorInside = this.cursorInside;
+            clone.cursorAfter = this.cursorAfter;
             for (EmmetNode child : this.children) {
                 EmmetNode childClone = child.deepClone();
                 clone.addChild(childClone);
@@ -527,13 +574,15 @@ public class EmmetParser {
         }
     }
 
-    private static String parseEmmetTree(String abbr) {
+    private static String parseEmmetTree(String abbr, String indentUnit) {
         List<EmmetNode> roots = parseSubTree(abbr, null);
         if (roots == null || roots.isEmpty()) return null;
 
+        assignCursorMarker(roots);
+
         StringBuilder sb = new StringBuilder();
         for (int r = 0; r < roots.size(); r++) {
-            renderNode(roots.get(r), sb, 0, r == roots.size() - 1);
+            renderNode(roots.get(r), sb, 0, r == roots.size() - 1, indentUnit);
         }
         return sb.toString();
     }
@@ -1065,19 +1114,219 @@ public class EmmetParser {
     // HTML Rendering
     // =========================================================================
 
-    private static void renderNode(EmmetNode node, StringBuilder sb, int indent, boolean isLast) {
-        String ind = getIndent(indent);
+    private static boolean hasCursorMarker(List<EmmetNode> nodes) {
+        if (nodes == null) return false;
+        for (EmmetNode node : nodes) {
+            if (node.cursorInside || node.cursorAfter) return true;
+            if (node.textContent != null && node.textContent.contains("|")) return true;
+            for (String val : node.attributes.values()) {
+                if (val != null && val.contains("|")) return true;
+            }
+            if (hasCursorMarker(node.children)) return true;
+        }
+        return false;
+    }
+
+    private static EmmetNode findTargetLeaf(List<EmmetNode> nodes) {
+        if (nodes == null || nodes.isEmpty()) return null;
+        EmmetNode chosen = null;
+        for (EmmetNode n : nodes) {
+            if (!n.isTextOnly) {
+                chosen = n;
+                break;
+            }
+        }
+        if (chosen == null) {
+            chosen = nodes.get(0);
+        }
+        if (chosen.children.isEmpty()) {
+            return chosen;
+        }
+        return findTargetLeaf(chosen.children);
+    }
+
+    private static void assignCursorMarker(List<EmmetNode> roots) {
+        if (roots == null || roots.isEmpty()) return;
+
+        if (hasCursorMarker(roots)) return;
+
+        // Find primary leaf node: prefer real elements over bare text nodes
+        EmmetNode target = findTargetLeaf(roots);
+        if (target == null) return;
+
+        // If target is not a structural container, look for an empty attribute to place cursor
+        if (!isStructuralContainer(target.tag)) {
+            String targetAttr = null;
+            if (target.attributes.containsKey("href") && "".equals(target.attributes.get("href"))) {
+                targetAttr = "href";
+            } else if (target.attributes.containsKey("src") && "".equals(target.attributes.get("src"))) {
+                targetAttr = "src";
+            } else if (target.attributes.containsKey("name") && "".equals(target.attributes.get("name"))) {
+                targetAttr = "name";
+            } else {
+                for (Map.Entry<String, String> entry : target.attributes.entrySet()) {
+                    if ("".equals(entry.getValue())) {
+                        targetAttr = entry.getKey();
+                        break;
+                    }
+                }
+            }
+
+            if (targetAttr != null) {
+                target.attributes.put(targetAttr, "|");
+                return;
+            }
+        }
+
+        // Target has text content
+        if (target.textContent != null) {
+            if (target.textContent.isEmpty()) {
+                target.textContent = "|";
+            } else {
+                target.cursorAfter = true;
+            }
+            return;
+        }
+
+        // Void element with no empty attributes
+        if (isVoidElement(target.tag)) {
+            target.cursorAfter = true;
+            return;
+        }
+
+        // Container or leaf element
+        target.cursorInside = true;
+    }
+
+    private static boolean shouldFormatInline(EmmetNode node) {
+        if (node == null || node.children.isEmpty()) return false;
+        if (isStructuralContainer(node.tag)) return false;
+
+        for (EmmetNode child : node.children) {
+            if (child.isTextOnly) continue;
+            if (child.tag == null) return false;
+            if (!KnownElements.isInlineElement(child.tag)) return false;
+            if (!child.children.isEmpty() && !hasOnlyInlineChildren(child)) return false;
+        }
+        return true;
+    }
+
+    private static boolean hasOnlyInlineChildren(EmmetNode node) {
+        if (node == null || node.children.isEmpty()) return false;
+        for (EmmetNode child : node.children) {
+            if (child.isTextOnly) continue;
+            if (child.tag == null) return false;
+            if (!KnownElements.isInlineElement(child.tag)) return false;
+            if (!child.children.isEmpty() && !hasOnlyInlineChildren(child)) return false;
+        }
+        return true;
+    }
+
+    private static void renderNode(EmmetNode node, StringBuilder sb, int indent, boolean isLast, String indentUnit) {
+        String ind = getIndent(indent, indentUnit);
 
         if (node.isTextOnly) {
             if (node.textContent != null) {
                 sb.append(ind).append(node.textContent);
             }
+            if (node.cursorAfter) sb.append("|");
             if (!isLast) sb.append("\n");
             return;
         }
 
         sb.append(ind).append("<").append(node.tag);
+        renderAttributes(node, sb);
 
+        boolean isVoid = isVoidElement(node.tag);
+        sb.append(">");
+
+        if (isVoid) {
+            if (node.cursorAfter) sb.append("|");
+            if (!isLast) sb.append("\n");
+            return;
+        }
+
+        if (node.children.isEmpty()) {
+            if (node.textContent != null) {
+                sb.append(node.textContent).append("</").append(node.tag).append(">");
+                if (node.cursorAfter) sb.append("|");
+            } else if (node.cursorInside) {
+                if (isStructuralContainer(node.tag)) {
+                    sb.append("\n")
+                            .append(ind).append(indentUnit).append("|\n")
+                            .append(ind).append("</").append(node.tag).append(">");
+                } else {
+                    sb.append("|</").append(node.tag).append(">");
+                }
+            } else {
+                if (isStructuralContainer(node.tag)) {
+                    sb.append("\n").append(ind).append("</").append(node.tag).append(">");
+                } else {
+                    sb.append("</").append(node.tag).append(">");
+                }
+            }
+        } else {
+            if (shouldFormatInline(node)) {
+                renderInlineChildren(node, sb);
+                sb.append("</").append(node.tag).append(">");
+                if (node.cursorAfter) sb.append("|");
+            } else {
+                sb.append("\n");
+                for (int i = 0; i < node.children.size(); i++) {
+                    renderNode(node.children.get(i), sb, indent + 1, false, indentUnit);
+                }
+                sb.append(ind).append("</").append(node.tag).append(">");
+                if (node.cursorAfter) sb.append("|");
+            }
+        }
+
+        if (!isLast) sb.append("\n");
+    }
+
+    private static void renderInlineChildren(EmmetNode node, StringBuilder sb) {
+        for (EmmetNode child : node.children) {
+            renderInlineNode(child, sb);
+        }
+    }
+
+    private static void renderInlineNode(EmmetNode node, StringBuilder sb) {
+        if (node.isTextOnly) {
+            if (node.textContent != null) {
+                sb.append(node.textContent);
+            }
+            if (node.cursorAfter) sb.append("|");
+            return;
+        }
+
+        sb.append("<").append(node.tag);
+        renderAttributes(node, sb);
+
+        boolean isVoid = isVoidElement(node.tag);
+        sb.append(">");
+
+        if (isVoid) {
+            if (node.cursorAfter) sb.append("|");
+            return;
+        }
+
+        if (node.children.isEmpty()) {
+            if (node.textContent != null) {
+                sb.append(node.textContent);
+            } else if (node.cursorInside) {
+                sb.append("|");
+            }
+            sb.append("</").append(node.tag).append(">");
+            if (node.cursorAfter) sb.append("|");
+        } else {
+            for (EmmetNode child : node.children) {
+                renderInlineNode(child, sb);
+            }
+            sb.append("</").append(node.tag).append(">");
+            if (node.cursorAfter) sb.append("|");
+        }
+    }
+
+    private static void renderAttributes(EmmetNode node, StringBuilder sb) {
         if (node.id != null) {
             sb.append(" id=\"").append(node.id).append("\"");
         }
@@ -1103,34 +1352,18 @@ public class EmmetParser {
                 sb.append(" ").append(name).append("=\"").append(val).append("\"");
             }
         }
-
-        boolean isVoid = isVoidElement(node.tag);
-        sb.append(">");
-
-        if (!isVoid) {
-            if (node.textContent != null && node.children.isEmpty()) {
-                sb.append(node.textContent).append("</").append(node.tag).append(">");
-            } else if (node.children.isEmpty()) {
-                sb.append("</").append(node.tag).append(">");
-            } else {
-                sb.append("\n");
-                for (int i = 0; i < node.children.size(); i++) {
-                    renderNode(node.children.get(i), sb, indent + 1, i == node.children.size() - 1);
-                }
-                sb.append(ind).append("</").append(node.tag).append(">");
-            }
-        }
-
-        if (!isLast) sb.append("\n");
     }
 
     private static boolean isVoidElement(String tag) {
         return KnownElements.isVoidElement(tag);
     }
 
-    private static String getIndent(int levels) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < levels; i++) sb.append("    ");
+    private static String getIndent(int levels, String indentUnit) {
+        if (levels <= 0) return "";
+        if (indentUnit == null) indentUnit = defaultIndentUnit;
+        if (levels == 1) return indentUnit;
+        StringBuilder sb = new StringBuilder(levels * indentUnit.length());
+        for (int i = 0; i < levels; i++) sb.append(indentUnit);
         return sb.toString();
     }
 }

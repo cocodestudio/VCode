@@ -110,7 +110,7 @@ public class CursorPlacementTest {
     public void emmetHtmlCursorPlacement() {
         String divExpanded = EmmetParser.expandHtml("div.card", null);
         assertNotNull(divExpanded);
-        assertEquals("<div class=\"card\">|</div>", divExpanded);
+        assertEquals("<div class=\"card\">\n  |\n</div>", divExpanded);
 
         String imgExpanded = EmmetParser.expandHtml("img[src=\"\" alt=\"\"]", null);
         assertNotNull(imgExpanded);

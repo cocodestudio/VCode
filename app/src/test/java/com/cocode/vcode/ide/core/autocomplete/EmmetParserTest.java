@@ -312,4 +312,56 @@ public class EmmetParserTest {
         assertTrue(formResult.contains("action="));
         assertTrue(formResult.contains("class=\"login\""));
     }
+
+    @Test
+    public void testContainerFormattingAndCursor() {
+        String div = EmmetParser.expandHtml("div.container", null);
+        assertNotNull(div);
+        assertEquals("<div class=\"container\">\n  |\n</div>", div);
+
+        String section = EmmetParser.expandHtml("section#intro", null);
+        assertNotNull(section);
+        assertEquals("<section id=\"intro\">\n  |\n</section>", section);
+
+        String form = EmmetParser.expandHtml("form.login", null);
+        assertNotNull(form);
+        assertEquals("<form class=\"login\" action=\"\">\n  |\n</form>", form);
+    }
+
+    @Test
+    public void testInlineChildrenFormatting() {
+        String listWithLinks = EmmetParser.expandHtml("ul>li*3>a", null);
+        assertNotNull(listWithLinks);
+        assertEquals("<ul>\n  <li><a href=\"|\"></a></li>\n  <li><a href=\"\"></a></li>\n  <li><a href=\"\"></a></li>\n</ul>", listWithLinks);
+
+        String pSpan = EmmetParser.expandHtml("p>span", null);
+        assertNotNull(pSpan);
+        assertEquals("<p><span>|</span></p>", pSpan);
+
+        String pWithLinks = EmmetParser.expandHtml("p>{Click }+a{here}+{ to continue}", null);
+        assertNotNull(pWithLinks);
+        assertEquals("<p>Click <a href=\"|\">here</a> to continue</p>", pWithLinks);
+    }
+
+    @Test
+    public void testLeafCursorPlacementInNestedTrees() {
+        String formInput = EmmetParser.expandHtml("form>input:text", null);
+        assertNotNull(formInput);
+        assertEquals("<form action=\"\">\n  <input name=\"|\" id=\"\" type=\"text\">\n</form>", formInput);
+
+        String formSubmit = EmmetParser.expandHtml("form>btn:s.save", null);
+        assertNotNull(formSubmit);
+        assertEquals("<form action=\"\">\n  <button class=\"save\" type=\"submit\">|</button>\n</form>", formSubmit);
+    }
+
+    @Test
+    public void testCustomIndentationUnit() {
+        String fourSpaces = EmmetParser.expandHtml("div.card", null, "    ");
+        assertNotNull(fourSpaces);
+        assertEquals("<div class=\"card\">\n    |\n</div>", fourSpaces);
+
+        String tabIndent = EmmetParser.expandHtml("div>p", null, "\t");
+        assertNotNull(tabIndent);
+        assertEquals("<div>\n\t<p>|</p>\n</div>", tabIndent);
+    }
 }
