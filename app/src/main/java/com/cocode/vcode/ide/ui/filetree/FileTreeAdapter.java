@@ -119,13 +119,42 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
         this.clipboardFile = file;
         this.isCutAction = isCut;
 
-        // Targeted notify only for the affected file(s) rather than notifyDataSetChanged()
+        String oldPath = oldFile != null ? oldFile.getAbsolutePath() : null;
+        String newPath = file != null ? file.getAbsolutePath() : null;
+
+        // Targeted notify only for the affected file(s) and any descendants in flatNodes
         for (int i = 0; i < flatNodes.size(); i++) {
             File f = flatNodes.get(i).getFile();
-            if ((file != null && f.equals(file)) || (oldFile != null && f.equals(oldFile))) {
-                notifyItemChanged(i);
+            if (f != null) {
+                String nodePath = f.getAbsolutePath();
+                boolean affectsOld = oldPath != null && (nodePath.equals(oldPath) || nodePath.startsWith(oldPath + File.separator));
+                boolean affectsNew = newPath != null && (nodePath.equals(newPath) || nodePath.startsWith(newPath + File.separator));
+                if (affectsOld || affectsNew) {
+                    notifyItemChanged(i);
+                }
             }
         }
+    }
+
+    /**
+     * Resets the clipboard state and restores normal node opacity.
+     */
+    public void clearClipboardState() {
+        if (clipboardFile != null || isCutAction) {
+            setClipboardState(null, false);
+        }
+    }
+
+    /**
+     * Returns true if the given node is currently marked as cut (including descendants of cut folders).
+     */
+    public boolean isNodeCut(FileNode node) {
+        if (!isCutAction || clipboardFile == null || node == null || node.getFile() == null) {
+            return false;
+        }
+        String nodePath = node.getFile().getAbsolutePath();
+        String cutPath = clipboardFile.getAbsolutePath();
+        return nodePath.equals(cutPath) || nodePath.startsWith(cutPath + File.separator);
     }
 
     public File getClipboardFile() {
@@ -347,15 +376,7 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
             binding.ivIcon.setImageTintList(null);
 
             // Apply opacity if node is cut
-            boolean isCut = false;
-            if (adapter.isCutAction && adapter.clipboardFile != null) {
-                String nodePath = node.getFile().getAbsolutePath();
-                String cutPath = adapter.clipboardFile.getAbsolutePath();
-                if (nodePath.equals(cutPath) || nodePath.startsWith(cutPath + File.separator)) {
-                    isCut = true;
-                }
-            }
-            binding.getRoot().setAlpha(isCut ? 0.7f : 1.0f);
+            binding.getRoot().setAlpha(adapter.isNodeCut(node) ? 0.7f : 1.0f);
 
             if (node.isDirectory()) {
                 bindDirectory(node);

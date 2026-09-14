@@ -11,6 +11,7 @@ import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -22,6 +23,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -61,6 +63,8 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     private FileTreeAdapter adapter;
     private FileSelectionListener selectionListener;
     private File selectedImportDestination = null;
+    private DrawerLayout.DrawerListener drawerListener = null;
+    private DrawerLayout attachedDrawerLayout = null;
     /**
      * Result launcher for importing multiple files from the system picker.
      */
@@ -123,9 +127,37 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         binding.btnImportFiles.setOnClickListener(v -> showImportDestinationDialog(() -> importFilesLauncher.launch("*/*")));
         binding.btnImportFolder.setOnClickListener(v -> showImportDestinationDialog(() -> importFolderLauncher.launch(null)));
 
+        setupDrawerListener(view);
+    }
 
+    private void setupDrawerListener(View view) {
+        view.post(() -> {
+            if (!isAdded()) return;
+            ViewParent parent = view.getParent();
+            while (parent != null) {
+                if (parent instanceof DrawerLayout) {
+                    attachedDrawerLayout = (DrawerLayout) parent;
+                    drawerListener = new DrawerLayout.SimpleDrawerListener() {
+                        @Override
+                        public void onDrawerClosed(@NonNull View drawerView) {
+                            clearClipboardState();
+                        }
+                    };
+                    attachedDrawerLayout.addDrawerListener(drawerListener);
+                    break;
+                }
+                parent = parent.getParent();
+            }
+        });
+    }
 
-
+    /**
+     * Clears any active clipboard cut/copy state and restores normal node opacity.
+     */
+    public void clearClipboardState() {
+        if (adapter != null) {
+            adapter.clearClipboardState();
+        }
     }
 
     /**
@@ -466,6 +498,12 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
     @Override
     public void onDestroyView() {
+        if (attachedDrawerLayout != null && drawerListener != null) {
+            attachedDrawerLayout.removeDrawerListener(drawerListener);
+            drawerListener = null;
+            attachedDrawerLayout = null;
+        }
+        clearClipboardState();
         super.onDestroyView();
         binding = null;
     }

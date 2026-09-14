@@ -14,6 +14,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -199,6 +201,16 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void setupListeners() {
+        binding.drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerClosed(@NonNull View drawerView) {
+                Fragment fragment = getSupportFragmentManager().findFragmentById(binding.drawerContainer.getId());
+                if (fragment instanceof FileTreeFragment) {
+                    ((FileTreeFragment) fragment).clearClipboardState();
+                }
+            }
+        });
+
         binding.btnMenu.setOnClickListener(v -> {
             UiUtils.hideKeyboard(this);
             CodeEditText codeEditText = getActiveCodeEditor();
