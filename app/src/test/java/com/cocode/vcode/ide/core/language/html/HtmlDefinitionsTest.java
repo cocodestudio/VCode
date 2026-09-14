@@ -340,6 +340,68 @@ public class HtmlDefinitionsTest {
         assertEquals("<a href=\"#\">Click</a>|", aClick.getInsertText());
         assertEquals(17, aClick.getReplaceLength());
         assertEquals(1, aClick.getReplaceAfterLength());
+
+        // 4. Text node containing an HTML alias like "span" - should NOT expand inner span
+        String src4 = "p{span}";
+        List<CompletionItem> items4 = engine.getSuggestions(src4, 6);
+        assertNotNull(items4);
+        assertEquals(1, items4.size());
+        CompletionItem pSpan = items4.get(0);
+        assertEquals("p{span}", pSpan.getLabel());
+        assertEquals("<p>span</p>|", pSpan.getInsertText());
+        assertEquals(6, pSpan.getReplaceLength());
+        assertEquals(1, pSpan.getReplaceAfterLength());
+
+        // 5. Text node containing a dot
+        String src5 = "p{hello.world}";
+        List<CompletionItem> items5 = engine.getSuggestions(src5, 13);
+        assertNotNull(items5);
+        assertEquals(1, items5.size());
+        CompletionItem pDot = items5.get(0);
+        assertEquals("p{hello.world}", pDot.getLabel());
+        assertEquals(13, pDot.getReplaceLength());
+        assertEquals(1, pDot.getReplaceAfterLength());
+
+        // 6. Attribute Emmet before auto-closed bracket: a[href="#"]
+        String src6 = "a[href=\"#\"]";
+        List<CompletionItem> items6 = engine.getSuggestions(src6, 10);
+        assertNotNull(items6);
+        assertEquals(1, items6.size());
+        CompletionItem aAttr = items6.get(0);
+        assertEquals("a[href=\"#\"]", aAttr.getLabel());
+        assertEquals("<a href=\"#\">|</a>", aAttr.getInsertText());
+        assertEquals(10, aAttr.getReplaceLength());
+        assertEquals(1, aAttr.getReplaceAfterLength());
+
+        // 7. Attribute with colon URL: a[href="http://example.com"]
+        String src7 = "a[href=\"http://example.com\"]";
+        List<CompletionItem> items7 = engine.getSuggestions(src7, 27);
+        assertNotNull(items7);
+        assertEquals(1, items7.size());
+        CompletionItem aUrl = items7.get(0);
+        assertEquals("a[href=\"http://example.com\"]", aUrl.getLabel());
+        assertEquals(27, aUrl.getReplaceLength());
+        assertEquals(1, aUrl.getReplaceAfterLength());
+
+        // 8. Unclosed text node when auto-close is false: p{hello without trailing }
+        String src8 = "p{hello";
+        List<CompletionItem> items8 = engine.getSuggestions(src8, 7);
+        assertNotNull(items8);
+        assertEquals(1, items8.size());
+        CompletionItem pUnclosed = items8.get(0);
+        assertEquals("p{hello}", pUnclosed.getLabel());
+        assertEquals(7, pUnclosed.getReplaceLength());
+        assertEquals(0, pUnclosed.getReplaceAfterLength());
+
+        // 9. Step 7 with duplicate closing delimiter ahead: p{hello}} with cursor at 8
+        String src9 = "p{hello}}";
+        List<CompletionItem> items9 = engine.getSuggestions(src9, 8);
+        assertNotNull(items9);
+        assertEquals(1, items9.size());
+        CompletionItem pDup = items9.get(0);
+        assertEquals("p{hello}", pDup.getLabel());
+        assertEquals(8, pDup.getReplaceLength());
+        assertEquals(1, pDup.getReplaceAfterLength());
     }
 
     private static CompletionItem findItem(List<CompletionItem> items, String label) {

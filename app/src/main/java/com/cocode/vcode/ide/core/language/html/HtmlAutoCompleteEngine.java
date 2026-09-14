@@ -386,9 +386,12 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         // 7. Emmet expansion
+        boolean inEmmetBraces = isInsideEmmetBraces(lineBefore);
+        boolean inEmmetBrackets = isInsideEmmetBrackets(lineBefore);
+
         String emmetAbbr = getEmmetAbbreviationBeforeCursor(fullText, cursorPos);
         List<CompletionItem> emmetResults = new ArrayList<>();
-        if (emmetAbbr != null && !emmetAbbr.isEmpty() && !emmetAbbr.contains("<")) {
+        if (!inEmmetBraces && !inEmmetBrackets && emmetAbbr != null && !emmetAbbr.isEmpty() && !emmetAbbr.contains("<")) {
             String expanded = EmmetParser.expandHtml(emmetAbbr, htmlBoilerplate);
             if (expanded != null) {
                 boolean isComplex = emmetAbbr.contains(".") || emmetAbbr.contains("#")
@@ -405,6 +408,15 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     CompletionItem emmetItem = new CompletionItem(emmetAbbr, expanded,
                             "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
                     emmetItem.setReplaceLength(emmetAbbr.length());
+
+                    if (cursorPos < fullText.length()) {
+                        char nextChar = fullText.charAt(cursorPos);
+                        if (nextChar == '}' && emmetAbbr.contains("{")) {
+                            emmetItem.setReplaceAfterLength(1);
+                        } else if (nextChar == ']' && emmetAbbr.contains("[")) {
+                            emmetItem.setReplaceAfterLength(1);
+                        }
+                    }
                     
                     List<CompletionItem> res = new ArrayList<>();
                     res.add(emmetItem);
@@ -414,48 +426,48 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         // 7b. Candidate Emmet abbreviation with trailing auto-closed delimiter ('}' or ']')
-        if (cursorPos < fullText.length()) {
-            char nextChar = fullText.charAt(cursorPos);
-            if (nextChar == '}' && isInsideEmmetBraces(lineBefore)) {
-                int braceIdx = lineBefore.lastIndexOf('{');
-                if (braceIdx >= 0) {
-                    int prefixEnd = Math.max(0, cursorPos - (lineBefore.length() - braceIdx));
-                    String prefix = (prefixEnd > 0) ? getEmmetAbbreviationBeforeCursor(fullText, prefixEnd) : "";
-                    String inside = lineBefore.substring(braceIdx + 1);
-                    String candidateAbbr = prefix + "{" + inside + "}";
-                    if (!candidateAbbr.contains("<")) {
-                        String expanded = EmmetParser.expandHtml(candidateAbbr, htmlBoilerplate);
-                        if (expanded != null) {
-                            CompletionItem emmetItem = new CompletionItem(candidateAbbr, expanded,
-                                    "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
-                            emmetItem.setReplaceLength(prefix.length() + 1 + inside.length());
-                            emmetItem.setReplaceAfterLength(1);
+        // or unclosed delimiter while typing inside braces/brackets
+        if (inEmmetBraces) {
+            int braceIdx = lineBefore.lastIndexOf('{');
+            if (braceIdx >= 0) {
+                int prefixEnd = Math.max(0, cursorPos - (lineBefore.length() - braceIdx));
+                String prefix = (prefixEnd > 0) ? getEmmetAbbreviationBeforeCursor(fullText, prefixEnd) : "";
+                String inside = lineBefore.substring(braceIdx + 1);
+                String candidateAbbr = prefix + "{" + inside + "}";
+                if (!candidateAbbr.contains("<")) {
+                    String expanded = EmmetParser.expandHtml(candidateAbbr, htmlBoilerplate);
+                    if (expanded != null) {
+                        CompletionItem emmetItem = new CompletionItem(candidateAbbr, expanded,
+                                "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
+                        emmetItem.setReplaceLength(prefix.length() + 1 + inside.length());
+                        int replaceAfter = (cursorPos < fullText.length() && fullText.charAt(cursorPos) == '}') ? 1 : 0;
+                        emmetItem.setReplaceAfterLength(replaceAfter);
 
-                            List<CompletionItem> res = new ArrayList<>();
-                            res.add(emmetItem);
-                            return res;
-                        }
+                        List<CompletionItem> res = new ArrayList<>();
+                        res.add(emmetItem);
+                        return res;
                     }
                 }
-            } else if (nextChar == ']') {
-                int bracketIdx = lineBefore.lastIndexOf('[');
-                if (bracketIdx >= 0 && !lineBefore.substring(bracketIdx).contains("]")) {
-                    int prefixEnd = Math.max(0, cursorPos - (lineBefore.length() - bracketIdx));
-                    String prefix = (prefixEnd > 0) ? getEmmetAbbreviationBeforeCursor(fullText, prefixEnd) : "";
-                    String inside = lineBefore.substring(bracketIdx + 1);
-                    String candidateAbbr = prefix + "[" + inside + "]";
-                    if (!candidateAbbr.contains("<")) {
-                        String expanded = EmmetParser.expandHtml(candidateAbbr, htmlBoilerplate);
-                        if (expanded != null) {
-                            CompletionItem emmetItem = new CompletionItem(candidateAbbr, expanded,
-                                    "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
-                            emmetItem.setReplaceLength(prefix.length() + 1 + inside.length());
-                            emmetItem.setReplaceAfterLength(1);
+            }
+        } else if (inEmmetBrackets) {
+            int bracketIdx = lineBefore.lastIndexOf('[');
+            if (bracketIdx >= 0 && !lineBefore.substring(bracketIdx).contains("]")) {
+                int prefixEnd = Math.max(0, cursorPos - (lineBefore.length() - bracketIdx));
+                String prefix = (prefixEnd > 0) ? getEmmetAbbreviationBeforeCursor(fullText, prefixEnd) : "";
+                String inside = lineBefore.substring(bracketIdx + 1);
+                String candidateAbbr = prefix + "[" + inside + "]";
+                if (!candidateAbbr.contains("<")) {
+                    String expanded = EmmetParser.expandHtml(candidateAbbr, htmlBoilerplate);
+                    if (expanded != null) {
+                        CompletionItem emmetItem = new CompletionItem(candidateAbbr, expanded,
+                                "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
+                        emmetItem.setReplaceLength(prefix.length() + 1 + inside.length());
+                        int replaceAfter = (cursorPos < fullText.length() && fullText.charAt(cursorPos) == ']') ? 1 : 0;
+                        emmetItem.setReplaceAfterLength(replaceAfter);
 
-                            List<CompletionItem> res = new ArrayList<>();
-                            res.add(emmetItem);
-                            return res;
-                        }
+                        List<CompletionItem> res = new ArrayList<>();
+                        res.add(emmetItem);
+                        return res;
                     }
                 }
             }
@@ -470,7 +482,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         boolean isTagEligible = isTagNamePos || (word != null && !word.isEmpty() && lineBefore.trim().equals(word));
 
         if (isTagEligible && !ctx.isInsideAttributeValue && !ctx.isInsideComment && !ctx.isInsideCloseTag) {
-            if (isInsideEmmetBraces(lineBefore)) {
+            if (inEmmetBraces || inEmmetBrackets) {
                 return emmetResults.isEmpty() ? new ArrayList<>() : emmetResults;
             }
             List<CompletionItem> finalResults = new ArrayList<>(emmetResults);
@@ -510,7 +522,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return pathQuery;
     }
 
-    // Emmet brace detection
+    // Emmet brace and bracket detection
     /**
      * Returns true if the cursor is inside unmatched curly braces on the current line.
      * This indicates the user is typing Emmet text content like {@code a{Click me|}}
@@ -518,10 +530,53 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
      */
     private boolean isInsideEmmetBraces(String lineBefore) {
         int depth = 0;
+        boolean inQuote = false;
+        char quoteChar = 0;
         for (int i = 0; i < lineBefore.length(); i++) {
             char c = lineBefore.charAt(i);
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
+            if (inQuote) {
+                if (c == quoteChar && (i == 0 || lineBefore.charAt(i - 1) != '\\')) {
+                    inQuote = false;
+                }
+            } else {
+                if (c == '"' || c == '\'') {
+                    inQuote = true;
+                    quoteChar = c;
+                } else if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                }
+            }
+        }
+        return depth > 0;
+    }
+
+    /**
+     * Returns true if the cursor is inside unmatched square brackets on the current line.
+     * This indicates the user is typing Emmet attribute content like {@code a[href="#|"]}
+     * and we should NOT show HTML tag suggestions or let Step 7 match inner words.
+     */
+    private boolean isInsideEmmetBrackets(String lineBefore) {
+        int depth = 0;
+        boolean inQuote = false;
+        char quoteChar = 0;
+        for (int i = 0; i < lineBefore.length(); i++) {
+            char c = lineBefore.charAt(i);
+            if (inQuote) {
+                if (c == quoteChar && (i == 0 || lineBefore.charAt(i - 1) != '\\')) {
+                    inQuote = false;
+                }
+            } else {
+                if (c == '"' || c == '\'') {
+                    inQuote = true;
+                    quoteChar = c;
+                } else if (c == '[') {
+                    depth++;
+                } else if (c == ']') {
+                    depth--;
+                }
+            }
         }
         return depth > 0;
     }

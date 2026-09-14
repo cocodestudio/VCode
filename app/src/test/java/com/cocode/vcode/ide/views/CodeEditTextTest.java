@@ -301,4 +301,83 @@ public class CodeEditTextTest {
         assertEquals("<p></p>", editor.getText().toString());
         assertEquals(3, editor.getSelectionStart());
     }
+
+    @Test
+    public void testInsertCompletionConsumesStrayBraceWithoutExplicitReplaceAfterLength() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("p{hello}");
+        inputConnection.setSelection(7, 7); // between 'o' and '}'
+
+        CompletionItem emmetItem = new CompletionItem("p{hello}", "<p>hello</p>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(7); // "p{hello"
+        emmetItem.setReplaceAfterLength(0); // 0, but editor should detect trailing '}'
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("<p>hello</p>", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionConsumesStrayBracketWithoutExplicitReplaceAfterLength() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("a[href=\"#\"]");
+        inputConnection.setSelection(10, 10); // between '"' and ']'
+
+        CompletionItem emmetItem = new CompletionItem("a[href=\"#\"]", "<a href=\"#\"></a>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(10);
+        emmetItem.setReplaceAfterLength(0);
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("<a href=\"#\"></a>", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionConsumesDuplicateBracket() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("p{hello}}");
+        inputConnection.setSelection(8, 8); // between the first and second '}'
+
+        CompletionItem emmetItem = new CompletionItem("p{hello}", "<p>hello</p>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(8);
+        emmetItem.setReplaceAfterLength(0);
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("<p>hello</p>", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionPreservesOuterBracesWhenAutoCloseDisabled() {
+        editor.setAutoCloseBrackets(false);
+        editor.setText("p{hello}\n}");
+        inputConnection.setSelection(8, 8); // after '}'
+
+        CompletionItem emmetItem = new CompletionItem("p{hello}", "<p>hello</p>|", "Emmet", CompletionItem.Type.SNIPPET, 0);
+        emmetItem.setReplaceLength(8);
+        emmetItem.setReplaceAfterLength(0);
+
+        editor.insertCompletion(emmetItem);
+        ShadowLooper.runUiThreadTasks();
+
+        // Outer brace on next line should NOT be deleted
+        assertEquals("<p>hello</p>\n}", editor.getText().toString());
+    }
+
+    @Test
+    public void testComposingTextSkipOverClosingBracket() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("p{}");
+        inputConnection.setSelection(2, 2);
+
+        inputConnection.setComposingText("hello", 1);
+        inputConnection.commitText("}", 1);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("p{hello}", editor.getText().toString());
+        assertEquals(8, editor.getSelectionStart());
+    }
 }

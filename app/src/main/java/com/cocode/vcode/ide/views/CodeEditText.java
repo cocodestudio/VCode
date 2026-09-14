@@ -2428,6 +2428,26 @@ public class CodeEditText extends View {
         String deletedText = "";
         int deleteEnd = flatCursor + Math.max(0, item.getReplaceAfterLength());
         deleteEnd = Math.min(deleteEnd, content.totalLength());
+
+        // Clean up redundant trailing delimiter left by auto-close or duplicate bracket
+        if (deleteEnd < content.totalLength() && wordStart < flatCursor) {
+            String replacedPrefix = content.getSubstring(wordStart, flatCursor);
+            ContentPosition nextPos = content.positionAt(deleteEnd);
+            if (nextPos.column < content.lineLength(nextPos.line)) {
+                char nextCharInDoc = content.charAt(nextPos.line, nextPos.column);
+                if (nextCharInDoc == '}') {
+                    boolean hadBrace = replacedPrefix.contains("{");
+                    if (hadBrace && (autoCloseBrackets || item.getReplaceAfterLength() > 0 || isUnclosedDelimiter(replacedPrefix, '{', '}'))) {
+                        deleteEnd++;
+                    }
+                } else if (nextCharInDoc == ']') {
+                    boolean hadBracket = replacedPrefix.contains("[");
+                    if (hadBracket && (autoCloseBrackets || item.getReplaceAfterLength() > 0 || isUnclosedDelimiter(replacedPrefix, '[', ']'))) {
+                        deleteEnd++;
+                    }
+                }
+            }
+        }
         try {
             if (deleteEnd > wordStart) {
                 deletedText = content.getSubstring(wordStart, deleteEnd);
@@ -2507,6 +2527,17 @@ public class CodeEditText extends View {
             default:
                 return null;
         }
+    }
+
+    private static boolean isUnclosedDelimiter(String s, char open, char close) {
+        if (s == null) return false;
+        int depth = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == open) depth++;
+            else if (c == close) depth--;
+        }
+        return depth > 0;
     }
 
     private void handleAutoCloseHtmlTag(int cursorAfterGt) {
@@ -2951,14 +2982,37 @@ public class CodeEditText extends View {
                 }
                 UndoStack.EditorSnapshot before = editor.snapshotAt(editor.cursor, null);
 
-                editor.content.replace(startPos.line, startPos.column, endPos.line, endPos.column, insertText);
-                ContentPosition after = editor.content.positionAt(start + insertText.length());
-                editor.cursor = after;
-                editor.selectionAnchor = null;
+                // If IME commits text ending with a closing bracket/quote matching the char right after composing range, skip over it
+                boolean skippedOver = false;
+                if (!insertText.isEmpty() && end < total) {
+                    char lastCh = insertText.charAt(insertText.length() - 1);
+                    boolean isBracket = (lastCh == ')' || lastCh == ']' || lastCh == '}') && editor.autoCloseBrackets;
+                    boolean isQuote = (lastCh == '"' || lastCh == '\'' || lastCh == '`') && editor.autoCloseQuotes;
+                    if ((isBracket || isQuote) && endPos.column < editor.content.lineLength(endPos.line)
+                            && editor.content.charAt(endPos.line, endPos.column) == lastCh) {
+                        String cleanInsert = insertText.substring(0, insertText.length() - 1);
+                        editor.content.replace(startPos.line, startPos.column, endPos.line, endPos.column, cleanInsert);
+                        ContentPosition after = editor.content.positionAt(start + cleanInsert.length() + 1);
+                        editor.cursor = after;
+                        editor.selectionAnchor = null;
+                        if (!deleted.isEmpty() || !cleanInsert.isEmpty()) {
+                            editor.undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
+                                    deleted, cleanInsert, before, editor.snapshotAt(after, null));
+                        }
+                        skippedOver = true;
+                    }
+                }
 
-                if (!deleted.isEmpty() || !insertText.isEmpty()) {
-                    editor.undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
-                            deleted, insertText, before, editor.snapshotAt(after, null));
+                if (!skippedOver) {
+                    editor.content.replace(startPos.line, startPos.column, endPos.line, endPos.column, insertText);
+                    ContentPosition after = editor.content.positionAt(start + insertText.length());
+                    editor.cursor = after;
+                    editor.selectionAnchor = null;
+
+                    if (!deleted.isEmpty() || !insertText.isEmpty()) {
+                        editor.undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
+                                deleted, insertText, before, editor.snapshotAt(after, null));
+                    }
                 }
 
                 editor.composingStart = -1;
