@@ -202,7 +202,7 @@ public class JsStandardLibrary {
                         if ("__global__".equals(container) || "window".equals(container)) {
                             GLOBAL_SIGNATURES.putIfAbsent(name, sig);
                         }
-                        if (container.startsWith("__")) {
+                        if (container.startsWith("__") && !"__global__".equals(container)) {
                             PROTOTYPE_SIGNATURES_BY_NAME.putIfAbsent(name, sig);
                         }
                     }

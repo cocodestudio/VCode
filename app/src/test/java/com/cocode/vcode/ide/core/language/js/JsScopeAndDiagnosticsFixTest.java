@@ -269,4 +269,214 @@ public class JsScopeAndDiagnosticsFixTest extends BaseJsAstTest {
         assertFalse("TsLinter enum check should not be WARNING", hasEnumWarning);
         assertTrue("TsLinter enum check should be INFO", hasEnumInfo);
     }
+
+    @Test
+    public void testCrossFileImportedFunctionArity_noFalseZeroParamError() {
+        File baseDir = new File(".").getAbsoluteFile();
+        File sourceFile = new File(baseDir, "app.js");
+        File mathFile = new File(baseDir, "math.js");
+
+        String mathCode = "export function add(a, b) {\n" +
+                "    return a + b;\n" +
+                "}\n";
+        mockIndex.updateDocumentSnapshot(mathFile.getAbsolutePath(), mathCode, "javascript");
+
+        String appCode = "import { add } from './math';\n" +
+                "add(10, 20);\n";
+
+        List<Problem> problems = JsLinter.analyze(sourceFile, appCode, mockIndex);
+        for (Problem p : problems) {
+            String msg = p.getMessage();
+            assertFalse("Should not report expects 0 arguments: " + msg, msg.contains("expects 0 argument(s)"));
+        }
+    }
+
+    @Test
+    public void testCrossFileImportedClassConstructorArity_noFalseZeroParamError() {
+        File baseDir = new File(".").getAbsoluteFile();
+        File sourceFile = new File(baseDir, "main.js");
+        File personFile = new File(baseDir, "person.js");
+
+        String personCode = "export class Person {\n" +
+                "    constructor(firstName, lastName) {\n" +
+                "        this.firstName = firstName;\n" +
+                "        this.lastName = lastName;\n" +
+                "    }\n" +
+                "}\n";
+        mockIndex.updateDocumentSnapshot(personFile.getAbsolutePath(), personCode, "javascript");
+
+        String mainCode = "import { Person } from './person';\n" +
+                "const p = new Person(\"John\", \"Doe\");\n";
+
+        List<Problem> problems = JsLinter.analyze(sourceFile, mainCode, mockIndex);
+        for (Problem p : problems) {
+            String msg = p.getMessage();
+            assertFalse("Should not report Person constructor expects 0 arguments: " + msg, msg.contains("expects 0 argument(s)"));
+        }
+    }
+
+    @Test
+    public void testCallbackAndExternalModule_noFalseZeroParamError() {
+        String code = "import { useState } from 'react';\n" +
+                "const [state, setState] = useState(0);\n" +
+                "function run(callback) {\n" +
+                "    callback(1, 2, 3);\n" +
+                "}\n";
+        List<Problem> problems = JsLinter.analyze(mockFile, code, mockIndex);
+        for (Problem p : problems) {
+            String msg = p.getMessage();
+            assertFalse("Unresolved external module or callback parameter call should not report expects 0 arguments: " + msg,
+                    msg.contains("expects 0 argument(s)"));
+        }
+    }
+
+    @Test
+    public void testFunctionSignatureChange_updatesIndexParseResultAndSymbols() {
+        File file = new File("component.js");
+        String v1 = "function calculate(x) { return x; }";
+        JsLinter.analyze(file, v1, mockIndex);
+
+        List<com.cocode.vcode.ide.core.lsp.SymbolEntry> syms1 = mockIndex.getFileSymbols(file.getAbsolutePath());
+        org.junit.Assert.assertNotNull(syms1);
+        boolean foundCalc1 = false;
+        for (com.cocode.vcode.ide.core.lsp.SymbolEntry s : syms1) {
+            if ("calculate".equals(s.name)) {
+                assertEquals("x", s.detail);
+                foundCalc1 = true;
+                break;
+            }
+        }
+        assertTrue("calculate(x) should be indexed", foundCalc1);
+
+        String v2 = "function calculate(x, y, z) { return x + y + z; }";
+        JsLinter.analyze(file, v2, mockIndex);
+
+        List<com.cocode.vcode.ide.core.lsp.SymbolEntry> syms2 = mockIndex.getFileSymbols(file.getAbsolutePath());
+        org.junit.Assert.assertNotNull(syms2);
+        boolean foundCalc2 = false;
+        for (com.cocode.vcode.ide.core.lsp.SymbolEntry s : syms2) {
+            if ("calculate".equals(s.name)) {
+                assertEquals("x, y, z", s.detail);
+                foundCalc2 = true;
+                break;
+            }
+        }
+        assertTrue("calculate(x, y, z) should be updated in index immediately", foundCalc2);
+    }
+
+    @Test
+    public void testClassInstanceMethodArity_detectsTooFewAndTooManyArguments() {
+        String js = "class Person {\n" +
+                "    getName(prefix) {\n" +
+                "        return prefix + ' John';\n" +
+                "    }\n" +
+                "}\n" +
+                "const p = new Person();\n" +
+                "p.getName();\n" +
+                "p.getName('Sir');\n" +
+                "p.getName('Sir', 'Extra');\n";
+
+        List<Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
+
+        boolean foundTooFew = false;
+        boolean foundTooMany = false;
+        for (Problem p : problems) {
+            String msg = p.getMessage();
+            if (msg.contains("Too few arguments: 'p.getName' expects 1 argument(s), but got 0")) {
+                foundTooFew = true;
+            }
+            if (msg.contains("Too many arguments: 'p.getName' expects 1 argument(s), but got 2")) {
+                foundTooMany = true;
+            }
+        }
+        assertTrue("Should report too few arguments when calling p.getName() with 0 arguments", foundTooFew);
+        assertTrue("Should report too many arguments when calling p.getName() with 2 arguments", foundTooMany);
+    }
+
+    @Test
+    public void testClassInstanceMethodArity_signatureChange_dynamicallyUpdatesDiagnostics() {
+        // Version 1: getName takes NO params. Calling p.getName() has 0 errors.
+        String v1 = "class Person {\n" +
+                "    getName() {\n" +
+                "        return 'John';\n" +
+                "    }\n" +
+                "}\n" +
+                "const p = new Person();\n" +
+                "p.getName();\n";
+
+        List<Problem> problemsV1 = JsLinter.analyze(mockFile, v1, mockIndex);
+        for (Problem p : problemsV1) {
+            assertFalse("V1 should have no arity error for p.getName(): " + p.getMessage(),
+                    p.getMessage().contains("Too few arguments: 'p.getName'"));
+        }
+
+        // Version 2: User changes signature: getName now takes 1 param (prefix).
+        // Calling p.getName() with 0 args should now immediately report error!
+        String v2 = "class Person {\n" +
+                "    getName(prefix) {\n" +
+                "        return prefix + ' John';\n" +
+                "    }\n" +
+                "}\n" +
+                "const p = new Person();\n" +
+                "p.getName();\n";
+
+        List<Problem> problemsV2 = JsLinter.analyze(mockFile, v2, mockIndex);
+        boolean foundError = false;
+        for (Problem p : problemsV2) {
+            if (p.getMessage().contains("Too few arguments: 'p.getName' expects 1 argument(s), but got 0")) {
+                foundError = true;
+                break;
+            }
+        }
+        assertTrue("V2 must report 'Too few arguments' after signature was changed to take 1 param", foundError);
+    }
+
+    @Test
+    public void testCrossFileClassInstanceMethodArity_detectsArityMismatch() {
+        File personFile = new File("Person.js");
+        String personCode = "export class Person {\n" +
+                "    getName(prefix) {\n" +
+                "        return prefix + ' John';\n" +
+                "    }\n" +
+                "}\n";
+        JsLinter.analyze(personFile, personCode, mockIndex);
+
+        File mainFile = new File("main.js");
+        String mainCode = "import { Person } from './Person';\n" +
+                "const p = new Person();\n" +
+                "p.getName();\n" +
+                "p.getName('Dr.');\n";
+
+        List<Problem> problems = JsLinter.analyze(mainFile, mainCode, mockIndex);
+        boolean foundTooFew = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Too few arguments: 'p.getName' expects 1 argument(s), but got 0")) {
+                foundTooFew = true;
+                break;
+            }
+        }
+        assertTrue("Cross-file class instance method arity check must report too few arguments", foundTooFew);
+    }
+
+    @Test
+    public void testClassInstanceInheritedMethodArity() {
+        String js = "class Animal {\n" +
+                "    speak(sound) {\n" +
+                "        return sound;\n" +
+                "    }\n" +
+                "}\n" +
+                "class Dog extends Animal {}\n" +
+                "const d = new Dog();\n" +
+                "d.speak();\n";
+        List<Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
+        boolean foundTooFew = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Too few arguments: 'd.speak' expects 1 argument(s), but got 0")) {
+                foundTooFew = true;
+                break;
+            }
+        }
+        assertTrue("Inherited method arity check must report too few arguments", foundTooFew);
+    }
 }
+

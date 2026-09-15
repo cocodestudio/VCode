@@ -56,6 +56,15 @@ public class JsLinter {
                     tree.buildNodesByOffset();
                 }
                 scopeTree = ScopeTree.build(tree);
+                if (!filePath.isEmpty()) {
+                    ParseResult freshPr = new ParseResult(file, text, mask, tree, scopeTree, ParseResult.MODE_FULL);
+                    index.updateParseResult(filePath, freshPr);
+                    String langId = (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) ? "typescript" : "javascript";
+                    index.updateDocumentSnapshot(filePath, text, langId);
+                    java.util.List<com.cocode.vcode.ide.core.lsp.SymbolEntry> syms =
+                            com.cocode.vcode.ide.core.lsp.SymbolExtractor.extractJsSymbolsFromTree(filePath, text, tree);
+                    index.updateFileSymbols(filePath, syms);
+                }
             }
         } else {
             tree = JsParser.parseFull(text, mask);

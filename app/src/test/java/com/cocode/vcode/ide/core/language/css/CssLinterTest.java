@@ -249,4 +249,115 @@ public class CssLinterTest {
                     p.getMessage().contains("Invalid color"));
         }
     }
+
+    @Test
+    public void testBorderShorthandValues() {
+        String css = "div {\n" +
+                "  border: 1px solid rgba(255, 255, 255, 0.03);\n" +
+                "  border-top: 1px solid rgba(255, 255, 255, 0.05);\n" +
+                "  border-bottom: 1px solid rgba(255, 255, 255, 0.05);\n" +
+                "  border: 1px solid var(--accent);\n" +
+                "  border: solid 2px red;\n" +
+                "  border: #fff 1px dashed;\n" +
+                "  border: none;\n" +
+                "}";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("Valid border shorthand should not produce invalid color error: " + p.getMessage(),
+                    p.getMessage().contains("Invalid color"));
+            assertFalse("Valid border shorthand should not produce invalid border error: " + p.getMessage(),
+                    p.getMessage().contains("Invalid border"));
+        }
+    }
+
+    @Test
+    public void testRgbaInBorderColor() {
+        String css = "div {\n" +
+                "  border-color: rgba(212, 175, 55, 0.2);\n" +
+                "  border-color: rgba(255, 255, 255, 0.3);\n" +
+                "}";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("rgba in border-color should be valid: " + p.getMessage(),
+                    p.getMessage().contains("Invalid color"));
+        }
+    }
+
+    @Test
+    public void testBoxShadowAndBackgroundNotFlaggedAsColor() {
+        String css = "div {\n" +
+                "  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);\n" +
+                "  box-shadow: 0 10px 20px rgba(212, 175, 55, 0.15);\n" +
+                "  background: radial-gradient(circle, rgba(212, 175, 55, 0.08) 0%, rgba(0, 0, 0, 0) 70%);\n" +
+                "}";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("box-shadow / complex background should not be flagged as invalid color: " + p.getMessage(),
+                    p.getMessage().contains("Invalid color"));
+        }
+    }
+
+    @Test
+    public void testDeclaredCustomPropertyNoFallbackWarning() {
+        String css = ":root {\n" +
+                "  --accent: #d4af37;\n" +
+                "}\n" +
+                "div {\n" +
+                "  color: var(--accent);\n" +
+                "  border: 1px solid var(--accent);\n" +
+                "}";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("Declared custom property should not warn about missing fallback: " + p.getMessage(),
+                    p.getMessage().contains("without a fallback"));
+        }
+    }
+
+    @Test
+    public void testZeroPxInsideMathFunctionNotFlagged() {
+        String css = "div {\n" +
+                "  width: calc(100% - 0px);\n" +
+                "  margin-top: max(0px, 10px);\n" +
+                "}";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        for (Problem p : problems) {
+            assertFalse("0px inside calc/max should not warn about unnecessary units: " + p.getMessage(),
+                    p.getMessage().contains("units are unnecessary on zero values"));
+        }
+    }
+
+    @Test
+    public void testSelectorCombinatorsDoNotIncreaseDepth() {
+        // 3 compound selectors with 2 combinators -> 5 tokens total if combinators counted,
+        // but depth is 3 -> should not be flagged.
+        String css = "div > span + p { color: red; }";
+        List<Problem> problems = CssLinter.analyze(mockFile, css);
+        boolean specificWarn = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Overly specific selector")) specificWarn = true;
+        }
+        assertFalse("Selector with combinators (div > span + p) should not warn depth > 3 when combinators ignored",
+                specificWarn);
+
+        // Also test without whitespace around combinator: div>span+p
+        String cssNoSpace = "div>span+p { color: red; }";
+        List<Problem> problems2 = CssLinter.analyze(mockFile, cssNoSpace);
+        boolean specificWarn2 = false;
+        for (Problem p : problems2) {
+            if (p.getMessage().contains("Overly specific selector")) specificWarn2 = true;
+        }
+        assertFalse("Selector with tight combinators (div>span+p) should not warn depth > 3",
+                specificWarn2);
+
+        // 4 compound selectors -> depth is 4 -> should be flagged
+        String cssOver = "div > span + p ~ a { color: red; }";
+        List<Problem> problemsOver = CssLinter.analyze(mockFile, cssOver);
+        boolean specificWarnOver = false;
+        for (Problem p : problemsOver) {
+            if (p.getMessage().contains("Overly specific selector")) specificWarnOver = true;
+        }
+        assertTrue("Selector with 4 compound selectors (div > span + p ~ a) should be flagged",
+                specificWarnOver);
+    }
 }
+

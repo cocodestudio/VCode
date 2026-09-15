@@ -75,11 +75,18 @@ public final class SymbolExtractor {
     // -------------------------------------------------------------------------
 
     private static List<SymbolEntry> extractJsSymbols(LspDocument doc) {
-        List<SymbolEntry> results = new ArrayList<>();
         String text = doc.text;
-
         TokenStream stream = JsLexer.tokenize(text);
         JsSyntaxTree tree = JsParser.parseTopLevel(text, stream);
+        return extractJsSymbolsFromTree(doc.uri, text, tree);
+    }
+
+    /**
+     * Extracts JS/TS symbols directly from a pre-parsed syntax tree without re-lexing or re-parsing.
+     */
+    public static List<SymbolEntry> extractJsSymbolsFromTree(String uri, String text, JsSyntaxTree tree) {
+        List<SymbolEntry> results = new ArrayList<>();
+        if (tree == null || text == null) return results;
 
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
@@ -87,16 +94,23 @@ public final class SymbolExtractor {
             if (name == null || name.isEmpty() || "{destructure}".equals(name)) continue;
 
             int kind = -1;
-            if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC || 
-                type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER) {
+            if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC) {
                 kind = SymbolEntry.KIND_FUNCTION;
+            } else if (type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER) {
+                kind = SymbolEntry.KIND_METHOD;
             } else if (type == JsSyntaxTree.N_CLASS_DECL) {
                 kind = SymbolEntry.KIND_CLASS;
             } else if (type == JsSyntaxTree.N_VAR_DECL) {
                 // Promote variables with arrow functions or function expressions to KIND_FUNCTION
-                String stmt = text.substring(tree.nodeStart[i], tree.nodeEnd[i]);
-                if (stmt.contains("=>") || stmt.contains("function")) {
-                    kind = SymbolEntry.KIND_FUNCTION;
+                int start = tree.nodeStart[i];
+                int end = Math.min(tree.nodeEnd[i], text.length());
+                if (start >= 0 && start < end) {
+                    String stmt = text.substring(start, end);
+                    if (stmt.contains("=>") || stmt.contains("function")) {
+                        kind = SymbolEntry.KIND_FUNCTION;
+                    } else {
+                        kind = SymbolEntry.KIND_VARIABLE;
+                    }
                 } else {
                     kind = SymbolEntry.KIND_VARIABLE;
                 }
@@ -114,7 +128,7 @@ public final class SymbolExtractor {
 
                 LspPosition pos = offsetToPosition(text, nameStart);
                 LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-                results.add(new SymbolEntry(name, doc.uri, range, kind, detail));
+                results.add(new SymbolEntry(name, uri, range, kind, detail));
             }
         }
 
@@ -130,7 +144,13 @@ public final class SymbolExtractor {
             int guard = 0;
             while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
                 if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
-                    params.add(tree.nodeName[child] != null ? tree.nodeName[child] : "arg");
+                    String pName = tree.nodeName[child] != null ? tree.nodeName[child] : "arg";
+                    if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_REST) != 0) {
+                        pName = "..." + pName;
+                    } else if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) != 0) {
+                        pName = pName + "=?";
+                    }
+                    params.add(pName);
                 }
                 child = tree.nodeSibling[child];
             }

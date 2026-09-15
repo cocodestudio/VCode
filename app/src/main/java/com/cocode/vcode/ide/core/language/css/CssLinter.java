@@ -21,27 +21,169 @@ import java.util.Set;
  */
 public class CssLinter {
 
+    private static final Set<String> CSS_SYSTEM_COLORS = new HashSet<>(java.util.Arrays.asList(
+            "canvas", "canvastext", "linktext", "visitedtext", "activetext",
+            "buttonface", "buttontext", "buttonborder", "field", "fieldtext",
+            "highlight", "highlighttext", "selecteditem", "selecteditemtext",
+            "mark", "marktext", "graytext", "accentcolor", "accentcolortext"
+    ));
+
+    private static final Set<String> CSS_GLOBAL_VALUES = new HashSet<>(java.util.Arrays.asList(
+            "inherit", "initial", "unset", "revert", "revert-layer"
+    ));
+
+    private static final Set<String> BORDER_STYLES = new HashSet<>(java.util.Arrays.asList(
+            "none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset"
+    ));
+
+    public static List<String> splitParenAwareTokens(String s) {
+        List<String> tokens = new ArrayList<>();
+        if (s == null || s.isEmpty()) return tokens;
+        int len = s.length();
+        int start = 0;
+        int parenDepth = 0;
+        int bracketDepth = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < len) {
+                i++; // skip escaped char
+                continue;
+            }
+            if (c == '\'' && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+            } else if (c == '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (!inSingleQuote && !inDoubleQuote) {
+                if (c == '(') parenDepth++;
+                else if (c == ')' && parenDepth > 0) parenDepth--;
+                else if (c == '[') bracketDepth++;
+                else if (c == ']' && bracketDepth > 0) bracketDepth--;
+                else if (Character.isWhitespace(c) && parenDepth == 0 && bracketDepth == 0) {
+                    if (i > start) {
+                        String token = s.substring(start, i).trim();
+                        if (!token.isEmpty()) tokens.add(token);
+                    }
+                    start = i + 1;
+                }
+            }
+        }
+        if (start < len) {
+            String token = s.substring(start).trim();
+            if (!token.isEmpty()) tokens.add(token);
+        }
+        return tokens;
+    }
+
+    private static boolean isSingleColor(String lo) {
+        if (lo == null || lo.isEmpty()) return false;
+        if (CSS_GLOBAL_VALUES.contains(lo)) return true;
+        if ("transparent".equals(lo) || "currentcolor".equals(lo)) return true;
+        if (CSS_SYSTEM_COLORS.contains(lo)) return true;
+        if (lo.startsWith("#") || lo.startsWith("rgb(") || lo.startsWith("rgba(")
+                || lo.startsWith("hsl(") || lo.startsWith("hsla(") || lo.startsWith("oklch(")
+                || lo.startsWith("oklab(") || lo.startsWith("lch(") || lo.startsWith("lab(")
+                || lo.startsWith("color(") || lo.startsWith("color-mix(") || lo.startsWith("var(")
+                || lo.startsWith("light-dark(") || lo.startsWith("hwb(") || lo.startsWith("env(")) {
+            return true;
+        }
+        return KnownElements.CSS_NAMED_COLORS.contains(lo);
+    }
+
     private static boolean isValidColor(String v, String prop) {
         if (v == null || v.isEmpty()) return true;
         String lo = v.toLowerCase().trim();
-        if ("invert".equals(lo) && "outline-color".equals(prop)) return true;
-        if ("border-color".equals(prop) && lo.contains(" ")) {
-            for (String part : lo.split("\\s+")) {
-                if (!part.isEmpty() && !isSingleColor(part)) return false;
+        if (CSS_GLOBAL_VALUES.contains(lo)) return true;
+        if ("outline-color".equals(prop) && ("invert".equals(lo) || "auto".equals(lo))) return true;
+        if (("caret-color".equals(prop) || "accent-color".equals(prop)) && "auto".equals(lo)) return true;
+        if ("scrollbar-color".equals(prop)) {
+            if ("auto".equals(lo) || "none".equals(lo)) return true;
+            List<String> tokens = splitParenAwareTokens(lo);
+            if (tokens.size() == 2) {
+                return isSingleColor(tokens.get(0)) && isSingleColor(tokens.get(1));
+            }
+            return false;
+        }
+        if ("border-color".equals(prop)) {
+            List<String> tokens = splitParenAwareTokens(lo);
+            if (tokens.isEmpty() || tokens.size() > 4) return false;
+            for (String token : tokens) {
+                if (!isSingleColor(token)) return false;
             }
             return true;
         }
         return isSingleColor(lo);
     }
 
-    private static boolean isSingleColor(String lo) {
-        if (lo.startsWith("#") || lo.startsWith("rgb(") || lo.startsWith("rgba(")
-                || lo.startsWith("hsl(") || lo.startsWith("hsla(") || lo.startsWith("oklch(")
-                || lo.startsWith("oklab(") || lo.startsWith("lch(") || lo.startsWith("lab(")
-                || lo.startsWith("color(") || lo.startsWith("color-mix(") || lo.startsWith("var(")
-                || lo.startsWith("light-dark(") || lo.startsWith("hwb(")) return true;
-        return KnownElements.CSS_NAMED_COLORS.contains(lo);
+    private static boolean isBorderStyle(String token, String prop) {
+        if (BORDER_STYLES.contains(token)) return true;
+        if ("outline".equals(prop) && "auto".equals(token)) return true;
+        return false;
     }
+
+    private static boolean isBorderWidth(String token) {
+        if ("thin".equals(token) || "medium".equals(token) || "thick".equals(token) || "0".equals(token)) return true;
+        if (token.startsWith("calc(") || token.startsWith("clamp(") || token.startsWith("min(") || token.startsWith("max(")) return true;
+        int i = 0;
+        int len = token.length();
+        while (i < len && (Character.isDigit(token.charAt(i)) || token.charAt(i) == '.')) {
+            i++;
+        }
+        if (i > 0 && i < len) {
+            String unit = token.substring(i);
+            return "px".equals(unit) || "em".equals(unit) || "rem".equals(unit)
+                    || "pt".equals(unit) || "vw".equals(unit) || "vh".equals(unit)
+                    || "vmin".equals(unit) || "vmax".equals(unit) || "%".equals(unit)
+                    || "ch".equals(unit) || "ex".equals(unit) || "cm".equals(unit)
+                    || "mm".equals(unit) || "in".equals(unit) || "pc".equals(unit)
+                    || "cqi".equals(unit) || "cqw".equals(unit);
+        }
+        return false;
+    }
+
+    private static boolean isBorderShorthandValid(String v, String prop) {
+        if (v == null || v.isEmpty()) return true;
+        String lo = v.toLowerCase().trim();
+        if (CSS_GLOBAL_VALUES.contains(lo)) return true;
+        if ("none".equals(lo) || "0".equals(lo) || "hidden".equals(lo)) return true;
+
+        List<String> tokens = splitParenAwareTokens(lo);
+        if (tokens.isEmpty() || tokens.size() > 3) return false;
+
+        boolean hasWidth = false;
+        boolean hasStyle = false;
+        boolean hasColor = false;
+
+        for (String token : tokens) {
+            if (!hasStyle && isBorderStyle(token, prop)) {
+                hasStyle = true;
+            } else if (!hasWidth && isBorderWidth(token)) {
+                hasWidth = true;
+            } else if (!hasColor && isSingleColor(token)) {
+                hasColor = true;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Set<String> collectDeclaredCustomProperties(CssSyntaxTree tree) {
+        Set<String> set = new HashSet<>();
+        if (tree == null) return set;
+        int count = tree.nodeCount;
+        for (int i = 1; i < count; i++) {
+            if (tree.nodeType[i] == CssSyntaxTree.N_PROPERTY) {
+                String name = tree.nodeName[i];
+                if (name != null && name.startsWith("--")) {
+                    set.add(name);
+                }
+            }
+        }
+        return set;
+    }
+
 
     public static List<Problem> analyze(File file, String text) {
         if (text == null || text.trim().isEmpty()) return new ArrayList<>();
@@ -64,7 +206,7 @@ public class CssLinter {
         }
 
         boolean pastFirstRule = false;
-        Set<String> declaredVars = new HashSet<>();
+        Set<String> declaredVars = collectDeclaredCustomProperties(tree);
         Set<String> usedVars = new HashSet<>();
 
         int nodeCount = tree.nodeCount;
@@ -340,20 +482,28 @@ public class CssLinter {
                     Problem.Severity.INFO));
         }
 
-        // var() without fallback warning
-        if (hasVarWithoutFallback(valTrimmed)) {
+        // var() without fallback warning (only for variables not declared in stylesheet)
+        if (hasVarWithoutFallback(valTrimmed, declaredVars)) {
             problems.add(new Problem(file, propLine, propCol, propLen,
                     "CSS variable in '" + prop + "' used without a fallback value",
                     Problem.Severity.INFO));
         }
 
-        // Invalid color value check
-        if (KnownElements.isCssColorProperty(pLo)) {
-            String v = valTrimmed.replace("!important", "").trim();
-            if (!v.isEmpty() && !isValidColor(v, pLo)) {
-                problems.add(new Problem(file, propLine, propCol, propLen,
-                        "Invalid color value '" + v + "' for '" + prop + "'",
-                        Problem.Severity.ERROR));
+        // Color & Shorthand validation
+        String valWithoutImportant = valTrimmed.replaceAll("(?i)\\s*!\\s*important\\s*$", "").trim();
+        if (!valWithoutImportant.isEmpty()) {
+            if (KnownElements.isPureColorProperty(pLo) || KnownElements.isMultiColorProperty(pLo)) {
+                if (!isValidColor(valWithoutImportant, pLo)) {
+                    problems.add(new Problem(file, propLine, propCol, propLen,
+                            "Invalid color value '" + valWithoutImportant + "' for '" + prop + "'",
+                            Problem.Severity.ERROR));
+                }
+            } else if (KnownElements.isBorderShorthandProperty(pLo)) {
+                if (!isBorderShorthandValid(valWithoutImportant, pLo)) {
+                    problems.add(new Problem(file, propLine, propCol, propLen,
+                            "Invalid border value '" + valWithoutImportant + "' for '" + prop + "'",
+                            Problem.Severity.ERROR));
+                }
             }
         }
 
@@ -390,8 +540,36 @@ public class CssLinter {
         while (idx >= 0) {
             boolean startBound = (idx == 0) || !Character.isLetterOrDigit(s.charAt(idx - 1));
             boolean endBound = (idx + 3 >= s.length()) || !Character.isLetterOrDigit(s.charAt(idx + 3));
-            if (startBound && endBound) return true;
+            if (startBound && endBound) {
+                if (!isInsideMathFunction(s, idx)) {
+                    return true;
+                }
+            }
             idx = s.indexOf("0px", idx + 3);
+        }
+        return false;
+    }
+
+    private static boolean isInsideMathFunction(String s, int pos) {
+        int parenDepth = 0;
+        for (int i = pos; i >= 0; i--) {
+            char c = s.charAt(i);
+            if (c == ')') parenDepth++;
+            else if (c == '(') {
+                if (parenDepth > 0) {
+                    parenDepth--;
+                } else {
+                    int idEnd = i;
+                    int idStart = idEnd - 1;
+                    while (idStart >= 0 && Character.isLetter(s.charAt(idStart))) {
+                        idStart--;
+                    }
+                    String fn = s.substring(idStart + 1, idEnd).toLowerCase();
+                    if ("calc".equals(fn) || "min".equals(fn) || "max".equals(fn) || "clamp".equals(fn)) {
+                        return true;
+                    }
+                }
+            }
         }
         return false;
     }
@@ -436,7 +614,7 @@ public class CssLinter {
         return false;
     }
 
-    private static boolean hasVarWithoutFallback(String s) {
+    private static boolean hasVarWithoutFallback(String s, Set<String> declaredVars) {
         if (s == null) return false;
         int start = s.indexOf("var(");
         while (start >= 0) {
@@ -444,7 +622,14 @@ public class CssLinter {
             int close = findMatchingParen(s, openParen);
             if (close > openParen) {
                 String inner = s.substring(openParen + 1, close);
-                if (!hasFallbackComma(inner)) return true;
+                if (!hasFallbackComma(inner)) {
+                    String varName = inner.trim();
+                    if (declaredVars != null && declaredVars.contains(varName)) {
+                        start = s.indexOf("var(", start + 4);
+                        continue;
+                    }
+                    return true;
+                }
             }
             start = s.indexOf("var(", start + 4);
         }
@@ -482,11 +667,10 @@ public class CssLinter {
     private static boolean selectorSpecificityTooHigh(String selector) {
         if (selector == null || selector.isEmpty() || selector.startsWith("@")) return false;
         for (String group : selector.split(",")) {
-            int depth = 0;
-            for (String part : group.trim().split("\\s+")) {
-                if (!part.isEmpty()) depth++;
-            }
-            if (depth > 3) return true;
+            String cleaned = group.replaceAll("[>+~|]+", " ").trim();
+            if (cleaned.isEmpty()) continue;
+            String[] parts = cleaned.split("\\s+");
+            if (parts.length > 3) return true;
         }
         return false;
     }

@@ -12,6 +12,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -351,4 +352,78 @@ public class JsSignatureParserTest {
         assertEquals("", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName(""));
         assertEquals("", com.cocode.vcode.ide.views.SignatureHintPopup.extractMethodName(null));
     }
+
+    @Test
+    public void testClassMethod_fetch_doesNotOverlapWithBuiltinFetch() {
+        String code = "class ApiClient {\n" +
+                "    fetch(customEndpoint, bodyData, headers) {\n" +
+                "        return null;\n" +
+                "    }\n" +
+                "    request() {\n" +
+                "        this.fetch(\n" +
+                "    }\n" +
+                "}\n";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(5, 19);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help should resolve this.fetch", help);
+        assertEquals(1, help.signatures.size());
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Signature should contain customEndpoint parameter: " + sig.label, sig.label.contains("customEndpoint"));
+        assertEquals("Method", sig.documentation);
+        assertFalse("Doc must not be global fetch doc", sig.documentation != null && sig.documentation.contains("Fetches a resource from the network"));
+    }
+
+    @Test
+    public void testSameFileFunction_labeledLocalFunctionNotCrossFile() {
+        String code = "function localWorker(jobId, priority) {}\n" +
+                "localWorker(\n";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(1, 12);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue(sig.label.contains("jobId"));
+        assertFalse("Same-file function must not be labeled Cross-file", "Cross-file function".equals(sig.documentation));
+    }
+
+    @Test
+    public void testSameFileClass_labeledClassConstructorNotCrossFile() {
+        String code = "class MyService {\n" +
+                "    constructor(config, env) {}\n" +
+                "}\n" +
+                "new MyService(\n";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(3, 14);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue(sig.label.contains("config"));
+        assertFalse("Same-file class must not be labeled Cross-file", "Cross-file class".equals(sig.documentation));
+        assertEquals("Class constructor", sig.documentation);
+    }
+
+    @Test
+    public void testClassInstanceMethod_signatureHelp() {
+        String code = "class Person {\n" +
+                "    getName(prefix) {\n" +
+                "        return prefix;\n" +
+                "    }\n" +
+                "}\n" +
+                "const p = new Person();\n" +
+                "p.getName(\n";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(6, 10);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help should resolve p.getName", help);
+        assertEquals(1, help.signatures.size());
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Signature should contain 'prefix': " + sig.label, sig.label.contains("prefix"));
+        assertEquals("Method", sig.documentation);
+    }
 }
+

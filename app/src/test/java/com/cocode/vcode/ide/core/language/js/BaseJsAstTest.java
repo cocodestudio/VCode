@@ -18,6 +18,13 @@ public abstract class BaseJsAstTest {
     protected ProjectIndex mockIndex;
     protected File mockFile;
 
+    @org.junit.Before
+    public void initBase() {
+        this.mockIndex = ProjectIndex.getInstance();
+        this.mockFile = new File("test.js");
+        this.problems = new ArrayList<>();
+    }
+
     protected void setupEngine(String code) {
         this.source = code;
         this.tokens = JsLexer.tokenize(code);

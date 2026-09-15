@@ -1548,74 +1548,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private int findExportInTree(JsSyntaxTree tree, String exportName) {
-        if (tree == null) return 0;
-
-        if ("default".equals(exportName) || exportName == null) {
-            for (int i = 1; i < tree.nodeCount; i++) {
-                if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT && "default".equals(tree.nodeName[i])) {
-                    int child = tree.nodeChild[i];
-                    if (child > 0 && child < tree.nodeCount) {
-                        if (tree.nodeType[child] == JsSyntaxTree.N_IDENTIFIER) {
-                            int topId = findTopLevelDeclInTree(tree, tree.nodeName[child]);
-                            return topId > 0 ? topId : child;
-                        }
-                        return child;
-                    }
-                    return i;
-                }
-            }
-            int cjs = findCommonJsExportNode(tree);
-            if (cjs > 0) return cjs;
-            return 0;
-        }
-
-        for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT) {
-                int child = tree.nodeChild[i];
-                int childLoop = 0;
-                while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
-                    String cName = tree.nodeName[child];
-                    if (exportName.equals(cName)) {
-                        if (tree.nodeType[child] == JsSyntaxTree.N_IDENTIFIER) {
-                            String originalSymbol = tree.nodeTypeAnn[child] != null ? tree.nodeTypeAnn[child] : cName;
-                            int topId = findTopLevelDeclInTree(tree, originalSymbol);
-                            return topId > 0 ? topId : child;
-                        }
-                        return child;
-                    }
-                    child = tree.nodeSibling[child];
-                }
-            }
-        }
-
-        int topDecl = findTopLevelDeclInTree(tree, exportName);
-        if (topDecl > 0) return topDecl;
-
-        return 0;
-    }
-
-    private int findTopLevelDeclInTree(JsSyntaxTree tree, String name) {
-        if (tree == null || name == null) return 0;
-        for (int i = 1; i < tree.nodeCount; i++) {
-            int type = tree.nodeType[i];
-            if (type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL 
-                    || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_INTERFACE) {
-                if (name.equals(tree.nodeName[i])) {
-                    return i;
-                }
-            }
-        }
-        return 0;
-    }
-
-    private int findCommonJsExportNode(JsSyntaxTree tree) {
-        if (tree == null) return 0;
-        for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == JsSyntaxTree.N_OBJECT_LITERAL) {
-                return i;
-            }
-        }
-        return 0;
+        return JsExportTable.findExportNode(tree, exportName);
     }
 
     private ResolvedSymbol resolveImport(String typeAnn) {

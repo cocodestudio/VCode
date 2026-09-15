@@ -28,6 +28,7 @@ public class CssValueCompletionTest {
         String props = "[" +
                 "{\"property\": \"color\", \"values\": [\"red\", \"blue\", \"transparent\"], \"acceptsColor\": true}," +
                 "{\"property\": \"display\", \"values\": [\"block\", \"flex\", \"inline\"]}," +
+                "{\"property\": \"border\", \"values\": [\"none\", \"solid\", \"1px\", \"1px solid var(--border)\"], \"acceptsColor\": true}," +
                 "{\"property\": \"--my-var\", \"values\": []}" +
                 "]";
         StaticAssetReader.setAssetOverride(StaticCompletionLoader.CSS_PROPERTIES_ASSET, props);
@@ -144,4 +145,39 @@ public class CssValueCompletionTest {
         String resolved = CssStaticCompletionDispatcher.resolvePropertyName(src, null, cursor);
         assertEquals(null, resolved);
     }
+
+    @Test
+    public void borderPropertyOffersValuesAndColors() {
+        seedLoader();
+        String src = ".x { border: |";
+        int cursor = src.indexOf('|');
+        CssStaticCompletionDispatcher.Position pos =
+                CssStaticCompletionDispatcher.detectPosition(src, null, null, cursor);
+        assertEquals(CssStaticCompletionDispatcher.Position.PROPERTY_VALUE, pos);
+        List<CompletionItem> items = CssStaticCompletionDispatcher.buildCompletions(pos, src, cursor);
+        Set<String> labels = new HashSet<>();
+        for (CompletionItem c : items) labels.add(c.getLabel());
+
+        assertTrue("solid should be suggested for border", labels.contains("solid"));
+        assertTrue("1px should be suggested for border", labels.contains("1px"));
+        assertTrue("1px solid var(--border) should be suggested for border", labels.contains("1px solid var(--border)"));
+        assertTrue("red (color) should be suggested for border", labels.contains("red"));
+        assertTrue("rgb() (color function) should be suggested for border", labels.contains("rgb(|, , , )"));
+    }
+
+    @Test
+    public void cssAutoCompleteEngineBorderShorthandSuggestions() {
+        com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine engine =
+                new com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine(null);
+        String css = ".box { border: ";
+        List<CompletionItem> items = engine.getSuggestions(css, css.length());
+        Set<String> labels = new HashSet<>();
+        for (CompletionItem item : items) {
+            labels.add(item.getLabel());
+        }
+        assertTrue("solid stroke style must be suggested", labels.contains("solid"));
+        assertTrue("dashed stroke style must be suggested", labels.contains("dashed"));
+        assertTrue("1px stroke width must be suggested", labels.contains("1px"));
+    }
 }
+

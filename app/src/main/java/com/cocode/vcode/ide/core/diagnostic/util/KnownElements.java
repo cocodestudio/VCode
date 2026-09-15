@@ -45,6 +45,9 @@ public final class KnownElements {
     public static final Set<String> VALID_CSS_PROPERTIES = new HashSet<>();
     public static final Set<String> CSS_COLOR_PROPERTIES = new HashSet<>();
     public static final Set<String> CSS_NAMED_COLORS = new HashSet<>();
+    public static final Set<String> CSS_PURE_COLOR_PROPERTIES = new HashSet<>();
+    public static final Set<String> CSS_MULTI_COLOR_PROPERTIES = new HashSet<>();
+    public static final Set<String> CSS_BORDER_SHORTHAND_PROPERTIES = new HashSet<>();
 
     private static volatile boolean isLoaded = false;
     private static final Object lock = new Object();
@@ -58,8 +61,26 @@ public final class KnownElements {
         Collections.addAll(BLOCK_ELEMENTS,
                 "address", "article", "aside", "blockquote", "details", "dialog", "dd", "div",
                 "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2",
-                "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "li", "main", "nav", "ol",
-                "p", "pre", "section", "summary", "table", "ul");
+                "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "li", "main", "nav",
+                "noscript", "ol", "p", "pre", "section", "table", "ul");
+
+        Collections.addAll(CSS_PURE_COLOR_PROPERTIES,
+                "color", "background-color",
+                "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+                "border-block-color", "border-block-start-color", "border-block-end-color",
+                "border-inline-color", "border-inline-start-color", "border-inline-end-color",
+                "text-decoration-color", "column-rule-color",
+                "caret-color", "accent-color", "outline-color",
+                "flood-color", "lighting-color", "stop-color");
+
+        Collections.addAll(CSS_MULTI_COLOR_PROPERTIES,
+                "border-color", "scrollbar-color");
+
+        Collections.addAll(CSS_BORDER_SHORTHAND_PROPERTIES,
+                "border", "border-top", "border-right", "border-bottom", "border-left",
+                "border-block", "border-block-start", "border-block-end",
+                "border-inline", "border-inline-start", "border-inline-end",
+                "outline", "column-rule");
 
         Collections.addAll(INLINE_ELEMENTS,
                 "a", "abbr", "acronym", "b", "bdo", "big", "br", "button", "cite", "code", "dfn", "em", "i",
@@ -129,6 +150,30 @@ public final class KnownElements {
     public static boolean isCssColorProperty(String prop) {
         if (!isLoaded) ensureLoaded();
         return prop != null && CSS_COLOR_PROPERTIES.contains(prop.toLowerCase());
+    }
+
+    /**
+     * Determines if a CSS property strictly expects a single color value (e.g. 'color', 'background-color').
+     */
+    public static boolean isPureColorProperty(String prop) {
+        if (!isLoaded) ensureLoaded();
+        return prop != null && CSS_PURE_COLOR_PROPERTIES.contains(prop.toLowerCase());
+    }
+
+    /**
+     * Determines if a CSS property accepts multiple space-separated colors (e.g. 'border-color', 'scrollbar-color').
+     */
+    public static boolean isMultiColorProperty(String prop) {
+        if (!isLoaded) ensureLoaded();
+        return prop != null && CSS_MULTI_COLOR_PROPERTIES.contains(prop.toLowerCase());
+    }
+
+    /**
+     * Determines if a CSS property is a border-like shorthand (e.g. 'border', 'border-top', 'outline').
+     */
+    public static boolean isBorderShorthandProperty(String prop) {
+        if (!isLoaded) ensureLoaded();
+        return prop != null && CSS_BORDER_SHORTHAND_PROPERTIES.contains(prop.toLowerCase());
     }
 
     /**

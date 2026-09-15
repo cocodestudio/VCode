@@ -20,6 +20,7 @@ public final class SymbolEntry {
     public static final int KIND_CSS_CLASS = 7;
     public static final int KIND_CSS_ID = 8;
     public static final int KIND_HTML_ID = 9;
+    public static final int KIND_METHOD = 10;
 
     /**
      * The symbol name as it appears in source (e.g. {@code "fetchUser"}, {@code ".btn-primary"}).

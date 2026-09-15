@@ -6,6 +6,7 @@ import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -130,17 +131,109 @@ public class JsSignatureParser {
                 signature = String.join(", ", parsedParamNames);
                 sourceLabel = "Class constructor";
             } else if (declType == JsSyntaxTree.N_VAR_DECL) {
-                int child = tree.nodeChild[declNodeId];
-                if (child > 0 && child < tree.nodeCount) {
-                    int cType = tree.nodeType[child];
-                    if (cType == JsSyntaxTree.N_FUNC_DECL || cType == JsSyntaxTree.N_ARROW_FUNC) {
-                        parsedParamNames = extractParamNames(tree, child);
-                        signature = String.join(", ", parsedParamNames);
-                        sourceLabel = "Function";
-                    } else if (cType == JsSyntaxTree.N_CLASS_DECL) {
-                        parsedParamNames = extractClassConstructorParams(tree, child, scopeTree, scopeId);
-                        signature = String.join(", ", parsedParamNames);
-                        sourceLabel = "Class constructor";
+                String typeAnn = tree.nodeTypeAnn[declNodeId];
+                if (typeAnn != null && (typeAnn.startsWith("@IMPORT:") || typeAnn.startsWith("@REQUIRE:") || typeAnn.startsWith("@REQUIRE_PROP:"))) {
+                    com.cocode.vcode.ide.core.lsp.ProjectIndex pIndex = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance();
+                    String modPath = null;
+                    String expName = null;
+                    if (typeAnn.startsWith("@IMPORT:")) {
+                        int colon = typeAnn.indexOf(':', 8);
+                        if (colon != -1) {
+                            modPath = typeAnn.substring(8, colon);
+                            expName = typeAnn.substring(colon + 1);
+                        }
+                    } else if (typeAnn.startsWith("@REQUIRE_PROP:")) {
+                        int colon = typeAnn.indexOf(':', 14);
+                        if (colon != -1) {
+                            modPath = typeAnn.substring(14, colon);
+                            expName = typeAnn.substring(colon + 1);
+                        }
+                    } else if (typeAnn.startsWith("@REQUIRE:")) {
+                        modPath = typeAnn.substring(9);
+                        expName = "default";
+                    }
+                    if (modPath != null && pIndex != null) {
+                        com.cocode.vcode.ide.core.lsp.LspLocation loc =
+                                com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(doc.uri, modPath);
+                        if (loc != null && loc.uri != null) {
+                            com.cocode.vcode.ide.core.language.js.ParseResult targetPr =
+                                    pIndex.getOrParseJsFile(new java.io.File(loc.uri));
+                            if (targetPr != null && targetPr.tree != null) {
+                                int expNode = com.cocode.vcode.ide.core.language.js.JsExportTable.findExportNode(targetPr.tree, expName);
+                                if (expNode <= 0) {
+                                    expNode = com.cocode.vcode.ide.core.language.js.JsExportTable.findTopLevelDecl(targetPr.tree, expName);
+                                }
+                                if (expNode > 0) {
+                                    int eType = targetPr.tree.nodeType[expNode];
+                                    if (eType == JsSyntaxTree.N_CLASS_DECL) {
+                                        parsedParamNames = extractClassConstructorParams(targetPr.tree, expNode, targetPr.scopeTree, 0);
+                                        signature = String.join(", ", parsedParamNames);
+                                        sourceLabel = "Cross-file class";
+                                    } else if (eType == JsSyntaxTree.N_FUNC_DECL || eType == JsSyntaxTree.N_ARROW_FUNC) {
+                                        parsedParamNames = extractParamNames(targetPr.tree, expNode);
+                                        signature = String.join(", ", parsedParamNames);
+                                        sourceLabel = "Cross-file function";
+                                    } else if (eType == JsSyntaxTree.N_VAR_DECL) {
+                                        int c = targetPr.tree.nodeChild[expNode];
+                                        if (c > 0 && c < targetPr.tree.nodeCount) {
+                                            int ct = targetPr.tree.nodeType[c];
+                                            if (ct == JsSyntaxTree.N_CLASS_DECL) {
+                                                parsedParamNames = extractClassConstructorParams(targetPr.tree, c, targetPr.scopeTree, 0);
+                                                signature = String.join(", ", parsedParamNames);
+                                                sourceLabel = "Cross-file class";
+                                            } else if (ct == JsSyntaxTree.N_FUNC_DECL || ct == JsSyntaxTree.N_ARROW_FUNC) {
+                                                parsedParamNames = extractParamNames(targetPr.tree, c);
+                                                signature = String.join(", ", parsedParamNames);
+                                                sourceLabel = "Cross-file function";
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    int child = tree.nodeChild[declNodeId];
+                    if (child > 0 && child < tree.nodeCount) {
+                        int cType = tree.nodeType[child];
+                        if (cType == JsSyntaxTree.N_FUNC_DECL || cType == JsSyntaxTree.N_ARROW_FUNC) {
+                            parsedParamNames = extractParamNames(tree, child);
+                            signature = String.join(", ", parsedParamNames);
+                            sourceLabel = "Function";
+                        } else if (cType == JsSyntaxTree.N_CLASS_DECL) {
+                            parsedParamNames = extractClassConstructorParams(tree, child, scopeTree, scopeId);
+                            signature = String.join(", ", parsedParamNames);
+                            sourceLabel = "Class constructor";
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2b. Check 'this.' method inside class
+        if (signature == null && dotIdx >= 0 && funcName.startsWith("this.")) {
+            int enclosingClass = findEnclosingClassNode(tree, activeOpenParen);
+            if (enclosingClass > 0) {
+                int methodNode = findMethodInClassNode(tree, enclosingClass, baseIdentifier);
+                if (methodNode > 0) {
+                    parsedParamNames = extractParamNames(tree, methodNode);
+                    signature = String.join(", ", parsedParamNames);
+                    sourceLabel = "Method";
+                } else {
+                    String superName = tree.nodeTypeAnn[enclosingClass];
+                    if (superName != null && !superName.isEmpty()) {
+                        int[] superResolved = scopeTree.lookupSymbol(superName, scopeId);
+                        if (superResolved != null && superResolved[1] > 0 && superResolved[1] < tree.nodeCount) {
+                            int superNode = superResolved[1];
+                            if (tree.nodeType[superNode] == JsSyntaxTree.N_CLASS_DECL) {
+                                int sMethod = findMethodInClassNode(tree, superNode, baseIdentifier);
+                                if (sMethod > 0) {
+                                    parsedParamNames = extractParamNames(tree, sMethod);
+                                    signature = String.join(", ", parsedParamNames);
+                                    sourceLabel = "Method";
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -184,6 +277,20 @@ public class JsSignatureParser {
             }
         }
 
+        // 3b. Check class instance method (e.g. p.getName(|))
+        if (signature == null && dotIdx >= 0 && !funcName.startsWith("this.")) {
+            String receiver = funcName.substring(0, dotIdx);
+            File currentFile = (doc != null && doc.uri != null) ? new File(doc.uri) : null;
+            com.cocode.vcode.ide.core.language.js.JsSemanticLinter.ResolvedMethod rm =
+                    com.cocode.vcode.ide.core.language.js.JsSemanticLinter.resolveInstanceMethod(
+                            receiver, baseIdentifier, activeOpenParen, currentFile, doc != null ? doc.text : null, tree, scopeTree, com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
+            if (rm != null) {
+                parsedParamNames = extractParamNames(rm.tree, rm.methodNode);
+                signature = String.join(", ", parsedParamNames);
+                sourceLabel = rm.isCrossFile ? "Cross-file method" : "Method";
+            }
+        }
+
         // 4. Check built-in signatures from JsStandardLibrary
         if (signature == null) {
             String receiverType = null;
@@ -214,7 +321,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 5. Fallback to ProjectIndex definitions for cross-file project symbols
+        // 5. Fallback to ProjectIndex definitions for cross-file and un-scoped project symbols
         if (signature == null) {
             com.cocode.vcode.ide.core.lsp.ProjectIndex index = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance();
             List<com.cocode.vcode.ide.core.lsp.LspLocation> defs = index.findDefinitions(baseIdentifier);
@@ -225,7 +332,9 @@ public class JsSignatureParser {
                 if (entries == null) continue;
                 for (com.cocode.vcode.ide.core.lsp.SymbolEntry entry : entries) {
                     if (entry.name.equals(baseIdentifier) &&
-                            (entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_FUNCTION || entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS)) {
+                            (entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_FUNCTION ||
+                             entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_METHOD ||
+                             entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS)) {
                         targetEntry = entry;
                         break;
                     }
@@ -239,7 +348,24 @@ public class JsSignatureParser {
                 } else if (targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS) {
                     signature = "";
                 }
-                sourceLabel = targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS ? "Cross-file class" : "Cross-file function";
+                boolean isSameFile = doc != null && doc.uri != null && (doc.uri.equals(targetEntry.uri) || new java.io.File(doc.uri).equals(new java.io.File(targetEntry.uri)));
+                if (isSameFile) {
+                    if (targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS) {
+                        sourceLabel = "Class constructor";
+                    } else if (targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_METHOD) {
+                        sourceLabel = "Method";
+                    } else {
+                        sourceLabel = "Local function";
+                    }
+                } else {
+                    if (targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS) {
+                        sourceLabel = "Cross-file class";
+                    } else if (targetEntry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_METHOD) {
+                        sourceLabel = "Cross-file method";
+                    } else {
+                        sourceLabel = "Cross-file function";
+                    }
+                }
             }
         }
 
@@ -569,5 +695,19 @@ public class JsSignatureParser {
             }
         }
         return -1;
+    }
+
+    private static int findMethodInClassNode(JsSyntaxTree tree, int classNodeId, String methodName) {
+        if (tree == null || classNodeId <= 0 || methodName == null) return 0;
+        int child = tree.nodeChild[classNodeId];
+        int guard = 0;
+        while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
+            if ((tree.nodeType[child] == JsSyntaxTree.N_METHOD || tree.nodeType[child] == JsSyntaxTree.N_GETTER || tree.nodeType[child] == JsSyntaxTree.N_SETTER)
+                    && methodName.equals(tree.nodeName[child])) {
+                return child;
+            }
+            child = tree.nodeSibling[child];
+        }
+        return 0;
     }
 }

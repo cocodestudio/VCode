@@ -9,6 +9,7 @@ import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 
 import com.cocode.vcode.ide.core.completion.staticdata.CssStaticCompletionDispatcher;
+import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -43,6 +44,21 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     private final List<CompletionItem> cachedCustomProps = new ArrayList<>();
     private final FastTrie propertyTrie = new FastTrie();
     private int lastTextHash = 0;
+
+    private static final String[] BORDER_STYLES = {
+            "none", "hidden", "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset"
+    };
+    private static final String[] BORDER_WIDTHS = {
+            "thin", "medium", "thick", "1px", "2px", "3px", "4px"
+    };
+    private static final String[] BORDER_RADII = {
+            "0", "2px", "4px", "6px", "8px", "12px", "16px", "24px", "50%", "9999px", "1rem", "0.5rem", "0.25rem"
+    };
+    private static final String[] SHADOW_PRESETS = {
+            "none", "0 1px 2px rgba(0,0,0,0.05)", "0 1px 3px rgba(0,0,0,0.1)",
+            "0 4px 6px -1px rgba(0,0,0,0.1)", "0 10px 15px -3px rgba(0,0,0,0.1)",
+            "0 20px 25px -5px rgba(0,0,0,0.1)", "inset 0 2px 4px 0 rgba(0,0,0,0.06)"
+    };
 
     public CssAutoCompleteEngine(Context context) {
         super(context);
@@ -315,24 +331,60 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         List<CompletionItem> items = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
 
         // var(--…) completions
         if (word.startsWith("--") || word.equals("var")) {
-            items.addAll(cachedCustomProps);
+            for (CompletionItem ci : cachedCustomProps) {
+                if (seen.add(ci.getLabel())) items.add(ci);
+            }
         }
 
         // Property-specific enumerated values
         List<String> vals = valueMap.get(propertyName);
         if (vals != null) {
             for (String v : vals) {
-                items.add(new CompletionItem(v, v, propertyName, CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(v)) {
+                    items.add(new CompletionItem(v, v, propertyName, CompletionItem.Type.CSS_VALUE, 0));
+                }
             }
         }
 
-        items.addAll(globalValueItems);
+        // Shorthand enrichments
+        String p = propertyName != null ? propertyName.toLowerCase() : "";
+        if (p.contains("radius")) {
+            for (String r : BORDER_RADII) {
+                if (seen.add(r)) items.add(new CompletionItem(r, r, "Radius", CompletionItem.Type.CSS_VALUE, 0));
+            }
+        } else if (p.endsWith("-style")) {
+            for (String s : BORDER_STYLES) {
+                if (seen.add(s)) items.add(new CompletionItem(s, s, "Border style", CompletionItem.Type.CSS_VALUE, 0));
+            }
+        } else if (p.endsWith("-width")) {
+            for (String w : BORDER_WIDTHS) {
+                if (seen.add(w)) items.add(new CompletionItem(w, w, "Border width", CompletionItem.Type.CSS_VALUE, 0));
+            }
+        } else if (KnownElements.isBorderShorthandProperty(p) || p.startsWith("outline") || p.startsWith("column-rule")) {
+            for (String s : BORDER_STYLES) {
+                if (seen.add(s)) items.add(new CompletionItem(s, s, "Stroke style", CompletionItem.Type.CSS_VALUE, 0));
+            }
+            for (String w : BORDER_WIDTHS) {
+                if (seen.add(w)) items.add(new CompletionItem(w, w, "Stroke width", CompletionItem.Type.CSS_VALUE, 0));
+            }
+        } else if (p.endsWith("shadow")) {
+            for (String sp : SHADOW_PRESETS) {
+                if (seen.add(sp)) items.add(new CompletionItem(sp, sp, "Shadow preset", CompletionItem.Type.CSS_VALUE, 0));
+            }
+        }
+
+        for (CompletionItem ci : globalValueItems) {
+            if (seen.add(ci.getLabel())) items.add(ci);
+        }
 
         if (isColorProperty(propertyName)) {
-            items.addAll(colorItems);
+            for (CompletionItem ci : colorItems) {
+                if (seen.add(ci.getLabel())) items.add(ci);
+            }
         }
 
         return fuzzyFilter(items, word);
@@ -416,8 +468,15 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     private boolean isColorProperty(String prop) {
         if (prop == null) return false;
         String p = prop.toLowerCase();
-        return p.endsWith("color") || p.equals("background") || p.equals("fill")
-                || p.equals("stroke") || p.equals("outline") || p.equals("border")
+        if (p.endsWith("-width") || p.endsWith("-style") || p.contains("radius")) {
+            return false;
+        }
+        if (KnownElements.isCssColorProperty(p)) {
+            return true;
+        }
+        return p.equals("background") || p.startsWith("background")
+                || p.equals("fill") || p.equals("stroke")
+                || p.startsWith("outline")
                 || p.endsWith("shadow") || p.equals("caret-color") || p.equals("accent-color");
     }
 

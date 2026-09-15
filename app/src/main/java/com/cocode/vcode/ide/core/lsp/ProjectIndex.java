@@ -227,13 +227,21 @@ public final class ProjectIndex {
         if (file == null || file.length() > 500 * 1024) return null; // 500 KB safety limit
         String uri = file.getAbsolutePath();
         com.cocode.vcode.ide.core.language.js.ParseResult cached = getParseResult(uri);
+        LspDocument doc = getDocument(uri);
+        String currentContent = (doc != null && doc.text != null) ? doc.text : null;
+
         if (cached != null && cached.tree != null) {
-            return cached;
+            if (currentContent != null) {
+                if (currentContent.equals(cached.source)) {
+                    return cached;
+                }
+            } else if (cached.file != null && file.lastModified() <= cached.file.lastModified()) {
+                return cached;
+            }
         }
 
         try {
-            LspDocument doc = getDocument(uri);
-            String content = (doc != null && doc.text != null) ? doc.text : com.cocode.vcode.ide.utils.FileUtils.readFile(file);
+            String content = (currentContent != null) ? currentContent : com.cocode.vcode.ide.utils.FileUtils.readFile(file);
             if (content != null) {
                 com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(content);
                 com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(content, tokens);
@@ -244,6 +252,8 @@ public final class ProjectIndex {
                 com.cocode.vcode.ide.core.language.js.ParseResult pr = new com.cocode.vcode.ide.core.language.js.ParseResult(
                         file, content, tokens, tree, scopeTree, com.cocode.vcode.ide.core.language.js.ParseResult.MODE_FULL);
                 updateParseResult(uri, pr);
+                List<SymbolEntry> syms = SymbolExtractor.extractJsSymbolsFromTree(uri, content, tree);
+                updateFileSymbols(uri, syms);
                 return pr;
             }
         } catch (Throwable ignored) {}
@@ -304,19 +314,56 @@ public final class ProjectIndex {
      * @param doc updated document snapshot
      */
     public void updateDocument(LspDocument doc) {
+        if (doc == null || doc.uri == null) return;
         documents.put(doc.uri, doc);
+        String canon = canonicalize(doc.uri);
+        if (canon != null && !canon.equals(doc.uri)) {
+            documents.put(canon, doc);
+        }
         // Re-extract symbols for this single file in the background
         ExecutorProvider.getInstance().runOnIo(() -> {
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
-            fileSymbols.put(doc.uri, symbols);
+            updateFileSymbols(doc.uri, symbols);
         });
+    }
+
+    /**
+     * Instantly updates the symbol list for a file.
+     */
+    public void updateFileSymbols(String uri, List<SymbolEntry> symbols) {
+        if (uri == null || symbols == null) return;
+        fileSymbols.put(uri, symbols);
+        String canon = canonicalize(uri);
+        if (canon != null && !canon.equals(uri)) {
+            fileSymbols.put(canon, symbols);
+        }
+    }
+
+    /**
+     * Synchronously updates the live in-memory document snapshot in the index.
+     */
+    public void updateDocumentSnapshot(String uri, String text, String languageId) {
+        if (uri == null || text == null) return;
+        LspDocument oldDoc = getDocument(uri);
+        int version = (oldDoc != null) ? oldDoc.version + 1 : 1;
+        LspDocument doc = new LspDocument(uri, text, languageId != null ? languageId : "javascript", version);
+        documents.put(uri, doc);
+        String canon = canonicalize(uri);
+        if (canon != null && !canon.equals(uri)) {
+            documents.put(canon, doc);
+        }
     }
 
     /**
      * Removes the extracted symbols for the given URI, forcing a re-extract on next access if needed.
      */
     public void invalidateSymbols(String uri) {
+        if (uri == null) return;
         fileSymbols.remove(uri);
+        String canon = canonicalize(uri);
+        if (canon != null) {
+            fileSymbols.remove(canon);
+        }
     }
 
     /**
@@ -330,7 +377,7 @@ public final class ProjectIndex {
             // Re-extract symbols from the already-up-to-date in-memory snapshot
             ExecutorProvider.getInstance().runOnIo(() -> {
                 List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(existing);
-                fileSymbols.put(uri, symbols);
+                updateFileSymbols(uri, symbols);
             });
         } else {
             ExecutorProvider.getInstance().runOnIo(() -> indexFile(file));
@@ -345,6 +392,10 @@ public final class ProjectIndex {
     public void revertToDisk(File file) {
         String uri = file.getAbsolutePath();
         documents.remove(uri);
+        String canon = canonicalize(uri);
+        if (canon != null) {
+            documents.remove(canon);
+        }
         ExecutorProvider.getInstance().runOnIo(() -> indexFile(file));
     }
 
@@ -355,7 +406,12 @@ public final class ProjectIndex {
      * @param uri absolute file path
      */
     public LspDocument getDocument(String uri) {
-        return documents.get(uri);
+        if (uri == null) return null;
+        LspDocument doc = documents.get(uri);
+        if (doc == null) {
+            doc = documents.get(canonicalize(uri));
+        }
+        return doc;
     }
 
 
@@ -439,7 +495,11 @@ public final class ProjectIndex {
      * @return list of symbols, or an empty list if the file is not indexed
      */
     public List<SymbolEntry> getFileSymbols(String uri) {
+        if (uri == null) return Collections.emptyList();
         List<SymbolEntry> symbols = fileSymbols.get(uri);
+        if (symbols == null) {
+            symbols = fileSymbols.get(canonicalize(uri));
+        }
         return symbols != null ? symbols : Collections.emptyList();
     }
 
