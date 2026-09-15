@@ -102,6 +102,8 @@ public class CodeEditText extends View {
     private boolean autoCloseQuotes = true;
     private boolean wordWrap = false;
     private int[] visualRowStarts;
+    private int[][] lineWrapBreaks;
+    private int cachedWrapCharsPerRow = -1;
     private int totalVisualRows;
     private boolean visualLayoutPending = false;
     private boolean isSettingSelectionFromIme = false;
@@ -555,7 +557,7 @@ public class CodeEditText extends View {
             int lineLen = content.lineLength(line);
             if (lineLen == 0) continue;
 
-            int subRows = wordWrap ? Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow)) : 1;
+            int subRows = wordWrap ? getSubRowCount(line) : 1;
 
             com.cocode.vcode.ide.core.editor.text.ContentLine contentLine = content.getLine(line);
             boolean canHighlight = syntaxHighlighter != null
@@ -571,8 +573,8 @@ public class CodeEditText extends View {
             List<HighlightToken> lineTokens = contentLine.tokens;
 
             for (int sr = 0; sr < subRows; sr++) {
-                int srStart = sr * charsPerRow;
-                int srEnd = Math.min(lineLen, srStart + charsPerRow);
+                int srStart = wordWrap ? getSubRowStart(line, sr) : 0;
+                int srEnd = wordWrap ? getSubRowEnd(line, sr) : lineLen;
 
                 int startVisCol, endVisCol;
                 if (wordWrap) {
@@ -717,11 +719,10 @@ public class CodeEditText extends View {
                 float y0 = paddingTop + line * lineHeightPx;
                 canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, selectionPaint);
             } else {
-                int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
-                int subRows = Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow));
+                int subRows = getSubRowCount(line);
                 for (int sr = 0; sr < subRows; sr++) {
-                    int srStart = sr * charsPerRow;
-                    int srEndRow = Math.min(lineLen, srStart + charsPerRow);
+                    int srStart = getSubRowStart(line, sr);
+                    int srEndRow = getSubRowEnd(line, sr);
                     if (colEnd <= srStart || colStart >= srEndRow) continue;
                     int s = Math.max(colStart, srStart);
                     int e = Math.min(colEnd, srEndRow);
@@ -783,11 +784,10 @@ public class CodeEditText extends View {
                     float y0 = paddingTop + line * lineHeightPx;
                     canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, paint);
                 } else {
-                    int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
-                    int subRows = Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow));
+                    int subRows = getSubRowCount(line);
                     for (int sr = 0; sr < subRows; sr++) {
-                        int srStart = sr * charsPerRow;
-                        int srEndRow = Math.min(lineLen, srStart + charsPerRow);
+                        int srStart = getSubRowStart(line, sr);
+                        int srEndRow = getSubRowEnd(line, sr);
                         if (colEnd <= srStart || colStart >= srEndRow) continue;
                         int s = Math.max(colStart, srStart);
                         int e = Math.min(colEnd, srEndRow);
@@ -858,7 +858,7 @@ public class CodeEditText extends View {
             if (wordWrap) {
                 float x0 = paddingLeft + getCursorX(lineIdx, colStart);
                 float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
-                if (colEnd > colStart && colInSubRow(colEnd) < colInSubRow(colStart)) {
+                if (colEnd > colStart && visualSubRow(lineIdx, colEnd) > visualSubRow(lineIdx, colStart)) {
                     // problem spans multiple subrows, just draw for the first subrow
                     x1 = paddingLeft + getWidth() - getPaddingRight();
                 }
@@ -2024,21 +2024,50 @@ public class CodeEditText extends View {
                 visualRowStarts = new int[n + 1];
             for (int i = 0; i <= n; i++) visualRowStarts[i] = i;
             totalVisualRows = n;
+            lineWrapBreaks = null;
+            cachedWrapCharsPerRow = -1;
             return;
         }
         int n = content.lineCount();
         if (visualRowStarts == null || visualRowStarts.length < n + 1)
-            visualRowStarts = new int[n + 1];
+            visualRowStarts = new int[n + 65];
+        if (lineWrapBreaks == null || lineWrapBreaks.length < n)
+            lineWrapBreaks = new int[n + 64][];
+
         int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
+        cachedWrapCharsPerRow = charsPerRow;
+
         int row = 0;
         for (int i = 0; i < n; i++) {
             visualRowStarts[i] = row;
             int lineLen = content.lineLength(i);
-            int rows = Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow));
-            row += rows;
+            if (lineLen <= charsPerRow) {
+                lineWrapBreaks[i] = null;
+                row += 1;
+            } else {
+                int[] breaks = WordWrapHelper.computeLineWrapBreaks(content.getLine(i), lineLen, charsPerRow);
+                lineWrapBreaks[i] = breaks;
+                row += (breaks != null ? breaks.length : 1);
+            }
         }
         visualRowStarts[n] = row;
         totalVisualRows = row;
+    }
+
+    private int getSubRowCount(int line) {
+        if (!wordWrap || visualRowStarts == null || line + 1 >= visualRowStarts.length) return 1;
+        return Math.max(1, visualRowStarts[line + 1] - visualRowStarts[line]);
+    }
+
+    private int getSubRowStart(int line, int sr) {
+        if (!wordWrap || lineWrapBreaks == null || line >= lineWrapBreaks.length) return 0;
+        return WordWrapHelper.getSubRowStart(lineWrapBreaks[line], sr);
+    }
+
+    private int getSubRowEnd(int line, int sr) {
+        int lineLen = content.lineLength(line);
+        if (!wordWrap || lineWrapBreaks == null || line >= lineWrapBreaks.length) return lineLen;
+        return WordWrapHelper.getSubRowEnd(lineWrapBreaks[line], sr, lineLen);
     }
 
     private int visualRowOf(int logicalLine) {
@@ -2046,20 +2075,18 @@ public class CodeEditText extends View {
         return visualRowStarts[logicalLine];
     }
 
-    private int visualSubRow(int col) {
-        if (!wordWrap || getWidth() <= 0) return 0;
-        int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
-        return col / charsPerRow;
+    private int visualSubRow(int line, int col) {
+        if (!wordWrap || lineWrapBreaks == null || line >= lineWrapBreaks.length) return 0;
+        return WordWrapHelper.visualSubRow(lineWrapBreaks[line], col);
     }
 
-    private int colInSubRow(int col) {
-        if (!wordWrap || getWidth() <= 0) return col;
-        int charsPerRow = Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth));
-        return col % charsPerRow;
+    private int colInSubRow(int line, int col) {
+        if (!wordWrap || lineWrapBreaks == null || line >= lineWrapBreaks.length) return col;
+        return WordWrapHelper.colInSubRow(lineWrapBreaks[line], col);
     }
 
     private int absoluteVisualRow(int logicalLine, int col) {
-        return visualRowOf(logicalLine) + visualSubRow(col);
+        return visualRowOf(logicalLine) + visualSubRow(logicalLine, col);
     }
 
     private int visualRowToLogicalLine(int visualRow) {
@@ -2763,12 +2790,13 @@ public class CodeEditText extends View {
     }
 
     private float getCursorX(int line, int col) {
-        if (wordWrap) col = colInSubRow(col);
-        float cx = col * charWidth;
+        int effectiveCol = wordWrap ? colInSubRow(line, col) : col;
+        float cx = effectiveCol * charWidth;
         java.util.List<com.cocode.vcode.ide.core.editor.highlight.HighlightToken> tokens = content.getLine(line).tokens;
         if (tokens != null) {
+            int subRowStart = wordWrap ? getSubRowStart(line, visualSubRow(line, col)) : 0;
             for (com.cocode.vcode.ide.core.editor.highlight.HighlightToken t : tokens) {
-                if (t.hasPreviewColor && t.startCol < col) {
+                if (t.hasPreviewColor && t.startCol >= subRowStart && t.startCol < col) {
                     cx += charWidth * 1.2f;
                 }
             }
@@ -2781,9 +2809,10 @@ public class CodeEditText extends View {
         int logicalLine = visualRowToLogicalLine(visualRow);
         logicalLine = Math.max(0, Math.min(logicalLine, content.lineCount() - 1));
 
-        int subRow = wordWrap ? (visualRow - visualRowOf(logicalLine)) : 0;
-        int charsPerRow = wordWrap ? Math.max(1, (int) ((getWidth() - getPaddingLeft() - getPaddingRight()) / charWidth)) : Integer.MAX_VALUE;
-        int colOffset = subRow * charsPerRow;
+        int subRow = wordWrap ? Math.max(0, visualRow - visualRowOf(logicalLine)) : 0;
+        int colOffset = wordWrap ? getSubRowStart(logicalLine, subRow) : 0;
+        int colEnd = wordWrap ? getSubRowEnd(logicalLine, subRow) : content.lineLength(logicalLine);
+        int subRowLen = Math.max(0, colEnd - colOffset);
 
         float relativeX = touchX + (wordWrap ? 0 : getScrollX()) - getPaddingLeft();
         int lineLen = content.lineLength(logicalLine);
@@ -2793,7 +2822,7 @@ public class CodeEditText extends View {
         boolean hasCircles = false;
         if (tokens != null) {
             for (com.cocode.vcode.ide.core.editor.highlight.HighlightToken t : tokens) {
-                if (t.hasPreviewColor) {
+                if (t.hasPreviewColor && t.startCol >= colOffset && t.startCol < colEnd) {
                     hasCircles = true;
                     break;
                 }
@@ -2806,7 +2835,7 @@ public class CodeEditText extends View {
             if (relativeX - colInSub * charWidth > charWidth / 2f) colInSub++;
         } else {
             float currentX = 0;
-            while (colInSub < lineLen - colOffset) {
+            while (colInSub < subRowLen) {
                 float widthAtCol = charWidth;
                 for (com.cocode.vcode.ide.core.editor.highlight.HighlightToken t : tokens) {
                     if (t.hasPreviewColor && t.startCol == colOffset + colInSub) {
@@ -2819,6 +2848,7 @@ public class CodeEditText extends View {
                 colInSub++;
             }
         }
+        colInSub = Math.max(0, Math.min(colInSub, subRowLen));
         int col = colOffset + colInSub;
         return new ContentPosition(logicalLine, Math.max(0, Math.min(col, lineLen)));
     }
