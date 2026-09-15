@@ -21,6 +21,8 @@ documentfile = "1.1.0"
 slf4jNop = "2.0.18"
 desugarJdkLibs = "2.1.2"
 orgJson = "20231013"
+slidingpanelayout = "1.2.0"
+window = "1.3.0"
 
 [libraries]
 activity = { module = "androidx.activity:activity", version.ref = "activity" }
@@ -48,6 +50,8 @@ slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jNop" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4jNop" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
+slidingpanelayout = { module = "androidx.slidingpanelayout:slidingpanelayout", version.ref = "slidingpanelayout" }
+window = { module = "androidx.window:window", version.ref = "window" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
