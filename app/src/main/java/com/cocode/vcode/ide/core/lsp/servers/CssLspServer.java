@@ -151,7 +151,7 @@ public final class CssLspServer implements LspServer {
         int offset = doc.toOffset(pos);
         if (offset < 0 || offset > doc.text.length()) return null;
 
-        // 1. Check for @import via AST
+        // Check for @import via AST
         CssTokenStream stream = CssLexer.tokenize(doc.text);
         CssSyntaxTree tree = CssParser.parse(stream, doc.text);
 
@@ -179,7 +179,7 @@ public final class CssLspServer implements LspServer {
             }
         }
 
-        // 2. .class or #id selector → find its definition in HTML
+        // Look up class or ID selector definition in HTML documents
         String selector = extractSelectorAtOffset(doc.text, offset);
         if (selector != null && projectIndex != null) {
             List<LspLocation> defs = projectIndex.findDefinitions(selector);

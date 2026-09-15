@@ -307,7 +307,7 @@ public final class LspClientManager {
      * @return new uninitialised server instance, or null if unsupported
      */
     private LspServer createServer(String languageId) {
-        // Servers will be registered here as they are implemented in subsequent phases.
+        // Register language servers according to supported language identifiers
         switch (languageId) {
             case "html":
                 return new com.cocode.vcode.ide.core.lsp.servers.HtmlLspServer(appContext);

@@ -54,7 +54,7 @@ public class TsLinter {
         return problems;
     }
 
-    // 1. Type Mismatch
+    // Type mismatch check
     private static void checkTypeMismatch(File file, String text, TokenStream stream, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_VAR_DECL) {
@@ -87,7 +87,7 @@ public class TsLinter {
         }
     }
 
-    // 2. Return Any
+    // Function return type of 'any' check
     private static void checkReturnAny(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
@@ -107,7 +107,7 @@ public class TsLinter {
         }
     }
 
-    // 3. Exported Function Return Type
+    // Missing return type on exported function
     private static void checkExportedFnReturnType(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT) {
@@ -133,7 +133,7 @@ public class TsLinter {
         }
     }
 
-    // 4. Optional Before Required Parameters
+    // Optional parameter before required parameter
     private static void checkOptionalBeforeRequired(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
@@ -167,7 +167,7 @@ public class TsLinter {
         }
     }
 
-    // 5. Explicit 'any' in Param or Var
+    // Explicit 'any' in parameter or variable declaration
     private static void checkAnyType(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
@@ -188,7 +188,7 @@ public class TsLinter {
         }
     }
 
-    // 6. Enums
+    // Enum declaration check
     private static void checkEnum(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_ENUM) {
@@ -205,7 +205,7 @@ public class TsLinter {
         }
     }
 
-    // 7. Redundant Inferred Type
+    // Redundant type annotation matching inferred literal
     private static void checkRedundantType(File file, String text, TokenStream stream, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_VAR_DECL) {
@@ -238,7 +238,7 @@ public class TsLinter {
         }
     }
 
-    // 8. Union Undefined Parameter
+    // Parameter with union undefined without optional marker
     private static void checkUnionUndefined(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_PARAM) {
@@ -259,7 +259,7 @@ public class TsLinter {
         }
     }
 
-    // 9. Readonly Array Suggestion
+    // Suggest readonly array for non-mutated interface properties
     private static void checkReadonlyArray(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
@@ -287,7 +287,7 @@ public class TsLinter {
         }
     }
 
-    // 10. Inline Object Type
+    // Suggest extracting complex inline object types
     private static void checkInlineObjectType(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             String typeAnn = tree.nodeTypeAnn[i];
@@ -315,7 +315,7 @@ public class TsLinter {
         }
     }
 
-    // 11. Namespace
+    // Discourage namespace keyword in modern TypeScript
     private static void checkNamespace(File file, String text, TokenStream stream, List<Problem> out) {
         int t = 0;
         while (t < stream.length) {
@@ -332,7 +332,7 @@ public class TsLinter {
         }
     }
 
-    // 12. Function Type
+    // Suggest specific signature over Function type
     private static void checkFunctionType(File file, String text, JsSyntaxTree tree, List<Problem> out) {
         for (int i = 1; i < tree.nodeCount; i++) {
             String typeAnn = tree.nodeTypeAnn[i];
@@ -358,7 +358,7 @@ public class TsLinter {
         return false;
     }
 
-    // 13. As Assertion
+    // Type assertion validation
     private static void checkAsAssertion(File file, String text, TokenStream stream, List<Problem> out) {
         int t = 0;
         while (t < stream.length) {

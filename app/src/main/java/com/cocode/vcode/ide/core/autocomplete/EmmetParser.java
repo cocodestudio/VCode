@@ -409,7 +409,7 @@ public class EmmetParser {
             if (abbr.isEmpty()) return null;
         }
 
-        // 1. Hex color shorthands: c#f, c#333, bg#000, bd#f00
+        // Hex color shorthands (e.g. c#f, c#333, bg#000, bd#f00)
         Matcher hexMatch = PAT_HEX_COLOR.matcher(abbr);
         if (hexMatch.matches()) {
             ensureLoaded();
@@ -436,13 +436,13 @@ public class EmmetParser {
             }
         }
 
-        // 2. Check named abbreviations first (exact match)
+        // Match exact named abbreviations
         String named = EmmetCssDefinitions.CSS_ABBREVS.get(abbr);
         if (named != null) {
             return applyImportant(named, important);
         }
 
-        // 3. Auto values with colon shorthand: m:a, mt:a, w:a, h:a
+        // Shorthands with auto values (e.g. m:a, mt:a, w:a, h:a)
         if (abbr.endsWith(":a")) {
             String propKey = abbr.substring(0, abbr.length() - 2);
             String prop = EmmetCssDefinitions.CSS_PROP_MAP.get(propKey);
@@ -451,7 +451,7 @@ public class EmmetParser {
             }
         }
 
-        // 4. Numeric property shorthand (e.g. m10, m-10, m-10--20, op0.5, lh1.5, w100p)
+        // Numeric property shorthands with units or decimals
         Matcher m = PAT_CSS_NUMERIC.matcher(abbr);
         if (m.matches()) {
             String propAbbr = m.group(1);
@@ -845,7 +845,7 @@ public class EmmetParser {
     private static List<EmmetNode> parseElementToken(String token, String parentTag) {
         if (token == null || token.isEmpty()) return null;
 
-        // 1. Check multiplication at the end (*N)
+        // Parse multiplication multiplier at the end (*N)
         int mult = 1;
         int lastMultIdx = -1;
         int depth = 0;
@@ -868,7 +868,7 @@ public class EmmetParser {
             }
         }
 
-        // 2. Pure text node: {Click me}
+        // Standalone text node: {Click me}
         if (token.startsWith("{") && token.endsWith("}")) {
             String text = token.substring(1, token.length() - 1);
             List<EmmetNode> nodes = new ArrayList<>(mult);
@@ -881,7 +881,7 @@ public class EmmetParser {
             return nodes;
         }
 
-        // 3. Extract text content {text} attached to an element
+        // Text content attached to an element: {text}
         String textContent = null;
         int textOpen = -1;
         depth = 0;
@@ -903,7 +903,7 @@ public class EmmetParser {
             }
         }
 
-        // 4. Extract attributes [attr=val][attr2="val2"]
+        // Element attribute expressions: [attr=val][attr2="val2"]
         Map<String, String> customAttrs = new LinkedHashMap<>();
         StringBuilder tokenWithoutAttrs = new StringBuilder();
         int p = 0;
@@ -925,7 +925,7 @@ public class EmmetParser {
 
         String remaining = tokenWithoutAttrs.toString();
 
-        // 5. Parse tag, #id, .class1.class2
+        // Parse tag name, ID, and class selectors
         String tagOrAlias = "";
         String id = null;
         List<String> classes = new ArrayList<>();

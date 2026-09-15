@@ -156,7 +156,7 @@ public final class JsLspServer implements LspServer {
         com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(doc.text);
         com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(doc.text, tokens);
 
-        // 1. Resolve import module path if cursor is on an import statement
+        // Resolve module target path when cursor is on an import statement
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_IMPORT) {
                 if (offset >= tree.nodeStart[i] && offset <= tree.nodeEnd[i]) {
@@ -169,7 +169,7 @@ public final class JsLspServer implements LspServer {
             }
         }
 
-        // 2. Try local file resolution using ScopeTree
+        // Resolve local symbol definition via ScopeTree
         String word = extractWord(doc.text, offset);
         if (word.isEmpty()) return null;
 

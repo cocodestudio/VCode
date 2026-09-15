@@ -86,7 +86,7 @@ public class JsSemanticLinter {
     private static void checkConstReassignment(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
-                // Ignore the identifier if it is part of its own declaration (Test 1.1 fix)
+                // Ignore the identifier when referenced within its own variable declaration
                 int parentId = tree.nodeParent[i];
                 if (parentId != 0 && tree.nodeType[parentId] == JsSyntaxTree.N_VAR_DECL && tree.nodeName[i].equals(tree.nodeName[parentId])) {
                     continue;
@@ -466,7 +466,7 @@ public class JsSemanticLinter {
 
         if (className == null || className.isEmpty()) return null;
 
-        // 1. In current file's scope
+        // Check declaration in the current file scope
         int scopeId = scopeTree != null ? scopeTree.findScopeAt(callOffset, tree) : 0;
         int[] classResolved = scopeTree != null ? scopeTree.lookupSymbol(className, scopeId, callOffset, tree) : null;
         if (classResolved != null && classResolved[1] > 0 && classResolved[1] < tree.nodeCount) {
@@ -486,7 +486,7 @@ public class JsSemanticLinter {
             }
         }
 
-        // 2. In ProjectIndex definitions
+        // Check cross-file declarations in ProjectIndex
         if (index != null) {
             List<com.cocode.vcode.ide.core.lsp.LspLocation> defs = index.findDefinitions(className);
             if (defs != null) {
@@ -801,7 +801,7 @@ public class JsSemanticLinter {
         if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) {
             return new int[]{0, 0, 0};
         }
-        // 1. Look for explicit constructor method in this class
+        // Look for an explicit constructor method in this class
         int child = tree.nodeChild[classNodeId];
         int guard = 0;
         while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
@@ -829,10 +829,10 @@ public class JsSemanticLinter {
             child = tree.nodeSibling[child];
         }
 
-        // 2. No explicit constructor in this class -> check superclass if any
+        // Check superclass constructor if the class extends another class
         String superName = tree.nodeTypeAnn[classNodeId];
         if (superName != null && !superName.isEmpty()) {
-            // 2a. Check if superclass is in scope in the same file
+            // Check if superclass is in scope in the same file
             if (scopeTree != null) {
                 int[] superResolved = scopeTree.lookupSymbol(superName, scopeId);
                 if (superResolved != null && superResolved[1] > 0 && superResolved[1] < tree.nodeCount) {
@@ -854,7 +854,7 @@ public class JsSemanticLinter {
                 }
             }
 
-            // 2b. Check built-in standard library classes (e.g. Error, Map, Set, Event, etc.)
+            // Check built-in standard library classes (e.g. Error, Map, Set, Event, etc.)
             JsStandardLibrary.SignatureInfo builtinSuper = JsStandardLibrary.getBuiltinSignature(superName, null);
             if (builtinSuper != null && builtinSuper.parameters != null) {
                 boolean variadic = false;
@@ -872,7 +872,7 @@ public class JsSemanticLinter {
                 return new int[]{min, total, variadic ? 1 : 0};
             }
 
-            // 2c. Check cross-file project symbols via index
+            // Check cross-file project symbols via index
             if (index != null) {
                 List<LspLocation> defs = index.findDefinitions(superName);
                 for (LspLocation loc : defs) {
@@ -883,14 +883,28 @@ public class JsSemanticLinter {
                             if (s.detail != null) {
                                 String detail = s.detail.trim();
                                 boolean variadic = detail.contains("...");
-                                String[] parts = detail.isEmpty() ? new String[0] : detail.split(",");
+                                int total = 0;
                                 int min = 0;
-                                for (String p : parts) {
-                                    if (!p.contains("?") && !p.contains("=") && !p.contains("...")) {
-                                        min++;
+                                int open = detail.indexOf('(');
+                                int close = detail.lastIndexOf(')');
+                                if (open != -1 && close > open) {
+                                    String paramStr = detail.substring(open + 1, close).trim();
+                                    if (!paramStr.isEmpty()) {
+                                        String[] parts = paramStr.split(",");
+                                        for (String p : parts) {
+                                            String pt = p.trim();
+                                            if (pt.contains("...")) {
+                                                variadic = true;
+                                            } else {
+                                                total++;
+                                                if (!pt.contains("?") && !pt.contains("=")) {
+                                                    min++;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                                return new int[]{min, parts.length, variadic ? 1 : 0};
+                                return new int[]{min, total, variadic ? 1 : 0};
                             }
                             return new int[]{0, 0, 0};
                         }
@@ -903,7 +917,7 @@ public class JsSemanticLinter {
             return null;
         }
 
-        // 3. No explicit constructor and no superclass -> default ES6 constructor takes 0 arguments
+        // Default ES6 constructor takes 0 arguments when no explicit constructor exists
         return new int[]{0, 0, 0};
     }
     

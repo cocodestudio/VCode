@@ -219,8 +219,8 @@ public final class LspEditorBridge {
     public void setFile(File file) {
         File previousFile = this.currentFile;
 
-        // 1. Flush the previous file's LATEST content under its own URI, then
-        //    re-derive its symbols. Do this BEFORE overwriting this.currentFile.
+        // Flush the previous file's latest content under its own URI, then
+        // re-derive its symbols before overwriting this.currentFile.
         if (previousFile != null) {
             docVersion.incrementAndGet();
             updateProjectIndex();
@@ -232,14 +232,14 @@ public final class LspEditorBridge {
             }
         }
 
-        // 2. Switch to the new file
+        // Switch to the new file
         this.currentFile = file;
         this.fileType = editor != null ? editor.getFileType() : fileType;
 
-        // 3. Ensure the new file has an entry in ProjectIndex.
-        //    We CANNOT use updateProjectIndex() here because the editor still
-        //    contains the previous file's text — the caller's editor.setText(newContent)
-        //    call hasn't happened yet.
+        // Ensure the new file has an entry in ProjectIndex.
+        // We cannot use updateProjectIndex() here because the editor still
+        // contains the previous file's text — the caller's editor.setText(newContent)
+        // call hasn't happened yet.
         //    Use the existing in-memory document if available, otherwise schedule
         //    a disk read from the incremental scanner.
         if (file != null) {

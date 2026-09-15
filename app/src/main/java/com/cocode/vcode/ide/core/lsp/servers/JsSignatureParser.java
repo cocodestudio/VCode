@@ -34,7 +34,7 @@ public class JsSignatureParser {
         int callNode = 0;
         int activeOpenParen = -1;
 
-        // 1. Find the innermost N_CALL_EXPR whose open parenthesis precedes offset and whose argument list contains offset
+        // Find innermost N_CALL_EXPR whose open parenthesis precedes offset and whose argument list contains offset
         for (int j = 1; j < tree.nodeCount; j++) {
             if (tree.nodeType[j] == JsSyntaxTree.N_CALL_EXPR) {
                 int openParen = findOpenParenForCall(text, tree, j);
@@ -49,7 +49,7 @@ public class JsSignatureParser {
 
         String funcName = (callNode > 0) ? tree.nodeName[callNode] : null;
 
-        // 2. Fallback: if AST did not produce N_CALL_EXPR (e.g. unclosed / transient syntax or constructor call), find innermost unclosed '('
+        // Fallback: if AST did not produce N_CALL_EXPR (e.g. unclosed / transient syntax or constructor call), find innermost unclosed '('
         if (callNode == 0 || funcName == null || funcName.isEmpty()) {
             int unclosedParen = findInnermostUnclosedParen(text, offset);
             if (unclosedParen >= 0 && isCursorInsideCall(text, unclosedParen, offset)) {
@@ -96,7 +96,7 @@ public class JsSignatureParser {
         String sourceLabel = "Local function";
         List<String> parsedParamNames = null;
 
-        // 1. Special case: super(...) call inside derived class constructor or method
+        // Special case: super(...) call inside derived class constructor or method
         if ("super".equals(baseIdentifier) || "super".equals(funcName)) {
             int enclosingClass = findEnclosingClassNode(tree, activeOpenParen);
             if (enclosingClass > 0 && tree.nodeTypeAnn[enclosingClass] != null) {
@@ -117,7 +117,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 2. Check local file declaration in scope
+        // Check local file declaration in scope
         if (signature == null && resolved != null && resolved[1] > 0 && resolved[1] < tree.nodeCount) {
             int declNodeId = resolved[1];
             int declType = tree.nodeType[declNodeId];
@@ -239,7 +239,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 3. Check object literal member if receiver is in scope (e.g. mathUtils.add(|))
+        // Check object literal member if receiver is in scope (e.g. mathUtils.add(|))
         if (signature == null && dotIdx >= 0) {
             String receiver = funcName.substring(0, dotIdx);
             int[] recResolved = scopeTree.lookupSymbol(receiver, scopeId);
@@ -277,7 +277,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 3b. Check class instance method (e.g. p.getName(|))
+        // Check class instance method (e.g. p.getName(|))
         if (signature == null && dotIdx >= 0 && !funcName.startsWith("this.")) {
             String receiver = funcName.substring(0, dotIdx);
             File currentFile = (doc != null && doc.uri != null) ? new File(doc.uri) : null;
@@ -291,7 +291,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 4. Check built-in signatures from JsStandardLibrary
+        // Check built-in signatures from standard library
         if (signature == null) {
             String receiverType = null;
             if (dotIdx >= 0) {
@@ -321,7 +321,7 @@ public class JsSignatureParser {
             }
         }
 
-        // 5. Fallback to ProjectIndex definitions for cross-file and un-scoped project symbols
+        // Fallback to ProjectIndex definitions for cross-file and project symbols
         if (signature == null) {
             com.cocode.vcode.ide.core.lsp.ProjectIndex index = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance();
             List<com.cocode.vcode.ide.core.lsp.LspLocation> defs = index.findDefinitions(baseIdentifier);

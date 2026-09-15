@@ -51,7 +51,7 @@ public class JsLexer {
         byte[] newTypes = new byte[newLen];
         int[] newTokenStart = new int[newLen];
 
-        // 1. Find safe start point (beginning of the line)
+        // Find safe start point at the beginning of the line
         int start = editOffset;
         if (start > newLen) start = newLen;
         while (start > 0 && newSource.charAt(start - 1) != '\n') {
@@ -68,7 +68,7 @@ public class JsLexer {
         }
         if (start < 0) start = 0;
 
-        // 2. Find safe end point
+        // Find safe end boundary beyond the edit
         int newEnd = editOffset;
         while (newEnd < newLen) {
             char c = newSource.charAt(newEnd);
@@ -101,13 +101,13 @@ public class JsLexer {
             oldEnd = oldLen;
         }
 
-        // 3. Copy clean prefix
+        // Copy clean prefix
         if (start > 0) {
             System.arraycopy(existing.types, 0, newTypes, 0, start);
             System.arraycopy(existing.tokenStart, 0, newTokenStart, 0, start);
         }
 
-        // 4. Copy clean suffix
+        // Copy clean suffix
         if (newEnd < newLen && oldEnd < oldLen) {
             int suffixLen = Math.min(newLen - newEnd, oldLen - oldEnd);
             System.arraycopy(existing.types, oldEnd, newTypes, newEnd, suffixLen);
@@ -117,7 +117,7 @@ public class JsLexer {
             }
         }
 
-        // 5. Determine initial lastTokenType for regex disambiguation
+        // Determine initial lastTokenType for regex disambiguation
         int lastTokenType = 0;
         int before = start - 1;
         while (before >= 0) {
@@ -137,7 +137,7 @@ public class JsLexer {
             break;
         }
 
-        // 6. Lex the dirty region
+        // Lex the modified region
         lexRegion(newSource, newTypes, newTokenStart, start, newEnd, lastTokenType);
 
         return new TokenStream(newTypes, newTokenStart);

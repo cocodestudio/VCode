@@ -20,10 +20,10 @@ import java.util.List;
 /**
  * High-performance, zero-allocation context-aware autocomplete engine for Markdown.
  * Supports:
- * 1. File and image path completions inside link and image targets: [text](path) and ![alt](path).
- * 2. Embedded language completions inside fenced code blocks (```html, ```css, ```js, ```json).
- * 3. Markdown structure snippets (headings, lists, tasks, blockquotes, tables, horizontal rules).
- * 4. Inline formatting snippets (bold, italic, inline code, strikethrough, link, image).
+ * - File and image path completions inside link and image targets: {@code [text](path)} and {@code ![alt](path)}.
+ * - Embedded language completions inside fenced code blocks ({@code ```html}, {@code ```css}, {@code ```js}, {@code ```json}).
+ * - Markdown structure snippets (headings, lists, tasks, blockquotes, tables, horizontal rules).
+ * - Inline formatting snippets (bold, italic, inline code, strikethrough, link, image).
  */
 public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
 
@@ -81,7 +81,7 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
             return Collections.emptyList();
         }
 
-        // 1. Check if cursor is inside a link/image destination: [...](<cursor>)
+        // Check if cursor is inside a link or image target path
         if (isInsideLinkDestination(fullText, cursorPos)) {
             List<CompletionItem> pathSuggestions = pathEngine.getSuggestions(fullText, cursorPos);
             if (pathSuggestions != null && !pathSuggestions.isEmpty()) {
@@ -89,7 +89,7 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 2. Check if cursor is inside a fenced code block
+        // Check if cursor is inside a fenced code block
         CodeBlockContext blockCtx = findCodeBlockContext(fullText, cursorPos);
         if (blockCtx != null && blockCtx.language != null) {
             List<CompletionItem> embeddedSuggestions = getEmbeddedSuggestions(blockCtx, fullText, cursorPos);
@@ -98,7 +98,7 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 3. Structural & snippet completions
+        // Structural and formatting snippet completions
         String word = getWordBeforeCursor(fullText, cursorPos);
         List<CompletionItem> result = new ArrayList<>();
 

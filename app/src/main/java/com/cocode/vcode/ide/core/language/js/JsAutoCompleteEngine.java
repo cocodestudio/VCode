@@ -172,15 +172,15 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         String word = getWordBeforeCursor(fullText, cursorPos);
 
-    // 1. Import / require path completion
+        // Module path completions for import and require calls
         List<CompletionItem> importItems = getImportPathSuggestions(fullText, cursorPos);
         if (importItems != null) return importItems;
 
-    // 1c. Import block completion
+        // Named import and export clause completions
         List<CompletionItem> importExport = getImportExportSuggestions(fullText, cursorPos, word);
         if (importExport != null) return importExport;
 
-    // 1b. Event name string completions (addEventListener/removeEventListener/on) & DOM queries
+        // Event name string completions (addEventListener/removeEventListener/on) & DOM queries
         String lineBefore = getLineBeforeCursor(fullText, cursorPos);
         int lastQuote = Math.max(lineBefore.lastIndexOf('\''), lineBefore.lastIndexOf('"'));
         if (lastQuote != -1) {
@@ -223,7 +223,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-    // 2. Dot-member completion
+        // Member access completions following a dot accessor
         int dotCheckPos = cursorPos - word.length() - 1;
         
         int enclosingNode = 0;
@@ -248,8 +248,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             return getMemberCompletions(fullText, dotCheckPos, word);
         }
 
-    // 2b. Object literal key completion
-        // If we're inside an object literal (after { or ,) suggest known keys
+        // Inside an object literal (after { or ,), suggest known property keys
         List<CompletionItem> objKeys = getObjectLiteralSuggestions(fullText, cursorPos, word);
         if (objKeys != null) return objKeys;
 
@@ -259,7 +258,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 3. General: keywords + user symbols
+        // Scope symbols, globals, and keyword completions
         List<CompletionItem> staticItems = JsStaticCompletionDispatcher.buildCompletions();
         List<CompletionItem> baseKeywords = (staticItems != null && !staticItems.isEmpty()) ? staticItems : builtinItems;
         List<CompletionItem> filteredKeywords = JsStaticCompletionDispatcher.filterStructural(baseKeywords, fullText, cursorPos);
@@ -1823,7 +1822,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                      Set<String> seen, List<CompletionItem> items, int depth) {
         if (depth > 10 || classNodeId <= 0 || classNodeId >= tree.nodeCount) return;
 
-        // 1. Direct children of this class
+        // Direct methods and properties of this class
         int child = tree.nodeChild[classNodeId];
         while (child > 0 && child < tree.nodeCount) {
             int type = tree.nodeType[child];
@@ -1840,7 +1839,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             child = tree.nodeSibling[child];
         }
 
-        // 2. If this class extends another class, resolve base class and collect inherited members
+        // If this class extends another class, resolve the base class and collect inherited members
         String superName = tree.nodeTypeAnn[classNodeId];
         if (superName != null && !superName.isEmpty()) {
             for (int i = 1; i < tree.nodeCount; i++) {

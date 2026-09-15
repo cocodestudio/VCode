@@ -28,7 +28,7 @@ public class MarkdownLinter {
         MdLineStream stream = MdLexer.lex(text);
         MdSyntaxTree tree = MdParser.parseBlocks(stream, text);
 
-        // 1. AST Traversal
+        // Traverse AST to validate structural rules
         int lastHeadingLevel = 0;
         char listMarker = '\0';
 
@@ -94,7 +94,7 @@ public class MarkdownLinter {
             }
         }
 
-        // 2. Pattern checks for links, images, URLs, tabs, and whitespace (gated against code blocks)
+        // Validate links, images, URLs, tabs, and trailing whitespace outside code blocks
         List<int[]> codeSpans = new ArrayList<>();
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == MdSyntaxTree.N_CODE_BLOCK) {

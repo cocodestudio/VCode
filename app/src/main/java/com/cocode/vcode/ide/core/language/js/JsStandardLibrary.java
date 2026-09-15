@@ -82,7 +82,7 @@ public class JsStandardLibrary {
         try {
             JSONObject root = new JSONObject(jsonStr);
 
-            // 1. dotMethods
+            // Load static container methods
             if (root.has("dotMethods")) {
                 JSONObject dotObj = root.getJSONObject("dotMethods");
                 int size = dotObj.length();
@@ -106,7 +106,7 @@ public class JsStandardLibrary {
                 DOT_METHODS = new String[0][0];
             }
 
-            // 2. eventNames
+            // Load DOM event names
             if (root.has("eventNames")) {
                 JSONArray evArr = root.getJSONArray("eventNames");
                 String[] eventNames = new String[evArr.length()];
@@ -118,7 +118,7 @@ public class JsStandardLibrary {
                 EVENT_NAMES = new String[0];
             }
 
-            // 3. prototypeMethods
+            // Load prototype methods by receiver type
             PROTOTYPE_METHODS.clear();
             if (root.has("prototypeMethods")) {
                 JSONObject protoObj = root.getJSONObject("prototypeMethods");
@@ -134,7 +134,7 @@ public class JsStandardLibrary {
                 }
             }
 
-            // 4. chainReturnTypes
+            // Load fluent chain return types
             CHAIN_RETURN_TYPES.clear();
             if (root.has("chainReturnTypes")) {
                 JSONObject chainObj = root.getJSONObject("chainReturnTypes");
@@ -145,7 +145,7 @@ public class JsStandardLibrary {
                 }
             }
 
-            // 5. promiseFunctions
+            // Load asynchronous and Promise-returning functions
             PROMISE_FUNCTIONS.clear();
             if (root.has("promiseFunctions")) {
                 JSONArray pfArr = root.getJSONArray("promiseFunctions");
@@ -154,7 +154,7 @@ public class JsStandardLibrary {
                 }
             }
 
-            // 6. lspMembers & signatures
+            // Load LSP signatures and member metadata
             SIGNATURES_BY_CONTAINER.clear();
             GLOBAL_SIGNATURES.clear();
             PROTOTYPE_SIGNATURES_BY_NAME.clear();
@@ -230,13 +230,13 @@ public class JsStandardLibrary {
             String container = funcName.substring(0, dotIdx);
             String method = funcName.substring(dotIdx + 1);
 
-            // 1. Direct container lookup (e.g. "console", "Math", "document", "JSON", "URL")
+            // Look up direct container object (e.g. console, Math, document, JSON, URL)
             Map<String, SignatureInfo> cMap = SIGNATURES_BY_CONTAINER.get(container);
             if (cMap != null && cMap.containsKey(method)) {
                 return cMap.get(method);
             }
 
-            // 2. Inferred receiver type lookup
+            // Look up inferred receiver type
             if (receiverType != null) {
                 String protoContainer = mapTypeToContainer(receiverType);
                 if (protoContainer != null) {
@@ -247,13 +247,13 @@ public class JsStandardLibrary {
                 }
             }
 
-            // 3. Fallback to well-known prototype method by name (e.g. "push", "slice", "replace", "addEventListener")
+            // Fallback to standard prototype method by name (e.g. push, slice, replace, addEventListener)
             SignatureInfo protoSig = PROTOTYPE_SIGNATURES_BY_NAME.get(method);
             if (protoSig != null) {
                 return protoSig;
             }
 
-            // 4. If container is window, check globals
+            // Check global identifiers when container is window
             if ("window".equals(container)) {
                 return GLOBAL_SIGNATURES.get(method);
             }

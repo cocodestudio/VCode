@@ -143,12 +143,12 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         String trimmed = lineBefore.trim();
         String word = getWordBeforeCursor(fullText, cursorPos);
 
-        // 0. Comment gating
+        // Suppress completions inside HTML comments
         if (isInsideComment(fullText, cursorPos)) {
             return new ArrayList<>();
         }
 
-        // 1. DOCTYPE completions (when typing "<!" or "<!D" or "<!--" etc.)
+        // DOCTYPE completions (e.g. <!DOCTYPE html> or comment boilerplate)
         int lastLt = lineBefore.lastIndexOf('<');
         if (lastLt >= 0 && (trimmed.startsWith("<!") || trimmed.startsWith("<!--"))) {
             String prefix = lineBefore.substring(lastLt);
@@ -164,7 +164,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 2. Entity completions (when typing "&" followed by letters)
+        // HTML entity completions when typing '&'
         if (!lineBefore.isEmpty()) {
             int ampIdx = lineBefore.lastIndexOf('&');
             if (ampIdx >= 0) {
@@ -192,7 +192,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 3. Embedded <style> / <script> block delegation via AST/ProjectIndex
+        // Delegate to CSS/JS completion engines for embedded <style> and <script> blocks
         if (currentFile != null) {
             com.cocode.vcode.ide.core.language.js.ParseResult cached = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getParseResult(currentFile.getAbsolutePath());
             if (cached != null && cached.embeddedResults != null) {
@@ -230,7 +230,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 4. Closing-tag suggestion on "</" using AST and tagParser
+        // Suggest matching closing tags on "</"
         int lastCloseTagIdx = lineBefore.lastIndexOf("</");
         if (lastCloseTagIdx != -1) {
             String afterSlash = lineBefore.substring(lastCloseTagIdx + 2);
@@ -274,7 +274,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 5. AST-Aware Position Dispatching via HtmlStaticCompletionDispatcher
+        // Context-aware attribute name and value completions
         com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position pos =
                 com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.detectPosition(fullText, cursorPos);
 
@@ -290,18 +290,18 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             return new ArrayList<>();
         }
 
-        // 6. Inside an attribute value
+        // Inside attribute value
         if (ctx.isInsideOpenTag && !ctx.isTypingTagName && ctx.currentTagName != null) {
             if (ctx.isInsideAttributeValue && ctx.currentAttributeName != null) {
                 String attrName = ctx.currentAttributeName;
                 String typedValue = ctx.currentAttributeValue != null ? ctx.currentAttributeValue : "";
 
-                // 6a. Inside style="…" → CSS
+                // Embedded CSS completions inside inline style attributes
                 if ("style".equals(attrName)) {
                     return cssEngine.getSuggestions(typedValue, typedValue.length(), true);
                 }
 
-                // 6b. Inside on*="…" → JS
+                // Embedded JavaScript completions inside inline event handler attributes
                 if (attrName.startsWith("on")) {
                     return jsEngine.getSuggestions(typedValue, typedValue.length());
                 }
@@ -385,7 +385,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 7. Emmet expansion
+        // Emmet abbreviation expansion
         boolean inEmmetBraces = isInsideEmmetBraces(lineBefore);
         boolean inEmmetBrackets = isInsideEmmetBrackets(lineBefore);
 
@@ -425,7 +425,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 7b. Candidate Emmet abbreviation with trailing auto-closed delimiter ('}' or ']')
+        // Candidate Emmet abbreviation with trailing auto-closed delimiter ('}' or ']')
         // or unclosed delimiter while typing inside braces/brackets
         if (inEmmetBraces) {
             int braceIdx = lineBefore.lastIndexOf('{');
@@ -473,7 +473,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 8. Tag name completions
+        // HTML tag name completions
         boolean isTagNamePos = pos == com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.TAG_NAME
                 || ctx.isTypingTagName
                 || trimmed.endsWith("<")
@@ -555,7 +555,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     /**
      * Returns true if the cursor is inside unmatched square brackets on the current line.
      * This indicates the user is typing Emmet attribute content like {@code a[href="#|"]}
-     * and we should NOT show HTML tag suggestions or let Step 7 match inner words.
+     * and we should not show HTML tag suggestions or match inner words as Emmet expressions.
      */
     private boolean isInsideEmmetBrackets(String lineBefore) {
         int depth = 0;

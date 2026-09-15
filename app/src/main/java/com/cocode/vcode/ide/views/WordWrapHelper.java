@@ -51,7 +51,7 @@ public final class WordWrapHelper {
             int limit = start + charsPerRow;
             int breakPoint = -1;
 
-            // Priority 1: Whitespace boundary (space or tab)
+            // Check for whitespace boundary (space or tab)
             // Look backward from limit down to start + 1
             for (int k = limit; k > start; k--) {
                 char prev = line.charAt(k - 1);
@@ -62,7 +62,7 @@ public final class WordWrapHelper {
                 }
             }
 
-            // Priority 2: Punctuation / delimiter / operator boundary
+            // Check for punctuation, delimiter, or operator boundary
             if (breakPoint == -1) {
                 for (int k = limit; k > start; k--) {
                     char prev = line.charAt(k - 1);
@@ -74,7 +74,7 @@ public final class WordWrapHelper {
                 }
             }
 
-            // Priority 3: Fallback hard break if no word/punctuation boundary exists in window
+            // Fallback to hard wrap if no word or punctuation boundary exists in this slice
             if (breakPoint == -1) {
                 breakPoint = limit;
             }

@@ -53,7 +53,7 @@ public class FastTrie {
         TrieNode current = root;
         String lowerPrefix = prefix.toLowerCase();
 
-        // 1. Traverse to the end of the prefix
+        // Walk the trie to the end of the prefix node
         for (int i = 0; i < lowerPrefix.length(); i++) {
             char c = lowerPrefix.charAt(i);
             if (c >= 128) return results; // Prefix contains non-ASCII
@@ -64,10 +64,10 @@ public class FastTrie {
             current = current.children[c];
         }
 
-        // 2. Perform DFS to gather candidates from this subtree (bounded search)
+        // Depth-first search to collect matching candidates within limits
         gatherItems(current, results, Math.max(maxResults * 4, 128));
 
-        // 3. Sort by priority descending, then alphabetical
+        // Sort candidates by priority rank descending, then alphabetically
         Collections.sort(results, (a, b) -> {
             int pDiff = b.getTypePriority() - a.getTypePriority();
             if (pDiff != 0) return pDiff;

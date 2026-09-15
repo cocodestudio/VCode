@@ -235,7 +235,7 @@ public class ProjectSymbolIndex {
         List<CompletionItem> exports = new ArrayList<>();
         Map<String, String> signatures = new HashMap<>();
 
-        // 1. Gather signatures for functions and arrow functions from AST
+        // Gather signatures for functions and arrow functions from AST
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
             if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC) {
@@ -258,7 +258,7 @@ public class ProjectSymbolIndex {
             }
         }
 
-        // 2. Gather named exports using JsExportTable
+        // Gather named exports using JsExportTable
         Set<String> seenExports = new HashSet<>();
         JsExportTable exportTable = JsExportTable.build(tree, file.getAbsolutePath());
         for (int e = 0; e < exportTable.count; e++) {
@@ -269,7 +269,7 @@ public class ProjectSymbolIndex {
             }
         }
 
-        // 3. Handle default export from AST
+        // Handle default export from AST
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT && "default".equals(tree.nodeName[i])) {
                 int child = tree.nodeChild[i];
@@ -293,7 +293,7 @@ public class ProjectSymbolIndex {
             }
         }
 
-        // 4. Handle module.exports using fast character scanning
+        // Handle module.exports using fast character scanning
         scanModuleExports(content, exports, signatures, seenExports, file);
 
         synchronized (this) {
@@ -304,7 +304,7 @@ public class ProjectSymbolIndex {
             }
         }
 
-        // 5. Index class members using AST
+        // Index class members using AST
         indexClassMembersFromTree(file, tree);
     }
 

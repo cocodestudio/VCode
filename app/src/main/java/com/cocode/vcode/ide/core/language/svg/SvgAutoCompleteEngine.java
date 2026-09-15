@@ -18,11 +18,11 @@ import java.util.Set;
 /**
  * High-performance, zero-allocation context-aware autocomplete engine for SVG files.
  * Uses HtmlTagParser's lexical state machine to determine whether the cursor is inside:
- * 1. An SVG tag name (recommending SVG elements: svg, path, rect, circle, g, defs, etc.)
- * 2. An SVG attribute name (recommending presentation & geometry attributes: viewBox, fill, stroke, d, cx, cy, etc.)
- * 3. An SVG attribute value (recommending namespaces, colors, cap/join types, units)
- * 4. A closing tag (suggesting matching closing tags with exact replace length)
- * 5. Text content (offering SVG snippet templates when typing '<')
+ * - An SVG tag name (recommending SVG elements: svg, path, rect, circle, g, defs, etc.)
+ * - An SVG attribute name (recommending presentation & geometry attributes: viewBox, fill, stroke, d, cx, cy, etc.)
+ * - An SVG attribute value (recommending namespaces, colors, cap/join types, units)
+ * - A closing tag (suggesting matching closing tags with exact replace length)
+ * - Text content (offering SVG snippet templates when typing '<')
  */
 public class SvgAutoCompleteEngine extends AutoCompleteEngine {
 
@@ -112,34 +112,34 @@ public class SvgAutoCompleteEngine extends AutoCompleteEngine {
 
         HtmlTagParser.HtmlContext ctx = HtmlTagParser.parseContext(fullText, cursorPos);
 
-        // 1. Inside comment: suppress completions
+        // Suppress completions inside SVG comments
         if (ctx.isInsideComment) {
             return Collections.emptyList();
         }
 
         String word = getWordBeforeCursor(fullText, cursorPos);
 
-        // 2. Inside close tag: </...
+        // Suggest matching closing tag
         if (ctx.isInsideCloseTag) {
             return getCloseTagSuggestions(fullText, cursorPos);
         }
 
-        // 3. Inside attribute value: attr="val|
+        // Inside attribute value
         if (ctx.isInsideAttributeValue) {
             return getAttributeValueSuggestions(ctx, word);
         }
 
-        // 4. Inside attribute name: <tag attr|
+        // Inside attribute name
         if (ctx.isInsideOpenTag && !ctx.isTypingTagName) {
             return getAttributeNameSuggestions(ctx, word);
         }
 
-        // 5. Inside tag name: <svg|
+        // Inside tag name
         if (ctx.isInsideOpenTag && ctx.isTypingTagName) {
             return getTagSuggestions(word);
         }
 
-        // 6. Outside tags (text position): if preceded by '<', suggest tags; otherwise snippets
+        // Outside tags: suggest element tags after '<' or snippets in content positions
         if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '<') {
             return getTagSuggestions(word);
         }

@@ -48,7 +48,7 @@ public final class MdParser {
                 continue;
             }
             
-            // 1. Calculate line's blockquote depth and list indent
+            // Calculate line's blockquote depth and list indent
             int bqDepth = 0;
             int indent = 0;
             int j = start;
@@ -71,7 +71,7 @@ public final class MdParser {
                 lineType = classifyRemainder(source, j, end);
             }
             
-            // 2. Match with current stack
+            // Match active block containers against the current stack
             int matchIdx = 1; // 0 is root
             int currentBqDepth = 0;
             

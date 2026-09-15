@@ -272,7 +272,7 @@ public abstract class AutoCompleteEngine {
         if (fullText == null || cursorPos <= 0) return false;
         int limit = Math.min(cursorPos, fullText.length());
 
-        // 1. Check single-line comment // on current line
+        // Check for single-line comments on the current line
         String line = getLineBeforeCursor(fullText, limit);
         boolean inStr = false;
         char quote = 0;
@@ -290,14 +290,14 @@ public abstract class AutoCompleteEngine {
             if (c == '/' && line.charAt(i + 1) == '/') return true;
         }
 
-        // 2. Check block comment /* ... */
+        // Check for multi-line block comments
         int scanStart = Math.max(0, limit - 50000);
         for (int i = limit - 2; i >= scanStart; i--) {
             if (fullText.charAt(i) == '/' && fullText.charAt(i + 1) == '*') return true;
             if (fullText.charAt(i) == '*' && fullText.charAt(i + 1) == '/') break;
         }
 
-        // 3. Check HTML comment <!-- ... -->
+        // Check for HTML comment blocks
         for (int i = limit - 4; i >= scanStart; i--) {
             if (fullText.charAt(i) == '<' && fullText.charAt(i + 1) == '!'
                     && fullText.charAt(i + 2) == '-' && fullText.charAt(i + 3) == '-') {

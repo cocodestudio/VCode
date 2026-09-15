@@ -224,7 +224,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 1. Value Position
+        // Value position completions
         if (staticPos == JsonStaticCompletionDispatcher.Position.VALUE) {
             String currentKey = resolveCurrentKey(fullText, cursorPos);
             List<CompletionItem> candidates = new ArrayList<>();
@@ -245,7 +245,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
             return filtered;
         }
 
-        // 2. Key Position
+        // Key position completions
         List<CompletionItem> keyCandidates = new ArrayList<>();
 
         // Schema-aware key suggestions based on file name

@@ -210,7 +210,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 1. If inside inline style:
+        // Inline style handling inside HTML elements
         if (isInlineStyle) {
             Zone declZone = detectDeclarationZone(fullText, cursorPos);
             if (declZone == Zone.VALUE) {
@@ -221,18 +221,18 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // 2. @media/@supports/@container CONDITION completions
+        // Media, supports, and container condition completions
         if (isInsideAtRuleCondition(fullText, cursorPos)) {
             return getMediaSuggestions(fullText, cursorPos, word);
         }
 
-        // 3. At-rule completions when line starts with "@"
+        // At-rule completions when line starts with "@"
         if (trimmed.startsWith("@")) {
             String atWord = "@" + word;
             return fuzzyFilter(CssDefinitions.AT_RULE_ITEMS, atWord);
         }
 
-        // 4. AST / Dispatcher Position Check
+        // Context-aware property, selector, and value completions based on AST position
         CssStaticCompletionDispatcher.Position pos =
                 CssStaticCompletionDispatcher.detectPosition(fullText, null, null, cursorPos);
 
