@@ -178,8 +178,12 @@ public class CodeEditText extends View {
     private float lastSquiggleConfigHash = 0;
 
     // Editor settings
+    public static final int LARGE_FILE_LINE_THRESHOLD = 10000;
     private boolean autoCloseBrackets = true;
     private boolean autoIndent = true;
+    private boolean showSquigglyLines = true;
+    private boolean deleteMatchingPairs = true;
+    private boolean forceLargeFileHighlighting = false;
     private IndentationEngine indentEngine;
     private final AutoCompletePopup autoCompletePopup;
     private final SignatureHintPopup signatureHintPopup;
@@ -554,7 +558,9 @@ public class CodeEditText extends View {
             int subRows = wordWrap ? Math.max(1, (int) Math.ceil((double) lineLen / charsPerRow)) : 1;
 
             com.cocode.vcode.ide.core.editor.text.ContentLine contentLine = content.getLine(line);
-            if (contentLine.tokens == null && syntaxHighlighter != null) {
+            boolean canHighlight = syntaxHighlighter != null
+                    && (content.lineCount() <= LARGE_FILE_LINE_THRESHOLD || forceLargeFileHighlighting);
+            if (contentLine.tokens == null && canHighlight) {
                 int state = contentLine.getTokenizerStartState();
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
@@ -817,7 +823,7 @@ public class CodeEditText extends View {
      */
     private void drawDiagnostics(Canvas canvas, int firstLine, int lastLine,
                                  float paddingLeft, float paddingTop) {
-        if (currentProblems == null || currentProblems.isEmpty()) return;
+        if (!showSquigglyLines || currentProblems == null || currentProblems.isEmpty()) return;
 
         int lineCount = content.lineCount();
 
@@ -1250,7 +1256,8 @@ public class CodeEditText extends View {
         }
 
         boolean deletePair = false;
-        if (newPos.line == cursor.line
+        if (deleteMatchingPairs
+                && newPos.line == cursor.line
                 && cursor.column < content.lineLength(cursor.line)
                 && (autoCloseBrackets || autoCloseQuotes)) {
             char before = deleted.charAt(0);
@@ -1851,6 +1858,37 @@ public class CodeEditText extends View {
         invalidate();
     }
 
+    public boolean isShowSquigglyLines() {
+        return showSquigglyLines;
+    }
+
+    public void setShowSquigglyLines(boolean showSquigglyLines) {
+        if (this.showSquigglyLines != showSquigglyLines) {
+            this.showSquigglyLines = showSquigglyLines;
+            invalidate();
+        }
+    }
+
+    public boolean isDeleteMatchingPairs() {
+        return deleteMatchingPairs;
+    }
+
+    public void setDeleteMatchingPairs(boolean deleteMatchingPairs) {
+        this.deleteMatchingPairs = deleteMatchingPairs;
+    }
+
+    public boolean isForceLargeFileHighlighting() {
+        return forceLargeFileHighlighting;
+    }
+
+    public void setForceLargeFileHighlighting(boolean forceLargeFileHighlighting) {
+        if (this.forceLargeFileHighlighting != forceLargeFileHighlighting) {
+            this.forceLargeFileHighlighting = forceLargeFileHighlighting;
+            scheduleHighlight();
+            invalidate();
+        }
+    }
+
     public FileType getFileType() {
         return fileType;
     }
@@ -2166,6 +2204,9 @@ public class CodeEditText extends View {
 
     private void scheduleHighlight() {
         if (syntaxHighlighter == null) return;
+        if (content.lineCount() > LARGE_FILE_LINE_THRESHOLD && !forceLargeFileHighlighting) {
+            return;
+        }
 
         bracketMatchOpen = null;
         bracketMatchClose = null;
@@ -3420,7 +3461,8 @@ public class CodeEditText extends View {
             }
 
             boolean deletePair = false;
-            if (newCursorPos.line == editor.cursor.line
+            if (editor.deleteMatchingPairs
+                    && newCursorPos.line == editor.cursor.line
                     && editor.cursor.column < editor.content.lineLength(editor.cursor.line)
                     && (editor.autoCloseBrackets || editor.autoCloseQuotes)) {
                 char before = deleted.charAt(0);

@@ -133,6 +133,58 @@ public class SettingsViewModel extends ViewModel {
         }
     }
 
+    /**
+     * Toggles background code diagnostics and diagnostic bar visibility.
+     * When diagnostics are disabled, squiggly lines are automatically disabled.
+     */
+    public void updateEnableDiagnostics(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.enableDiagnostics = value;
+            if (!value) {
+                current.showSquigglyLines = false;
+            }
+            saveSettings(current);
+        }
+    }
+
+    /**
+     * Toggles rendering of wavy squiggly underlines on syntax errors and warnings.
+     * Cannot be enabled if diagnostics are disabled.
+     */
+    public void updateShowSquigglyLines(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            if (!current.enableDiagnostics && value) {
+                return;
+            }
+            current.showSquigglyLines = value;
+            saveSettings(current);
+        }
+    }
+
+    /**
+     * Toggles deletion of matching delimiter pairs on backspace.
+     */
+    public void updateDeleteMatchingPairs(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.deleteMatchingPairs = value;
+            saveSettings(current);
+        }
+    }
+
+    /**
+     * Toggles syntax highlighting on large files (> 10k lines).
+     */
+    public void updateForceLargeFileHighlighting(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.forceLargeFileHighlighting = value;
+            saveSettings(current);
+        }
+    }
+
 
     /**
      * Updates the global application theme (Light, Dark, or System).

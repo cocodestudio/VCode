@@ -16,6 +16,10 @@ public final class PreferenceKeys {
     public static final String HIGHLIGHT_CURRENT_LINE = "vcode_pref_highlight_current_line";
     public static final String AUTO_INDENT = "vcode_pref_auto_indent";
     public static final String MATCH_BRACKETS = "vcode_pref_match_brackets";
+    public static final String ENABLE_DIAGNOSTICS = "vcode_pref_enable_diagnostics";
+    public static final String SHOW_SQUIGGLY_LINES = "vcode_pref_show_squiggly_lines";
+    public static final String DELETE_MATCHING_PAIRS = "vcode_pref_delete_matching_pairs";
+    public static final String FORCE_LARGE_FILE_HIGHLIGHTING = "vcode_pref_force_large_file_highlighting";
     public static final String JSON_FORMAT_ON_SAVE = "vcode_pref_json_format_on_save";
 
     // Git

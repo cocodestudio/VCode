@@ -50,6 +50,13 @@ public class SettingsRepository {
         s.highlightCurrentLine = prefs.getBoolean(PreferenceKeys.HIGHLIGHT_CURRENT_LINE, s.highlightCurrentLine);
         s.autoIndent = prefs.getBoolean(PreferenceKeys.AUTO_INDENT, s.autoIndent);
         s.matchBrackets = prefs.getBoolean(PreferenceKeys.MATCH_BRACKETS, s.matchBrackets);
+        s.enableDiagnostics = prefs.getBoolean(PreferenceKeys.ENABLE_DIAGNOSTICS, s.enableDiagnostics);
+        s.showSquigglyLines = prefs.getBoolean(PreferenceKeys.SHOW_SQUIGGLY_LINES, s.showSquigglyLines);
+        if (!s.enableDiagnostics) {
+            s.showSquigglyLines = false;
+        }
+        s.deleteMatchingPairs = prefs.getBoolean(PreferenceKeys.DELETE_MATCHING_PAIRS, s.deleteMatchingPairs);
+        s.forceLargeFileHighlighting = prefs.getBoolean(PreferenceKeys.FORCE_LARGE_FILE_HIGHLIGHTING, s.forceLargeFileHighlighting);
 
         // Language syntax preferences
         s.jsonFormatOnSave = prefs.getBoolean(PreferenceKeys.JSON_FORMAT_ON_SAVE, s.jsonFormatOnSave);
@@ -182,6 +189,13 @@ public class SettingsRepository {
         ed.putBoolean(PreferenceKeys.HIGHLIGHT_CURRENT_LINE, s.highlightCurrentLine);
         ed.putBoolean(PreferenceKeys.AUTO_INDENT, s.autoIndent);
         ed.putBoolean(PreferenceKeys.MATCH_BRACKETS, s.matchBrackets);
+        if (!s.enableDiagnostics) {
+            s.showSquigglyLines = false;
+        }
+        ed.putBoolean(PreferenceKeys.ENABLE_DIAGNOSTICS, s.enableDiagnostics);
+        ed.putBoolean(PreferenceKeys.SHOW_SQUIGGLY_LINES, s.showSquigglyLines);
+        ed.putBoolean(PreferenceKeys.DELETE_MATCHING_PAIRS, s.deleteMatchingPairs);
+        ed.putBoolean(PreferenceKeys.FORCE_LARGE_FILE_HIGHLIGHTING, s.forceLargeFileHighlighting);
 
         ed.putBoolean(PreferenceKeys.JSON_FORMAT_ON_SAVE, s.jsonFormatOnSave);
 

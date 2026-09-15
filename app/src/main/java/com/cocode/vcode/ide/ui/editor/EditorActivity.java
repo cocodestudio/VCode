@@ -405,6 +405,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 }
             }
             binding.tabBar.setAutoSaveOn(settings.autoSave);
+            if (!settings.enableDiagnostics) {
+                binding.diagnosticBar.setVisibility(View.GONE);
+            }
             updateToolbarVisibility();
         });
 
@@ -512,13 +515,20 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     String content = activeFile.getContent();
                     isEmpty = (content == null || content.trim().isEmpty());
                 }
-                boolean showDiagnostic = isFileDiagnosable(activeFile) && !isEmpty;
+                AppSettings currentSettings = viewModel.getSettingsLiveData().getValue();
+                boolean diagnosticsAllowed = currentSettings == null || currentSettings.enableDiagnostics;
+                boolean showDiagnostic = diagnosticsAllowed && isFileDiagnosable(activeFile) && !isEmpty;
                 binding.diagnosticBar.setVisibility(showDiagnostic ? View.VISIBLE : View.GONE);
             }
             updateToolbarVisibility();
         });
 
         viewModel.getActiveFileDiagnostics().observe(this, counts -> {
+            AppSettings currentSettings = viewModel.getSettingsLiveData().getValue();
+            if (currentSettings != null && !currentSettings.enableDiagnostics) {
+                binding.diagnosticBar.setVisibility(View.GONE);
+                return;
+            }
             List<EditorFile> files = viewModel.getOpenFiles().getValue();
             Integer idx = viewModel.getActiveTabIndex().getValue();
             if (files == null || idx == null || idx < 0 || idx >= files.size() || !isFileDiagnosable(files.get(idx))) {

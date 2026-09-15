@@ -53,6 +53,10 @@ public final class SettingsJsonSerializer {
         editor.put("autoCloseHtmlTags", s.autoCloseHtmlTags);
         editor.put("wordWrap", s.wordWrap);
         editor.put("autoIndent", s.autoIndent);
+        editor.put("enableDiagnostics", s.enableDiagnostics);
+        editor.put("showSquigglyLines", s.showSquigglyLines);
+        editor.put("deleteMatchingPairs", s.deleteMatchingPairs);
+        editor.put("forceLargeFileHighlighting", s.forceLargeFileHighlighting);
         root.put("editor", editor);
 
         // Appearance settings
@@ -96,6 +100,10 @@ public final class SettingsJsonSerializer {
                 if (ed.has("autoCloseHtmlTags")) s.autoCloseHtmlTags = ed.optBoolean("autoCloseHtmlTags", s.autoCloseHtmlTags);
                 if (ed.has("wordWrap")) s.wordWrap = ed.optBoolean("wordWrap", s.wordWrap);
                 if (ed.has("autoIndent")) s.autoIndent = ed.optBoolean("autoIndent", s.autoIndent);
+                if (ed.has("enableDiagnostics")) s.enableDiagnostics = ed.optBoolean("enableDiagnostics", s.enableDiagnostics);
+                if (ed.has("showSquigglyLines")) s.showSquigglyLines = ed.optBoolean("showSquigglyLines", s.showSquigglyLines);
+                if (ed.has("deleteMatchingPairs")) s.deleteMatchingPairs = ed.optBoolean("deleteMatchingPairs", s.deleteMatchingPairs);
+                if (ed.has("forceLargeFileHighlighting")) s.forceLargeFileHighlighting = ed.optBoolean("forceLargeFileHighlighting", s.forceLargeFileHighlighting);
             }
         }
 
@@ -127,7 +135,7 @@ public final class SettingsJsonSerializer {
             }
         }
 
-        // 5. Flat dot-notation fallbacks (VS Code compatibility)
+        // 5. Flat dot-notation fallbacks (compatibility)
         if (root.has("editor.fontSize")) s.fontSize = root.optInt("editor.fontSize", s.fontSize);
         if (root.has("editor.showLineNumbers")) s.showLineNumbers = root.optBoolean("editor.showLineNumbers", s.showLineNumbers);
         if (root.has("editor.autoCloseBrackets")) s.autoCloseBrackets = root.optBoolean("editor.autoCloseBrackets", s.autoCloseBrackets);
@@ -135,6 +143,10 @@ public final class SettingsJsonSerializer {
         if (root.has("editor.autoCloseHtmlTags")) s.autoCloseHtmlTags = root.optBoolean("editor.autoCloseHtmlTags", s.autoCloseHtmlTags);
         if (root.has("editor.wordWrap")) s.wordWrap = root.optBoolean("editor.wordWrap", s.wordWrap);
         if (root.has("editor.autoIndent")) s.autoIndent = root.optBoolean("editor.autoIndent", s.autoIndent);
+        if (root.has("editor.enableDiagnostics")) s.enableDiagnostics = root.optBoolean("editor.enableDiagnostics", s.enableDiagnostics);
+        if (root.has("editor.showSquigglyLines")) s.showSquigglyLines = root.optBoolean("editor.showSquigglyLines", s.showSquigglyLines);
+        if (root.has("editor.deleteMatchingPairs")) s.deleteMatchingPairs = root.optBoolean("editor.deleteMatchingPairs", s.deleteMatchingPairs);
+        if (root.has("editor.forceLargeFileHighlighting")) s.forceLargeFileHighlighting = root.optBoolean("editor.forceLargeFileHighlighting", s.forceLargeFileHighlighting);
 
         if (root.has("appearance.theme")) parseTheme(root.optString("appearance.theme"), s);
         if (root.has("theme")) parseTheme(root.optString("theme"), s);
@@ -146,6 +158,10 @@ public final class SettingsJsonSerializer {
 
         if (root.has("general.openPreviewInApp")) s.openPreviewInApp = root.optBoolean("general.openPreviewInApp", s.openPreviewInApp);
         if (root.has("general.autoSave")) s.autoSave = root.optBoolean("general.autoSave", s.autoSave);
+
+        if (!s.enableDiagnostics) {
+            s.showSquigglyLines = false;
+        }
 
         return s;
     }
@@ -178,6 +194,8 @@ public final class SettingsJsonSerializer {
         // Domain check: Must contain at least one known section or recognizable VCode setting key
         boolean hasKnownSection = root.has("editor") || root.has("appearance") || root.has("git") || root.has("general");
         boolean hasKnownFlatKey = root.has("editor.fontSize") || root.has("editor.showLineNumbers")
+                || root.has("editor.enableDiagnostics") || root.has("editor.showSquigglyLines")
+                || root.has("editor.deleteMatchingPairs") || root.has("editor.forceLargeFileHighlighting")
                 || root.has("fontSize") || root.has("theme")
                 || root.has("git.defaultBranch") || root.has("defaultBranch")
                 || root.has("general.openPreviewInApp") || root.has("autoSave");

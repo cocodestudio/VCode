@@ -59,6 +59,7 @@ public final class LspEditorBridge {
      * Whether the bridge is actively connected to an editor instance.
      */
     private boolean attached = false;
+    private boolean diagnosticsEnabled = true;
     private IEditorCallback editorCallback;
     private final Runnable diagnosticRunnable = this::performDiagnostics;
     /**
@@ -196,6 +197,17 @@ public final class LspEditorBridge {
         codeEditor.addTextLoadListener(textLoadListener);
         // Pass the application context so LSP servers can load JSON assets (keywords, etc.)
         LspClientManager.getInstance().setApplicationContext(codeEditor.getContext());
+    }
+
+    public void setDiagnosticsEnabled(boolean enabled) {
+        this.diagnosticsEnabled = enabled;
+        if (!enabled) {
+            mainHandler.removeCallbacks(diagnosticRunnable);
+            if (editor != null) editor.applyDiagnostics(Collections.emptyList());
+            if (editorCallback != null && currentFile != null) {
+                editorCallback.reportProblems(currentFile, Collections.emptyList());
+            }
+        }
     }
 
     /**
@@ -444,7 +456,7 @@ public final class LspEditorBridge {
     // -------------------------------------------------------------------------
 
     private void performDiagnostics() {
-        if (!attached || editor == null) return;
+        if (!attached || editor == null || !diagnosticsEnabled) return;
         // Defense in depth: if we're still waiting for the post-file-switch content sync
         // (see contentSyncPending), check if editor is actually still setting text.
         if (contentSyncPending) {

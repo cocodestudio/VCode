@@ -388,6 +388,182 @@
                             android:scaleY="0.8" />
                     </LinearLayout>
 
+                    <!-- Code Diagnostics -->
+                    <LinearLayout
+                        android:id="@+id/op_enable_diagnostics"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tv_enable_diagnostics"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_code_diagnostics"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
+                                android:textColor="?attr/colorOnBackground" />
+
+                            <TextView
+                                android:id="@+id/tv_enable_diagnostics_desc"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_code_diagnostics_desc"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switch_enable_diagnostics"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:scaleX="0.8"
+                            android:scaleY="0.8" />
+                    </LinearLayout>
+
+                    <!-- Squiggly Lines -->
+                    <LinearLayout
+                        android:id="@+id/op_show_squiggly_lines"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tv_show_squiggly_lines"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_squiggly_lines"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
+                                android:textColor="?attr/colorOnBackground" />
+
+                            <TextView
+                                android:id="@+id/tv_show_squiggly_lines_desc"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_squiggly_lines_desc"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switch_show_squiggly_lines"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:scaleX="0.8"
+                            android:scaleY="0.8" />
+                    </LinearLayout>
+
+                    <!-- Delete Matching Pairs on Backspace -->
+                    <LinearLayout
+                        android:id="@+id/op_delete_matching_pairs"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tv_delete_matching_pairs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_delete_matching_pairs"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
+                                android:textColor="?attr/colorOnBackground" />
+
+                            <TextView
+                                android:id="@+id/tv_delete_matching_pairs_desc"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_delete_matching_pairs_desc"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switch_delete_matching_pairs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:scaleX="0.8"
+                            android:scaleY="0.8" />
+                    </LinearLayout>
+
+                    <!-- Force Syntax Highlighting for Large Files -->
+                    <LinearLayout
+                        android:id="@+id/op_force_large_file_highlighting"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tv_force_large_file_highlighting"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_force_large_file_highlighting"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
+                                android:textColor="?attr/colorOnBackground" />
+
+                            <TextView
+                                android:id="@+id/tv_force_large_file_highlighting_desc"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/vcode_setting_force_large_file_highlighting_desc"
+                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switch_force_large_file_highlighting"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:scaleX="0.8"
+                            android:scaleY="0.8" />
+                    </LinearLayout>
+
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

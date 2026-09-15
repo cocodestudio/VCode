@@ -65,6 +65,14 @@ public class EditorSettingsFragment extends Fragment {
         binding.tvWordWrapDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvAutoIndent.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvAutoIndentDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvEnableDiagnostics.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvEnableDiagnosticsDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvShowSquigglyLines.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvShowSquigglyLinesDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvDeleteMatchingPairs.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvDeleteMatchingPairsDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvForceLargeFileHighlighting.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvForceLargeFileHighlightingDesc.setTypeface(fm.getUiFont(requireContext()));
     }
 
     private void setupListeners() {
@@ -82,6 +90,17 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchWordWrap.setChecked(!binding.switchWordWrap.isChecked()));
         binding.opAutoIndent.setOnClickListener(_view ->
                 binding.switchAutoIndent.setChecked(!binding.switchAutoIndent.isChecked()));
+        binding.opEnableDiagnostics.setOnClickListener(_view ->
+                binding.switchEnableDiagnostics.setChecked(!binding.switchEnableDiagnostics.isChecked()));
+        binding.opShowSquigglyLines.setOnClickListener(_view -> {
+            if (binding.switchShowSquigglyLines.isEnabled()) {
+                binding.switchShowSquigglyLines.setChecked(!binding.switchShowSquigglyLines.isChecked());
+            }
+        });
+        binding.opDeleteMatchingPairs.setOnClickListener(_view ->
+                binding.switchDeleteMatchingPairs.setChecked(!binding.switchDeleteMatchingPairs.isChecked()));
+        binding.opForceLargeFileHighlighting.setOnClickListener(_view ->
+                binding.switchForceLargeFileHighlighting.setChecked(!binding.switchForceLargeFileHighlighting.isChecked()));
 
         binding.btnFontIncrease.setOnClickListener(v -> {
             AppSettings current = viewModel.getSettingsLiveData().getValue();
@@ -120,6 +139,31 @@ public class EditorSettingsFragment extends Fragment {
         binding.switchAutoIndent.setOnCheckedChangeListener((btn, isChecked) -> {
             if (!isUpdatingUi) viewModel.updateAutoIndent(isChecked);
         });
+
+        binding.switchEnableDiagnostics.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) {
+                updateSquigglyLinesUi(isChecked, isChecked && binding.switchShowSquigglyLines.isChecked());
+                viewModel.updateEnableDiagnostics(isChecked);
+            }
+        });
+
+        binding.switchShowSquigglyLines.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) {
+                if (!binding.switchEnableDiagnostics.isChecked() && isChecked) {
+                    btn.setChecked(false);
+                    return;
+                }
+                viewModel.updateShowSquigglyLines(isChecked);
+            }
+        });
+
+        binding.switchDeleteMatchingPairs.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) viewModel.updateDeleteMatchingPairs(isChecked);
+        });
+
+        binding.switchForceLargeFileHighlighting.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) viewModel.updateForceLargeFileHighlighting(isChecked);
+        });
     }
 
     private void setupObservers() {
@@ -132,10 +176,21 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchAutoCloseTags.setChecked(settings.autoCloseHtmlTags);
                 binding.switchWordWrap.setChecked(settings.wordWrap);
                 binding.switchAutoIndent.setChecked(settings.autoIndent);
+                binding.switchEnableDiagnostics.setChecked(settings.enableDiagnostics);
+                updateSquigglyLinesUi(settings.enableDiagnostics, settings.showSquigglyLines);
+                binding.switchDeleteMatchingPairs.setChecked(settings.deleteMatchingPairs);
+                binding.switchForceLargeFileHighlighting.setChecked(settings.forceLargeFileHighlighting);
                 binding.tvFontSizeValue.setText(MessageFormat.format("{0}px", settings.getFontSize()));
                 isUpdatingUi = false;
             }
         });
+    }
+
+    private void updateSquigglyLinesUi(boolean diagnosticsEnabled, boolean squigglyChecked) {
+        binding.switchShowSquigglyLines.setEnabled(diagnosticsEnabled);
+        binding.opShowSquigglyLines.setEnabled(diagnosticsEnabled);
+        binding.opShowSquigglyLines.setAlpha(diagnosticsEnabled ? 1.0f : 0.4f);
+        binding.switchShowSquigglyLines.setChecked(diagnosticsEnabled && squigglyChecked);
     }
 
     @Override

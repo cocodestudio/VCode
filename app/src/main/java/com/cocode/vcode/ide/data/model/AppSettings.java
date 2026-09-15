@@ -16,6 +16,10 @@ public class AppSettings {
     public boolean highlightCurrentLine = true;
     public boolean autoIndent = true;
     public boolean matchBrackets = true;
+    public boolean enableDiagnostics = true;
+    public boolean showSquigglyLines = true;
+    public boolean deleteMatchingPairs = true;
+    public boolean forceLargeFileHighlighting = false;
 
     // JSON Validation & Formatting
     public int jsonIndentSize = 2;
@@ -99,6 +103,25 @@ public class AppSettings {
      */
     public void setConfirmHardReset(boolean confirm) {
         this.gitConfirmHardReset = confirm;
+    }
+
+    public boolean isEnableDiagnostics() {
+        return enableDiagnostics;
+    }
+
+    public void setEnableDiagnostics(boolean enable) {
+        this.enableDiagnostics = enable;
+        if (!enable) {
+            this.showSquigglyLines = false;
+        }
+    }
+
+    public boolean isShowSquigglyLines() {
+        return enableDiagnostics && showSquigglyLines;
+    }
+
+    public void setShowSquigglyLines(boolean show) {
+        this.showSquigglyLines = enableDiagnostics && show;
     }
 
     public Theme getTheme() {

@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 public class SettingsJsonSerializerTest {
 
     @Test
-    public void testSerializeStrict14Fields() throws Exception {
+    public void testSerializeStrict18Fields() throws Exception {
         AppSettings s = new AppSettings();
         s.fontSize = 16;
         s.showLineNumbers = true;
@@ -25,6 +25,10 @@ public class SettingsJsonSerializerTest {
         s.autoCloseHtmlTags = true;
         s.wordWrap = true;
         s.autoIndent = false;
+        s.enableDiagnostics = false;
+        s.showSquigglyLines = false;
+        s.deleteMatchingPairs = false;
+        s.forceLargeFileHighlighting = true;
 
         s.theme = AppSettings.Theme.DARK;
 
@@ -46,9 +50,9 @@ public class SettingsJsonSerializerTest {
         assertTrue(root.has("git"));
         assertTrue(root.has("general"));
 
-        // Editor: 7 fields
+        // Editor: 11 fields
         JSONObject editor = root.getJSONObject("editor");
-        assertEquals("Editor must have 7 fields", 7, editor.length());
+        assertEquals("Editor must have 11 fields", 11, editor.length());
         assertEquals(16, editor.getInt("fontSize"));
         assertTrue(editor.getBoolean("showLineNumbers"));
         assertTrue(editor.getBoolean("autoCloseBrackets"));
@@ -56,6 +60,10 @@ public class SettingsJsonSerializerTest {
         assertTrue(editor.getBoolean("autoCloseHtmlTags"));
         assertTrue(editor.getBoolean("wordWrap"));
         assertFalse(editor.getBoolean("autoIndent"));
+        assertFalse(editor.getBoolean("enableDiagnostics"));
+        assertFalse(editor.getBoolean("showSquigglyLines"));
+        assertFalse(editor.getBoolean("deleteMatchingPairs"));
+        assertTrue(editor.getBoolean("forceLargeFileHighlighting"));
 
         // Appearance: 1 field
         JSONObject appearance = root.getJSONObject("appearance");
@@ -82,7 +90,11 @@ public class SettingsJsonSerializerTest {
         String json = "{\n" +
                 "  \"editor\": {\n" +
                 "    \"fontSize\": 20,\n" +
-                "    \"wordWrap\": false\n" +
+                "    \"wordWrap\": false,\n" +
+                "    \"enableDiagnostics\": false,\n" +
+                "    \"showSquigglyLines\": false,\n" +
+                "    \"deleteMatchingPairs\": false,\n" +
+                "    \"forceLargeFileHighlighting\": true\n" +
                 "  },\n" +
                 "  \"appearance\": {\n" +
                 "    \"theme\": \"LIGHT\"\n" +
@@ -102,6 +114,10 @@ public class SettingsJsonSerializerTest {
         assertNotNull(result.settings);
         assertEquals(20, result.settings.fontSize);
         assertFalse(result.settings.wordWrap);
+        assertFalse(result.settings.enableDiagnostics);
+        assertFalse(result.settings.showSquigglyLines);
+        assertFalse(result.settings.deleteMatchingPairs);
+        assertTrue(result.settings.forceLargeFileHighlighting);
         assertEquals(AppSettings.Theme.LIGHT, result.settings.theme);
         assertEquals("master", result.settings.gitDefaultBranch);
         assertTrue(result.settings.autoSave);
@@ -111,6 +127,10 @@ public class SettingsJsonSerializerTest {
     public void testValidateAndParseFlatDotNotation() {
         String json = "{\n" +
                 "  \"editor.fontSize\": 22,\n" +
+                "  \"editor.enableDiagnostics\": false,\n" +
+                "  \"editor.showSquigglyLines\": false,\n" +
+                "  \"editor.deleteMatchingPairs\": false,\n" +
+                "  \"editor.forceLargeFileHighlighting\": true,\n" +
                 "  \"appearance.theme\": \"DARK\",\n" +
                 "  \"git.authorName\": \"Test Coder\",\n" +
                 "  \"general.openPreviewInApp\": false\n" +
@@ -122,6 +142,10 @@ public class SettingsJsonSerializerTest {
         assertTrue(result.isValid);
         assertNotNull(result.settings);
         assertEquals(22, result.settings.fontSize);
+        assertFalse(result.settings.enableDiagnostics);
+        assertFalse(result.settings.showSquigglyLines);
+        assertFalse(result.settings.deleteMatchingPairs);
+        assertTrue(result.settings.forceLargeFileHighlighting);
         assertEquals(AppSettings.Theme.DARK, result.settings.theme);
         assertEquals("Test Coder", result.settings.gitAuthorName);
         assertFalse(result.settings.openPreviewInApp);
@@ -164,5 +188,30 @@ public class SettingsJsonSerializerTest {
         SettingsJsonSerializer.ValidationResult resultEmptyObj =
                 SettingsJsonSerializer.validateAndParse("{}", new AppSettings());
         assertFalse(resultEmptyObj.isValid);
+    }
+
+    @Test
+    public void testValidateAndParseDiagnosticsDisabledForcesSquigglyLinesDisabled() {
+        String hierarchicalJson = "{\n" +
+                "  \"editor\": {\n" +
+                "    \"enableDiagnostics\": false,\n" +
+                "    \"showSquigglyLines\": true\n" +
+                "  }\n" +
+                "}";
+        SettingsJsonSerializer.ValidationResult resultHierarchical =
+                SettingsJsonSerializer.validateAndParse(hierarchicalJson, new AppSettings());
+        assertTrue(resultHierarchical.isValid);
+        assertFalse(resultHierarchical.settings.enableDiagnostics);
+        assertFalse(resultHierarchical.settings.showSquigglyLines);
+
+        String flatJson = "{\n" +
+                "  \"editor.enableDiagnostics\": false,\n" +
+                "  \"editor.showSquigglyLines\": true\n" +
+                "}";
+        SettingsJsonSerializer.ValidationResult resultFlat =
+                SettingsJsonSerializer.validateAndParse(flatJson, new AppSettings());
+        assertTrue(resultFlat.isValid);
+        assertFalse(resultFlat.settings.enableDiagnostics);
+        assertFalse(resultFlat.settings.showSquigglyLines);
     }
 }

@@ -141,7 +141,11 @@ public class CodeFileViewer implements IFileViewer {
             codeEditText.setAutoCloseHtmlTags(settings.autoCloseHtmlTags);
             codeEditText.setWordWrap(settings.wordWrap);
             codeEditText.setAutoIndent(settings.autoIndent);
+            codeEditText.setShowSquigglyLines(settings.enableDiagnostics && settings.showSquigglyLines);
+            codeEditText.setDeleteMatchingPairs(settings.deleteMatchingPairs);
+            codeEditText.setForceLargeFileHighlighting(settings.forceLargeFileHighlighting);
             editorLayout.setShowLineNumbers(settings.isShowLineNumbers());
+            lspBridge.setDiagnosticsEnabled(settings.enableDiagnostics);
         }
 
         codeEditText.setTag(file.getId());
@@ -279,6 +283,17 @@ public class CodeFileViewer implements IFileViewer {
 
         AppSettings settings = viewModel.getSettingsLiveData().getValue();
         if (settings == null) return;
+
+        lspBridge.setDiagnosticsEnabled(settings.enableDiagnostics);
+        if (!settings.enableDiagnostics) {
+            if (codeEditText != null) {
+                codeEditText.applyDiagnostics(new java.util.ArrayList<>());
+            }
+            if (editorCallback != null && currentFile != null) {
+                editorCallback.reportProblems(currentFile.getFile(), new java.util.ArrayList<>());
+            }
+            return;
+        }
 
         jsonValidationHandler.removeCallbacksAndMessages(null);
 
