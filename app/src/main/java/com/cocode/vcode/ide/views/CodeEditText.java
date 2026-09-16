@@ -571,7 +571,7 @@ public class CodeEditText extends View {
                 String lineStr = contentLine.toLineString();
                 contentLine.tokens = syntaxHighlighter.tokenizeLine(lineStr, line, internalState);
                 if (rainbowBrackets) {
-                    BracketMatcher.applyRainbowBrackets(contentLine.tokens, lineStr, rainbowColors, depth, internalState, line);
+                    BracketMatcher.applyRainbowBrackets(contentLine.tokens, lineStr, rainbowColors, depth, internalState, line, fileType);
                 }
             }
             List<HighlightToken> lineTokens = contentLine.tokens;
@@ -2313,7 +2313,7 @@ public class CodeEditText extends View {
                 int internalState = state & 0xFFFF;
                 int depth = (state >>> 16) & 0xFFFF;
                 int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState);
+                int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState, fileType);
                 int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 
                 line.setTokenizerEndState(newState);
@@ -2326,6 +2326,7 @@ public class CodeEditText extends View {
                 final int startState = state;
                 final int convergeAt = dirtyEnd.line;
                 final long versionAtSchedule = content.getVersion();
+                final FileType bgFileType = fileType;
 
                 ExecutorProvider.getInstance().runOnCpu(() -> {
                     List<int[]> computed = new ArrayList<>();
@@ -2341,7 +2342,7 @@ public class CodeEditText extends View {
                             int depth = (bgState >>> 16) & 0xFFFF;
 
                             int newInternalState = syntaxHighlighter.computeEndState(line, internalState);
-                            int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState);
+                            int newDepth = BracketMatcher.computeBracketDepth(line, depth, internalState, bgFileType);
 
                             int newState = (newDepth << 16) | (newInternalState & 0xFFFF);
 

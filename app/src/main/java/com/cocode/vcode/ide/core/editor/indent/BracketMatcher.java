@@ -1,6 +1,7 @@
 package com.cocode.vcode.ide.core.editor.indent;
 
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
+import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.util.List;
@@ -20,17 +21,21 @@ public class BracketMatcher {
     private boolean hasCache = false;
 
     public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth) {
-        applyRainbowBrackets(tokens, text, colors, initialDepth, 0, 0);
+        applyRainbowBrackets(tokens, text, colors, initialDepth, 0, 0, null);
     }
 
     public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState) {
-        applyRainbowBrackets(tokens, text, colors, initialDepth, startState, 0);
+        applyRainbowBrackets(tokens, text, colors, initialDepth, startState, 0, null);
     }
 
     public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState, int lineIndex) {
+        applyRainbowBrackets(tokens, text, colors, initialDepth, startState, lineIndex, null);
+    }
+
+    public static void applyRainbowBrackets(List<HighlightToken> tokens, String text, int[] colors, int initialDepth, int startState, int lineIndex, FileType fileType) {
         if (text == null || colors == null || colors.length == 0 || tokens == null) return;
 
-        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState, fileType);
         int depth = initialDepth;
 
         for (int i = 0; i < text.length(); i++) {
@@ -43,23 +48,27 @@ public class BracketMatcher {
 
             if (isOpen) {
                 int colorIdx = Math.abs(depth) % colors.length;
-                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
+                tokens.add(new HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
                 depth++;
             } else {
                 depth = Math.max(0, depth - 1);
                 int colorIdx = Math.abs(depth) % colors.length;
-                tokens.add(new com.cocode.vcode.ide.core.editor.highlight.HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
+                tokens.add(new HighlightToken(lineIndex, i, i + 1, colors[colorIdx], false));
             }
         }
     }
 
     public static int computeBracketDepth(CharSequence text, int initialDepth) {
-        return computeBracketDepth(text, initialDepth, 0);
+        return computeBracketDepth(text, initialDepth, 0, null);
     }
 
     public static int computeBracketDepth(CharSequence text, int initialDepth, int startState) {
+        return computeBracketDepth(text, initialDepth, startState, null);
+    }
+
+    public static int computeBracketDepth(CharSequence text, int initialDepth, int startState, FileType fileType) {
         if (text == null) return initialDepth;
-        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState);
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), startState, fileType);
         int depth = initialDepth;
         for (int i = 0; i < text.length(); i++) {
             if (mask[i]) continue;
@@ -74,7 +83,8 @@ public class BracketMatcher {
         java.util.List<Problem> problems = new java.util.ArrayList<>();
         if (text == null || text.isEmpty()) return problems;
 
-        boolean[] mask = computeStringCommentMask(text, 0, text.length(), 0);
+        FileType fileType = (file != null) ? FileType.fromFile(file) : null;
+        boolean[] mask = computeStringCommentMask(text, 0, text.length(), 0, fileType);
 
         java.util.List<int[]> stack = new java.util.ArrayList<>();
         // int[]: [type (1='(', 2='[', 3='{'), line, col]
@@ -219,10 +229,219 @@ public class BracketMatcher {
     }
 
     private static boolean[] computeStringCommentMask(CharSequence text, int from, int to) {
-        return computeStringCommentMask(text, from, to, 0);
+        return computeStringCommentMask(text, from, to, 0, null);
     }
 
     private static boolean[] computeStringCommentMask(CharSequence text, int from, int to, int startState) {
+        return computeStringCommentMask(text, from, to, startState, null);
+    }
+
+    public static boolean[] computeStringCommentMask(CharSequence text, int from, int to, int startState, FileType fileType) {
+        if (fileType == FileType.CSS) {
+            return computeCssCommentMask(text, from, to, startState);
+        } else if (fileType == FileType.HTML) {
+            return computeHtmlCommentMask(text, from, to, startState);
+        } else if (fileType == FileType.JSON) {
+            return computeJsonCommentMask(text, from, to, startState);
+        } else if (fileType == FileType.MARKDOWN) {
+            return computeMarkdownCommentMask(text, from, to, startState);
+        } else {
+            return computeJsCommentMask(text, from, to, startState);
+        }
+    }
+
+    private static boolean[] computeCssCommentMask(CharSequence text, int from, int to, int startState) {
+        boolean[] mask = new boolean[to - from];
+        boolean inBlockComment = (startState & 2) != 0;
+        boolean inDouble = (startState & (1 << 13)) != 0;
+        boolean inSingle = (startState & (1 << 14)) != 0;
+        boolean inLineComment = false;
+
+        for (int i = from; i < to; i++) {
+            mask[i - from] = inBlockComment || inDouble || inSingle || inLineComment;
+
+            char c = text.charAt(i);
+            char n = (i + 1 < text.length()) ? text.charAt(i + 1) : '\0';
+
+            if (inLineComment) {
+                if (c == '\n') inLineComment = false;
+                continue;
+            }
+            if (inBlockComment) {
+                if (c == '*' && n == '/') {
+                    inBlockComment = false;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
+                    i++;
+                }
+                continue;
+            }
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (inDouble) {
+                if (c == '"') inDouble = false;
+                continue;
+            }
+            if (inSingle) {
+                if (c == '\'') inSingle = false;
+                continue;
+            }
+            if (c == '/' && n == '*') {
+                inBlockComment = true;
+                mask[i - from] = true;
+                if (i + 1 < to) mask[i + 1 - from] = true;
+                i++;
+                continue;
+            }
+            if (c == '/' && n == '/') {
+                inLineComment = true;
+                mask[i - from] = true;
+                if (i + 1 < to) mask[i + 1 - from] = true;
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                inDouble = true;
+                mask[i - from] = true;
+                continue;
+            }
+            if (c == '\'') {
+                inSingle = true;
+                mask[i - from] = true;
+                continue;
+            }
+        }
+        return mask;
+    }
+
+    private static boolean[] computeHtmlCommentMask(CharSequence text, int from, int to, int startState) {
+        int outer = startState & 0xF;
+        int inner = startState >>> 4;
+        if (outer == 5) { // STATE_STYLE_CONTENT (embedded CSS)
+            return computeCssCommentMask(text, from, to, inner);
+        }
+        if (outer == 6) { // STATE_SCRIPT_CONTENT (embedded JS)
+            return computeJsCommentMask(text, from, to, inner);
+        }
+
+        boolean[] mask = new boolean[to - from];
+        boolean inHtmlComment = (outer == 1);
+        boolean inDouble = (outer == 3 || outer == 9 || outer == 11);
+        boolean inSingle = (outer == 4 || outer == 10 || outer == 12);
+
+        for (int i = from; i < to; i++) {
+            mask[i - from] = inHtmlComment || inDouble || inSingle;
+
+            char c = text.charAt(i);
+            char n = (i + 1 < text.length()) ? text.charAt(i + 1) : '\0';
+
+            if (inHtmlComment) {
+                if (c == '-' && n == '-' && i + 2 < text.length() && text.charAt(i + 2) == '>') {
+                    inHtmlComment = false;
+                    mask[i - from] = true;
+                    if (i + 1 < to) mask[i + 1 - from] = true;
+                    if (i + 2 < to) mask[i + 2 - from] = true;
+                    i += 2;
+                }
+                continue;
+            }
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (inDouble) {
+                if (c == '"') inDouble = false;
+                continue;
+            }
+            if (inSingle) {
+                if (c == '\'') inSingle = false;
+                continue;
+            }
+            if (c == '<' && n == '!' && i + 3 < text.length() && text.charAt(i + 2) == '-' && text.charAt(i + 3) == '-') {
+                inHtmlComment = true;
+                mask[i - from] = true;
+                if (i + 1 < to) mask[i + 1 - from] = true;
+                if (i + 2 < to) mask[i + 2 - from] = true;
+                if (i + 3 < to) mask[i + 3 - from] = true;
+                i += 3;
+                continue;
+            }
+            if (c == '"') {
+                inDouble = true;
+                mask[i - from] = true;
+                continue;
+            }
+            if (c == '\'') {
+                inSingle = true;
+                mask[i - from] = true;
+                continue;
+            }
+        }
+        return mask;
+    }
+
+    private static boolean[] computeJsonCommentMask(CharSequence text, int from, int to, int startState) {
+        boolean[] mask = new boolean[to - from];
+        boolean inDouble = (startState == 1);
+        boolean inLineComment = false;
+
+        for (int i = from; i < to; i++) {
+            mask[i - from] = inDouble || inLineComment;
+
+            char c = text.charAt(i);
+            char n = (i + 1 < text.length()) ? text.charAt(i + 1) : '\0';
+
+            if (inLineComment) {
+                if (c == '\n') inLineComment = false;
+                continue;
+            }
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (inDouble) {
+                if (c == '"') inDouble = false;
+                continue;
+            }
+            if (c == '/' && n == '/') {
+                inLineComment = true;
+                mask[i - from] = true;
+                if (i + 1 < to) mask[i + 1 - from] = true;
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                inDouble = true;
+                mask[i - from] = true;
+                continue;
+            }
+        }
+        return mask;
+    }
+
+    private static boolean[] computeMarkdownCommentMask(CharSequence text, int from, int to, int startState) {
+        boolean[] mask = new boolean[to - from];
+        boolean inFence = (startState == 1);
+
+        for (int i = from; i < to; i++) {
+            mask[i - from] = inFence;
+
+            char c = text.charAt(i);
+            if (c == '`' && i + 2 < text.length() && text.charAt(i + 1) == '`' && text.charAt(i + 2) == '`') {
+                inFence = !inFence;
+                mask[i - from] = true;
+                if (i + 1 < to) mask[i + 1 - from] = true;
+                if (i + 2 < to) mask[i + 2 - from] = true;
+                i += 2;
+                continue;
+            }
+        }
+        return mask;
+    }
+
+    private static boolean[] computeJsCommentMask(CharSequence text, int from, int to, int startState) {
         boolean[] mask = new boolean[to - from];
         int mode = startState & 0x7;
         int templateDepth = (startState >>> 3) & 0x7;

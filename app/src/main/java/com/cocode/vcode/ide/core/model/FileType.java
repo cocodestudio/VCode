@@ -2,6 +2,7 @@ package com.cocode.vcode.ide.core.model;
 
 import com.cocode.vcode.ide.R;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
@@ -56,6 +57,24 @@ public enum FileType {
         this.displayName = displayName;
         this.isTextBased = isTextBased;
         this.extensions = Arrays.asList(extensions);
+    }
+
+    /**
+     * Resolves a {@link FileType} from a file object. Defaults to {@link #TEXT} if null or unknown.
+     */
+    public static FileType fromFile(File file) {
+        if (file == null) return TEXT;
+        return fromFileName(file.getName());
+    }
+
+    /**
+     * Resolves a {@link FileType} from a filename string. Defaults to {@link #TEXT} if unknown.
+     */
+    public static FileType fromFileName(String name) {
+        if (name == null || name.isEmpty()) return TEXT;
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) return TEXT;
+        return fromExtension(name.substring(dot + 1));
     }
 
     /**
