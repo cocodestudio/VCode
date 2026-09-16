@@ -50,6 +50,9 @@ public class SettingsRepository {
         s.highlightCurrentLine = prefs.getBoolean(PreferenceKeys.HIGHLIGHT_CURRENT_LINE, s.highlightCurrentLine);
         s.autoIndent = prefs.getBoolean(PreferenceKeys.AUTO_INDENT, s.autoIndent);
         s.matchBrackets = prefs.getBoolean(PreferenceKeys.MATCH_BRACKETS, s.matchBrackets);
+        s.rainbowBrackets = prefs.getBoolean(PreferenceKeys.RAINBOW_BRACKETS, s.rainbowBrackets);
+        s.bracketHighlighting = prefs.getBoolean(PreferenceKeys.BRACKET_HIGHLIGHTING, prefs.getBoolean(PreferenceKeys.MATCH_BRACKETS, s.bracketHighlighting));
+        s.matchBrackets = s.bracketHighlighting;
         s.enableDiagnostics = prefs.getBoolean(PreferenceKeys.ENABLE_DIAGNOSTICS, s.enableDiagnostics);
         s.showSquigglyLines = prefs.getBoolean(PreferenceKeys.SHOW_SQUIGGLY_LINES, s.showSquigglyLines);
         if (!s.enableDiagnostics) {
@@ -188,7 +191,9 @@ public class SettingsRepository {
         ed.putBoolean(PreferenceKeys.WORD_WRAP, s.wordWrap);
         ed.putBoolean(PreferenceKeys.HIGHLIGHT_CURRENT_LINE, s.highlightCurrentLine);
         ed.putBoolean(PreferenceKeys.AUTO_INDENT, s.autoIndent);
-        ed.putBoolean(PreferenceKeys.MATCH_BRACKETS, s.matchBrackets);
+        ed.putBoolean(PreferenceKeys.MATCH_BRACKETS, s.bracketHighlighting);
+        ed.putBoolean(PreferenceKeys.RAINBOW_BRACKETS, s.rainbowBrackets);
+        ed.putBoolean(PreferenceKeys.BRACKET_HIGHLIGHTING, s.bracketHighlighting);
         if (!s.enableDiagnostics) {
             s.showSquigglyLines = false;
         }

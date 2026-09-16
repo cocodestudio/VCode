@@ -357,6 +357,10 @@ public class ProjectsActivity extends BaseActivity {
     private void filterProjects(String query) {
         if (query == null || query.trim().isEmpty()) {
             adapter.setProjects(allProjects);
+            binding.ivEmptyStateIcon.setImageResource(R.drawable.ic_folder);
+            binding.tvNoProjectsYet.setText(R.string.vcode_no_projects_yet);
+            binding.tvTapPlusToCreate.setText(R.string.vcode_create_project_hint);
+            binding.btnCreateProjectEmpty.setVisibility(View.VISIBLE);
             updateEmptyStateVisibility(allProjects.isEmpty());
         } else {
             List<Project> filtered = new ArrayList<>();
@@ -366,7 +370,15 @@ public class ProjectsActivity extends BaseActivity {
                 }
             }
             adapter.setProjects(filtered);
-            updateEmptyStateVisibility(allProjects.isEmpty());
+            if (filtered.isEmpty()) {
+                binding.ivEmptyStateIcon.setImageResource(R.drawable.ic_magnifying_glass);
+                binding.tvNoProjectsYet.setText(R.string.vcode_no_matching_projects);
+                binding.tvTapPlusToCreate.setText(R.string.vcode_no_matching_projects_desc);
+                binding.btnCreateProjectEmpty.setVisibility(View.GONE);
+                updateEmptyStateVisibility(true);
+            } else {
+                updateEmptyStateVisibility(false);
+            }
         }
     }
 

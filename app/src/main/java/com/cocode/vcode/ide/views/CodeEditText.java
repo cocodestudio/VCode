@@ -186,6 +186,8 @@ public class CodeEditText extends View {
     private boolean showSquigglyLines = true;
     private boolean deleteMatchingPairs = true;
     private boolean forceLargeFileHighlighting = false;
+    private boolean rainbowBrackets = true;
+    private boolean bracketHighlighting = true;
     private IndentationEngine indentEngine;
     private final AutoCompletePopup autoCompletePopup;
     private final SignatureHintPopup signatureHintPopup;
@@ -568,7 +570,9 @@ public class CodeEditText extends View {
                 int depth = (state >>> 16) & 0xFFFF;
                 String lineStr = contentLine.toLineString();
                 contentLine.tokens = syntaxHighlighter.tokenizeLine(lineStr, line, internalState);
-                BracketMatcher.applyRainbowBrackets(contentLine.tokens, lineStr, rainbowColors, depth, internalState, line);
+                if (rainbowBrackets) {
+                    BracketMatcher.applyRainbowBrackets(contentLine.tokens, lineStr, rainbowColors, depth, internalState, line);
+                }
             }
             List<HighlightToken> lineTokens = contentLine.tokens;
 
@@ -802,6 +806,7 @@ public class CodeEditText extends View {
     }
 
     private void drawBracketHighlights(Canvas canvas, float paddingLeft, float paddingTop) {
+        if (!bracketHighlighting) return;
         // bracketHighlightPaint is allocated once in init() — no per-frame allocation
         bracketHighlightPaint.setColor(cachedBracketHighlightColor);
 
@@ -1889,6 +1894,49 @@ public class CodeEditText extends View {
         }
     }
 
+    public boolean isRainbowBrackets() {
+        return rainbowBrackets;
+    }
+
+    public void setRainbowBrackets(boolean rainbowBrackets) {
+        if (this.rainbowBrackets != rainbowBrackets) {
+            this.rainbowBrackets = rainbowBrackets;
+            if (content != null) {
+                content.acquireReadLock();
+                try {
+                    int count = content.lineCount();
+                    for (int i = 0; i < count; i++) {
+                        com.cocode.vcode.ide.core.editor.text.ContentLine line = content.getLine(i);
+                        if (line != null) {
+                            line.tokens = null;
+                        }
+                    }
+                } finally {
+                    content.releaseReadLock();
+                }
+            }
+            invalidate();
+        }
+    }
+
+    public boolean isBracketHighlighting() {
+        return bracketHighlighting;
+    }
+
+    public void setBracketHighlighting(boolean bracketHighlighting) {
+        if (this.bracketHighlighting != bracketHighlighting) {
+            this.bracketHighlighting = bracketHighlighting;
+            if (!bracketHighlighting) {
+                bracketMatchOpen = null;
+                bracketMatchClose = null;
+            } else if (content != null) {
+                mainHandler.removeCallbacks(bracketMatchRunnable);
+                bracketMatchRunnable.run();
+            }
+            invalidate();
+        }
+    }
+
     public FileType getFileType() {
         return fileType;
     }
@@ -2698,6 +2746,10 @@ public class CodeEditText extends View {
     private void updateBracketMatch(CharSequence text, int cursorFlat) {
         bracketMatchOpen = null;
         bracketMatchClose = null;
+        if (!bracketHighlighting) {
+            invalidate();
+            return;
+        }
         if (text.length() > 60000) {
             invalidate();
             return;

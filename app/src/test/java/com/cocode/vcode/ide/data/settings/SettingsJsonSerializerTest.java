@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 public class SettingsJsonSerializerTest {
 
     @Test
-    public void testSerializeStrict18Fields() throws Exception {
+    public void testSerializeStrict20Fields() throws Exception {
         AppSettings s = new AppSettings();
         s.fontSize = 16;
         s.showLineNumbers = true;
@@ -25,6 +25,8 @@ public class SettingsJsonSerializerTest {
         s.autoCloseHtmlTags = true;
         s.wordWrap = true;
         s.autoIndent = false;
+        s.rainbowBrackets = true;
+        s.bracketHighlighting = false;
         s.enableDiagnostics = false;
         s.showSquigglyLines = false;
         s.deleteMatchingPairs = false;
@@ -50,9 +52,9 @@ public class SettingsJsonSerializerTest {
         assertTrue(root.has("git"));
         assertTrue(root.has("general"));
 
-        // Editor: 11 fields
+        // Editor: 13 fields
         JSONObject editor = root.getJSONObject("editor");
-        assertEquals("Editor must have 11 fields", 11, editor.length());
+        assertEquals("Editor must have 13 fields", 13, editor.length());
         assertEquals(16, editor.getInt("fontSize"));
         assertTrue(editor.getBoolean("showLineNumbers"));
         assertTrue(editor.getBoolean("autoCloseBrackets"));
@@ -60,6 +62,8 @@ public class SettingsJsonSerializerTest {
         assertTrue(editor.getBoolean("autoCloseHtmlTags"));
         assertTrue(editor.getBoolean("wordWrap"));
         assertFalse(editor.getBoolean("autoIndent"));
+        assertTrue(editor.getBoolean("rainbowBrackets"));
+        assertFalse(editor.getBoolean("bracketHighlighting"));
         assertFalse(editor.getBoolean("enableDiagnostics"));
         assertFalse(editor.getBoolean("showSquigglyLines"));
         assertFalse(editor.getBoolean("deleteMatchingPairs"));
@@ -91,6 +95,8 @@ public class SettingsJsonSerializerTest {
                 "  \"editor\": {\n" +
                 "    \"fontSize\": 20,\n" +
                 "    \"wordWrap\": false,\n" +
+                "    \"rainbowBrackets\": false,\n" +
+                "    \"bracketHighlighting\": false,\n" +
                 "    \"enableDiagnostics\": false,\n" +
                 "    \"showSquigglyLines\": false,\n" +
                 "    \"deleteMatchingPairs\": false,\n" +
@@ -114,6 +120,9 @@ public class SettingsJsonSerializerTest {
         assertNotNull(result.settings);
         assertEquals(20, result.settings.fontSize);
         assertFalse(result.settings.wordWrap);
+        assertFalse(result.settings.rainbowBrackets);
+        assertFalse(result.settings.bracketHighlighting);
+        assertFalse(result.settings.matchBrackets);
         assertFalse(result.settings.enableDiagnostics);
         assertFalse(result.settings.showSquigglyLines);
         assertFalse(result.settings.deleteMatchingPairs);
@@ -127,6 +136,8 @@ public class SettingsJsonSerializerTest {
     public void testValidateAndParseFlatDotNotation() {
         String json = "{\n" +
                 "  \"editor.fontSize\": 22,\n" +
+                "  \"editor.rainbowBrackets\": false,\n" +
+                "  \"editor.bracketHighlighting\": false,\n" +
                 "  \"editor.enableDiagnostics\": false,\n" +
                 "  \"editor.showSquigglyLines\": false,\n" +
                 "  \"editor.deleteMatchingPairs\": false,\n" +
@@ -142,6 +153,9 @@ public class SettingsJsonSerializerTest {
         assertTrue(result.isValid);
         assertNotNull(result.settings);
         assertEquals(22, result.settings.fontSize);
+        assertFalse(result.settings.rainbowBrackets);
+        assertFalse(result.settings.bracketHighlighting);
+        assertFalse(result.settings.matchBrackets);
         assertFalse(result.settings.enableDiagnostics);
         assertFalse(result.settings.showSquigglyLines);
         assertFalse(result.settings.deleteMatchingPairs);
@@ -149,6 +163,29 @@ public class SettingsJsonSerializerTest {
         assertEquals(AppSettings.Theme.DARK, result.settings.theme);
         assertEquals("Test Coder", result.settings.gitAuthorName);
         assertFalse(result.settings.openPreviewInApp);
+    }
+
+    @Test
+    public void testLegacyMatchBracketsFallback() {
+        String hierarchical = "{\n" +
+                "  \"editor\": {\n" +
+                "    \"matchBrackets\": false\n" +
+                "  }\n" +
+                "}";
+        SettingsJsonSerializer.ValidationResult result1 =
+                SettingsJsonSerializer.validateAndParse(hierarchical, new AppSettings());
+        assertTrue(result1.isValid);
+        assertFalse(result1.settings.bracketHighlighting);
+        assertFalse(result1.settings.matchBrackets);
+
+        String flat = "{\n" +
+                "  \"editor.matchBrackets\": false\n" +
+                "}";
+        SettingsJsonSerializer.ValidationResult result2 =
+                SettingsJsonSerializer.validateAndParse(flat, new AppSettings());
+        assertTrue(result2.isValid);
+        assertFalse(result2.settings.bracketHighlighting);
+        assertFalse(result2.settings.matchBrackets);
     }
 
     @Test

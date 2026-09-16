@@ -53,6 +53,8 @@ public final class SettingsJsonSerializer {
         editor.put("autoCloseHtmlTags", s.autoCloseHtmlTags);
         editor.put("wordWrap", s.wordWrap);
         editor.put("autoIndent", s.autoIndent);
+        editor.put("rainbowBrackets", s.rainbowBrackets);
+        editor.put("bracketHighlighting", s.bracketHighlighting);
         editor.put("enableDiagnostics", s.enableDiagnostics);
         editor.put("showSquigglyLines", s.showSquigglyLines);
         editor.put("deleteMatchingPairs", s.deleteMatchingPairs);
@@ -100,6 +102,14 @@ public final class SettingsJsonSerializer {
                 if (ed.has("autoCloseHtmlTags")) s.autoCloseHtmlTags = ed.optBoolean("autoCloseHtmlTags", s.autoCloseHtmlTags);
                 if (ed.has("wordWrap")) s.wordWrap = ed.optBoolean("wordWrap", s.wordWrap);
                 if (ed.has("autoIndent")) s.autoIndent = ed.optBoolean("autoIndent", s.autoIndent);
+                if (ed.has("rainbowBrackets")) s.rainbowBrackets = ed.optBoolean("rainbowBrackets", s.rainbowBrackets);
+                if (ed.has("bracketHighlighting")) {
+                    s.bracketHighlighting = ed.optBoolean("bracketHighlighting", s.bracketHighlighting);
+                    s.matchBrackets = s.bracketHighlighting;
+                } else if (ed.has("matchBrackets")) {
+                    s.bracketHighlighting = ed.optBoolean("matchBrackets", s.bracketHighlighting);
+                    s.matchBrackets = s.bracketHighlighting;
+                }
                 if (ed.has("enableDiagnostics")) s.enableDiagnostics = ed.optBoolean("enableDiagnostics", s.enableDiagnostics);
                 if (ed.has("showSquigglyLines")) s.showSquigglyLines = ed.optBoolean("showSquigglyLines", s.showSquigglyLines);
                 if (ed.has("deleteMatchingPairs")) s.deleteMatchingPairs = ed.optBoolean("deleteMatchingPairs", s.deleteMatchingPairs);
@@ -143,6 +153,14 @@ public final class SettingsJsonSerializer {
         if (root.has("editor.autoCloseHtmlTags")) s.autoCloseHtmlTags = root.optBoolean("editor.autoCloseHtmlTags", s.autoCloseHtmlTags);
         if (root.has("editor.wordWrap")) s.wordWrap = root.optBoolean("editor.wordWrap", s.wordWrap);
         if (root.has("editor.autoIndent")) s.autoIndent = root.optBoolean("editor.autoIndent", s.autoIndent);
+        if (root.has("editor.rainbowBrackets")) s.rainbowBrackets = root.optBoolean("editor.rainbowBrackets", s.rainbowBrackets);
+        if (root.has("editor.bracketHighlighting")) {
+            s.bracketHighlighting = root.optBoolean("editor.bracketHighlighting", s.bracketHighlighting);
+            s.matchBrackets = s.bracketHighlighting;
+        } else if (root.has("editor.matchBrackets")) {
+            s.bracketHighlighting = root.optBoolean("editor.matchBrackets", s.bracketHighlighting);
+            s.matchBrackets = s.bracketHighlighting;
+        }
         if (root.has("editor.enableDiagnostics")) s.enableDiagnostics = root.optBoolean("editor.enableDiagnostics", s.enableDiagnostics);
         if (root.has("editor.showSquigglyLines")) s.showSquigglyLines = root.optBoolean("editor.showSquigglyLines", s.showSquigglyLines);
         if (root.has("editor.deleteMatchingPairs")) s.deleteMatchingPairs = root.optBoolean("editor.deleteMatchingPairs", s.deleteMatchingPairs);
@@ -194,6 +212,8 @@ public final class SettingsJsonSerializer {
         // Domain check: Must contain at least one known section or recognizable VCode setting key
         boolean hasKnownSection = root.has("editor") || root.has("appearance") || root.has("git") || root.has("general");
         boolean hasKnownFlatKey = root.has("editor.fontSize") || root.has("editor.showLineNumbers")
+                || root.has("editor.rainbowBrackets") || root.has("editor.bracketHighlighting")
+                || root.has("editor.matchBrackets")
                 || root.has("editor.enableDiagnostics") || root.has("editor.showSquigglyLines")
                 || root.has("editor.deleteMatchingPairs") || root.has("editor.forceLargeFileHighlighting")
                 || root.has("fontSize") || root.has("theme")

@@ -54,7 +54,10 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        binding.tvTitle.setTypeface(FontManager.getInstance().getUiSemiBold(requireContext()));
+        FontManager fm = FontManager.getInstance();
+        binding.tvTitle.setTypeface(fm.getUiSemiBold(requireContext()));
+        binding.tvEmptyTitle.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvEmptySubtitle.setTypeface(fm.getUiFont(requireContext()));
 
         binding.rvProblems.setLayoutManager(new LinearLayoutManager(requireContext()));
         adapter = new ProblemsAdapter();
@@ -64,15 +67,20 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
         viewModel = new ViewModelProvider(requireActivity(), factory).get(EditorViewModel.class);
 
         viewModel.getProblems().observe(getViewLifecycleOwner(), problems -> {
+            List<Problem> filtered = new ArrayList<>();
             if (problems != null) {
-                List<Problem> filtered = new ArrayList<>();
                 for (Problem p : problems) {
                     if (filterFile == null || (p.getFile() != null && p.getFile().equals(filterFile))) {
                         filtered.add(p);
                     }
                 }
                 adapter.setProblems(filtered, viewModel.getProjectRoot() != null ? viewModel.getProjectRoot().getAbsolutePath() : "");
+            } else {
+                adapter.setProblems(filtered, "");
             }
+            boolean isEmpty = filtered.isEmpty();
+            binding.layoutEmptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+            binding.rvProblems.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
         });
     }
 

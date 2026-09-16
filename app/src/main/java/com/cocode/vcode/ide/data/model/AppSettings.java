@@ -16,6 +16,8 @@ public class AppSettings {
     public boolean highlightCurrentLine = true;
     public boolean autoIndent = true;
     public boolean matchBrackets = true;
+    public boolean rainbowBrackets = true;
+    public boolean bracketHighlighting = true;
     public boolean enableDiagnostics = true;
     public boolean showSquigglyLines = true;
     public boolean deleteMatchingPairs = true;
@@ -122,6 +124,23 @@ public class AppSettings {
 
     public void setShowSquigglyLines(boolean show) {
         this.showSquigglyLines = enableDiagnostics && show;
+    }
+
+    public boolean isRainbowBrackets() {
+        return rainbowBrackets;
+    }
+
+    public void setRainbowBrackets(boolean rainbowBrackets) {
+        this.rainbowBrackets = rainbowBrackets;
+    }
+
+    public boolean isBracketHighlighting() {
+        return bracketHighlighting;
+    }
+
+    public void setBracketHighlighting(boolean bracketHighlighting) {
+        this.bracketHighlighting = bracketHighlighting;
+        this.matchBrackets = bracketHighlighting;
     }
 
     public Theme getTheme() {

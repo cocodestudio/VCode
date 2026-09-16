@@ -141,6 +141,8 @@ public class CodeFileViewer implements IFileViewer {
             codeEditText.setAutoCloseHtmlTags(settings.autoCloseHtmlTags);
             codeEditText.setWordWrap(settings.wordWrap);
             codeEditText.setAutoIndent(settings.autoIndent);
+            codeEditText.setRainbowBrackets(settings.rainbowBrackets);
+            codeEditText.setBracketHighlighting(settings.bracketHighlighting);
             codeEditText.setShowSquigglyLines(settings.enableDiagnostics && settings.showSquigglyLines);
             codeEditText.setDeleteMatchingPairs(settings.deleteMatchingPairs);
             codeEditText.setForceLargeFileHighlighting(settings.forceLargeFileHighlighting);

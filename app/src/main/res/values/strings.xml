@@ -35,6 +35,10 @@
     <string name="vcode_setting_delete_matching_pairs_desc">Delete matching bracket or quote pairs when pressing backspace between them</string>
     <string name="vcode_setting_force_large_file_highlighting">Force Syntax Highlighting</string>
     <string name="vcode_setting_force_large_file_highlighting_desc">Enable syntax highlighting on files exceeding 10,000 lines (may impact performance)</string>
+    <string name="vcode_setting_rainbow_brackets">Rainbow Brackets</string>
+    <string name="vcode_setting_rainbow_brackets_desc">Colorize matching bracket pairs with distinct rainbow colors</string>
+    <string name="vcode_setting_bracket_highlighting">Bracket Highlighting</string>
+    <string name="vcode_setting_bracket_highlighting_desc">Highlight matching bracket pairs with a stroked boundary</string>
     <string name="auto_save">Auto save</string>
     <string name="automatically_save_file">Automatically save the file as you stopped typing</string>
     <string name="git_settings">GIT SETTINGS</string>
@@ -314,6 +318,12 @@
     <!--    Empty State: Projects Activity-->
     <string name="vcode_no_projects_yet">No projects yet</string>
     <string name="vcode_create_project_hint">Tap the button below to create your first project</string>
+    <string name="vcode_no_matching_projects">No matching projects</string>
+    <string name="vcode_no_matching_projects_desc">No projects found matching your search query</string>
+
+    <!--    Empty State: Problems Sheet-->
+    <string name="vcode_no_problems_found">No problems detected</string>
+    <string name="vcode_no_problems_found_desc">No syntax or linting issues found in this file</string>
 
 
     <!--    Empty State: Editor Activity-->

@@ -185,6 +185,29 @@ public class SettingsViewModel extends ViewModel {
         }
     }
 
+    /**
+     * Toggles rainbow bracket coloring.
+     */
+    public void updateRainbowBrackets(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.rainbowBrackets = value;
+            saveSettings(current);
+        }
+    }
+
+    /**
+     * Toggles stroked boundary highlighting around matching brackets.
+     */
+    public void updateBracketHighlighting(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.bracketHighlighting = value;
+            current.matchBrackets = value;
+            saveSettings(current);
+        }
+    }
+
 
     /**
      * Updates the global application theme (Light, Dark, or System).

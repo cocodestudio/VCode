@@ -65,6 +65,10 @@ public class EditorSettingsFragment extends Fragment {
         binding.tvWordWrapDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvAutoIndent.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvAutoIndentDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvRainbowBrackets.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvRainbowBracketsDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvBracketHighlighting.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvBracketHighlightingDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvEnableDiagnostics.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvEnableDiagnosticsDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvShowSquigglyLines.setTypeface(fm.getUiMedium(requireContext()));
@@ -90,6 +94,10 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchWordWrap.setChecked(!binding.switchWordWrap.isChecked()));
         binding.opAutoIndent.setOnClickListener(_view ->
                 binding.switchAutoIndent.setChecked(!binding.switchAutoIndent.isChecked()));
+        binding.opRainbowBrackets.setOnClickListener(_view ->
+                binding.switchRainbowBrackets.setChecked(!binding.switchRainbowBrackets.isChecked()));
+        binding.opBracketHighlighting.setOnClickListener(_view ->
+                binding.switchBracketHighlighting.setChecked(!binding.switchBracketHighlighting.isChecked()));
         binding.opEnableDiagnostics.setOnClickListener(_view ->
                 binding.switchEnableDiagnostics.setChecked(!binding.switchEnableDiagnostics.isChecked()));
         binding.opShowSquigglyLines.setOnClickListener(_view -> {
@@ -140,6 +148,14 @@ public class EditorSettingsFragment extends Fragment {
             if (!isUpdatingUi) viewModel.updateAutoIndent(isChecked);
         });
 
+        binding.switchRainbowBrackets.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) viewModel.updateRainbowBrackets(isChecked);
+        });
+
+        binding.switchBracketHighlighting.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) viewModel.updateBracketHighlighting(isChecked);
+        });
+
         binding.switchEnableDiagnostics.setOnCheckedChangeListener((btn, isChecked) -> {
             if (!isUpdatingUi) {
                 updateSquigglyLinesUi(isChecked, isChecked && binding.switchShowSquigglyLines.isChecked());
@@ -176,6 +192,8 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchAutoCloseTags.setChecked(settings.autoCloseHtmlTags);
                 binding.switchWordWrap.setChecked(settings.wordWrap);
                 binding.switchAutoIndent.setChecked(settings.autoIndent);
+                binding.switchRainbowBrackets.setChecked(settings.rainbowBrackets);
+                binding.switchBracketHighlighting.setChecked(settings.bracketHighlighting);
                 binding.switchEnableDiagnostics.setChecked(settings.enableDiagnostics);
                 updateSquigglyLinesUi(settings.enableDiagnostics, settings.showSquigglyLines);
                 binding.switchDeleteMatchingPairs.setChecked(settings.deleteMatchingPairs);
