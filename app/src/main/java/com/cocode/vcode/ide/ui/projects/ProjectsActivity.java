@@ -1,7 +1,6 @@
 package com.cocode.vcode.ide.ui.projects;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
@@ -18,7 +17,6 @@ import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -160,11 +158,7 @@ public class ProjectsActivity extends BaseActivity {
         refreshUIState();
 
         IntentFilter filter = new IntentFilter("com.cocode.vcode.ide.ACTION_CLONE_COMPLETE");
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(cloneCompleteReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(cloneCompleteReceiver, filter);
-        }
+        ContextCompat.registerReceiver(this, cloneCompleteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     @Override
