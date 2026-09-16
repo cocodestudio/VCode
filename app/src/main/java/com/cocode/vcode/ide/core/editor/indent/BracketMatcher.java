@@ -204,8 +204,10 @@ public class BracketMatcher {
                 i++;
                 continue;
             } // skip escaped chars
-            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
-            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;
+            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0))
+                inSingle = !inSingle;
+            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0))
+                inDouble = !inDouble;
             else if (!inSingle && !inDouble) {
                 if (!inTemplate) {
                     if (c == '`') inTemplate = true;
@@ -517,8 +519,10 @@ public class BracketMatcher {
                 inSingle = false;
                 inDouble = false;
             }
-            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0)) inSingle = !inSingle;
-            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0)) inDouble = !inDouble;
+            if (c == '\'' && !inDouble && (!inTemplate || templateBraceDepth > 0))
+                inSingle = !inSingle;
+            else if (c == '"' && !inSingle && (!inTemplate || templateBraceDepth > 0))
+                inDouble = !inDouble;
             else if (!inSingle && !inDouble) {
                 if (!inTemplate) {
                     if (c == '`') inTemplate = true;

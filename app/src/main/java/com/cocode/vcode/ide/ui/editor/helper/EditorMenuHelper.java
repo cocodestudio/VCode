@@ -15,7 +15,6 @@ import com.cocode.vcode.ide.ui.git.GitActivity;
 import com.cocode.vcode.ide.ui.sheets.editor.EditorOptionsBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 

@@ -25,6 +25,7 @@ public class SyntaxHighlighter {
     protected final int colorNumber;
     protected final int colorOperator;
     protected int lastLineState = 0;
+    protected Content content;
 
     public SyntaxHighlighter(Context context) {
         this.context = context.getApplicationContext();
@@ -61,12 +62,6 @@ public class SyntaxHighlighter {
         this.colorOperator = operator;
     }
 
-    protected Content content;
-
-    public void setContent(Content content) {
-        this.content = content;
-    }
-
     public static int findMatchingParen(String s, int openParenIdx) {
         if (s == null) return -1;
         int len = s.length();
@@ -83,6 +78,19 @@ public class SyntaxHighlighter {
             }
         }
         return -1;
+    }
+
+    public static boolean match(CharSequence cs, int start, int end, String target) {
+        int len = end - start;
+        if (len != target.length()) return false;
+        for (int i = 0; i < len; i++) {
+            if (cs.charAt(start + i) != target.charAt(i)) return false;
+        }
+        return true;
+    }
+
+    public void setContent(Content content) {
+        this.content = content;
     }
 
     public android.text.SpannableStringBuilder highlight(String code) {
@@ -378,15 +386,6 @@ public class SyntaxHighlighter {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 
-    public static boolean match(CharSequence cs, int start, int end, String target) {
-        int len = end - start;
-        if (len != target.length()) return false;
-        for (int i = 0; i < len; i++) {
-            if (cs.charAt(start + i) != target.charAt(i)) return false;
-        }
-        return true;
-    }
-
     public boolean isKeyword(CharSequence cs, int start, int end) {
         int len = end - start;
         if (len < 2 || len > 10) return false;
@@ -411,15 +410,18 @@ public class SyntaxHighlighter {
                 if (c0 == 'e') return match(cs, start, end, "else");
                 if (c0 == 'c') return match(cs, start, end, "case");
                 if (c0 == 'v') return match(cs, start, end, "void");
-                if (c0 == 't') return match(cs, start, end, "this") || match(cs, start, end, "true");
+                if (c0 == 't')
+                    return match(cs, start, end, "this") || match(cs, start, end, "true");
                 if (c0 == 'n') return match(cs, start, end, "null");
                 if (c0 == 'f') return match(cs, start, end, "from");
                 return false;
             case 5:
-                if (c0 == 'c') return match(cs, start, end, "const") || match(cs, start, end, "class") || match(cs, start, end, "catch");
+                if (c0 == 'c')
+                    return match(cs, start, end, "const") || match(cs, start, end, "class") || match(cs, start, end, "catch");
                 if (c0 == 'w') return match(cs, start, end, "while");
                 if (c0 == 'b') return match(cs, start, end, "break");
-                if (c0 == 'a') return match(cs, start, end, "async") || match(cs, start, end, "await");
+                if (c0 == 'a')
+                    return match(cs, start, end, "async") || match(cs, start, end, "await");
                 if (c0 == 't') return match(cs, start, end, "throw");
                 if (c0 == 'y') return match(cs, start, end, "yield");
                 if (c0 == 's') return match(cs, start, end, "super");
@@ -427,7 +429,8 @@ public class SyntaxHighlighter {
                 return false;
             case 6:
                 if (c0 == 'r') return match(cs, start, end, "return");
-                if (c0 == 's') return match(cs, start, end, "switch") || match(cs, start, end, "static");
+                if (c0 == 's')
+                    return match(cs, start, end, "switch") || match(cs, start, end, "static");
                 if (c0 == 'd') return match(cs, start, end, "delete");
                 if (c0 == 't') return match(cs, start, end, "typeof");
                 if (c0 == 'e') return match(cs, start, end, "export");
@@ -454,7 +457,7 @@ public class SyntaxHighlighter {
 
     protected boolean isKeyword(String w) {
         if (w == null) return false;
-        return isKeyword((CharSequence) w, 0, w.length());
+        return isKeyword(w, 0, w.length());
     }
 
     protected int getColor(int resId) {

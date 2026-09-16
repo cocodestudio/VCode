@@ -17,8 +17,8 @@ import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.databinding.BottomSheetProblemsBinding;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.ui.editor.EditorViewModelFactory;
-import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
+import com.cocode.vcode.ide.utils.FontManager;
 
 import java.util.ArrayList;
 import java.util.List;

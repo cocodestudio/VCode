@@ -11,43 +11,43 @@ public final class MdParser {
     public static MdSyntaxTree parseBlocks(MdLineStream stream, String source) {
         int len = source.length();
         MdSyntaxTree tree = new MdSyntaxTree(Math.max(512, stream.lineCount * 3));
-        
+
         int rootId = tree.addNode(MdSyntaxTree.N_NONE, 0, len, 0, null);
-        
+
         int mode = com.cocode.vcode.ide.core.language.base.ParseModeGate.select(
-                com.cocode.vcode.ide.core.language.base.ParseModeGate.SizeMetric.LINES, 
+                com.cocode.vcode.ide.core.language.base.ParseModeGate.SizeMetric.LINES,
                 stream.lineCount, 1000, 5000, 15000);
-                
+
         if (mode == com.cocode.vcode.ide.core.language.js.ParseResult.MODE_TOKENIZE_ONLY) {
             return tree;
         }
-        
+
         // Stack to track open blocks: lists and blockquotes
         int[] stackIds = new int[64];
         int[] stackTypes = new int[64];
         int[] stackLevels = new int[64]; // for lists: indent; for bq: > count
         int stackSize = 0;
-        
+
         stackIds[stackSize] = rootId;
         stackTypes[stackSize] = MdSyntaxTree.N_NONE;
         stackLevels[stackSize] = -1;
         stackSize++;
-        
+
         int currentParagraph = 0;
-        
+
         int i = 0;
         while (i < stream.lineCount) {
             byte lineType = stream.lineTypes[i];
             int start = stream.lineStartOffsets[i];
             int end = stream.lineEndOffsets[i];
-            
+
             if (lineType == MdLineStream.L_BLANK) {
                 // Close paragraph, but lists/blockquotes stay open until a mismatch
                 currentParagraph = 0;
                 i++;
                 continue;
             }
-            
+
             // Calculate line's blockquote depth and list indent
             int bqDepth = 0;
             int indent = 0;
@@ -65,16 +65,16 @@ public final class MdParser {
                     break;
                 }
             }
-            
+
             // Re-evaluate lineType if it was hidden behind blockquote
             if (lineType == MdLineStream.L_BLOCKQUOTE && j < end) {
                 lineType = classifyRemainder(source, j, end);
             }
-            
+
             // Match active block containers against the current stack
             int matchIdx = 1; // 0 is root
             int currentBqDepth = 0;
-            
+
             while (matchIdx < stackSize) {
                 if (stackTypes[matchIdx] == MdSyntaxTree.N_BLOCKQUOTE) {
                     if (currentBqDepth + 1 <= bqDepth) {
@@ -96,15 +96,15 @@ public final class MdParser {
                     matchIdx++;
                 }
             }
-            
+
             // Close unmatched blocks
             if (stackSize > matchIdx) {
                 currentParagraph = 0; // Paragraph always closes if we pop stack
                 stackSize = matchIdx;
             }
-            
+
             int currentParent = stackIds[stackSize - 1];
-            
+
             // Open new blockquotes if needed
             while (currentBqDepth < bqDepth) {
                 currentParagraph = 0;
@@ -118,7 +118,7 @@ public final class MdParser {
                 }
                 currentParent = bqId;
             }
-            
+
             // Process block type
             if (lineType == MdLineStream.L_CODE_FENCE) {
                 currentParagraph = 0;
@@ -127,11 +127,11 @@ public final class MdParser {
                     tagStart++;
                 }
                 String lang = source.substring(tagStart, end).trim();
-                
+
                 int blockStart = start;
                 int originalI = i;
                 int startOfInner = (i + 1 < stream.lineCount) ? stream.lineStartOffsets[i + 1] : len;
-                
+
                 i++;
                 while (i < stream.lineCount) {
                     int innerStart = stream.lineStartOffsets[i];
@@ -145,24 +145,24 @@ public final class MdParser {
                     }
                     i++;
                 }
-                
+
                 int endOfInner = (i < stream.lineCount) ? stream.lineStartOffsets[i] : len;
                 if (endOfInner < startOfInner) endOfInner = startOfInner; // safety for empty fences
-                
+
                 int blockEnd = (i < stream.lineCount) ? stream.lineEndOffsets[i] : (stream.lineCount > 0 ? stream.lineEndOffsets[stream.lineCount - 1] : len);
-                
+
                 int cbId = tree.addNode(MdSyntaxTree.N_CODE_BLOCK, blockStart, blockEnd, currentParent, lang);
                 tree.addNode(MdSyntaxTree.N_NONE, startOfInner, endOfInner, cbId, null);
                 if (i >= stream.lineCount) {
                     tree.addNode(MdSyntaxTree.N_ERROR, blockStart, Math.min(blockStart + 3, len), cbId, "Unclosed code block");
                 }
-                
+
                 updateParentBounds(tree, stackIds, stackSize, blockEnd);
-                
+
                 i++;
                 continue;
             }
-            
+
             if (lineType == MdLineStream.L_HEADER) {
                 currentParagraph = 0;
                 int hashes = 0;
@@ -177,7 +177,7 @@ public final class MdParser {
                 i++;
                 continue;
             }
-            
+
             if (lineType == MdLineStream.L_THEMATIC_BREAK) {
                 currentParagraph = 0;
                 tree.addNode(MdSyntaxTree.N_THEMATIC_BREAK, start, end, currentParent, null);
@@ -185,7 +185,7 @@ public final class MdParser {
                 i++;
                 continue;
             }
-            
+
             if (lineType == MdLineStream.L_LIST_ITEM) {
                 currentParagraph = 0;
                 if (stackTypes[stackSize - 1] != MdSyntaxTree.N_LIST || indent > stackLevels[stackSize - 1] + 2) {
@@ -198,15 +198,15 @@ public final class MdParser {
                     }
                     currentParent = listId;
                 }
-                
+
                 int itemId = tree.addNode(MdSyntaxTree.N_LIST_ITEM, start, end, currentParent, null);
                 currentParagraph = tree.addNode(MdSyntaxTree.N_PARAGRAPH, start, end, itemId, null);
                 updateParentBounds(tree, stackIds, stackSize, end);
-                
+
                 i++;
                 continue;
             }
-            
+
             if (currentParagraph == 0) {
                 currentParagraph = tree.addNode(MdSyntaxTree.N_PARAGRAPH, start, end, currentParent, null);
             } else {
@@ -217,10 +217,10 @@ public final class MdParser {
                 }
             }
             updateParentBounds(tree, stackIds, stackSize, end);
-            
+
             i++;
         }
-        
+
         embedSubLanguages(tree, source);
         parseInline(tree, source);
         tree.buildNodesByOffset();
@@ -319,7 +319,7 @@ public final class MdParser {
         int i = start;
         while (i < end) {
             char c = source.charAt(i);
-            
+
             if (c == '`') {
                 int backticks = 0;
                 int j = i;
@@ -351,7 +351,7 @@ public final class MdParser {
                 if (!found) i = j;
                 continue;
             }
-            
+
             if (c == '*' || c == '_') {
                 int runLen = 0;
                 int j = i;
@@ -390,7 +390,7 @@ public final class MdParser {
                     continue;
                 }
             }
-            
+
             if (c == '[') {
                 int closeBracket = source.indexOf(']', i + 1);
                 if (closeBracket != -1 && closeBracket < end) {
@@ -407,24 +407,24 @@ public final class MdParser {
                 i++;
                 continue;
             }
-            
+
             i++;
         }
     }
-    
+
     private static void updateParentBounds(MdSyntaxTree tree, int[] stackIds, int stackSize, int end) {
         for (int i = 1; i < stackSize; i++) {
             tree.nodeEnd[stackIds[i]] = end;
         }
     }
-    
+
     private static byte classifyRemainder(String source, int start, int end) {
         int i = start;
         while (i < end && source.charAt(i) == ' ') i++;
         if (i == end) return MdLineStream.L_BLANK;
-        
+
         char c = source.charAt(i);
-        
+
         if (c == '#') {
             int hashes = 0;
             while (i < end && source.charAt(i) == '#') {
@@ -436,7 +436,7 @@ public final class MdParser {
             }
             return MdLineStream.L_PARAGRAPH;
         }
-        
+
         if (c == '`') {
             int backticks = 0;
             while (i < end && source.charAt(i) == '`') {
@@ -446,7 +446,7 @@ public final class MdParser {
             if (backticks >= 3) return MdLineStream.L_CODE_FENCE;
             return MdLineStream.L_PARAGRAPH;
         }
-        
+
         if (c == '-' || c == '*' || c == '_') {
             char marker = c;
             int count = 1;
@@ -465,7 +465,7 @@ public final class MdParser {
                 }
             }
             if (count >= 3 && onlyMarkersAndSpaces) return MdLineStream.L_THEMATIC_BREAK;
-            
+
             if ((c == '-' || c == '*') && i + 1 <= end) {
                 if (i + 1 == end || source.charAt(i + 1) == ' ') {
                     return MdLineStream.L_LIST_ITEM;
@@ -473,7 +473,7 @@ public final class MdParser {
             }
             return MdLineStream.L_PARAGRAPH;
         }
-        
+
         if (c >= '0' && c <= '9') {
             int j = i;
             while (j < end && source.charAt(j) >= '0' && source.charAt(j) <= '9') j++;
@@ -482,7 +482,7 @@ public final class MdParser {
                 if (j == end || source.charAt(j) == ' ') return MdLineStream.L_LIST_ITEM;
             }
         }
-        
+
         return MdLineStream.L_PARAGRAPH;
     }
 }

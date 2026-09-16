@@ -53,11 +53,11 @@ public class DiagnosticEngine {
                     for (com.cocode.vcode.ide.core.language.js.ParseResult.EmbeddedResult emb : parseResult.embeddedResults) {
                         String embeddedText = text.substring(emb.startOffset, Math.min(emb.endOffset, text.length()));
                         List<Problem> sub = new ArrayList<>();
-                        
+
                         if (emb.result.cssTree != null) {
                             sub = CssLinter.analyze(file, embeddedText);
                         }
-                        
+
                         for (Problem p : sub) {
                             int pOffset = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.lineStartOffset(embeddedText, p.getLine()) + p.getColumn() - 1;
                             int absoluteOffset = emb.startOffset + pOffset;

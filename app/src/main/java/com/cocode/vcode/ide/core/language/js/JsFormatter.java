@@ -10,26 +10,12 @@ import java.util.regex.Pattern;
  */
 public class JsFormatter extends BaseFormatter {
 
+    /**
+     * Default indent string used by the AST-driven formatter.
+     */
+    public static final String DEFAULT_INDENT = "    ";
     private static final Pattern MULTI_NL = Pattern.compile("\\n{3,}");
     private static final Pattern TRAILING_SP = Pattern.compile("[ \t]+\n");
-
-    @Override
-    public String format(String code) {
-        if (code == null || code.isEmpty()) return "";
-
-        code = code.replace("\r\n", "\n").replace("\r", "\n");
-
-    // Pass 1: normalise the token stream
-        String norm = normalise(code);
-
-    // Pass 2: re-indent
-        String indented = reIndent(norm);
-
-    // Pass 3: post-process
-        indented = TRAILING_SP.matcher(indented).replaceAll("\n");
-        indented = MULTI_NL.matcher(indented).replaceAll("\n\n");
-        return indented.trim() + "\n";
-    }
 
     // ---------------------------------------------------------------
     // AST-driven formatter
@@ -43,14 +29,173 @@ public class JsFormatter extends BaseFormatter {
     // skeleton the later tasks will hang from.
     // ---------------------------------------------------------------
 
-    /** Default indent string used by the AST-driven formatter. */
-    public static final String DEFAULT_INDENT = "    ";
+    /**
+     * Copy {@code source[start..end)} into {@code out}, collapsing any
+     * run of three-or-more newlines down to exactly two. This is the
+     * blank-line rule.
+     * <p>
+     * The collapsed range is always between two AST nodes, so it
+     * should in principle be non-verbatim. However, a free-floating
+     * comment token (a {@code /* *}{@code /} or {@code //} line that the
+     * parser does not bind to any statement) can also live in the gap
+     * — and a block comment with multiple blank lines must keep them
+     * intact, because they are inside a verbatim span. We therefore
+     * consult {@code stream}: any newline whose source offset is
+     * tagged as {@code TK_COMMENT} / {@code TK_STRING} /
+     * {@code TK_TEMPLATE} / {@code TK_REGEX} is copied verbatim and is
+     * never counted toward a collapse run. {@code stream} may be null
+     * in which case we skip the verbatim check (the gap is treated as
+     * fully non-verbatim).
+     */
+    private static void appendGapWithBlankLineCollapse(StringBuilder out, String source, TokenStream stream, int start, int end) {
+        if (start >= end) return;
+        if (start < 0) start = 0;
+        if (end > source.length()) end = source.length();
+        int i = start;
+        while (i < end) {
+            char c = source.charAt(i);
+            if (c == '\n') {
+                int runStart = i;
+                int runEnd = i;
+                while (runEnd < end && source.charAt(runEnd) == '\n') runEnd++;
+                int runLen = runEnd - runStart;
+                int emit = runLen >= 3 ? 2 : runLen;
+                if (stream != null) {
+                    // If any newline in the run is inside a verbatim
+                    // span, emit all of them verbatim. This preserves
+                    // multi-line block comments and template literals
+                    // that happen to live in the gap.
+                    for (int k = runStart; k < runEnd; k++) {
+                        if (isInsideVerbatimSpan(stream, k)) {
+                            emit = runLen;
+                            break;
+                        }
+                    }
+                }
+                for (int k = 0; k < emit; k++) out.append('\n');
+                i = runEnd;
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+    }
+
+    /**
+     * Copy source[start..end) into out. No-op if start >= end.
+     */
+    private static void appendSource(StringBuilder out, String source, int start, int end) {
+        if (start >= end) return;
+        if (start < 0) start = 0;
+        if (end > source.length()) end = source.length();
+        out.append(source, start, end);
+    }
+
+    /**
+     * Clamp {@code v} into [lo, hi]. Used to defend against malformed
+     * parser output (e.g. nodeEnd == 0 on an unterminated block).
+     */
+    private static int clamp(int v, int lo, int hi) {
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
+    }
+
+    /**
+     * True if the node type should be preceded by an indent prefix.
+     */
+    private static boolean needsIndentBefore(int type, boolean inBlock) {
+        // Only block-level constructs get an indent. Expression-level
+        // types (CALL_EXPR, MEMBER_EXPR, IDENTIFIER) are emitted
+        // in-line by their parent statement.
+        switch (type) {
+            case JsSyntaxTree.N_BLOCK:
+            case JsSyntaxTree.N_FUNC_DECL:
+            case JsSyntaxTree.N_ARROW_FUNC:
+            case JsSyntaxTree.N_CLASS_DECL:
+            case JsSyntaxTree.N_METHOD:
+            case JsSyntaxTree.N_GETTER:
+            case JsSyntaxTree.N_SETTER:
+            case JsSyntaxTree.N_VAR_DECL:
+            case JsSyntaxTree.N_OBJECT_LITERAL:
+            case JsSyntaxTree.N_IMPORT:
+            case JsSyntaxTree.N_EXPORT:
+            case JsSyntaxTree.N_FOR_STMT:
+            case JsSyntaxTree.N_IF_STMT:
+            case JsSyntaxTree.N_WHILE_STMT:
+            case JsSyntaxTree.N_DO_STMT:
+            case JsSyntaxTree.N_WITH_STMT:
+            case JsSyntaxTree.N_SWITCH_STMT:
+            case JsSyntaxTree.N_TRY_STMT:
+            case JsSyntaxTree.N_CATCH_CLAUSE:
+            case JsSyntaxTree.N_FINALLY_CLAUSE:
+            case JsSyntaxTree.N_CASE_CLAUSE:
+            case JsSyntaxTree.N_STATEMENT:
+            case JsSyntaxTree.N_INTERFACE:
+            case JsSyntaxTree.N_TYPE_ALIAS:
+            case JsSyntaxTree.N_ENUM:
+            case JsSyntaxTree.N_ERROR:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * First index >= start that is not a space or tab. Used to skip
+     * leading whitespace when starting the top-level walk.
+     */
+    private static int firstNonWhitespace(String source, int start, int end) {
+        int i = start;
+        while (i < end) {
+            char c = source.charAt(i);
+            if (c != ' ' && c != '\t') return i;
+            i++;
+        }
+        return end;
+    }
+
+    /**
+     * True if the source byte at {@code offset} belongs to a
+     * verbatim token span — {@code TK_STRING}, {@code TK_TEMPLATE},
+     * {@code TK_REGEX}, or {@code TK_COMMENT}. The printer must not
+     * reflow, re-indent, or otherwise restructure bytes inside such
+     * spans. Returns false if {@code stream} is null or offset is out
+     * of the lexed range.
+     */
+    private static boolean isInsideVerbatimSpan(TokenStream stream, int offset) {
+        if (stream == null) return false;
+        if (offset < 0 || offset >= stream.length) return false;
+        byte t = stream.types[offset];
+        return t == TokenStream.TK_STRING
+                || t == TokenStream.TK_TEMPLATE
+                || t == TokenStream.TK_REGEX
+                || t == TokenStream.TK_COMMENT;
+    }
+
+    @Override
+    public String format(String code) {
+        if (code == null || code.isEmpty()) return "";
+
+        code = code.replace("\r\n", "\n").replace("\r", "\n");
+
+        // Pass 1: normalise the token stream
+        String norm = normalise(code);
+
+        // Pass 2: re-indent
+        String indented = reIndent(norm);
+
+        // Pass 3: post-process
+        indented = TRAILING_SP.matcher(indented).replaceAll("\n");
+        indented = MULTI_NL.matcher(indented).replaceAll("\n\n");
+        return indented.trim() + "\n";
+    }
 
     /**
      * Format JavaScript/TypeScript source by traversing {@code tree}.
      * The source is lexed internally to obtain a {@link TokenStream} used
      * for verbatim-span preservation.
-     *
+     * <p>
      * Returns "" for null/empty input.
      */
     public String format(JsSyntaxTree tree, String source) {
@@ -64,7 +209,7 @@ public class JsFormatter extends BaseFormatter {
      * Format JavaScript/TypeScript source by traversing {@code tree},
      * reusing a caller-provided {@link TokenStream} to avoid re-lexing
      * on the hot path. {@code indent} is the per-depth indentation string.
-     *
+     * <p>
      * If {@code attachments} is non-null, the printer consults the
      * comment-attachment record to ensure each comment is emitted
      * in the slot bound to its nearest adjacent AST node. Pass null
@@ -119,16 +264,16 @@ public class JsFormatter extends BaseFormatter {
      * {@code firstChild}, printing each. {@code cursor} is the current
      * position in {@code source} we've already printed up to; the gap
      * between cursor and each node's start is copied verbatim.
-     *
+     * <p>
      * Returns the final cursor position (one past the last source byte
      * consumed) so callers can tail-flush any remaining source bytes.
-     *
+     * <p>
      * {@code attachments} is consulted when a comment span falls
      * inside a gap or trails a node. In the skeleton comments are
      * preserved verbatim by the gap-copy, so attachments is currently
      * informational; future revisions that re-indent comments will
      * read it to pick the right slot.
-     *
+     * <p>
      * Blank-line collapsing is applied to the gap-copy. The gap
      * is always between two AST nodes (not inside a verbatim span), so
      * collapsing runs of {@code \n\n\n+} to {@code \n\n} here cannot
@@ -137,15 +282,15 @@ public class JsFormatter extends BaseFormatter {
      * are copied verbatim by {@code appendSource}.
      */
     private int printSiblingList(JsSyntaxTree tree, String source, TokenStream stream,
-                                  JsCommentAttachment attachments,
-                                  int firstChild, int depth, String indent,
-                                  int cursor, int sourceLen, StringBuilder out, boolean inBlock) {
+                                 JsCommentAttachment attachments,
+                                 int firstChild, int depth, String indent,
+                                 int cursor, int sourceLen, StringBuilder out, boolean inBlock) {
         int id = firstChild;
         int localCursor = cursor;
         int loop = 0;
         while (id > 0 && id < tree.nodeCount && ++loop <= tree.nodeCount) {
             int nodeStart = clamp(tree.nodeStart[id], localCursor, sourceLen);
-            int nodeEnd   = clamp(tree.nodeEnd[id],   nodeStart,   sourceLen);
+            int nodeEnd = clamp(tree.nodeEnd[id], nodeStart, sourceLen);
 
             // if the gap contains a comment attached to the
             // NEXT node (this id), emit it at the leading slot before
@@ -174,61 +319,9 @@ public class JsFormatter extends BaseFormatter {
     }
 
     /**
-     * Copy {@code source[start..end)} into {@code out}, collapsing any
-     * run of three-or-more newlines down to exactly two. This is the
-     * blank-line rule.
-     *
-     * The collapsed range is always between two AST nodes, so it
-     * should in principle be non-verbatim. However, a free-floating
-     * comment token (a {@code /* *}{@code /} or {@code //} line that the
-     * parser does not bind to any statement) can also live in the gap
-     * — and a block comment with multiple blank lines must keep them
-     * intact, because they are inside a verbatim span. We therefore
-     * consult {@code stream}: any newline whose source offset is
-     * tagged as {@code TK_COMMENT} / {@code TK_STRING} /
-     * {@code TK_TEMPLATE} / {@code TK_REGEX} is copied verbatim and is
-     * never counted toward a collapse run. {@code stream} may be null
-     * in which case we skip the verbatim check (the gap is treated as
-     * fully non-verbatim).
-     */
-    private static void appendGapWithBlankLineCollapse(StringBuilder out, String source, TokenStream stream, int start, int end) {
-        if (start >= end) return;
-        if (start < 0) start = 0;
-        if (end > source.length()) end = source.length();
-        int i = start;
-        while (i < end) {
-            char c = source.charAt(i);
-            if (c == '\n') {
-                int runStart = i;
-                int runEnd = i;
-                while (runEnd < end && source.charAt(runEnd) == '\n') runEnd++;
-                int runLen = runEnd - runStart;
-                int emit = runLen >= 3 ? 2 : runLen;
-                if (stream != null) {
-                    // If any newline in the run is inside a verbatim
-                    // span, emit all of them verbatim. This preserves
-                    // multi-line block comments and template literals
-                    // that happen to live in the gap.
-                    for (int k = runStart; k < runEnd; k++) {
-                        if (isInsideVerbatimSpan(stream, k)) {
-                            emit = runLen;
-                            break;
-                        }
-                    }
-                }
-                for (int k = 0; k < emit; k++) out.append('\n');
-                i = runEnd;
-            } else {
-                out.append(c);
-                i++;
-            }
-        }
-    }
-
-    /**
      * Print a single AST node. Returns the source-cursor position
      * immediately after the last byte emitted for this node.
-     *
+     * <p>
      * {@code attachments} is the comment-attachment record. The
      * skeleton preserves comments verbatim via the gap-copy, so
      * this parameter is currently only consumed for the structural
@@ -322,93 +415,11 @@ public class JsFormatter extends BaseFormatter {
         }
     }
 
-    /** Indent every line emitted inside an N_BLOCK's children. */
+    /**
+     * Indent every line emitted inside an N_BLOCK's children.
+     */
     private void appendIndent(StringBuilder out, int depth, String indent) {
         for (int d = 0; d < depth; d++) out.append(indent);
-    }
-
-    /** Copy source[start..end) into out. No-op if start >= end. */
-    private static void appendSource(StringBuilder out, String source, int start, int end) {
-        if (start >= end) return;
-        if (start < 0) start = 0;
-        if (end > source.length()) end = source.length();
-        out.append(source, start, end);
-    }
-
-    /** Clamp {@code v} into [lo, hi]. Used to defend against malformed
-     *  parser output (e.g. nodeEnd == 0 on an unterminated block). */
-    private static int clamp(int v, int lo, int hi) {
-        if (v < lo) return lo;
-        if (v > hi) return hi;
-        return v;
-    }
-
-    /** True if the node type should be preceded by an indent prefix. */
-    private static boolean needsIndentBefore(int type, boolean inBlock) {
-        // Only block-level constructs get an indent. Expression-level
-        // types (CALL_EXPR, MEMBER_EXPR, IDENTIFIER) are emitted
-        // in-line by their parent statement.
-        switch (type) {
-            case JsSyntaxTree.N_BLOCK:
-            case JsSyntaxTree.N_FUNC_DECL:
-            case JsSyntaxTree.N_ARROW_FUNC:
-            case JsSyntaxTree.N_CLASS_DECL:
-            case JsSyntaxTree.N_METHOD:
-            case JsSyntaxTree.N_GETTER:
-            case JsSyntaxTree.N_SETTER:
-            case JsSyntaxTree.N_VAR_DECL:
-            case JsSyntaxTree.N_OBJECT_LITERAL:
-            case JsSyntaxTree.N_IMPORT:
-            case JsSyntaxTree.N_EXPORT:
-            case JsSyntaxTree.N_FOR_STMT:
-            case JsSyntaxTree.N_IF_STMT:
-            case JsSyntaxTree.N_WHILE_STMT:
-            case JsSyntaxTree.N_DO_STMT:
-            case JsSyntaxTree.N_WITH_STMT:
-            case JsSyntaxTree.N_SWITCH_STMT:
-            case JsSyntaxTree.N_TRY_STMT:
-            case JsSyntaxTree.N_CATCH_CLAUSE:
-            case JsSyntaxTree.N_FINALLY_CLAUSE:
-            case JsSyntaxTree.N_CASE_CLAUSE:
-            case JsSyntaxTree.N_STATEMENT:
-            case JsSyntaxTree.N_INTERFACE:
-            case JsSyntaxTree.N_TYPE_ALIAS:
-            case JsSyntaxTree.N_ENUM:
-            case JsSyntaxTree.N_ERROR:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /** First index >= start that is not a space or tab. Used to skip
-     *  leading whitespace when starting the top-level walk. */
-    private static int firstNonWhitespace(String source, int start, int end) {
-        int i = start;
-        while (i < end) {
-            char c = source.charAt(i);
-            if (c != ' ' && c != '\t') return i;
-            i++;
-        }
-        return end;
-    }
-
-    /**
-     * True if the source byte at {@code offset} belongs to a
-     * verbatim token span — {@code TK_STRING}, {@code TK_TEMPLATE},
-     * {@code TK_REGEX}, or {@code TK_COMMENT}. The printer must not
-     * reflow, re-indent, or otherwise restructure bytes inside such
-     * spans. Returns false if {@code stream} is null or offset is out
-     * of the lexed range.
-     */
-    private static boolean isInsideVerbatimSpan(TokenStream stream, int offset) {
-        if (stream == null) return false;
-        if (offset < 0 || offset >= stream.length) return false;
-        byte t = stream.types[offset];
-        return t == TokenStream.TK_STRING
-            || t == TokenStream.TK_TEMPLATE
-            || t == TokenStream.TK_REGEX
-            || t == TokenStream.TK_COMMENT;
     }
 
     // Pass 1: Produce a clean, single-normalised-space stream
@@ -423,7 +434,7 @@ public class JsFormatter extends BaseFormatter {
         for (int i = 0; i < len; i++) {
             char c = code.charAt(i);
 
-    // Block comment
+            // Block comment
             if (inBlockComment) {
                 out.append(c);
                 if (c == '*' && i + 1 < len && code.charAt(i + 1) == '/') {
@@ -434,13 +445,13 @@ public class JsFormatter extends BaseFormatter {
                 }
                 continue;
             }
-    // Line comment
+            // Line comment
             if (inLineComment) {
                 out.append(c);
                 if (c == '\n') inLineComment = false;
                 continue;
             }
-    // String / template literal
+            // String / template literal
             if (inString) {
                 out.append(c);
                 if (c == '\\') {

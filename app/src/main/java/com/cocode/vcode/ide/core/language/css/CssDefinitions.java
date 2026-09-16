@@ -19,16 +19,6 @@ public class CssDefinitions {
     public static final List<String> MEDIA_KEYWORDS = new ArrayList<>();
     public static final List<MediaFeatureEntry> MEDIA_FEATURES = new ArrayList<>();
 
-    public static class MediaFeatureEntry {
-        public final String label;
-        public final String insertText;
-
-        public MediaFeatureEntry(String label, String insertText) {
-            this.label = label;
-            this.insertText = insertText;
-        }
-    }
-
     static {
         loadCssDefinitions();
     }
@@ -88,6 +78,16 @@ public class CssDefinitions {
                 }
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    public static class MediaFeatureEntry {
+        public final String label;
+        public final String insertText;
+
+        public MediaFeatureEntry(String label, String insertText) {
+            this.label = label;
+            this.insertText = insertText;
         }
     }
 }

@@ -1,11 +1,10 @@
 package com.cocode.vcode.ide.core.language.js;
 
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
-
-import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
-import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
 import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
 import com.cocode.vcode.ide.core.language.css.CssTokenStream;
+import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
+import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -38,18 +37,6 @@ public class ParseResult {
 
     public final List<EmbeddedResult> embeddedResults;
 
-    public static class EmbeddedResult {
-        public final int startOffset;
-        public final int endOffset;
-        public final ParseResult result;
-        
-        public EmbeddedResult(int startOffset, int endOffset, ParseResult result) {
-            this.startOffset = startOffset;
-            this.endOffset = endOffset;
-            this.result = result;
-        }
-    }
-
     public ParseResult(File file, String source, TokenStream tokens, JsSyntaxTree tree, ScopeTree scopeTree, int mode) {
         this.file = file;
         this.source = source;
@@ -65,7 +52,7 @@ public class ParseResult {
         this.jsonTree = null;
         this.embeddedResults = new ArrayList<>();
     }
-    
+
     // Constructor for HTML parsing
     public ParseResult(File file, String source, HtmlTokenStream htmlTokens, HtmlSyntaxTree htmlTree) {
         this(file, source, htmlTokens, htmlTree, new ArrayList<>());
@@ -120,9 +107,21 @@ public class ParseResult {
         this.cssTree = null;
         this.embeddedResults = new ArrayList<>();
     }
-    
+
     // Legacy constructor for tests or other languages
     public ParseResult(File file, String source, TokenStream tokens, JsSyntaxTree tree) {
         this(file, source, tokens, tree, null, MODE_FULL);
+    }
+
+    public static class EmbeddedResult {
+        public final int startOffset;
+        public final int endOffset;
+        public final ParseResult result;
+
+        public EmbeddedResult(int startOffset, int endOffset, ParseResult result) {
+            this.startOffset = startOffset;
+            this.endOffset = endOffset;
+            this.result = result;
+        }
     }
 }

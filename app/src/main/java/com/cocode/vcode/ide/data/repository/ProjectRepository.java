@@ -16,13 +16,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +35,16 @@ public class ProjectRepository {
     public static final String STATE_DIR = "state";
     public static final String PROJECT_FILE = "project.json";
     public static final String LEGACY_META_FILE = "project_meta.json";
+    private static final String KEY_ID = "id";
+    private static final String KEY_NAME = "name";
+    private static final String KEY_CREATED_AT = "createdAt";
+    private static final String KEY_LAST_MODIFIED_AT = "lastModifiedAt";
+    private static final String KEY_MAIN_FILE = "mainFile";
+    private static final String KEY_FILE_COUNT = "fileCount";
+    private final Context appContext;
+    public ProjectRepository(Context context) {
+        this.appContext = context.getApplicationContext();
+    }
 
     public static File findProjectRoot(File file) {
         File current = file;
@@ -65,18 +72,6 @@ public class ProjectRepository {
             return legacySession;
         }
         return new File(new File(new File(projectRoot, VCODE_DIR), STATE_DIR), "session.json");
-    }
-
-    private static final String KEY_ID = "id";
-    private static final String KEY_NAME = "name";
-    private static final String KEY_CREATED_AT = "createdAt";
-    private static final String KEY_LAST_MODIFIED_AT = "lastModifiedAt";
-    private static final String KEY_MAIN_FILE = "mainFile";
-    private static final String KEY_FILE_COUNT = "fileCount";
-    private final Context appContext;
-
-    public ProjectRepository(Context context) {
-        this.appContext = context.getApplicationContext();
     }
 
     /**

@@ -1,7 +1,5 @@
 package com.cocode.vcode.ide.core.autocomplete;
 
-import androidx.annotation.NonNull;
-
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.language.css.CssLexer;
 import com.cocode.vcode.ide.core.language.css.CssParser;
@@ -47,9 +45,9 @@ public class ProjectSymbolIndex {
     private final List<CompletionItem> htmlIdItems = new ArrayList<>();
     // Maps absolute file path to its exported CompletionItems
     private final Map<String, List<CompletionItem>> jsFileExports = new HashMap<>();
-    private String projectRoot = null;
     // Guards against multiple concurrent buildIndex() calls for the same root.
     private final java.util.concurrent.atomic.AtomicBoolean isBuilding = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private String projectRoot = null;
 
     private ProjectSymbolIndex() {
     }
@@ -63,6 +61,51 @@ public class ProjectSymbolIndex {
 
     public static File getProjectRoot(File file) {
         return ProjectRepository.findProjectRoot(file);
+    }
+
+    private static void extractCssClassesAndIds(String selector, Set<String> classNames, Set<String> cssIds) {
+        int len = selector.length();
+        int i = 0;
+        while (i < len) {
+            char c = selector.charAt(i);
+            if (c == '.' || c == '#') {
+                boolean isClass = (c == '.');
+                i++;
+                int start = i;
+                while (i < len) {
+                    char ch = selector.charAt(i);
+                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                if (i > start) {
+                    String name = selector.substring(start, i);
+                    if (isClass) {
+                        classNames.add(name);
+                    } else {
+                        cssIds.add(name);
+                    }
+                }
+            } else {
+                i++;
+            }
+        }
+    }
+
+    private static String stripQuotes(String str) {
+        if (str == null || str.length() < 2) return str != null ? str : "";
+        char first = str.charAt(0);
+        char last = str.charAt(str.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return str.substring(1, str.length() - 1);
+        }
+        return str;
+    }
+
+    private static boolean isIgnoredProp(String name) {
+        return "constructor".equals(name) || "prototype".equals(name) || "function".equals(name);
     }
 
     public void buildIndex(File rootDir) {
@@ -149,37 +192,6 @@ public class ProjectSymbolIndex {
         }
     }
 
-    private static void extractCssClassesAndIds(String selector, Set<String> classNames, Set<String> cssIds) {
-        int len = selector.length();
-        int i = 0;
-        while (i < len) {
-            char c = selector.charAt(i);
-            if (c == '.' || c == '#') {
-                boolean isClass = (c == '.');
-                i++;
-                int start = i;
-                while (i < len) {
-                    char ch = selector.charAt(i);
-                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
-                        i++;
-                    } else {
-                        break;
-                    }
-                }
-                if (i > start) {
-                    String name = selector.substring(start, i);
-                    if (isClass) {
-                        classNames.add(name);
-                    } else {
-                        cssIds.add(name);
-                    }
-                }
-            } else {
-                i++;
-            }
-        }
-    }
-
     private void indexHtmlFile(File file, Set<String> classNames, Set<String> htmlIds) {
         String content = readFile(file);
         if (content == null) return;
@@ -213,16 +225,6 @@ public class ProjectSymbolIndex {
                 }
             }
         }
-    }
-
-    private static String stripQuotes(String str) {
-        if (str == null || str.length() < 2) return str != null ? str : "";
-        char first = str.charAt(0);
-        char last = str.charAt(str.length() - 1);
-        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
-            return str.substring(1, str.length() - 1);
-        }
-        return str;
     }
 
     private void indexJsFile(File file) {
@@ -401,16 +403,15 @@ public class ProjectSymbolIndex {
         }
     }
 
-    private static boolean isIgnoredProp(String name) {
-        return "constructor".equals(name) || "prototype".equals(name) || "function".equals(name);
-    }
-
     private boolean hasDocument(File file) {
         if (file == null) return false;
-        if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath()) != null) return true;
+        if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath()) != null)
+            return true;
         try {
-            if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getCanonicalPath()) != null) return true;
-        } catch (Exception ignored) {}
+            if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getCanonicalPath()) != null)
+                return true;
+        } catch (Exception ignored) {
+        }
         return false;
     }
 
@@ -418,8 +419,9 @@ public class ProjectSymbolIndex {
         String queryPath = file.getAbsolutePath();
         try {
             queryPath = file.getCanonicalPath();
-        } catch (Exception ignored) {}
-        
+        } catch (Exception ignored) {
+        }
+
         com.cocode.vcode.ide.core.lsp.LspDocument doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(queryPath);
         if (doc == null && !queryPath.equals(file.getAbsolutePath())) {
             doc = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath());

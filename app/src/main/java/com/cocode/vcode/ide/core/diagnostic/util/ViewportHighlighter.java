@@ -5,10 +5,10 @@ import java.util.List;
 
 /**
  * Shared viewport-slice highlighter.
- *
+ * <p>
  * Given a {@code TokenStream}-shaped pair of parallel arrays
  * ({@code types[i] = token type for source byte i,
- *  tokenStart[i] = start offset of the token containing byte i}),
+ * tokenStart[i] = start offset of the token containing byte i}),
  * a visible byte range {@code [startOffset, endOffset)}, and a colour
  * resolver, binary-searches to the first token whose start is at or
  * after {@code startOffset} and iterates forward only through tokens
@@ -28,34 +28,7 @@ import java.util.List;
  */
 public final class ViewportHighlighter {
 
-    private ViewportHighlighter() {}
-
-    /**
-     * Resolves a token type to an ARGB colour, or returns a negative
-     * value to indicate "do not highlight". Implementing this as a
-     * small functional interface lets each language wire its own
-     * colour palette without subclassing.
-     */
-    public interface ColorResolver {
-        int colorFor(byte tokenType);
-    }
-
-    /**
-     * A highlight span expressed in absolute source-byte offsets.
-     * The caller (the editor's draw layer) is responsible for
-     * converting these to (line, col) coordinates if the existing
-     * line-based pipeline requires that form.
-     */
-    public static final class ViewportSpan {
-        public final int startOffset;
-        public final int endOffset;
-        public final int color;
-
-        public ViewportSpan(int startOffset, int endOffset, int color) {
-            this.startOffset = startOffset;
-            this.endOffset = endOffset;
-            this.color = color;
-        }
+    private ViewportHighlighter() {
     }
 
     /**
@@ -92,7 +65,7 @@ public final class ViewportHighlighter {
      * @param resolver    maps a token type to an ARGB colour, or a
      *                    negative value to skip
      * @return a list of {@link ViewportSpan}s in offset order. May
-     *         be empty.
+     * be empty.
      */
     public static List<ViewportSpan> highlight(
             byte[] types, int[] tokenStart, int length,
@@ -178,5 +151,33 @@ public final class ViewportHighlighter {
         // startOffset) or skip it (if the token ends at or before
         // startOffset).
         return lo - 1;
+    }
+
+    /**
+     * Resolves a token type to an ARGB colour, or returns a negative
+     * value to indicate "do not highlight". Implementing this as a
+     * small functional interface lets each language wire its own
+     * colour palette without subclassing.
+     */
+    public interface ColorResolver {
+        int colorFor(byte tokenType);
+    }
+
+    /**
+     * A highlight span expressed in absolute source-byte offsets.
+     * The caller (the editor's draw layer) is responsible for
+     * converting these to (line, col) coordinates if the existing
+     * line-based pipeline requires that form.
+     */
+    public static final class ViewportSpan {
+        public final int startOffset;
+        public final int endOffset;
+        public final int color;
+
+        public ViewportSpan(int startOffset, int endOffset, int color) {
+            this.startOffset = startOffset;
+            this.endOffset = endOffset;
+            this.color = color;
+        }
     }
 }

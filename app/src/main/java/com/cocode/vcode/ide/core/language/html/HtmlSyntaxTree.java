@@ -8,14 +8,14 @@ import java.util.Arrays;
  */
 public final class HtmlSyntaxTree {
 
-    public static final int N_NONE      = 0;
-    public static final int MAX_NODES   = 100_000;
-    public static final int N_ELEMENT   = 1;
+    public static final int N_NONE = 0;
+    public static final int MAX_NODES = 100_000;
+    public static final int N_ELEMENT = 1;
     public static final int N_ATTRIBUTE = 2;
-    public static final int N_TEXT      = 3;
-    public static final int N_COMMENT   = 4;
-    public static final int N_DOCTYPE   = 5;
-    public static final int N_ERROR     = 6;
+    public static final int N_TEXT = 3;
+    public static final int N_COMMENT = 4;
+    public static final int N_DOCTYPE = 5;
+    public static final int N_ERROR = 6;
 
     public int[] nodesByOffset; // Sorted node IDs
 
@@ -55,9 +55,9 @@ public final class HtmlSyntaxTree {
         nodeValue = new String[initialCapacity];
         nodeExtra = new int[initialCapacity];
         nodeReference = new Object[initialCapacity];
-        
+
         // Node 0 is reserved as "null/root"
-        nodeCount = 1; 
+        nodeCount = 1;
     }
 
     /**
@@ -147,12 +147,18 @@ public final class HtmlSyntaxTree {
 
     private void medianOfThree(int a, int b, int c) {
         if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+            int t = nodesByOffset[a];
+            nodesByOffset[a] = nodesByOffset[b];
+            nodesByOffset[b] = t;
         }
         if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
-            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            int t = nodesByOffset[b];
+            nodesByOffset[b] = nodesByOffset[c];
+            nodesByOffset[c] = t;
             if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+                int t2 = nodesByOffset[a];
+                nodesByOffset[a] = nodesByOffset[b];
+                nodesByOffset[b] = t2;
             }
         }
     }
@@ -177,7 +183,7 @@ public final class HtmlSyntaxTree {
     public HtmlSyntaxTree cloneWithShift(int offset, int delta) {
         HtmlSyntaxTree clone = new HtmlSyntaxTree(this.nodeType.length);
         clone.nodeCount = this.nodeCount;
-        
+
         System.arraycopy(this.nodeType, 0, clone.nodeType, 0, this.nodeCount);
         System.arraycopy(this.nodeParent, 0, clone.nodeParent, 0, this.nodeCount);
         System.arraycopy(this.nodeChild, 0, clone.nodeChild, 0, this.nodeCount);
@@ -187,16 +193,16 @@ public final class HtmlSyntaxTree {
         System.arraycopy(this.nodeValue, 0, clone.nodeValue, 0, this.nodeCount);
         System.arraycopy(this.nodeExtra, 0, clone.nodeExtra, 0, this.nodeCount);
         System.arraycopy(this.nodeReference, 0, clone.nodeReference, 0, this.nodeCount);
-        
+
         for (int i = 0; i < this.nodeCount; i++) {
             clone.nodeStart[i] = this.nodeStart[i] >= offset ? this.nodeStart[i] + delta : this.nodeStart[i];
             clone.nodeEnd[i] = this.nodeEnd[i] >= offset ? this.nodeEnd[i] + delta : this.nodeEnd[i];
         }
-        
+
         if (this.nodesByOffset != null) {
             clone.nodesByOffset = Arrays.copyOf(this.nodesByOffset, this.nodesByOffset.length);
         }
-        
+
         return clone;
     }
 
@@ -296,8 +302,8 @@ public final class HtmlSyntaxTree {
         nodeStart[id] = start;
         nodeEnd[id] = end;
         nodeParent[id] = parent;
-        nodeChild[id] = 0;   
-        nodeSibling[id] = 0; 
+        nodeChild[id] = 0;
+        nodeSibling[id] = 0;
         nodeLastChild[id] = 0;
         nodeName[id] = name;
         nodeValue[id] = value;

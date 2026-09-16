@@ -66,7 +66,8 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
                 String detail = obj.optString("detail", "");
                 addSnippet(label, insertText, detail, CompletionItem.Type.SNIPPET);
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
     }
 
     private void addSnippet(String label, String insertText, String detail, CompletionItem.Type type) {
@@ -110,9 +111,9 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         }
         String linePrefix = fullText.substring(nonWs, cursorPos);
 
-        boolean isPunctuationLineTrigger = !linePrefix.isEmpty() && 
-            (linePrefix.startsWith("#") || linePrefix.startsWith("`") || linePrefix.startsWith("-")
-             || linePrefix.startsWith(">") || linePrefix.startsWith("1.") || linePrefix.startsWith("|"));
+        boolean isPunctuationLineTrigger = !linePrefix.isEmpty() &&
+                (linePrefix.startsWith("#") || linePrefix.startsWith("`") || linePrefix.startsWith("-")
+                        || linePrefix.startsWith(">") || linePrefix.startsWith("1.") || linePrefix.startsWith("|"));
 
         String matchQuery;
         int replaceLen;
@@ -212,11 +213,6 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         return i + 1;
     }
 
-    private static class CodeBlockContext {
-        String language;
-        int blockStartOffset;
-    }
-
     private CodeBlockContext findCodeBlockContext(String text, int pos) {
         int fenceCount = 0;
         int lastFencePos = -1;
@@ -241,9 +237,11 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
                 lastFencePos = lineEnd;
                 // Parse language specifier after ```
                 int langStart = k + 3;
-                while (langStart < lineEnd && Character.isWhitespace(text.charAt(langStart))) langStart++;
+                while (langStart < lineEnd && Character.isWhitespace(text.charAt(langStart)))
+                    langStart++;
                 int langEnd = langStart;
-                while (langEnd < lineEnd && !Character.isWhitespace(text.charAt(langEnd))) langEnd++;
+                while (langEnd < lineEnd && !Character.isWhitespace(text.charAt(langEnd)))
+                    langEnd++;
                 if (langEnd > langStart) {
                     lastFenceLang = text.substring(langStart, langEnd).toLowerCase();
                 } else {
@@ -293,5 +291,10 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         return null;
+    }
+
+    private static class CodeBlockContext {
+        String language;
+        int blockStartOffset;
     }
 }

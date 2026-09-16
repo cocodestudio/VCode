@@ -1,8 +1,8 @@
 package com.cocode.vcode.ide.core.language.js;
 
 import java.util.Arrays;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * A flat-array data container representing a JavaScript/TypeScript Abstract Syntax Tree.
@@ -10,52 +10,51 @@ import java.util.HashMap;
  */
 public final class JsSyntaxTree {
 
-    public static final int N_NONE         = 0;
-    public static final int N_IMPORT       = 1;
-    public static final int MAX_NODES      = 100_000;
+    public static final int N_NONE = 0;
+    public static final int N_IMPORT = 1;
+    public static final int MAX_NODES = 100_000;
 
-    public static final int N_FUNC_DECL    = 2;
-    public static final int N_ARROW_FUNC   = 3;
-    public static final int N_CLASS_DECL   = 4;
-    public static final int N_METHOD       = 5;
-    public static final int N_GETTER       = 6;
-    public static final int N_SETTER       = 7;
-    public static final int N_VAR_DECL     = 8;   // let/const/var
-    public static final int N_PARAM        = 9;
-    public static final int N_BLOCK        = 10;
-    public static final int N_EXPORT       = 11;
-    public static final int N_CALL_EXPR    = 12;
-    public static final int N_MEMBER_EXPR  = 13;  // a.b
-    public static final int N_IDENTIFIER   = 14;
-    public static final int N_DESTRUCTURE  = 15;
-    public static final int N_STATEMENT    = 16;  // generic statement
-    public static final int N_FOR_STMT     = 17;
+    public static final int N_FUNC_DECL = 2;
+    public static final int N_ARROW_FUNC = 3;
+    public static final int N_CLASS_DECL = 4;
+    public static final int N_METHOD = 5;
+    public static final int N_GETTER = 6;
+    public static final int N_SETTER = 7;
+    public static final int N_VAR_DECL = 8;   // let/const/var
+    public static final int N_PARAM = 9;
+    public static final int N_BLOCK = 10;
+    public static final int N_EXPORT = 11;
+    public static final int N_CALL_EXPR = 12;
+    public static final int N_MEMBER_EXPR = 13;  // a.b
+    public static final int N_IDENTIFIER = 14;
+    public static final int N_DESTRUCTURE = 15;
+    public static final int N_STATEMENT = 16;  // generic statement
+    public static final int N_FOR_STMT = 17;
     public static final int N_CATCH_CLAUSE = 18;
-    public static final int N_IF_STMT      = 19;
-    public static final int N_WHILE_STMT   = 20;
-    public static final int N_DO_STMT      = 21;
-    public static final int N_WITH_STMT    = 22;
-    public static final int N_SWITCH_STMT  = 23;
-    public static final int N_CASE_CLAUSE  = 24;
-    public static final int N_TRY_STMT     = 25;
+    public static final int N_IF_STMT = 19;
+    public static final int N_WHILE_STMT = 20;
+    public static final int N_DO_STMT = 21;
+    public static final int N_WITH_STMT = 22;
+    public static final int N_SWITCH_STMT = 23;
+    public static final int N_CASE_CLAUSE = 24;
+    public static final int N_TRY_STMT = 25;
     public static final int N_FINALLY_CLAUSE = 26;
-    public static final int N_ERROR        = 27;
-    public static final int N_INTERFACE    = 28;
-    public static final int N_TYPE_ALIAS   = 29;
-    public static final int N_ENUM         = 30;
+    public static final int N_ERROR = 27;
+    public static final int N_INTERFACE = 28;
+    public static final int N_TYPE_ALIAS = 29;
+    public static final int N_ENUM = 30;
     public static final int N_OBJECT_LITERAL = 31;
-    public static final int N_PROPERTY     = 32;
+    public static final int N_PROPERTY = 32;
 
-    public static final int FLAG_NONE      = 0;
-    public static final int FLAG_VAR       = 1;
-    public static final int FLAG_LET       = 2;
-    public static final int FLAG_CONST     = 3;
-    public static final int FLAG_REST      = 4;
+    public static final int FLAG_NONE = 0;
+    public static final int FLAG_VAR = 1;
+    public static final int FLAG_LET = 2;
+    public static final int FLAG_CONST = 3;
+    public static final int FLAG_REST = 4;
     public static final int FLAG_PARAM_PROP = 8;
-    public static final int FLAG_DEFAULT   = 16;
-
+    public static final int FLAG_DEFAULT = 16;
+    public final Map<Integer, String[]> shapeTable = new HashMap<>();
     public int[] nodesByOffset; // Sorted node IDs
-
     // Parallel arrays for nodes. The index into these arrays is the "node ID".
     public int[] nodeType;
     public int[] nodeStart;
@@ -67,9 +66,6 @@ public final class JsSyntaxTree {
     public String[] nodeName;  // e.g., variable/function name
     public String[] nodeTypeAnn; // e.g., type annotation like "User"
     public int[] nodeExtra;    // extra data, e.g., flags (isAsync, isExported)
-
-    public final Map<Integer, String[]> shapeTable = new HashMap<>();
-
     /**
      * Number of active nodes currently in the tree.
      */
@@ -92,9 +88,9 @@ public final class JsSyntaxTree {
         nodeName = new String[initialCapacity];
         nodeTypeAnn = new String[initialCapacity];
         nodeExtra = new int[initialCapacity];
-        
+
         // Node 0 is reserved as "null/root"
-        nodeCount = 1; 
+        nodeCount = 1;
     }
 
     /**
@@ -187,12 +183,18 @@ public final class JsSyntaxTree {
 
     private void medianOfThree(int a, int b, int c) {
         if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+            int t = nodesByOffset[a];
+            nodesByOffset[a] = nodesByOffset[b];
+            nodesByOffset[b] = t;
         }
         if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
-            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            int t = nodesByOffset[b];
+            nodesByOffset[b] = nodesByOffset[c];
+            nodesByOffset[c] = t;
             if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+                int t2 = nodesByOffset[a];
+                nodesByOffset[a] = nodesByOffset[b];
+                nodesByOffset[b] = t2;
             }
         }
     }
@@ -305,8 +307,8 @@ public final class JsSyntaxTree {
         nodeStart[id] = start;
         nodeEnd[id] = end;
         nodeParent[id] = parent;
-        nodeChild[id] = 0;   
-        nodeSibling[id] = 0; 
+        nodeChild[id] = 0;
+        nodeSibling[id] = 0;
         nodeLastChild[id] = 0;
         nodeName[id] = name;
         nodeExtra[id] = 0;

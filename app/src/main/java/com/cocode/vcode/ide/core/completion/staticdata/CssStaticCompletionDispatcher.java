@@ -40,16 +40,35 @@ import java.util.Set;
  */
 public final class CssStaticCompletionDispatcher {
 
-    private CssStaticCompletionDispatcher() {}
-
-    /** Resolved cursor position within a CSS rule. */
-    public enum Position {
-        /** Cursor is in property-name position (before {@code :}). */
-        PROPERTY_NAME,
-        /** Cursor is in property-value position (after {@code :}). */
-        PROPERTY_VALUE,
-        /** Cursor is not inside a rule body's declaration. */
-        NONE
+    /**
+     * Build the static completion list for the cursor's current
+     * position. Returns an empty list for {@link Position#NONE}.
+     *
+     * <p>For {@link Position#PROPERTY_NAME}: returns one
+     * {@link CompletionItem} per property in
+     * {@link StaticCompletionLoader#getCssProperties()}.
+     *
+     * <p>For {@link Position#PROPERTY_VALUE}: resolves
+     * the declaration's property name, looks it up, and merges:
+     * <ul>
+     *   <li>the property's {@code values} array</li>
+     *   <li>{@code global_functions} always</li>
+     *   <li>{@code colors} + {@code color_functions} when
+     *       {@code acceptsColor} is true</li>
+     *   <li>unknown property: {@code global_functions} only</li>
+     * </ul>
+     *
+     * <p>This method produces {@link CompletionItem}s from
+     * {@link StaticCompletionItem}s; the conversion is the one
+     * place where strings are concatenated (the insertText), so
+     * the per-call allocation is bounded.
+     */
+    private static volatile List<CompletionItem> CACHED_PROP_NAMES = null;
+    private static volatile List<CompletionItem> CACHED_GLOBAL_FUNCS = null;
+    private static volatile List<CompletionItem> CACHED_COLORS = null;
+    private static volatile List<CompletionItem> CACHED_COLOR_FUNCS = null;
+    private static volatile java.util.Map<String, List<CompletionItem>> CACHED_PROP_VALUES = null;
+    private CssStaticCompletionDispatcher() {
     }
 
     /**
@@ -72,7 +91,10 @@ public final class CssStaticCompletionDispatcher {
         for (int i = cursor - 1; i >= 0; i--) {
             char c = source.charAt(i);
             if (c == '}') return Position.NONE; // outside any block
-            if (c == '{') { openBrace = i; break; }
+            if (c == '{') {
+                openBrace = i;
+                break;
+            }
         }
         if (openBrace < 0) return Position.NONE;
 
@@ -105,7 +127,10 @@ public final class CssStaticCompletionDispatcher {
         for (int i = cursor - 1; i >= 0; i--) {
             char c = source.charAt(i);
             if (c == '}') return null;
-            if (c == '{') { openBrace = i; break; }
+            if (c == '{') {
+                openBrace = i;
+                break;
+            }
         }
         if (openBrace < 0) return null;
         // Find the last ';' or '{' before cursor, then the ':' after
@@ -129,35 +154,6 @@ public final class CssStaticCompletionDispatcher {
         return source.substring(nameStart, lastColon).trim();
     }
 
-    /**
-     * Build the static completion list for the cursor's current
-     * position. Returns an empty list for {@link Position#NONE}.
-     *
-     * <p>For {@link Position#PROPERTY_NAME}: returns one
-     * {@link CompletionItem} per property in
-     * {@link StaticCompletionLoader#getCssProperties()}.
-     *
-     * <p>For {@link Position#PROPERTY_VALUE}: resolves
-     * the declaration's property name, looks it up, and merges:
-     * <ul>
-     *   <li>the property's {@code values} array</li>
-     *   <li>{@code global_functions} always</li>
-     *   <li>{@code colors} + {@code color_functions} when
-     *       {@code acceptsColor} is true</li>
-     *   <li>unknown property: {@code global_functions} only</li>
-     * </ul>
-     *
-     * <p>This method produces {@link CompletionItem}s from
-     * {@link StaticCompletionItem}s; the conversion is the one
-     * place where strings are concatenated (the insertText), so
-     * the per-call allocation is bounded.
-     */
-    private static volatile List<CompletionItem> CACHED_PROP_NAMES = null;
-    private static volatile List<CompletionItem> CACHED_GLOBAL_FUNCS = null;
-    private static volatile List<CompletionItem> CACHED_COLORS = null;
-    private static volatile List<CompletionItem> CACHED_COLOR_FUNCS = null;
-    private static volatile java.util.Map<String, List<CompletionItem>> CACHED_PROP_VALUES = null;
-
     public static void clearCachesForTest() {
         CACHED_PROP_NAMES = null;
         CACHED_GLOBAL_FUNCS = null;
@@ -168,7 +164,7 @@ public final class CssStaticCompletionDispatcher {
 
     private static void initCssCaches() {
         if (CACHED_PROP_NAMES != null) return;
-        
+
         List<CompletionItem> names = new ArrayList<>();
         java.util.Map<String, List<CompletionItem>> vals = new java.util.HashMap<>();
         for (StaticCompletionItem p : StaticCompletionLoader.getCssProperties()) {
@@ -183,19 +179,19 @@ public final class CssStaticCompletionDispatcher {
         }
         CACHED_PROP_VALUES = vals;
         CACHED_PROP_NAMES = names;
-        
+
         List<CompletionItem> gFuncs = new ArrayList<>();
         for (String f : StaticCompletionLoader.getCssGlobalFunctions()) {
             gFuncs.add(new CompletionItem(f, f, "CSS function", CompletionItem.Type.CSS_VALUE, 0));
         }
         CACHED_GLOBAL_FUNCS = gFuncs;
-        
+
         List<CompletionItem> colors = new ArrayList<>();
         for (String c : StaticCompletionLoader.getCssColors()) {
             colors.add(new CompletionItem(c, c, "CSS color", CompletionItem.Type.CSS_VALUE, 0));
         }
         CACHED_COLORS = colors;
-        
+
         List<CompletionItem> cFuncs = new ArrayList<>();
         for (String cf : StaticCompletionLoader.getCssColorFunctions()) {
             cFuncs.add(new CompletionItem(cf, cf, "CSS color function", CompletionItem.Type.CSS_VALUE, 0));
@@ -208,8 +204,8 @@ public final class CssStaticCompletionDispatcher {
      * position. Returns an empty list for {@link Position#NONE}.
      */
     public static List<CompletionItem> buildCompletions(Position position,
-                                                         String source,
-                                                         int cursor) {
+                                                        String source,
+                                                        int cursor) {
         if (position == Position.NONE) return new ArrayList<>();
         initCssCaches();
         if (position == Position.PROPERTY_NAME) {
@@ -220,7 +216,7 @@ public final class CssStaticCompletionDispatcher {
         String propName = resolvePropertyName(source, null, cursor);
         StaticCompletionItem prop = StaticCompletionLoader.getCssProperty(propName);
         Set<String> seen = new HashSet<>();
-        
+
         if (prop != null) {
             List<CompletionItem> pVals = CACHED_PROP_VALUES.get(prop.label);
             if (pVals != null) {
@@ -243,5 +239,23 @@ public final class CssStaticCompletionDispatcher {
             }
         }
         return out;
+    }
+
+    /**
+     * Resolved cursor position within a CSS rule.
+     */
+    public enum Position {
+        /**
+         * Cursor is in property-name position (before {@code :}).
+         */
+        PROPERTY_NAME,
+        /**
+         * Cursor is in property-value position (after {@code :}).
+         */
+        PROPERTY_VALUE,
+        /**
+         * Cursor is not inside a rule body's declaration.
+         */
+        NONE
     }
 }

@@ -5,7 +5,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 
-import androidx.annotation.NonNull;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 
 import com.cocode.vcode.ide.R;

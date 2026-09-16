@@ -1,5 +1,5 @@
 package com.cocode.vcode.ide.core.language.html;
- 
+
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 
 import java.util.ArrayDeque;
@@ -15,14 +15,6 @@ public class HtmlTagParser {
 
     public static boolean isVoidElement(String tagName) {
         return KnownElements.isVoidElement(tagName);
-    }
-
-    /**
-     * Replaces regex-based getCurrentOpenTagName.
-     */
-    public String getCurrentOpenTagName(String text, int cursorPos) {
-        HtmlContext ctx = parseContext(text, cursorPos);
-        return ctx.isInsideOpenTag ? ctx.currentTagName : null;
     }
 
     /**
@@ -259,6 +251,14 @@ public class HtmlTagParser {
         }
 
         return ctx;
+    }
+
+    /**
+     * Replaces regex-based getCurrentOpenTagName.
+     */
+    public String getCurrentOpenTagName(String text, int cursorPos) {
+        HtmlContext ctx = parseContext(text, cursorPos);
+        return ctx.isInsideOpenTag ? ctx.currentTagName : null;
     }
 
     private enum State {

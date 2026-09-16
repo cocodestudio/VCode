@@ -1,7 +1,7 @@
 package com.cocode.vcode.ide.core.language.css;
 
 /**
- * Full-file tokenizer for CSS. 
+ * Full-file tokenizer for CSS.
  * Implements a zero-allocation state machine that outputs a flat-array CssTokenStream.
  * Handles selectors, properties, values, punctuation, and comments.
  */
@@ -26,7 +26,7 @@ public class CssLexer {
         if (startOffset < endOffset) {
             lexRegion(source, types, starts, startOffset, endOffset);
         }
-        
+
         return new CssTokenStream(types, starts);
     }
 
@@ -53,8 +53,10 @@ public class CssLexer {
                         currentTokenType = CssTokenStream.TK_COMMENT;
                         state = STATE_COMMENT;
                         returnState = STATE_IDLE;
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
-                        types[i + 1] = currentTokenType; starts[i + 1] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
+                        types[i + 1] = currentTokenType;
+                        starts[i + 1] = currentTokenStart;
                         advance = false;
                         i += 2;
                     } else if (Character.isWhitespace(c)) {
@@ -78,8 +80,10 @@ public class CssLexer {
                         currentTokenType = CssTokenStream.TK_COMMENT;
                         state = STATE_COMMENT;
                         returnState = STATE_SELECTOR;
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
-                        types[i + 1] = currentTokenType; starts[i + 1] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
+                        types[i + 1] = currentTokenType;
+                        starts[i + 1] = currentTokenStart;
                         advance = false;
                         i += 2;
                     } else if (c == '"' || c == '\'') {
@@ -113,8 +117,10 @@ public class CssLexer {
                         currentTokenType = CssTokenStream.TK_COMMENT;
                         state = STATE_COMMENT;
                         returnState = STATE_PROPERTY_NAME;
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
-                        types[i + 1] = currentTokenType; starts[i + 1] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
+                        types[i + 1] = currentTokenType;
+                        starts[i + 1] = currentTokenStart;
                         advance = false;
                         i += 2;
                     } else if (Character.isWhitespace(c)) {
@@ -136,8 +142,10 @@ public class CssLexer {
                         currentTokenType = CssTokenStream.TK_COMMENT;
                         state = STATE_COMMENT;
                         returnState = STATE_PROPERTY_VALUE;
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
-                        types[i + 1] = currentTokenType; starts[i + 1] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
+                        types[i + 1] = currentTokenType;
+                        starts[i + 1] = currentTokenStart;
                         advance = false;
                         i += 2;
                     } else if (c == '"' || c == '\'') {
@@ -165,9 +173,11 @@ public class CssLexer {
                         state = returnState;
                         advance = false; // re-process \n in the return state
                     } else if (c == '\\') {
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
                         if (i + 1 < endOffset) {
-                            types[i + 1] = currentTokenType; starts[i + 1] = currentTokenStart;
+                            types[i + 1] = currentTokenType;
+                            starts[i + 1] = currentTokenStart;
                         }
                         advance = false;
                         i += 2;
@@ -176,8 +186,10 @@ public class CssLexer {
 
                 case STATE_COMMENT:
                     if (c == '*' && i + 1 < endOffset && source.charAt(i + 1) == '/') {
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
-                        types[i + 1] = currentTokenType; starts[i + 1] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
+                        types[i + 1] = currentTokenType;
+                        starts[i + 1] = currentTokenStart;
                         state = returnState;
                         currentTokenType = CssTokenStream.TK_NONE; // Reset type so returnState correctly starts a new token
                         advance = false;
@@ -199,7 +211,7 @@ public class CssLexer {
     private static boolean isSelector(String source, int start, int endOffset) {
         char firstChar = source.charAt(start);
         if (firstChar == '.' || firstChar == '#' || firstChar == '&' || firstChar == '@' ||
-            firstChar == '>' || firstChar == '+' || firstChar == '~' || firstChar == '[') {
+                firstChar == '>' || firstChar == '+' || firstChar == '~' || firstChar == '[') {
             return true;
         }
 

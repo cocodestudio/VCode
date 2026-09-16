@@ -13,19 +13,19 @@ public class SvgSyntaxHighlighter extends HtmlSyntaxHighlighter {
         super(context);
     }
 
-    public static SvgSyntaxHighlighter forTest() {
-        return new SvgSyntaxHighlighter((Void) null);
-    }
-
-    public static SvgSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment) {
-        return new SvgSyntaxHighlighter(tag, attribute, value, bracket, comment);
-    }
-
     SvgSyntaxHighlighter(Void unusedForTest) {
         super((Void) null);
     }
 
     SvgSyntaxHighlighter(int tag, int attribute, int value, int bracket, int comment) {
         super(tag, attribute, value, bracket, comment);
+    }
+
+    public static SvgSyntaxHighlighter forTest() {
+        return new SvgSyntaxHighlighter((Void) null);
+    }
+
+    public static SvgSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment) {
+        return new SvgSyntaxHighlighter(tag, attribute, value, bracket, comment);
     }
 }

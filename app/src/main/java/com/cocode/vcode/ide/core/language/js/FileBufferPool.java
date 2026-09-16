@@ -7,8 +7,8 @@ import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
  * to avoid garbage collection pauses on every keystroke.
  */
 public class FileBufferPool {
-    private TokenStream[] tokenBuffers = new TokenStream[2];
-    private JsSyntaxTree[] treeBuffers = new JsSyntaxTree[2];
+    private final TokenStream[] tokenBuffers = new TokenStream[2];
+    private final JsSyntaxTree[] treeBuffers = new JsSyntaxTree[2];
     private int activeIndex = 0;
 
     /**
@@ -17,8 +17,8 @@ public class FileBufferPool {
     public synchronized BufferPair getInactiveBuffer() {
         int inactiveIndex = (activeIndex + 1) % 2;
         return new BufferPair(
-            tokenBuffers[inactiveIndex],
-            treeBuffers[inactiveIndex]
+                tokenBuffers[inactiveIndex],
+                treeBuffers[inactiveIndex]
         );
     }
 

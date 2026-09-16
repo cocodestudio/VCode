@@ -86,10 +86,10 @@ public class HtmlParsePipeline {
                                 if (editStart >= emb.startOffset && editEndOld <= emb.endOffset) {
                                     // We can incrementally parse this embedded sub-tree!
                                     int delta = editEndNew - editEndOld;
-                                    
+
                                     HtmlSyntaxTree newHtmlTree = cached.htmlTree.cloneWithShift(editStart, delta);
                                     List<ParseResult.EmbeddedResult> newEmbeddedResults = new ArrayList<>(cached.embeddedResults.size());
-                                    
+
                                     for (int j = 0; j < cached.embeddedResults.size(); j++) {
                                         ParseResult.EmbeddedResult oldEmb = cached.embeddedResults.get(j);
                                         if (j < i) {
@@ -99,11 +99,11 @@ public class HtmlParsePipeline {
                                             int newEmbEnd = oldEmb.endOffset + delta;
                                             String oldEmbSource = cached.source.substring(oldEmb.startOffset, oldEmb.endOffset);
                                             String newEmbSource = source.substring(newEmbStart, newEmbEnd);
-                                            
+
                                             int embEditStart = editStart - oldEmb.startOffset;
                                             int embEditEndOld = editEndOld - oldEmb.startOffset;
                                             int embEditEndNew = editEndNew - oldEmb.startOffset;
-                                            
+
                                             ParseResult newEmbParseResult;
                                             if (oldEmb.result.tree != null && oldEmb.result.tokens != null) {
                                                 // JS
@@ -118,13 +118,13 @@ public class HtmlParsePipeline {
                                             } else {
                                                 newEmbParseResult = oldEmb.result;
                                             }
-                                            
+
                                             newEmbeddedResults.add(new ParseResult.EmbeddedResult(newEmbStart, newEmbEnd, newEmbParseResult));
                                         } else {
                                             newEmbeddedResults.add(new ParseResult.EmbeddedResult(oldEmb.startOffset + delta, oldEmb.endOffset + delta, oldEmb.result));
                                         }
                                     }
-                                    
+
                                     result = new ParseResult(file, source, cached.htmlTokens, newHtmlTree, newEmbeddedResults);
                                     break;
                                 }
@@ -141,7 +141,7 @@ public class HtmlParsePipeline {
                 }
 
                 ParseResult finalResult = result;
-                
+
                 if (file != null) {
                     ProjectIndex.getInstance().updateParseResult(file.getAbsolutePath(), finalResult);
                 }

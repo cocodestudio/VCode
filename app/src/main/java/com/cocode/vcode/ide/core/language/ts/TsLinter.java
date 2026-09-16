@@ -300,8 +300,9 @@ public class TsLinter {
                 for (int k = 1; k < typeAnn.length() - 1; k++) {
                     char c = typeAnn.charAt(k);
                     if (c == '{' || c == '(' || c == '<' || c == '[') depth++;
-                    else if (c == '}' || c == ')' || c == '>' || c == ']') { if (depth > 0) depth--; }
-                    else if (c == ';' && depth == 0) propCount++;
+                    else if (c == '}' || c == ')' || c == '>' || c == ']') {
+                        if (depth > 0) depth--;
+                    } else if (c == ';' && depth == 0) propCount++;
                 }
                 if (propCount > 2) {
                     int start = tree.nodeStart[i];
@@ -512,7 +513,8 @@ public class TsLinter {
         }
         if (t == TokenStream.TK_OPERATOR && text.charAt(tok) == '-') {
             int next = skipWsAndComments(stream, skipToken(stream, tok));
-            if (next < stream.length && stream.types[next] == TokenStream.TK_NUMBER) return "number";
+            if (next < stream.length && stream.types[next] == TokenStream.TK_NUMBER)
+                return "number";
         }
         return null;
     }

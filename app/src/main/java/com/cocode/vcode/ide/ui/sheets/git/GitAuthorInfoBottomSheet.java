@@ -13,9 +13,9 @@ import androidx.core.content.ContextCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetGitAuthorInfoBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * GitAuthorInfoBottomSheet provides an interface for configuring Git user metadata (Name and Email).

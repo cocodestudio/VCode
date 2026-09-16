@@ -27,35 +27,21 @@ import com.cocode.vcode.ide.core.language.js.ParseResult;
  */
 public final class ParseModeGate {
 
-    private ParseModeGate() {}
-
-    /**
-     * The size metric the gate consumes. Languages pick the one
-     * that best characterises their parse cost.
-     */
-    public enum SizeMetric {
-        /** Number of newlines + 1 (or 1 for empty input). */
-        LINES,
-        /** Number of nodes the lexer/parser would produce. */
-        NODES,
-        /** Source byte count. */
-        BYTES
-    }
-
     /**
      * Default threshold for full parse mode (lines &lt; 1,000).
      */
     public static final int DEFAULT_T1 = 1000;
-
     /**
      * Default threshold for lazy scope parse mode (lines &lt;= 5,000).
      */
     public static final int DEFAULT_T2 = 5000;
-
     /**
      * Default threshold for top-level only parse mode (lines &lt;= 15,000).
      */
     public static final int DEFAULT_T3 = 15000;
+
+    private ParseModeGate() {
+    }
 
     /**
      * Select a parse mode from a raw size value using the default
@@ -63,12 +49,12 @@ public final class ParseModeGate {
      *
      * @param metric the size unit (only the type is recorded; the
      *               actual comparison is value-based)
-     * @param value the measured size (line count, node count, or
-     *              byte count depending on {@code metric})
+     * @param value  the measured size (line count, node count, or
+     *               byte count depending on {@code metric})
      * @return one of {@link ParseResult#MODE_FULL},
-     *         {@link ParseResult#MODE_LAZY_SCOPE},
-     *         {@link ParseResult#MODE_TOP_LEVEL},
-     *         {@link ParseResult#MODE_TOKENIZE_ONLY}
+     * {@link ParseResult#MODE_LAZY_SCOPE},
+     * {@link ParseResult#MODE_TOP_LEVEL},
+     * {@link ParseResult#MODE_TOKENIZE_ONLY}
      */
     public static int select(SizeMetric metric, int value) {
         return select(metric, value, DEFAULT_T1, DEFAULT_T2, DEFAULT_T3);
@@ -123,5 +109,24 @@ public final class ParseModeGate {
             if (source.charAt(i) == '\n') count++;
         }
         return count;
+    }
+
+    /**
+     * The size metric the gate consumes. Languages pick the one
+     * that best characterises their parse cost.
+     */
+    public enum SizeMetric {
+        /**
+         * Number of newlines + 1 (or 1 for empty input).
+         */
+        LINES,
+        /**
+         * Number of nodes the lexer/parser would produce.
+         */
+        NODES,
+        /**
+         * Source byte count.
+         */
+        BYTES
     }
 }

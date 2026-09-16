@@ -96,7 +96,8 @@ public class CssLinter {
         String lo = v.toLowerCase().trim();
         if (CSS_GLOBAL_VALUES.contains(lo)) return true;
         if ("outline-color".equals(prop) && ("invert".equals(lo) || "auto".equals(lo))) return true;
-        if (("caret-color".equals(prop) || "accent-color".equals(prop)) && "auto".equals(lo)) return true;
+        if (("caret-color".equals(prop) || "accent-color".equals(prop)) && "auto".equals(lo))
+            return true;
         if ("scrollbar-color".equals(prop)) {
             if ("auto".equals(lo) || "none".equals(lo)) return true;
             List<String> tokens = splitParenAwareTokens(lo);
@@ -118,13 +119,14 @@ public class CssLinter {
 
     private static boolean isBorderStyle(String token, String prop) {
         if (BORDER_STYLES.contains(token)) return true;
-        if ("outline".equals(prop) && "auto".equals(token)) return true;
-        return false;
+        return "outline".equals(prop) && "auto".equals(token);
     }
 
     private static boolean isBorderWidth(String token) {
-        if ("thin".equals(token) || "medium".equals(token) || "thick".equals(token) || "0".equals(token)) return true;
-        if (token.startsWith("calc(") || token.startsWith("clamp(") || token.startsWith("min(") || token.startsWith("max(")) return true;
+        if ("thin".equals(token) || "medium".equals(token) || "thick".equals(token) || "0".equals(token))
+            return true;
+        if (token.startsWith("calc(") || token.startsWith("clamp(") || token.startsWith("min(") || token.startsWith("max("))
+            return true;
         int i = 0;
         int len = token.length();
         while (i < len && (Character.isDigit(token.charAt(i)) || token.charAt(i) == '.')) {
@@ -276,8 +278,8 @@ public class CssLinter {
                     if (selector.startsWith("@import")) {
                         if (pastFirstRule) {
                             problems.add(new Problem(file, selLine, selCol, selLen,
-                                "'@import' must appear before all other rules",
-                                Problem.Severity.ERROR));
+                                    "'@import' must appear before all other rules",
+                                    Problem.Severity.ERROR));
                         }
                     } else if (!selector.startsWith("@") && !selector.isEmpty()) {
                         pastFirstRule = true;
@@ -341,9 +343,12 @@ public class CssLinter {
                             if ("background-color".equals(pLo)) blockHasBgColor = true;
                             if ("display".equals(pLo) && vLo.contains("flex")) blockHasFlex = true;
                             if ("display".equals(pLo) && vLo.contains("grid")) blockHasGrid = true;
-                            if ("gap".equals(pLo) || "row-gap".equals(pLo) || "column-gap".equals(pLo)) blockHasGap = true;
-                            if ("margin-left".equals(pLo) && "auto".equals(vLo)) blockHasMarginLeftAuto = true;
-                            if ("margin-right".equals(pLo) && "auto".equals(vLo)) blockHasMarginRightAuto = true;
+                            if ("gap".equals(pLo) || "row-gap".equals(pLo) || "column-gap".equals(pLo))
+                                blockHasGap = true;
+                            if ("margin-left".equals(pLo) && "auto".equals(vLo))
+                                blockHasMarginLeftAuto = true;
+                            if ("margin-right".equals(pLo) && "auto".equals(vLo))
+                                blockHasMarginRightAuto = true;
                         }
                     }
                     child = tree.nodeSibling[child];

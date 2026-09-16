@@ -1,12 +1,12 @@
 package com.cocode.vcode.ide.core.autocomplete;
 
+import com.cocode.vcode.ide.utils.ExecutorProvider;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import com.cocode.vcode.ide.utils.ExecutorProvider;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 /**
  * Virtual File System (VFS) cache to allow O(1) directory listing for path suggestions.
@@ -14,8 +14,8 @@ import com.cocode.vcode.ide.data.repository.ProjectRepository;
  */
 public class VFSManager {
 
+    private static final int MAX_CACHE_ENTRIES = 10_000;
     private static VFSManager instance;
-
     // Maps absolute directory path -> list of child files/folders
     private final Map<String, List<File>> directoryCache = new HashMap<>();
     private String projectRoot = null;
@@ -45,8 +45,6 @@ public class VFSManager {
             }
         });
     }
-
-    private static final int MAX_CACHE_ENTRIES = 10_000;
 
     private void indexDirectoryRecursively(File dir) {
         if (directoryCache.size() >= MAX_CACHE_ENTRIES) return;

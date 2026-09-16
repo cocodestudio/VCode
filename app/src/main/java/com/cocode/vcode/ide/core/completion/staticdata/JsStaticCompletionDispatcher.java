@@ -25,21 +25,15 @@ import java.util.List;
  */
 public final class JsStaticCompletionDispatcher {
 
-    private JsStaticCompletionDispatcher() {}
+    /**
+     * Build the static JS keyword/builtin completion list. Used
+     * by M.12 (statement-start) and M.13 (filtered for structural
+     * keywords). For M.15 (member-access), the caller should
+     * not call this at all.
+     */
+    private static volatile List<CompletionItem> CACHED_COMPLETIONS = null;
 
-    public enum Position {
-        /** Cursor is at a statement-start position. */
-        STATEMENT_START,
-        /** Cursor is mid-identifier (typing `var foo|`). The static
-         *  keyword list is offered only as a side-merge, never as
-         *  the primary suggestion. */
-        IDENTIFIER,
-        /** Cursor is in dot-completion (member access) — the static
-         *  keyword list is suppressed entirely. */
-        MEMBER_ACCESS,
-        /** Cursor is in some other position (e.g. string literal,
-         *  comment) — no static suggestions. */
-        OTHER
+    private JsStaticCompletionDispatcher() {
     }
 
     /**
@@ -58,7 +52,10 @@ public final class JsStaticCompletionDispatcher {
         int i = cursor - 1;
         while (i >= 0) {
             char c = source.charAt(i);
-            if (Character.isWhitespace(c)) { i--; continue; }
+            if (Character.isWhitespace(c)) {
+                i--;
+                continue;
+            }
             // No comment-skipping here — the token stream tracks
             // those.
             break;
@@ -83,14 +80,6 @@ public final class JsStaticCompletionDispatcher {
         return Position.IDENTIFIER;
     }
 
-    /**
-     * Build the static JS keyword/builtin completion list. Used
-     * by M.12 (statement-start) and M.13 (filtered for structural
-     * keywords). For M.15 (member-access), the caller should
-     * not call this at all.
-     */
-    private static volatile List<CompletionItem> CACHED_COMPLETIONS = null;
-
     public static void clearCachesForTest() {
         CACHED_COMPLETIONS = null;
     }
@@ -98,7 +87,7 @@ public final class JsStaticCompletionDispatcher {
     public static List<CompletionItem> buildCompletions() {
         List<CompletionItem> cached = CACHED_COMPLETIONS;
         if (cached != null) return cached;
-        
+
         StaticCompletionItem[] items = StaticCompletionLoader.getJsKeywords();
         List<CompletionItem> out = new ArrayList<>(items.length);
         for (StaticCompletionItem k : items) {
@@ -115,14 +104,16 @@ public final class JsStaticCompletionDispatcher {
     private static CompletionItem.Type mapType(String t) {
         if (t == null) return CompletionItem.Type.KEYWORD;
         switch (t) {
-            case "KEYWORD": return CompletionItem.Type.KEYWORD;
-            case "BUILTIN":  return CompletionItem.Type.BUILTIN;
-            case "SNIPPET":  return CompletionItem.Type.SNIPPET;
-            default:         return CompletionItem.Type.KEYWORD;
+            case "KEYWORD":
+                return CompletionItem.Type.KEYWORD;
+            case "BUILTIN":
+                return CompletionItem.Type.BUILTIN;
+            case "SNIPPET":
+                return CompletionItem.Type.SNIPPET;
+            default:
+                return CompletionItem.Type.KEYWORD;
         }
     }
-
-    // --- M.13 structural-keyword gating --------------------------------
 
     /**
      * Filter the static keyword list down to the labels that are
@@ -152,6 +143,8 @@ public final class JsStaticCompletionDispatcher {
         }
         return out;
     }
+
+    // --- M.13 structural-keyword gating --------------------------------
 
     private static java.util.Set<String> excludedStructuralLabels(String source, int cursor) {
         java.util.Set<String> excluded = new java.util.HashSet<>();
@@ -264,8 +257,31 @@ public final class JsStaticCompletionDispatcher {
         String ctx = precedingContext(source, cursor).trim();
         if (ctx.startsWith("class ")) {
             // If there's no '{' yet, we're in declaration position.
-            if (!ctx.contains("{")) return true;
+            return !ctx.contains("{");
         }
         return false;
+    }
+
+    public enum Position {
+        /**
+         * Cursor is at a statement-start position.
+         */
+        STATEMENT_START,
+        /**
+         * Cursor is mid-identifier (typing `var foo|`). The static
+         * keyword list is offered only as a side-merge, never as
+         * the primary suggestion.
+         */
+        IDENTIFIER,
+        /**
+         * Cursor is in dot-completion (member access) — the static
+         * keyword list is suppressed entirely.
+         */
+        MEMBER_ACCESS,
+        /**
+         * Cursor is in some other position (e.g. string literal,
+         * comment) — no static suggestions.
+         */
+        OTHER
     }
 }

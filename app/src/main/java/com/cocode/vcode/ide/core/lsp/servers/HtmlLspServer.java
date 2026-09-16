@@ -3,11 +3,15 @@ package com.cocode.vcode.ide.core.lsp.servers;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.language.html.HtmlAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.html.HtmlLexer;
 import com.cocode.vcode.ide.core.language.html.HtmlLinter;
+import com.cocode.vcode.ide.core.language.html.HtmlParser;
+import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
 import com.cocode.vcode.ide.core.language.html.HtmlTagParser;
+import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
+import com.cocode.vcode.ide.core.language.js.ParseResult;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -18,12 +22,6 @@ import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.lsp.SymbolEntry;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
-
-import com.cocode.vcode.ide.core.language.html.HtmlLexer;
-import com.cocode.vcode.ide.core.language.html.HtmlParser;
-import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
-import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
-import com.cocode.vcode.ide.core.language.js.ParseResult;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -83,15 +81,55 @@ public final class HtmlLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
 
-
     // -------------------------------------------------------------------------
     // Diagnostics
     // -------------------------------------------------------------------------
 
 
-
     // -------------------------------------------------------------------------
     // Find References
+    // -------------------------------------------------------------------------
+
+    private static String stripQuotes(String str) {
+        if (str == null || str.length() < 2) return str != null ? str : "";
+        char first = str.charAt(0);
+        char last = str.charAt(str.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return str.substring(1, str.length() - 1);
+        }
+        return str;
+    }
+
+    // -------------------------------------------------------------------------
+    // Signature Help — not applicable for HTML
+    // -------------------------------------------------------------------------
+
+    private static String findClassAtOffset(String text, int attrStart, int attrEnd, String rawVal, int offset) {
+        String val = stripQuotes(rawVal);
+        int valStart = text.indexOf(val, attrStart);
+        if (valStart == -1 || valStart > attrEnd) valStart = attrStart;
+
+        int relOffset = offset - valStart;
+        String[] parts = val.split("\\s+");
+        int pos = 0;
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+            int pStart = val.indexOf(p, pos);
+            if (pStart == -1) pStart = pos;
+            int pEnd = pStart + p.length();
+            if (relOffset >= pStart && relOffset <= pEnd) {
+                return p;
+            }
+            pos = pEnd;
+        }
+        for (String p : parts) {
+            if (!p.trim().isEmpty()) return p.trim();
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers — conversion
     // -------------------------------------------------------------------------
 
     @Override
@@ -100,23 +138,19 @@ public final class HtmlLspServer implements LspServer {
         ready = true;
     }
 
-    // -------------------------------------------------------------------------
-    // Signature Help — not applicable for HTML
-    // -------------------------------------------------------------------------
-
     @Override
     public void shutdown() {
         ready = false;
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers — conversion
-    // -------------------------------------------------------------------------
-
     @Override
     public boolean isReady() {
         return ready;
     }
+
+    // -------------------------------------------------------------------------
+    // Private helpers — definition resolution
+    // -------------------------------------------------------------------------
 
     @Override
     public String getLanguageId() {
@@ -139,7 +173,7 @@ public final class HtmlLspServer implements LspServer {
 
         // Enrich with cross-file completions when inside class="" or id=""
         HtmlTagParser tagParser = new HtmlTagParser();
-        HtmlTagParser.HtmlContext ctx = tagParser.parseContext(doc.text, flatOffset);
+        HtmlTagParser.HtmlContext ctx = HtmlTagParser.parseContext(doc.text, flatOffset);
         if (ctx.isInsideAttributeValue && ctx.currentAttributeName != null
                 && projectIndex != null) {
             String prefix = ctx.currentAttributeValue != null ? ctx.currentAttributeValue : "";
@@ -161,10 +195,6 @@ public final class HtmlLspServer implements LspServer {
 
         return uniqueItems;
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers — definition resolution
-    // -------------------------------------------------------------------------
 
     @Override
     public List<Problem> diagnostics(LspDocument doc) {
@@ -268,40 +298,6 @@ public final class HtmlLspServer implements LspServer {
         return java.util.Collections.emptyList();
     }
 
-    private static String stripQuotes(String str) {
-        if (str == null || str.length() < 2) return str != null ? str : "";
-        char first = str.charAt(0);
-        char last = str.charAt(str.length() - 1);
-        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
-            return str.substring(1, str.length() - 1);
-        }
-        return str;
-    }
-
-    private static String findClassAtOffset(String text, int attrStart, int attrEnd, String rawVal, int offset) {
-        String val = stripQuotes(rawVal);
-        int valStart = text.indexOf(val, attrStart);
-        if (valStart == -1 || valStart > attrEnd) valStart = attrStart;
-
-        int relOffset = offset - valStart;
-        String[] parts = val.split("\\s+");
-        int pos = 0;
-        for (String p : parts) {
-            if (p.isEmpty()) continue;
-            int pStart = val.indexOf(p, pos);
-            if (pStart == -1) pStart = pos;
-            int pEnd = pStart + p.length();
-            if (relOffset >= pStart && relOffset <= pEnd) {
-                return p;
-            }
-            pos = pEnd;
-        }
-        for (String p : parts) {
-            if (!p.trim().isEmpty()) return p.trim();
-        }
-        return null;
-    }
-
     /**
      * Resolves src="..." or href="..." to an actual file in the project.
      */
@@ -332,7 +328,7 @@ public final class HtmlLspServer implements LspServer {
         String pattern = "getElementById(\"" + trimmed + "\")";
         for (String uri : projectIndex.getAllUris()) {
             if (!uri.endsWith(".js") && !uri.endsWith(".ts")) continue;
-            
+
             com.cocode.vcode.ide.core.lsp.LspDocument doc = projectIndex.getDocument(uri);
             if (doc == null || doc.text == null) continue;
             int idx = doc.text.indexOf(pattern);

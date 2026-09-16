@@ -13,9 +13,9 @@ import androidx.fragment.app.FragmentManager;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetCreateGithubRepoBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * Bottom sheet dialog for creating a new repository on GitHub and pushing the local project.

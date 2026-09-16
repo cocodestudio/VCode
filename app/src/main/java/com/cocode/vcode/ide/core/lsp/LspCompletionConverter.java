@@ -12,7 +12,8 @@ import java.util.List;
  */
 public final class LspCompletionConverter {
 
-    private LspCompletionConverter() {}
+    private LspCompletionConverter() {
+    }
 
     /**
      * Converts a list of legacy {@link CompletionItem} suggestions to a list of {@link LspCompletionItem}.

@@ -3,8 +3,8 @@ package com.cocode.vcode.ide.core.autocomplete;
 import androidx.annotation.NonNull;
 
 import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
-import com.cocode.vcode.ide.core.language.css.EmmetCssDefinitions;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
+import com.cocode.vcode.ide.core.language.css.EmmetCssDefinitions;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -61,9 +61,6 @@ public class EmmetParser {
 
     // Shared Cache loaded dynamically from completions/emmet_definitions.json
     private static final Object lock = new Object();
-    private static volatile boolean loaded = false;
-    private static String defaultBoilerplate;
-    private static String[] loremWords;
     private static final Map<String, String> HTML_ALIASES = new HashMap<>();
     private static final Map<String, String> HTML_SNIPPET_ALIASES = new HashMap<>();
     private static final Map<String, String> ELEMENT_ALIASES = new HashMap<>();
@@ -73,29 +70,18 @@ public class EmmetParser {
     private static final Set<String> CSS_UNITLESS_PROPERTIES = new HashSet<>();
     private static final Map<String, HexProperty> CSS_HEX_PROPERTIES = new HashMap<>();
     private static final Map<String, String> CSS_UNIT_ALIASES = new HashMap<>();
+    private static final Set<String> STRUCTURAL_CONTAINERS = new HashSet<>(Arrays.asList(
+            "div", "section", "article", "aside", "nav", "header", "footer", "main",
+            "form", "fieldset", "figure", "details", "dialog", "table", "thead",
+            "tbody", "tfoot", "tr", "ul", "ol", "dl", "head", "body", "html"
+    ));
+    private static volatile boolean loaded = false;
+    private static String defaultBoilerplate;
+    private static String[] loremWords;
+    private static volatile String defaultIndentUnit = "  ";
 
     static {
         ensureLoaded();
-    }
-
-    private static class TagTemplate {
-        final String tag;
-        final Map<String, String> defaultAttrs;
-
-        TagTemplate(String tag, Map<String, String> defaultAttrs) {
-            this.tag = tag;
-            this.defaultAttrs = defaultAttrs;
-        }
-    }
-
-    private static class HexProperty {
-        final String property;
-        final String prefix;
-
-        HexProperty(String property, String prefix) {
-            this.property = property;
-            this.prefix = prefix != null ? prefix : "";
-        }
     }
 
     public static void ensureLoaded() {
@@ -248,22 +234,14 @@ public class EmmetParser {
                 || ELEMENT_ALIASES.containsKey(abbr);
     }
 
-    private static volatile String defaultIndentUnit = "  ";
-
-    private static final Set<String> STRUCTURAL_CONTAINERS = new HashSet<>(Arrays.asList(
-            "div", "section", "article", "aside", "nav", "header", "footer", "main",
-            "form", "fieldset", "figure", "details", "dialog", "table", "thead",
-            "tbody", "tfoot", "tr", "ul", "ol", "dl", "head", "body", "html"
-    ));
+    public static String getDefaultIndentUnit() {
+        return defaultIndentUnit;
+    }
 
     public static void setDefaultIndentUnit(String indentUnit) {
         if (indentUnit != null && !indentUnit.isEmpty()) {
             defaultIndentUnit = indentUnit;
         }
-    }
-
-    public static String getDefaultIndentUnit() {
-        return defaultIndentUnit;
     }
 
     public static boolean isStructuralContainer(String tag) {
@@ -391,10 +369,6 @@ public class EmmetParser {
         return sb.toString();
     }
 
-    // =========================================================================
-    // CSS Emmet Expander
-    // =========================================================================
-
     /**
      * Expands a CSS Emmet abbreviation. Returns null if not recognized.
      */
@@ -491,6 +465,10 @@ public class EmmetParser {
         return cssDecl + " !important;";
     }
 
+    // =========================================================================
+    // CSS Emmet Expander
+    // =========================================================================
+
     @NonNull
     private static StringBuilder parseCssNumericValues(String numPart, String property, String unit) {
         StringBuilder value = new StringBuilder();
@@ -537,48 +515,6 @@ public class EmmetParser {
             }
         }
         return value;
-    }
-
-    // =========================================================================
-    // HTML AST Parser & Tree Expansion
-    // =========================================================================
-
-    public static class EmmetNode {
-        String tag;
-        String id;
-        List<String> classes = new ArrayList<>();
-        Map<String, String> attributes = new LinkedHashMap<>();
-        String textContent;
-        boolean isTextOnly = false;
-        boolean cursorInside = false;
-        boolean cursorAfter = false;
-        List<EmmetNode> children = new ArrayList<>();
-        EmmetNode parent;
-
-        EmmetNode(String tag) {
-            this.tag = tag;
-        }
-
-        public EmmetNode deepClone() {
-            EmmetNode clone = new EmmetNode(this.tag);
-            clone.id = this.id;
-            clone.classes = new ArrayList<>(this.classes);
-            clone.attributes = new LinkedHashMap<>(this.attributes);
-            clone.textContent = this.textContent;
-            clone.isTextOnly = this.isTextOnly;
-            clone.cursorInside = this.cursorInside;
-            clone.cursorAfter = this.cursorAfter;
-            for (EmmetNode child : this.children) {
-                EmmetNode childClone = child.deepClone();
-                clone.addChild(childClone);
-            }
-            return clone;
-        }
-
-        public void addChild(EmmetNode child) {
-            child.parent = this;
-            this.children.add(child);
-        }
     }
 
     private static String parseEmmetTree(String abbr, String indentUnit) {
@@ -680,6 +616,10 @@ public class EmmetParser {
 
         return roots;
     }
+
+    // =========================================================================
+    // HTML AST Parser & Tree Expansion
+    // =========================================================================
 
     private static String determineCurrentParentTag(List<EmmetNode> currentLeaves, char op, int climbCount, String fallbackTag) {
         if (currentLeaves.isEmpty()) return fallbackTag;
@@ -844,10 +784,6 @@ public class EmmetParser {
     private static int findMatchingParen(String s, int openIdx) {
         return findMatchingBracket(s, openIdx, '(', ')');
     }
-
-    // =========================================================================
-    // Element Token Parsing
-    // =========================================================================
 
     private static List<EmmetNode> parseElementToken(String token, String parentTag) {
         if (token == null || token.isEmpty()) return null;
@@ -1030,7 +966,8 @@ public class EmmetParser {
         int i = 0;
         int len = attrStr.length();
         while (i < len) {
-            while (i < len && (Character.isWhitespace(attrStr.charAt(i)) || attrStr.charAt(i) == ',')) i++;
+            while (i < len && (Character.isWhitespace(attrStr.charAt(i)) || attrStr.charAt(i) == ','))
+                i++;
             if (i >= len) break;
 
             int nameStart = i;
@@ -1083,6 +1020,10 @@ public class EmmetParser {
         return tag != null ? tag : "div";
     }
 
+    // =========================================================================
+    // Element Token Parsing
+    // =========================================================================
+
     /**
      * Replaces item numbering placeholders $, $$, $$$, $@-, $@N with computed index values.
      */
@@ -1116,10 +1057,6 @@ public class EmmetParser {
         m.appendTail(sb);
         return sb.toString();
     }
-
-    // =========================================================================
-    // HTML Rendering
-    // =========================================================================
 
     private static boolean hasCursorMarker(List<EmmetNode> nodes) {
         if (nodes == null) return false;
@@ -1204,6 +1141,10 @@ public class EmmetParser {
         // Container or leaf element
         target.cursorInside = true;
     }
+
+    // =========================================================================
+    // HTML Rendering
+    // =========================================================================
 
     private static boolean shouldFormatInline(EmmetNode node) {
         if (node == null || node.children.isEmpty()) return false;
@@ -1372,5 +1313,63 @@ public class EmmetParser {
         StringBuilder sb = new StringBuilder(levels * indentUnit.length());
         for (int i = 0; i < levels; i++) sb.append(indentUnit);
         return sb.toString();
+    }
+
+    private static class TagTemplate {
+        final String tag;
+        final Map<String, String> defaultAttrs;
+
+        TagTemplate(String tag, Map<String, String> defaultAttrs) {
+            this.tag = tag;
+            this.defaultAttrs = defaultAttrs;
+        }
+    }
+
+    private static class HexProperty {
+        final String property;
+        final String prefix;
+
+        HexProperty(String property, String prefix) {
+            this.property = property;
+            this.prefix = prefix != null ? prefix : "";
+        }
+    }
+
+    public static class EmmetNode {
+        String tag;
+        String id;
+        List<String> classes = new ArrayList<>();
+        Map<String, String> attributes = new LinkedHashMap<>();
+        String textContent;
+        boolean isTextOnly = false;
+        boolean cursorInside = false;
+        boolean cursorAfter = false;
+        List<EmmetNode> children = new ArrayList<>();
+        EmmetNode parent;
+
+        EmmetNode(String tag) {
+            this.tag = tag;
+        }
+
+        public EmmetNode deepClone() {
+            EmmetNode clone = new EmmetNode(this.tag);
+            clone.id = this.id;
+            clone.classes = new ArrayList<>(this.classes);
+            clone.attributes = new LinkedHashMap<>(this.attributes);
+            clone.textContent = this.textContent;
+            clone.isTextOnly = this.isTextOnly;
+            clone.cursorInside = this.cursorInside;
+            clone.cursorAfter = this.cursorAfter;
+            for (EmmetNode child : this.children) {
+                EmmetNode childClone = child.deepClone();
+                clone.addChild(childClone);
+            }
+            return clone;
+        }
+
+        public void addChild(EmmetNode child) {
+            child.parent = this;
+            this.children.add(child);
+        }
     }
 }

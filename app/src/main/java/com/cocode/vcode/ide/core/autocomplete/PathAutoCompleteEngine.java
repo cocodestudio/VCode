@@ -3,7 +3,6 @@ package com.cocode.vcode.ide.core.autocomplete;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.model.CompletionItem;
-import com.cocode.vcode.ide.core.model.FileType;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -44,21 +43,21 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
 
         List<CompletionItem> suggestions = new ArrayList<>();
         File baseDir = currentFile.getParentFile();
-        
+
         // Resolve target directory based on prefix
         String searchDirName = "";
         String filterPrefix = prefix;
-        
+
         int lastSlash = prefix.lastIndexOf('/');
         if (lastSlash != -1) {
             searchDirName = prefix.substring(0, lastSlash);
             filterPrefix = prefix.substring(lastSlash + 1);
-            
+
             if (searchDirName.startsWith("/")) {
                 // Not supporting absolute paths from root, just relative
                 return suggestions;
             }
-            
+
             String[] parts = searchDirName.split("/");
             for (String part : parts) {
                 if (part.equals(".")) {
@@ -70,7 +69,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
                 }
             }
         }
-        
+
         if (baseDir != null && baseDir.exists() && baseDir.isDirectory()) {
             List<File> files = VFSManager.getInstance().listCachedFiles(baseDir);
             if (files != null) {
@@ -93,7 +92,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
 
         return fuzzyFilter(suggestions, filterPrefix);
     }
-    
+
     private String getPathBeforeCursor(String text, int pos) {
         if (text == null || pos <= 0 || pos > text.length()) return "";
         int start = pos;
@@ -107,7 +106,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         }
         return text.substring(start, pos);
     }
-    
+
     private String getFileExtension(String name) {
         int dot = name.lastIndexOf('.');
         return (dot != -1 && dot < name.length() - 1) ? name.substring(dot + 1) : "";

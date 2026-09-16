@@ -46,7 +46,7 @@ public class CommitHistoryAdapter extends ListAdapter<CommitItem, CommitHistoryA
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         return new ViewHolder(ItemCommitHistoryBinding.inflate(
-            LayoutInflater.from(parent.getContext()), parent, false));
+                LayoutInflater.from(parent.getContext()), parent, false));
     }
 
     @Override

@@ -1,9 +1,9 @@
 package com.cocode.vcode.ide.core.language.js;
 
 
-
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 
+import java.util.Collections;
 
 
 /**
@@ -14,6 +14,10 @@ import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 public class JsParser {
 
 
+    private static final int STOP_STMT = 0;
+    private static final int STOP_PARAM = 1;
+    private static final int STOP_VAR_DECL = 2;
+    private static final int STOP_OBJ_PROP = 3;
 
     public static JsSyntaxTree parseFull(String source, TokenStream stream) {
 
@@ -21,15 +25,11 @@ public class JsParser {
 
     }
 
-
-
     public static JsSyntaxTree parseFull(String source, TokenStream stream, JsSyntaxTree buffer) {
 
         return parseTopLevel(source, stream, buffer);
 
     }
-
-
 
     public static JsSyntaxTree parseIncremental(String newSource, TokenStream newTokens, String oldSource, JsSyntaxTree oldTree, TokenStream oldTokens, int editStart, int editEndOld, int editEndNew) {
 
@@ -38,11 +38,10 @@ public class JsParser {
         if (r == 0) return null;
 
 
-
         int oldStartTok = binarySearchToken(oldTokens, oldTree.nodeStart[r]);
 
-        if (oldStartTok < 0 || oldTokens.types[oldStartTok] != TokenStream.TK_PUNCT || oldSource.charAt(oldTokens.tokenStart[oldStartTok]) != '{') return null;
-
+        if (oldStartTok < 0 || oldTokens.types[oldStartTok] != TokenStream.TK_PUNCT || oldSource.charAt(oldTokens.tokenStart[oldStartTok]) != '{')
+            return null;
 
 
         int oldEndTok = oldStartTok;
@@ -61,7 +60,10 @@ public class JsParser {
 
                     depth--;
 
-                    if (depth == 0) { oldEndTok = i; break; }
+                    if (depth == 0) {
+                        oldEndTok = i;
+                        break;
+                    }
 
                 }
 
@@ -72,11 +74,10 @@ public class JsParser {
         if (depth != 0) return null;
 
 
-
         int newStartTok = binarySearchToken(newTokens, oldTree.nodeStart[r]);
 
-        if (newStartTok < 0 || newTokens.types[newStartTok] != TokenStream.TK_PUNCT || newSource.charAt(newTokens.tokenStart[newStartTok]) != '{') return null;
-
+        if (newStartTok < 0 || newTokens.types[newStartTok] != TokenStream.TK_PUNCT || newSource.charAt(newTokens.tokenStart[newStartTok]) != '{')
+            return null;
 
 
         int newEndTok = newStartTok;
@@ -95,7 +96,10 @@ public class JsParser {
 
                     depth--;
 
-                    if (depth == 0) { newEndTok = i; break; }
+                    if (depth == 0) {
+                        newEndTok = i;
+                        break;
+                    }
 
                 }
 
@@ -106,13 +110,11 @@ public class JsParser {
         if (depth != 0) return null;
 
 
-
         int oldAfter = oldTokens.length - oldEndTok;
 
         int newAfter = newTokens.length - newEndTok;
 
         if (oldAfter != newAfter) return null;
-
 
 
         JsSyntaxTree newTree = new JsSyntaxTree(oldTree.nodeType.length + 1024);
@@ -138,7 +140,6 @@ public class JsParser {
         newTree.nodeCount = oldTree.nodeCount;
 
 
-
         int delta = (editEndNew - editStart) - (editEndOld - editStart);
 
         for (int i = 1; i < newTree.nodeCount; i++) {
@@ -150,13 +151,11 @@ public class JsParser {
         }
 
 
-
         newTree.nodeChild[r] = 0;
 
         newTree.nodeLastChild[r] = 0;
 
         newTree.nodeEnd[r] = getOffset(newTokens, newSource, newEndTok + 1);
-
 
 
         int nextTok = skipToken(newTokens, newStartTok);
@@ -176,13 +175,11 @@ public class JsParser {
 
     }
 
-
-
     private static int findDeepestBlock(JsSyntaxTree tree, int nodeId, int editStart, int editEnd, int best) {
         if (tree == null || tree.nodeCount <= 1) return 0;
         if (nodeId < 0 || nodeId >= tree.nodeCount) return best;
 
-        if (nodeId == 0 && best != 0) nodeId = tree.nodeChild[0]; 
+        if (nodeId == 0 && best != 0) nodeId = tree.nodeChild[0];
 
         if (nodeId == 0 && best == 0) {
             int child = tree.nodeChild[0];
@@ -209,8 +206,6 @@ public class JsParser {
         return best;
     }
 
-
-
     private static int binarySearchToken(TokenStream stream, int offset) {
 
         int low = 0;
@@ -235,8 +230,6 @@ public class JsParser {
 
     }
 
-
-
     public static JsSyntaxTree parseTopLevel(String source, TokenStream stream) {
         return parseTopLevel(source, stream, null);
     }
@@ -245,11 +238,11 @@ public class JsParser {
         JsSyntaxTree tree = new JsSyntaxTree(stream.length / 2 + 10);
         int len = stream.length;
         int i = 0;
-        
+
         while (i < len && (stream.types[i] == TokenStream.TK_NONE || stream.types[i] == TokenStream.TK_WHITESPACE || stream.types[i] == TokenStream.TK_COMMENT)) {
             i = skipToken(stream, i);
         }
-        
+
         while (i < len) {
             if (stream.types[i] == TokenStream.TK_NONE) break; // End of tokenized region
             i = skipWhitespaceAndComments(stream, i);
@@ -257,15 +250,13 @@ public class JsParser {
             int nextI = parseNext(source, stream, tree, i, 0);
             i = (nextI <= i) ? skipToken(stream, i) : nextI;
         }
-        
+
         // We do not resolve class inheritance for inline statements typically,
         // but it's safe to call if a class is somehow defined inline.
         resolveClassInheritance(tree);
         tree.buildNodesByOffset();
         return tree;
     }
-
-
 
     public static JsSyntaxTree parseTopLevel(String source, TokenStream stream, JsSyntaxTree buffer) {
 
@@ -288,7 +279,6 @@ public class JsParser {
         int i = 0;
 
 
-
         while (i < len && (stream.types[i] == TokenStream.TK_NONE || stream.types[i] == TokenStream.TK_WHITESPACE || stream.types[i] == TokenStream.TK_COMMENT)) {
             i = skipToken(stream, i);
         }
@@ -309,8 +299,6 @@ public class JsParser {
 
     }
 
-
-
     private static int parseNext(String source, TokenStream stream, JsSyntaxTree tree, int i, int parent) {
         if (parent > 0) {
             int depth = 0;
@@ -327,7 +315,6 @@ public class JsParser {
         byte type = stream.types[i];
         int statementStart = i;
 
-        
 
         if (type == TokenStream.TK_KEYWORD || type == TokenStream.TK_IDENTIFIER) {
 
@@ -344,19 +331,23 @@ public class JsParser {
 
             if ("export".equals(kw)) return parseExport(source, stream, tree, i, parent);
 
-            if ("function".equals(kw) || "async".equals(kw)) return parseFunction(source, stream, tree, i, parent);
+            if ("function".equals(kw) || "async".equals(kw))
+                return parseFunction(source, stream, tree, i, parent);
 
             if ("class".equals(kw)) return parseClass(source, stream, tree, i, parent);
 
-            if ("const".equals(kw) || "let".equals(kw) || "var".equals(kw)) return parseVarDecl(source, stream, tree, i, parent);
+            if ("const".equals(kw) || "let".equals(kw) || "var".equals(kw))
+                return parseVarDecl(source, stream, tree, i, parent);
 
             if ("for".equals(kw)) return parseFor(source, stream, tree, i, parent);
 
             if ("catch".equals(kw)) return parseCatch(source, stream, tree, i, parent);
 
-            if ("interface".equals(kw) || "enum".equals(kw)) return parseClass(source, stream, tree, i, parent);
+            if ("interface".equals(kw) || "enum".equals(kw))
+                return parseClass(source, stream, tree, i, parent);
 
-            if ("namespace".equals(kw) || "module".equals(kw)) return parseNamespace(source, stream, tree, i, parent);
+            if ("namespace".equals(kw) || "module".equals(kw))
+                return parseNamespace(source, stream, tree, i, parent);
 
             if ("type".equals(kw)) return parseTypeAlias(source, stream, tree, i, parent);
 
@@ -370,7 +361,8 @@ public class JsParser {
 
             if ("switch".equals(kw)) return parseSwitch(source, stream, tree, i, parent);
 
-            if ("case".equals(kw) || "default".equals(kw)) return parseCase(source, stream, tree, i, parent);
+            if ("case".equals(kw) || "default".equals(kw))
+                return parseCase(source, stream, tree, i, parent);
 
             if ("try".equals(kw)) return parseTry(source, stream, tree, i, parent);
 
@@ -379,13 +371,11 @@ public class JsParser {
         }
 
 
-
         if (type == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
 
             return parseBlock(source, stream, tree, i, parent);
 
         }
-
 
 
         if (type == TokenStream.TK_IDENTIFIER) {
@@ -413,7 +403,6 @@ public class JsParser {
         }
 
 
-
         // Generic statement
         int stmtNode = tree.addNode(JsSyntaxTree.N_STATEMENT, stream.tokenStart[i], 0, parent, null);
         int endIdx = skipToNextStatement(source, stream, tree, i, stmtNode);
@@ -425,8 +414,6 @@ public class JsParser {
 
     }
 
-
-
     static void resolveClassInheritance(JsSyntaxTree tree) {
         if (tree == null || tree.nodeCount <= 1) return;
         java.util.Map<String, Integer> classByName = new java.util.HashMap<>();
@@ -435,21 +422,21 @@ public class JsParser {
                 classByName.put(tree.nodeName[i], i);
             }
         }
-        
+
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL && tree.nodeTypeAnn[i] != null) {
                 Integer baseNodeId = classByName.get(tree.nodeTypeAnn[i]);
                 if (baseNodeId != null && baseNodeId > 0 && baseNodeId < tree.nodeCount) {
                     String[] baseShape = tree.shapeTable.get(baseNodeId);
                     String[] myShape = tree.shapeTable.get(i);
-                    
+
                     if (baseShape != null) {
                         java.util.Set<String> merged = new java.util.LinkedHashSet<>();
                         if (myShape != null) {
-                            for (String s : myShape) merged.add(s);
+                            Collections.addAll(merged, myShape);
                         }
-                        for (String s : baseShape) merged.add(s);
-                        
+                        Collections.addAll(merged, baseShape);
+
                         tree.shapeTable.put(i, merged.toArray(new String[0]));
                     }
                 }
@@ -462,21 +449,17 @@ public class JsParser {
         return stream.tokenStart[tokIdx];
     }
 
-
-
     private static int parseFor(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int forNode = tree.addNode(JsSyntaxTree.N_FOR_STMT, nodeStart, 0, parent, null);
 
-        
 
         int i = skipToken(stream, startIdx); // skip 'for'
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
@@ -484,7 +467,6 @@ public class JsParser {
 
             int headerEnd = skipBlockFast(source, stream, i, '(', ')');
 
-            
 
             int inner = skipToken(stream, headerStart);
 
@@ -518,7 +500,6 @@ public class JsParser {
 
         }
 
-        
 
         i = skipWhitespaceAndComments(stream, i);
 
@@ -536,7 +517,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[forNode] = getOffset(stream, source, i);
 
@@ -544,21 +524,17 @@ public class JsParser {
 
     }
 
-
-
     private static int parseCatch(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int catchNode = tree.addNode(JsSyntaxTree.N_CATCH_CLAUSE, nodeStart, 0, parent, null);
 
-        
 
         int i = skipToken(stream, startIdx); // skip 'catch'
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
@@ -566,7 +542,6 @@ public class JsParser {
 
             i = skipWhitespaceAndComments(stream, i);
 
-            
 
             if (i < stream.length && stream.types[i] == TokenStream.TK_IDENTIFIER) {
 
@@ -582,7 +557,6 @@ public class JsParser {
 
             }
 
-            
 
             while (i < stream.length) {
 
@@ -600,7 +574,6 @@ public class JsParser {
 
         }
 
-        
 
         i = skipWhitespaceAndComments(stream, i);
 
@@ -616,7 +589,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[catchNode] = getOffset(stream, source, i);
 
@@ -624,21 +596,17 @@ public class JsParser {
 
     }
 
-
-
     private static int parseTry(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int node = tree.addNode(JsSyntaxTree.N_TRY_STMT, nodeStart, 0, parent, null);
 
-        
 
         int i = skipToken(stream, startIdx); // skip 'try'
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
 
@@ -646,15 +614,12 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[node] = getOffset(stream, source, i);
 
         return i;
 
     }
-
-
 
     private static int parseFinally(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
@@ -662,13 +627,11 @@ public class JsParser {
 
         int node = tree.addNode(JsSyntaxTree.N_FINALLY_CLAUSE, nodeStart, 0, parent, null);
 
-        
 
         int i = skipToken(stream, startIdx); // skip 'finally'
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
 
@@ -676,7 +639,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[node] = getOffset(stream, source, i);
 
@@ -684,21 +646,17 @@ public class JsParser {
 
     }
 
-
-
     private static int parseConditionAndBody(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent, int nodeType) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int node = tree.addNode(nodeType, nodeStart, 0, parent, null);
 
-        
 
-        int i = skipToken(stream, startIdx); 
+        int i = skipToken(stream, startIdx);
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
@@ -706,7 +664,6 @@ public class JsParser {
 
         }
 
-        
 
         i = skipWhitespaceAndComments(stream, i);
 
@@ -724,7 +681,6 @@ public class JsParser {
 
         }
 
-        
 
         if (nodeType == JsSyntaxTree.N_IF_STMT) {
 
@@ -732,7 +688,7 @@ public class JsParser {
 
             if (nextTok < stream.length && stream.types[nextTok] == TokenStream.TK_KEYWORD && "else".equals(getWord(source, stream, nextTok))) {
 
-                i = skipToken(stream, nextTok); 
+                i = skipToken(stream, nextTok);
 
                 i = skipWhitespaceAndComments(stream, i);
 
@@ -754,7 +710,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[node] = getOffset(stream, source, i);
 
@@ -762,15 +717,11 @@ public class JsParser {
 
     }
 
-
-
     private static int parseIf(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         return parseConditionAndBody(source, stream, tree, startIdx, parent, JsSyntaxTree.N_IF_STMT);
 
     }
-
-
 
     private static int parseWhile(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
@@ -778,15 +729,11 @@ public class JsParser {
 
     }
 
-
-
     private static int parseWith(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         return parseConditionAndBody(source, stream, tree, startIdx, parent, JsSyntaxTree.N_WITH_STMT);
 
     }
-
-
 
     private static int parseDo(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
@@ -794,13 +741,11 @@ public class JsParser {
 
         int node = tree.addNode(JsSyntaxTree.N_DO_STMT, nodeStart, 0, parent, null);
 
-        
 
-        int i = skipToken(stream, startIdx); 
+        int i = skipToken(stream, startIdx);
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length) {
 
@@ -816,13 +761,12 @@ public class JsParser {
 
         }
 
-        
 
         int nextTok = skipWhitespaceAndComments(stream, i);
 
         if (nextTok < stream.length && stream.types[nextTok] == TokenStream.TK_KEYWORD && "while".equals(getWord(source, stream, nextTok))) {
 
-            i = skipToken(stream, nextTok); 
+            i = skipToken(stream, nextTok);
 
             i = skipWhitespaceAndComments(stream, i);
 
@@ -834,7 +778,6 @@ public class JsParser {
 
         }
 
-        
 
         int semiCheck = skipWhitespaceAndComments(stream, i);
 
@@ -844,7 +787,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[node] = getOffset(stream, source, i);
 
@@ -852,21 +794,17 @@ public class JsParser {
 
     }
 
-
-
     private static int parseSwitch(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int node = tree.addNode(JsSyntaxTree.N_SWITCH_STMT, nodeStart, 0, parent, null);
 
-        
 
-        int i = skipToken(stream, startIdx); 
+        int i = skipToken(stream, startIdx);
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
@@ -874,7 +812,6 @@ public class JsParser {
 
         }
 
-        
 
         i = skipWhitespaceAndComments(stream, i);
 
@@ -884,15 +821,12 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[node] = getOffset(stream, source, i);
 
         return i;
 
     }
-
-
 
     private static int parseCase(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
@@ -902,11 +836,9 @@ public class JsParser {
 
         int node = tree.addNode(JsSyntaxTree.N_CASE_CLAUSE, nodeStart, 0, parent, kw);
 
-        
 
-        int i = skipToken(stream, startIdx); 
+        int i = skipToken(stream, startIdx);
 
-        
 
         while (i < stream.length) {
 
@@ -924,7 +856,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[node] = getOffset(stream, source, i);
 
@@ -932,15 +863,12 @@ public class JsParser {
 
     }
 
-
-
     private static int parseBlock(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int blockNode = tree.addNode(JsSyntaxTree.N_BLOCK, nodeStart, 0, parent, null);
 
-        
 
         int i = skipToken(stream, startIdx);
 
@@ -950,7 +878,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -962,7 +889,6 @@ public class JsParser {
 
             }
 
-            
 
             int nextI = parseNext(source, stream, tree, i, blockNode);
             i = (nextI <= i) ? skipToken(stream, i) : nextI;
@@ -974,15 +900,12 @@ public class JsParser {
 
     }
 
-
-
     private static int parseObjectLiteral(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int objNode = tree.addNode(JsSyntaxTree.N_OBJECT_LITERAL, nodeStart, 0, parent, null); // Object literals don't create scopes
 
-        
 
         int i = skipToken(stream, startIdx);
 
@@ -992,7 +915,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -1004,11 +926,9 @@ public class JsParser {
 
             }
 
-            
 
             i = parseObjectPropertyOrMethod(source, stream, tree, i, objNode);
 
-            
 
             i = skipWhitespaceAndComments(stream, i);
 
@@ -1037,7 +957,6 @@ public class JsParser {
             tree.shapeTable.put(objNode, keyArray);
         }
 
-        
 
         return i;
 
@@ -1063,8 +982,6 @@ public class JsParser {
         }
     }
 
-
-
     private static int parseObjectPropertyOrMethod(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int i = startIdx;
@@ -1076,14 +993,12 @@ public class JsParser {
         int nodeStart = stream.tokenStart[i];
 
 
-
         while (i < stream.length) {
 
             i = skipWhitespaceAndComments(stream, i);
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -1097,7 +1012,7 @@ public class JsParser {
 
                     if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '(') {
 
-                        name = "get"; 
+                        name = "get";
 
                     } else {
 
@@ -1121,7 +1036,7 @@ public class JsParser {
 
                 } else if (name == null && ("async".equals(word) || "function".equals(word))) {
                     int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER 
+                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER
                             || stream.types[next] == TokenStream.TK_KEYWORD
                             || (stream.types[next] == TokenStream.TK_OPERATOR && (source.charAt(stream.tokenStart[next]) == '*' || source.charAt(stream.tokenStart[next]) == '#')))) {
                         // skip modifier
@@ -1148,7 +1063,6 @@ public class JsParser {
 
                     i = parseParams(source, stream, tree, i, methodNode);
 
-                    
 
                     while (i < stream.length) {
 
@@ -1226,8 +1140,6 @@ public class JsParser {
         return i;
 
     }
-
-
 
     private static int parseImport(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
@@ -1373,21 +1285,17 @@ public class JsParser {
 
     }
 
-
-
     private static int parseExport(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
 
         int exportNode = tree.addNode(JsSyntaxTree.N_EXPORT, nodeStart, 0, parent, null);
 
-        
 
         int i = skipToken(stream, startIdx);
 
         i = skipWhitespaceAndComments(stream, i);
 
-        
 
         if (i < stream.length && (stream.types[i] == TokenStream.TK_KEYWORD || stream.types[i] == TokenStream.TK_IDENTIFIER)) {
 
@@ -1493,7 +1401,6 @@ public class JsParser {
 
                 String word = (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) ? getWord(source, stream, tok) : null;
 
-                
 
                 if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[tok]) == '}') {
                     if (lastName != null) {
@@ -1575,7 +1482,6 @@ public class JsParser {
 
         }
 
-        
 
         int endIdx = skipToNextStatement(source, stream, tree, startIdx, exportNode);
 
@@ -1585,8 +1491,6 @@ public class JsParser {
 
     }
 
-
-
     private static int parseFunction(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int i = startIdx;
@@ -1595,7 +1499,6 @@ public class JsParser {
 
         String name = null;
 
-        
 
         while (i < stream.length) {
 
@@ -1632,7 +1535,7 @@ public class JsParser {
 
                     int funcNode = tree.addNode(JsSyntaxTree.N_FUNC_DECL, nodeStart, stream.tokenStart[nextTok], parent, name);
 
-                    return nextTok; 
+                    return nextTok;
 
                 }
 
@@ -1642,11 +1545,9 @@ public class JsParser {
 
         }
 
-        
 
         int funcNode = tree.addNode(JsSyntaxTree.N_FUNC_DECL, nodeStart, 0, parent, name);
 
-        
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
@@ -1654,7 +1555,6 @@ public class JsParser {
 
         }
 
-        
 
         while (i < stream.length) {
 
@@ -1691,7 +1591,6 @@ public class JsParser {
 
         }
 
-        
 
         tree.nodeEnd[funcNode] = getOffset(stream, source, i);
 
@@ -1699,23 +1598,21 @@ public class JsParser {
 
     }
 
-
-
     private static int parseParams(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
         int i = skipToken(stream, startIdx);
         boolean isRest = false;
         int lastParamNodeId = -1;
-        
+
         while (i < stream.length) {
             i = skipWhitespaceAndComments(stream, i);
             if (i >= stream.length) break;
-            
+
             byte t = stream.types[i];
             if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ')') {
                 return skipToken(stream, i);
             }
-            
-            if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '.' && i + 2 < stream.length && source.charAt(stream.tokenStart[i+1]) == '.' && source.charAt(stream.tokenStart[i+2]) == '.') {
+
+            if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '.' && i + 2 < stream.length && source.charAt(stream.tokenStart[i + 1]) == '.' && source.charAt(stream.tokenStart[i + 2]) == '.') {
                 i = skipToken(stream, skipToken(stream, skipToken(stream, i)));
                 isRest = true;
                 continue; // skip spread operator
@@ -1750,7 +1647,7 @@ public class JsParser {
                 if (isParamProp) {
                     tree.nodeExtra[paramNodeId] |= JsSyntaxTree.FLAG_PARAM_PROP;
                 }
-                
+
                 int next = skipWhitespaceAndComments(stream, i);
                 if (next < stream.length && (stream.types[next] == TokenStream.TK_PUNCT || stream.types[next] == TokenStream.TK_OPERATOR)
                         && (source.charAt(stream.tokenStart[next]) == ':' || source.charAt(stream.tokenStart[next]) == '?')) {
@@ -1788,7 +1685,7 @@ public class JsParser {
                 }
                 i = parseDestructuredVars(source, stream, tree, i, declNode, 0, open, close, JsSyntaxTree.N_PARAM);
                 tree.nodeEnd[declNode] = getOffset(stream, source, i);
-                
+
                 int next = skipWhitespaceAndComments(stream, i);
                 if (next < stream.length && (stream.types[next] == TokenStream.TK_PUNCT || stream.types[next] == TokenStream.TK_OPERATOR)
                         && (source.charAt(stream.tokenStart[next]) == ':' || source.charAt(stream.tokenStart[next]) == '?')) {
@@ -1837,9 +1734,10 @@ public class JsParser {
 
                         if (c == '(' || c == '[' || c == '{') depth++;
 
-                        else if (c == ')' || c == ']' || c == '}') { if (depth == 0) break; depth--; }
-
-                        else if (c == ',' && depth == 0) break;
+                        else if (c == ')' || c == ']' || c == '}') {
+                            if (depth == 0) break;
+                            depth--;
+                        } else if (c == ',' && depth == 0) break;
 
                     }
 
@@ -1858,8 +1756,6 @@ public class JsParser {
         return i;
 
     }
-
-
 
     private static int parseClass(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
         int i = skipToken(stream, startIdx);
@@ -1898,7 +1794,7 @@ public class JsParser {
                 } else {
                     i = parseClassBody(source, stream, tree, nextTok, classNode);
                 }
-                
+
                 // C.1 pre-populate shape for class/interface
                 java.util.Set<String> keys = new java.util.LinkedHashSet<>();
                 int child = tree.nodeChild[classNode];
@@ -1943,8 +1839,6 @@ public class JsParser {
 
     }
 
-
-
     private static int parseNamespace(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
         int i = startIdx;
         int nodeStart = stream.tokenStart[i];
@@ -1982,9 +1876,8 @@ public class JsParser {
 
         String name = null;
 
-        i = skipToken(stream, i); 
+        i = skipToken(stream, i);
 
-        
 
         while (i < stream.length) {
 
@@ -1992,7 +1885,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -2008,7 +1900,7 @@ public class JsParser {
 
                 int declNode = tree.addNode(JsSyntaxTree.N_VAR_DECL, nodeStart, 0, parent, name);
 
-                tree.nodeExtra[declNode] = JsSyntaxTree.FLAG_CONST; 
+                tree.nodeExtra[declNode] = JsSyntaxTree.FLAG_CONST;
 
                 int depth = 0;
 
@@ -2022,9 +1914,9 @@ public class JsParser {
 
                         if (dc == '{' || dc == '[' || dc == '(' || dc == '<') depth++;
 
-                        else if (dc == '}' || dc == ']' || dc == ')' || dc == '>') { if (depth > 0) depth--; }
-
-                        else if (depth == 0 && dc == ';') {
+                        else if (dc == '}' || dc == ']' || dc == ')' || dc == '>') {
+                            if (depth > 0) depth--;
+                        } else if (depth == 0 && dc == ';') {
 
                             i = skipToken(stream, i);
 
@@ -2059,8 +1951,6 @@ public class JsParser {
         return i;
 
     }
-
-
 
     private static int parseEnumBody(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int enumNode) {
         int i = skipToken(stream, startIdx); // skip '{'
@@ -2123,7 +2013,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -2133,7 +2022,6 @@ public class JsParser {
 
             }
 
-            
 
             i = parseMethodOrProperty(source, stream, tree, i, parent);
 
@@ -2142,8 +2030,6 @@ public class JsParser {
         return i;
 
     }
-
-
 
     private static int parseMethodOrProperty(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
@@ -2156,14 +2042,12 @@ public class JsParser {
         int nodeStart = stream.tokenStart[i];
 
 
-
         while (i < stream.length) {
 
             i = skipWhitespaceAndComments(stream, i);
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -2181,7 +2065,7 @@ public class JsParser {
                 if ("get".equals(word) && name == null) {
                     int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
                     if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '(') {
-                        name = "get"; 
+                        name = "get";
                     } else {
                         nodeType = JsSyntaxTree.N_GETTER;
                     }
@@ -2194,7 +2078,7 @@ public class JsParser {
                     }
                 } else if (name == null && isClassMemberModifierOrDecl(word)) {
                     int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER 
+                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER
                             || stream.types[next] == TokenStream.TK_KEYWORD
                             || (stream.types[next] == TokenStream.TK_OPERATOR && (source.charAt(stream.tokenStart[next]) == '*' || source.charAt(stream.tokenStart[next]) == '#')))) {
                         // skip modifier / declaration keyword
@@ -2276,8 +2160,6 @@ public class JsParser {
                 || "function".equals(word);
     }
 
-
-
     private static int parseVarDecl(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
 
         int nodeStart = stream.tokenStart[startIdx];
@@ -2286,11 +2168,9 @@ public class JsParser {
 
         int flag = "var".equals(kw) ? JsSyntaxTree.FLAG_VAR : ("let".equals(kw) ? JsSyntaxTree.FLAG_LET : JsSyntaxTree.FLAG_CONST);
 
-        
 
         int i = skipToken(stream, startIdx);
 
-        
 
         while (i < stream.length) {
 
@@ -2298,7 +2178,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             if (stream.types[i] == TokenStream.TK_PUNCT && (source.charAt(stream.tokenStart[i]) == '{' || source.charAt(stream.tokenStart[i]) == '[')) {
 
@@ -2326,7 +2205,7 @@ public class JsParser {
                 }
 
                 if (nextTok < stream.length && stream.types[nextTok] == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[nextTok]) == '=') {
-                    
+
                     String inferredType = inferBaseType(source, stream, nextTok);
                     if (inferredType != null && tree.nodeTypeAnn[declNode] == null) {
                         tree.nodeTypeAnn[declNode] = inferredType;
@@ -2376,7 +2255,7 @@ public class JsParser {
                 }
 
                 if (nextTok < stream.length && stream.types[nextTok] == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[nextTok]) == '=') {
-                    
+
                     String inferredType = inferBaseType(source, stream, nextTok);
                     if (inferredType != null && tree.nodeTypeAnn[declNode] == null) {
                         tree.nodeTypeAnn[declNode] = inferredType;
@@ -2400,7 +2279,6 @@ public class JsParser {
 
             }
 
-            
 
             if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT) {
 
@@ -2430,8 +2308,6 @@ public class JsParser {
 
     }
 
-
-
     private static int parseDestructuredVars(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent, int flag, char openChar, char closeChar, int emitType) {
 
         int i = skipToken(stream, startIdx); // skip '{' or '['
@@ -2442,7 +2318,6 @@ public class JsParser {
 
         boolean inAlias = false;
 
-        
 
         while (i < stream.length) {
 
@@ -2450,7 +2325,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             byte t = stream.types[i];
 
@@ -2554,7 +2428,7 @@ public class JsParser {
 
                 }
 
-                continue; 
+                continue;
 
             } else if (t == TokenStream.TK_IDENTIFIER) {
 
@@ -2578,23 +2452,11 @@ public class JsParser {
 
     }
 
-
-
-    private static final int STOP_STMT = 0;
-
-    private static final int STOP_PARAM = 1;
-
-    private static final int STOP_VAR_DECL = 2;
-
-    private static final int STOP_OBJ_PROP = 3;
-
-
-
-        private static int emitErrorAndSync(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
+    private static int emitErrorAndSync(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent) {
         int errStart = stream.tokenStart[startIdx];
         int i = skipToken(stream, startIdx);
         tree.addNode(JsSyntaxTree.N_ERROR, errStart, getOffset(stream, source, i), parent, null);
-        
+
         while (i < stream.length) {
             byte t = stream.types[i];
             if (t == TokenStream.TK_PUNCT) {
@@ -2629,12 +2491,11 @@ public class JsParser {
     }
 
 
-
     private static String inferBaseType(String source, TokenStream stream, int tokIdx) {
-        int i = skipToken(stream, tokIdx); 
+        int i = skipToken(stream, tokIdx);
         i = skipWhitespaceAndComments(stream, i);
         if (i >= stream.length) return null;
-        
+
         byte t = stream.types[i];
         if (t == TokenStream.TK_PUNCT) {
             char c = source.charAt(stream.tokenStart[i]);
@@ -2657,7 +2518,8 @@ public class JsParser {
                                 int colonNext = skipWhitespaceAndComments(stream, skipToken(stream, curr));
                                 if (colonNext < stream.length && stream.types[colonNext] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[colonNext]) == ':') {
                                     String key = getWord(source, stream, curr);
-                                    if (tt == TokenStream.TK_STRING) key = key.substring(1, key.length() - 1);
+                                    if (tt == TokenStream.TK_STRING)
+                                        key = key.substring(1, key.length() - 1);
                                     if (!keys.contains(key)) keys.add(key);
                                 }
                             }
@@ -2744,14 +2606,12 @@ public class JsParser {
     }
 
 
-
     private static int parseExpressionTokens(String source, TokenStream stream, JsSyntaxTree tree, int i, int parent, int stopCond) {
 
-        int depth = 0; 
+        int depth = 0;
 
         int initialLastChild = tree.nodeLastChild[parent];
 
-        
 
         while (i < stream.length) {
             byte t = stream.types[i];
@@ -2761,7 +2621,6 @@ public class JsParser {
 
                 int arrowNode = tree.addNode(JsSyntaxTree.N_ARROW_FUNC, stream.tokenStart[i], 0, parent, null);
 
-                
 
                 int firstExprChild = (initialLastChild == 0) ? tree.nodeChild[parent] : tree.nodeSibling[initialLastChild];
 
@@ -2795,7 +2654,6 @@ public class JsParser {
                         tree.nodeParent[curr] = arrowNode;
 
 
-
                         boolean isDefaultValue = false;
 
                         if (lastParam != 0) {
@@ -2806,12 +2664,14 @@ public class JsParser {
 
                                 if (c == ',') break;
 
-                                if (c == '=') { isDefaultValue = true; break; }
+                                if (c == '=') {
+                                    isDefaultValue = true;
+                                    break;
+                                }
 
                             }
 
                         }
-
 
 
                         if (isDefaultValue) {
@@ -2840,7 +2700,8 @@ public class JsParser {
                                 char c = source.charAt(p);
                                 if (c == ',') break;
                                 if (c == '=') {
-                                    if (p + 1 < source.length() && source.charAt(p + 1) == '>') continue;
+                                    if (p + 1 < source.length() && source.charAt(p + 1) == '>')
+                                        continue;
                                     tree.nodeExtra[curr] |= JsSyntaxTree.FLAG_DEFAULT;
                                     break;
                                 }
@@ -2855,7 +2716,6 @@ public class JsParser {
 
                 }
 
-                
 
                 i = skipToken(stream, i); // skip '=>' (both chars share same tokenStart)
 
@@ -2877,7 +2737,6 @@ public class JsParser {
 
             }
 
-            
 
             if (t == TokenStream.TK_IDENTIFIER || (t == TokenStream.TK_KEYWORD && ("this".equals(getWord(source, stream, i)) || "super".equals(getWord(source, stream, i))))) {
 
@@ -2889,15 +2748,14 @@ public class JsParser {
 
                 boolean isMember = false;
 
-                
 
                 while (curr < stream.length) {
 
                     int next = skipWhitespaceAndComments(stream, curr);
 
-                    if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && 
-                        (source.charAt(stream.tokenStart[next]) == '.' || 
-                         (source.charAt(stream.tokenStart[next]) == '?' && stream.tokenStart[next] + 1 < source.length() && source.charAt(stream.tokenStart[next] + 1) == '.'))) {
+                    if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT &&
+                            (source.charAt(stream.tokenStart[next]) == '.' ||
+                                    (source.charAt(stream.tokenStart[next]) == '?' && stream.tokenStart[next] + 1 < source.length() && source.charAt(stream.tokenStart[next] + 1) == '.'))) {
 
                         int afterDot = skipWhitespaceAndComments(stream, skipToken(stream, next));
 
@@ -2923,7 +2781,6 @@ public class JsParser {
 
                 }
 
-                
 
                 int nextAfterChain = skipWhitespaceAndComments(stream, curr);
 
@@ -2953,7 +2810,7 @@ public class JsParser {
 
                     i = curr;
 
-                    continue; 
+                    continue;
 
                 }
 
@@ -2977,7 +2834,6 @@ public class JsParser {
 
             }
 
-            
 
             if (t == TokenStream.TK_PUNCT) {
 
@@ -2995,11 +2851,12 @@ public class JsParser {
 
                     }
 
-                    continue; 
+                    continue;
 
                 } else if (c == '}') {
 
-                    if (depth <= 0 && (stopCond == STOP_STMT || stopCond == STOP_VAR_DECL || stopCond == STOP_OBJ_PROP)) return i; 
+                    if (depth <= 0 && (stopCond == STOP_STMT || stopCond == STOP_VAR_DECL || stopCond == STOP_OBJ_PROP))
+                        return i;
 
                 } else if (c == '(' || c == '[') {
 
@@ -3027,11 +2884,9 @@ public class JsParser {
 
             }
 
-            
 
             int nextTok = skipToken(stream, i);
 
-            
 
             if (depth <= 0 && (stopCond == STOP_STMT || stopCond == STOP_VAR_DECL)) {
 
@@ -3058,7 +2913,6 @@ public class JsParser {
     }
 
 
-
     private static int parseArguments(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int callNode) {
 
         int i = skipToken(stream, startIdx); // skip '('
@@ -3069,7 +2923,6 @@ public class JsParser {
 
             if (i >= stream.length) break;
 
-            
 
             if (stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ')') {
 
@@ -3079,7 +2932,6 @@ public class JsParser {
 
             }
 
-            
 
             int paramNode = tree.addNode(JsSyntaxTree.N_PARAM, stream.tokenStart[i], 0, callNode, null);
 
@@ -3087,7 +2939,6 @@ public class JsParser {
 
             tree.nodeEnd[paramNode] = getOffset(stream, source, i);
 
-            
 
             if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ',') {
 
@@ -3106,7 +2957,6 @@ public class JsParser {
         return i;
 
     }
-
 
 
     private static int skipBlockFast(String source, TokenStream stream, int i, char openChar, char closeChar) {
@@ -3146,27 +2996,25 @@ public class JsParser {
     }
 
 
-
     private static boolean isTopLevelKeyword(String source, TokenStream stream, int idx) {
 
         if (stream.types[idx] != TokenStream.TK_KEYWORD) return false;
 
         String kw = getWord(source, stream, idx);
 
-        return "import".equals(kw) || "export".equals(kw) || "class".equals(kw) || 
+        return "import".equals(kw) || "export".equals(kw) || "class".equals(kw) ||
 
-               "function".equals(kw) || "const".equals(kw) || "let".equals(kw) || "var".equals(kw) ||
+                "function".equals(kw) || "const".equals(kw) || "let".equals(kw) || "var".equals(kw) ||
 
-               "return".equals(kw) || "if".equals(kw) || "for".equals(kw) || "while".equals(kw) ||
+                "return".equals(kw) || "if".equals(kw) || "for".equals(kw) || "while".equals(kw) ||
 
-               "interface".equals(kw) || "type".equals(kw) || "enum".equals(kw) || "namespace".equals(kw) || "module".equals(kw) ||
+                "interface".equals(kw) || "type".equals(kw) || "enum".equals(kw) || "namespace".equals(kw) || "module".equals(kw) ||
 
-               "do".equals(kw) || "with".equals(kw) || "switch".equals(kw) || "case".equals(kw) || "default".equals(kw) ||
+                "do".equals(kw) || "with".equals(kw) || "switch".equals(kw) || "case".equals(kw) || "default".equals(kw) ||
 
-               "try".equals(kw) || "finally".equals(kw);
+                "try".equals(kw) || "finally".equals(kw);
 
     }
-
 
 
     private static boolean hasNewlineBetween(String source, TokenStream stream, int from, int to) {
@@ -3180,7 +3028,6 @@ public class JsParser {
         return false;
 
     }
-
 
 
     private static boolean isObjectLiteralStart(String source, TokenStream stream, int index) {
@@ -3203,13 +3050,11 @@ public class JsParser {
 
         if (prev < 0) return false;
 
-        
 
         byte pt = stream.types[prev];
 
         if (pt == TokenStream.TK_OPERATOR) return true; // =, ==, =>, +, etc.
 
-        
 
         if (pt == TokenStream.TK_PUNCT) {
 
@@ -3221,24 +3066,19 @@ public class JsParser {
 
         }
 
-        
 
         if (pt == TokenStream.TK_KEYWORD) {
 
             String kw = getWord(source, stream, prev);
 
-            if ("return".equals(kw) || "yield".equals(kw) || "throw".equals(kw) || "await".equals(kw) || "default".equals(kw)) return true;
-
-            return false;
+            return "return".equals(kw) || "yield".equals(kw) || "throw".equals(kw) || "await".equals(kw) || "default".equals(kw);
 
         }
 
-        
 
         return false;
 
     }
-
 
 
     private static int skipTypeAnnotation(String source, TokenStream stream, int i) {
@@ -3266,14 +3106,15 @@ public class JsParser {
                     }
                 }
                 if (c == '{' || c == '[' || c == '(' || c == '<') depth++;
-                else if (c == '}' || c == ']' || c == ')' || c == '>') { if (depth > 0) depth--; }
+                else if (c == '}' || c == ']' || c == ')' || c == '>') {
+                    if (depth > 0) depth--;
+                }
             }
             prevNonWsTok = i;
             i = skipToken(stream, i);
         }
         return i;
     }
-
 
 
     private static int skipGenericArguments(String source, TokenStream stream, int i) {
@@ -3319,7 +3160,6 @@ public class JsParser {
     }
 
 
-
     private static int skipToken(TokenStream stream, int i) {
 
         if (i >= stream.length) return i;
@@ -3335,7 +3175,6 @@ public class JsParser {
         return i;
 
     }
-
 
 
     private static int skipWhitespaceAndComments(TokenStream stream, int i) {
@@ -3355,7 +3194,6 @@ public class JsParser {
         return i;
 
     }
-
 
 
     private static String getWord(String source, TokenStream stream, int i) {

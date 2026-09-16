@@ -49,14 +49,6 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         jsHighlighter = new JsSyntaxHighlighter(context);
     }
 
-    public static HtmlSyntaxHighlighter forTest() {
-        return new HtmlSyntaxHighlighter((Void) null);
-    }
-
-    public static HtmlSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment) {
-        return new HtmlSyntaxHighlighter(tag, attribute, value, bracket, comment);
-    }
-
     protected HtmlSyntaxHighlighter(Void unusedForTest) {
         super((Void) null);
         this.colorTag = 0;
@@ -77,6 +69,14 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         this.colorHtmlComment = comment;
         this.cssHighlighter = CssSyntaxHighlighter.forTestWithColors(comment, tag, attribute, value, tag, bracket);
         this.jsHighlighter = JsSyntaxHighlighter.forTestWithColors(comment, value, tag, value, attribute, tag, bracket);
+    }
+
+    public static HtmlSyntaxHighlighter forTest() {
+        return new HtmlSyntaxHighlighter((Void) null);
+    }
+
+    public static HtmlSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment) {
+        return new HtmlSyntaxHighlighter(tag, attribute, value, bracket, comment);
     }
 
     private static int outerState(int combined) {
@@ -333,7 +333,8 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     i++;
                     // Check for unquoted attribute value
                     int nextNonWhite = i;
-                    while (nextNonWhite < len && Character.isWhitespace(lineStr.charAt(nextNonWhite))) nextNonWhite++;
+                    while (nextNonWhite < len && Character.isWhitespace(lineStr.charAt(nextNonWhite)))
+                        nextNonWhite++;
                     if (nextNonWhite < len) {
                         char nc = lineStr.charAt(nextNonWhite);
                         if (nc != '"' && nc != '\'' && nc != '>' && nc != '/') {

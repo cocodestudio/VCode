@@ -151,18 +151,6 @@ public class EditorViewModel extends ViewModel {
         }
     }
 
-    private final Runnable diagnosticWatchdogRunnable = () -> {
-        if (activeFileDiagnostics.getValue() == null) {
-            int activeIndex = getActiveTabIndexValue();
-            if (activeIndex >= 0 && activeIndex < getOpenFilesList().size()) {
-                EditorFile activeFile = getOpenFilesList().get(activeIndex);
-                recalculateActiveDiagnostics(activeFile.getFile().getAbsolutePath());
-            } else {
-                activeFileDiagnostics.postValue(new int[]{0, 0, 0});
-            }
-        }
-    };
-
     private void recalculateActiveDiagnostics(String path) {
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
         List<Problem> problems = fileProblemsMap.get(path);
@@ -179,7 +167,17 @@ public class EditorViewModel extends ViewModel {
             }
         }
         activeFileDiagnostics.postValue(counts);
-    }
+    }    private final Runnable diagnosticWatchdogRunnable = () -> {
+        if (activeFileDiagnostics.getValue() == null) {
+            int activeIndex = getActiveTabIndexValue();
+            if (activeIndex >= 0 && activeIndex < getOpenFilesList().size()) {
+                EditorFile activeFile = getOpenFilesList().get(activeIndex);
+                recalculateActiveDiagnostics(activeFile.getFile().getAbsolutePath());
+            } else {
+                activeFileDiagnostics.postValue(new int[]{0, 0, 0});
+            }
+        }
+    };
 
     public void setDiagnosticLoading(File file) {
         if (projectRoot == null || file == null) return;
@@ -1005,7 +1003,6 @@ public class EditorViewModel extends ViewModel {
         if (scrollY >= 0) file.setScrollY(scrollY);
     }
 
-
     /**
      * Triggers an asynchronous save of the project's metadata (tabs, positions).
      */
@@ -1140,4 +1137,6 @@ public class EditorViewModel extends ViewModel {
         super.onCleared();
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
     }
+
+
 }

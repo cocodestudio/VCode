@@ -19,7 +19,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.data.model.Project;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.databinding.ItemProjectCardBinding;
 import com.cocode.vcode.ide.utils.DateUtils;
 import com.cocode.vcode.ide.utils.ExecutorProvider;

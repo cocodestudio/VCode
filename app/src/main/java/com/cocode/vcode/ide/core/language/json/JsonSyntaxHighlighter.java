@@ -36,14 +36,6 @@ public class JsonSyntaxHighlighter extends SyntaxHighlighter {
         colorComma = getColor(R.color.vcode_color_json_comma);
     }
 
-    public static JsonSyntaxHighlighter forTest() {
-        return new JsonSyntaxHighlighter((Void) null);
-    }
-
-    public static JsonSyntaxHighlighter forTestWithColors(int key, int string, int number, int booleanCol, int nullCol, int bracket, int colon, int comma) {
-        return new JsonSyntaxHighlighter(key, string, number, booleanCol, nullCol, bracket, colon, comma);
-    }
-
     JsonSyntaxHighlighter(Void unusedForTest) {
         super((Void) null);
         this.colorKey = 0;
@@ -66,6 +58,14 @@ public class JsonSyntaxHighlighter extends SyntaxHighlighter {
         this.colorBracket = bracket;
         this.colorColon = colon;
         this.colorComma = comma;
+    }
+
+    public static JsonSyntaxHighlighter forTest() {
+        return new JsonSyntaxHighlighter((Void) null);
+    }
+
+    public static JsonSyntaxHighlighter forTestWithColors(int key, int string, int number, int booleanCol, int nullCol, int bracket, int colon, int comma) {
+        return new JsonSyntaxHighlighter(key, string, number, booleanCol, nullCol, bracket, colon, comma);
     }
 
     @Override

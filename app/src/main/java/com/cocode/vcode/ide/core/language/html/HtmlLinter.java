@@ -12,7 +12,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -212,21 +211,22 @@ public class HtmlLinter {
                 Set<String> requiredParents = KnownElements.REQUIRED_PARENTS.get(tagName);
                 if (requiredParents != null) {
                     int parentId = tree.nodeParent[i];
-                    String parentTagName = parentId > 0 && tree.nodeType[parentId] == HtmlSyntaxTree.N_ELEMENT 
+                    String parentTagName = parentId > 0 && tree.nodeType[parentId] == HtmlSyntaxTree.N_ELEMENT
                             ? tree.nodeName[parentId] : "";
                     if (!requiredParents.contains(parentTagName.toLowerCase())) {
                         StringBuilder sb = new StringBuilder();
                         int pCount = 0;
                         for (String rp : requiredParents) {
                             if (pCount > 0) {
-                                if (pCount == requiredParents.size() - 1) sb.append(requiredParents.size() > 2 ? ", or " : " or ");
+                                if (pCount == requiredParents.size() - 1)
+                                    sb.append(requiredParents.size() > 2 ? ", or " : " or ");
                                 else sb.append(", ");
                             }
                             sb.append("'<").append(rp).append(">'");
                             pCount++;
                         }
                         problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
-                                "'<" + tagName + ">' must be a child of " + sb.toString(),
+                                "'<" + tagName + ">' must be a child of " + sb,
                                 Problem.Severity.ERROR));
                     }
                 }

@@ -18,11 +18,6 @@ import com.cocode.vcode.ide.utils.FontManager;
  */
 public class SettingsOptionsBottomSheet extends BaseBottomSheetDialogFragment {
 
-    public interface SettingsOptionListener {
-        void onImportSettings();
-        void onExportSettings();
-    }
-
     private BottomSheetSettingsMenuBinding binding;
     private SettingsOptionListener listener;
 
@@ -73,5 +68,11 @@ public class SettingsOptionsBottomSheet extends BaseBottomSheetDialogFragment {
     public void onDestroyView() {
         super.onDestroyView();
         binding = null;
+    }
+
+    public interface SettingsOptionListener {
+        void onImportSettings();
+
+        void onExportSettings();
     }
 }

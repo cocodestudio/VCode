@@ -22,7 +22,8 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
 
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
-        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length()) return new ArrayList<>();
+        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
+            return new ArrayList<>();
 
         String word = getWordBeforeCursor(fullText, cursorPos);
 

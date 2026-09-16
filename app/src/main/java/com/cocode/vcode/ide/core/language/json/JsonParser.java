@@ -12,21 +12,21 @@ public class JsonParser {
 
         int p = 0;
         int currentParent = root;
-        
+
         int[] parentStack = new int[256];
         int depth = 0;
-        
+
         boolean expectColon = false;
         boolean lastWasComma = false;
 
         while (p < stream.length) {
             byte type = stream.types[p];
-            
+
             if (type == JsonTokenStream.TK_WHITESPACE || type == JsonTokenStream.TK_COMMENT) {
                 p++;
                 continue;
             }
-            
+
             int start = stream.tokenStart[p];
             int end = getTokenEnd(stream, start);
             p = Math.max(p + 1, end); // advance outer pointer with forward progress guarantee
@@ -50,10 +50,10 @@ public class JsonParser {
                         tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Trailing comma");
                     }
                     tree.nodeEnd[currentParent] = end;
-                    
+
                     if (depth > 0) currentParent = parentStack[--depth];
                     else currentParent = root;
-                    
+
                     if (currentParent != root && tree.nodeType[currentParent] == JsonSyntaxTree.N_KEY) {
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];
@@ -68,7 +68,7 @@ public class JsonParser {
                     checkMissingQuote(tree, start, end, currentParent, source);
                     String keyName = source.substring(start, end).trim();
                     int keyNode = tree.addNode(JsonSyntaxTree.N_KEY, start, -1, currentParent, keyName);
-                    
+
                     if (depth >= parentStack.length) {
                         int[] newStack = new int[parentStack.length * 2];
                         System.arraycopy(parentStack, 0, newStack, 0, parentStack.length);
@@ -90,9 +90,9 @@ public class JsonParser {
                         expectColon = false;
                         lastWasComma = false;
                         continue;
-                    } else if (type == JsonTokenStream.TK_STRING || type == JsonTokenStream.TK_NUMBER || 
-                               type == JsonTokenStream.TK_BRACE_OPEN || type == JsonTokenStream.TK_BRACKET_OPEN || 
-                               type == JsonTokenStream.TK_KEYWORD) {
+                    } else if (type == JsonTokenStream.TK_STRING || type == JsonTokenStream.TK_NUMBER ||
+                            type == JsonTokenStream.TK_BRACE_OPEN || type == JsonTokenStream.TK_BRACKET_OPEN ||
+                            type == JsonTokenStream.TK_KEYWORD) {
                         tree.addNode(JsonSyntaxTree.N_ERROR, start, start, currentParent, "Missing colon");
                         expectColon = false;
                         // DO NOT continue, process this token as value
@@ -102,7 +102,7 @@ public class JsonParser {
                         continue;
                     }
                 }
-                
+
                 if (type == JsonTokenStream.TK_STRING) {
                     checkMissingQuote(tree, start, end, currentParent, source);
                     tree.addNode(JsonSyntaxTree.N_VALUE_STRING, start, end, currentParent, source.substring(start, end).trim());
@@ -155,7 +155,7 @@ public class JsonParser {
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];
                         else currentParent = root;
-                        
+
                         if (currentParent != root && tree.nodeType[currentParent] == JsonSyntaxTree.N_KEY) {
                             tree.nodeEnd[currentParent] = end;
                             if (depth > 0) currentParent = parentStack[--depth];
@@ -170,7 +170,7 @@ public class JsonParser {
                     lastWasComma = true;
                     continue;
                 }
-                
+
                 if (type == JsonTokenStream.TK_STRING) {
                     checkMissingQuote(tree, start, end, currentParent, source);
                     tree.addNode(JsonSyntaxTree.N_VALUE_STRING, start, end, currentParent, source.substring(start, end).trim());
@@ -224,7 +224,7 @@ public class JsonParser {
             tree.nodeEnd[currentParent] = stream.length;
             currentParent = parentStack[--depth];
         }
-        
+
         tree.buildNodesByOffset();
         return tree;
     }

@@ -28,7 +28,8 @@ import java.util.List;
  */
 public final class JsRoleRecolorer {
 
-    private JsRoleRecolorer() {}
+    private JsRoleRecolorer() {
+    }
 
     /**
      * Build a flat SoA list of declaration byte ranges from
@@ -142,7 +143,7 @@ public final class JsRoleRecolorer {
         }
         if (lo >= n) return false;
         int start = ranges[lo * 2];
-        int end   = ranges[lo * 2 + 1];
+        int end = ranges[lo * 2 + 1];
         return start == offset;
     }
 
@@ -186,7 +187,7 @@ public final class JsRoleRecolorer {
             if (tokType == TokenStream.TK_IDENTIFIER) {
                 if (isDeclarationStart(declarationRanges, tokStart)) {
                     int visStart = Math.max(tokStart, startOffset);
-                    int visEnd   = Math.min(tokEnd,   endOffset);
+                    int visEnd = Math.min(tokEnd, endOffset);
                     if (visEnd > visStart) {
                         out.add(new ViewportHighlighter.ViewportSpan(
                                 visStart, visEnd, declarationColor));

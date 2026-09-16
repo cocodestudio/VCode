@@ -6,14 +6,13 @@ import android.os.Looper;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.language.base.ParseModeGate;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.io.File;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Background pipeline for parsing JavaScript/TypeScript files.
@@ -63,7 +62,7 @@ public class JsParsePipeline {
                 TokenStream tokens = JsLexer.tokenize(source, buffers.tokens);
                 JsSyntaxTree tree = null;
                 ScopeTree scopeTree;
-                
+
                 ParseResult cached = null;
                 if (file != null) {
                     cached = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getParseResult(file.getAbsolutePath());
@@ -102,7 +101,7 @@ public class JsParsePipeline {
 
                 scopeTree = ScopeTree.build(tree);
                 ParseResult result = new ParseResult(file, source, tokens, tree, scopeTree, mode);
-                
+
                 if (file != null) {
                     com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().updateParseResult(file.getAbsolutePath(), result);
                 }

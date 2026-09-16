@@ -21,9 +21,9 @@ import com.cocode.vcode.ide.ui.commitdetails.CommitDetailsActivity;
 import com.cocode.vcode.ide.ui.commitdetails.CommitDetailsViewModel;
 import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.io.File;
 

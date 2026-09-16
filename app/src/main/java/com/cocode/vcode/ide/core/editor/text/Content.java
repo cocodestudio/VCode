@@ -128,7 +128,6 @@ public final class Content {
     }
 
 
-
     private static char[] toCharArray(CharSequence s) {
         char[] arr = new char[s.length()];
         for (int i = 0; i < arr.length; i++) arr[i] = s.charAt(i);
@@ -232,7 +231,6 @@ public final class Content {
         }
         version.incrementAndGet();
     }
-
 
 
     /**
@@ -523,7 +521,6 @@ public final class Content {
     }
 
 
-
     /**
      * Releases a previously acquired read lock.
      */
@@ -628,7 +625,6 @@ public final class Content {
     }
 
 
-
     private void rebuildBit() {
         int n = lines.size();
         if (bit == null || bitCapacity < n + 1) {
@@ -649,7 +645,6 @@ public final class Content {
     private void notifyInsert(int line, int col, CharSequence text) {
         for (ContentChangeListener l : listeners) l.onInsert(line, col, text);
     }
-
 
 
     private void notifyDelete(int startLine, int startCol, int endLine, int endCol) {

@@ -272,7 +272,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
                 currentFocus.clearFocus();
             }
-            
+
             // Dismiss signature help if showing
             com.cocode.vcode.ide.views.CodeEditText activeEditor = getActiveCodeEditor();
             if (activeEditor != null) activeEditor.dismissSignatureHint();
@@ -803,7 +803,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         viewModel.syncAllOpenFilesToIndex();
         saveCurrentEditorState();
         viewModel.openFile(fileNode.getFile());
-        
+
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             showFindReplaceBar();
         }, 300);
@@ -869,7 +869,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     activeFile.setDirty(true);
                     viewModel.notifyFileDirtyStatusChanged();
                     viewModel.triggerAutoSave();
-                    
+
                     codeEditText.setText(formattedCode);
                     // Restore cursor to its pre-format position so Android's cursor-visibility
                     // logic scrolls back to the right place instead of jumping to the top.
@@ -957,7 +957,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
         File target = new File(path);
         int line = result.range != null ? result.range.start.line + 1 : 1;
-        
+
         if (!target.exists()) {
             Toast.makeText(this, R.string.vcode_lsp_no_definition_found, Toast.LENGTH_SHORT).show();
             return;

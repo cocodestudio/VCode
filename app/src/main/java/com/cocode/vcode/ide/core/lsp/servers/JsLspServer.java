@@ -6,7 +6,6 @@ import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -70,7 +69,6 @@ public final class JsLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
 
-
     // -------------------------------------------------------------------------
     // Diagnostics
     // -------------------------------------------------------------------------
@@ -85,14 +83,18 @@ public final class JsLspServer implements LspServer {
     // Signature Help
     // -------------------------------------------------------------------------
 
-    @Override
-    public void initialize(ProjectIndex index) {
-        ready = true;
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> suggestions) {
+        return LspCompletionConverter.convert(suggestions);
     }
 
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    @Override
+    public void initialize(ProjectIndex index) {
+        ready = true;
+    }
 
     @Override
     public void shutdown() {
@@ -120,10 +122,6 @@ public final class JsLspServer implements LspServer {
         if (suggestions == null) return Collections.emptyList();
 
         return convertCompletions(suggestions);
-    }
-
-    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> suggestions) {
-        return LspCompletionConverter.convert(suggestions);
     }
 
     @Override
@@ -174,22 +172,22 @@ public final class JsLspServer implements LspServer {
         if (word.isEmpty()) return null;
 
         com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree = com.cocode.vcode.ide.core.language.js.ScopeTree.build(tree);
-        
+
         int scopeId = scopeTree.findScopeAt(offset, tree);
         int[] resolved = scopeTree.lookupSymbol(word, scopeId);
-        
+
         if (resolved != null) {
             int declNodeId = resolved[1];
             int declType = tree.nodeType[declNodeId];
             int declNameOffset = -1;
-            
+
             if (declType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
                 declNameOffset = tree.nodeStart[declNodeId];
             } else {
                 for (int t = 0; t < tokens.types.length; t++) {
                     if (tokens.tokenStart[t] < tree.nodeStart[declNodeId]) continue;
                     if (tokens.tokenStart[t] >= tree.nodeEnd[declNodeId]) break;
-                    
+
                     if (tokens.types[t] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER) {
                         int tStart = tokens.tokenStart[t];
                         int tEnd = tStart + word.length();
@@ -200,7 +198,7 @@ public final class JsLspServer implements LspServer {
                     }
                 }
             }
-            
+
             if (declNameOffset != -1) {
                 LspPosition start = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declNameOffset);
                 LspPosition end = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declNameOffset + word.length());
@@ -248,18 +246,18 @@ public final class JsLspServer implements LspServer {
         // so findAllReferences never picks them up).
         int declNodeId = entry[1];
         int nameNodeId = -1;
-        
+
         // The declaration node itself (e.g., N_VAR_DECL) points to the keyword (const, let).
         // We scan the token stream forward to find the exact identifier.
         int declType = tree.nodeType[declNodeId];
-        
+
         if (declType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
             nameNodeId = tree.nodeStart[declNodeId]; // For N_PARAM, nodeStart is the identifier
         } else {
             for (int t = 0; t < tokens.types.length; t++) {
                 if (tokens.tokenStart[t] < tree.nodeStart[declNodeId]) continue;
                 if (tokens.tokenStart[t] >= tree.nodeEnd[declNodeId]) break;
-                
+
                 if (tokens.types[t] == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_IDENTIFIER) {
                     int tStart = tokens.tokenStart[t];
                     int tEnd = tStart + word.length();
@@ -270,7 +268,7 @@ public final class JsLspServer implements LspServer {
                 }
             }
         }
-        
+
         if (nameNodeId != -1) {
             int declCharOffset = nameNodeId;
             LspPosition declP = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, declCharOffset);
@@ -284,7 +282,7 @@ public final class JsLspServer implements LspServer {
             LspPosition endP = com.cocode.vcode.ide.core.lsp.SymbolExtractor.offsetToPosition(doc.text, charOffset + word.length());
             result.add(new LspLocation(doc.uri, new LspRange(p, endP)));
         }
-        
+
         // Deduplicate overlapping offsets by line and character to avoid duplicate replacement locations
         java.util.Set<String> seen = new java.util.HashSet<>();
         List<LspLocation> uniqueResult = new ArrayList<>();
@@ -303,7 +301,7 @@ public final class JsLspServer implements LspServer {
         String trimmed = word.trim();
         ProjectIndex projectIndex = ProjectIndex.getInstance();
         List<LspLocation> defs = projectIndex.findDefinitions(trimmed);
-        
+
         final int MAX_REFS = 100;
         for (String uri : projectIndex.getAllUris()) {
             if (result.size() >= MAX_REFS) break;

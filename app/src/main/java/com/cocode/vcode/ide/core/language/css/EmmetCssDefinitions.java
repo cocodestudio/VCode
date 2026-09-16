@@ -13,13 +13,12 @@ import java.util.Map;
  * Loaded lazily from assets/completions/emmet_definitions.json on first access.
  */
 public class EmmetCssDefinitions {
-    private static final Object lock = new Object();
-    private static volatile boolean loaded = false;
-
     // CSS Named Abbreviations
     public static final Map<String, String> CSS_ABBREVS = new HashMap<>();
     // CSS numeric property map
     public static final Map<String, String> CSS_PROP_MAP = new HashMap<>();
+    private static final Object lock = new Object();
+    private static volatile boolean loaded = false;
 
     static {
         ensureLoaded();

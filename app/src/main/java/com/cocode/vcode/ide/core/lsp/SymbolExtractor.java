@@ -1,10 +1,6 @@
 package com.cocode.vcode.ide.core.lsp;
 
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
-import com.cocode.vcode.ide.core.language.js.JsLexer;
-import com.cocode.vcode.ide.core.language.js.JsParser;
-import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
-
 import com.cocode.vcode.ide.core.language.css.CssLexer;
 import com.cocode.vcode.ide.core.language.css.CssParser;
 import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
@@ -13,6 +9,9 @@ import com.cocode.vcode.ide.core.language.html.HtmlLexer;
 import com.cocode.vcode.ide.core.language.html.HtmlParser;
 import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
 import com.cocode.vcode.ide.core.language.html.HtmlTokenStream;
+import com.cocode.vcode.ide.core.language.js.JsLexer;
+import com.cocode.vcode.ide.core.language.js.JsParser;
+import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
 import com.cocode.vcode.ide.core.language.js.ParseResult;
 
 import java.util.ArrayList;
@@ -115,7 +114,7 @@ public final class SymbolExtractor {
                     kind = SymbolEntry.KIND_VARIABLE;
                 }
             }
-            
+
             if (kind != -1) {
                 // Find exact offset of the identifier
                 int nameStart = tree.nodeStart[i];

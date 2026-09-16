@@ -23,10 +23,6 @@ import com.cocode.vcode.ide.utils.UiUtils;
  */
 public class ExtractTagsBottomSheet extends BaseBottomSheetDialogFragment {
 
-    public interface ExtractListener {
-        void onExtract(String targetFilename, TagExtractor.Type type);
-    }
-
     private BottomSheetRenameBinding binding;
     private ExtractListener listener;
     private TagExtractor.Type extractType;
@@ -118,5 +114,9 @@ public class ExtractTagsBottomSheet extends BaseBottomSheetDialogFragment {
             }
             dismiss();
         });
+    }
+
+    public interface ExtractListener {
+        void onExtract(String targetFilename, TagExtractor.Type type);
     }
 }

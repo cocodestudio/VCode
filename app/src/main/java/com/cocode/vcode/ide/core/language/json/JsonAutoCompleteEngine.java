@@ -5,9 +5,8 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.FastTrie;
 import com.cocode.vcode.ide.core.completion.staticdata.JsonStaticCompletionDispatcher;
-import com.cocode.vcode.ide.core.model.CompletionItem;
-
 import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
+import com.cocode.vcode.ide.core.model.CompletionItem;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -40,6 +39,8 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
 
     // Schema-aware key completions for known JSON files
     private static final Map<String, List<CompletionItem>> SCHEMA_KEYS = new HashMap<>();
+    private static final Object lock = new Object();
+    private static volatile boolean schemasLoaded = false;
 
     static {
         VALUE_ITEMS = new ArrayList<>();
@@ -58,8 +59,18 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
 
     }
 
-    private static final Object lock = new Object();
-    private static volatile boolean schemasLoaded = false;
+    private final List<CompletionItem> snippetItems = new ArrayList<>();
+    private final List<CompletionItem> cachedDocKeys = new ArrayList<>();
+    private final FastTrie docKeysTrie = new FastTrie();
+    /**
+     * Cache for keys extracted from the document itself.
+     */
+    private int lastTextHash = 0;
+    private File currentFile;
+    public JsonAutoCompleteEngine(Context context) {
+        super(context);
+        loadSnippets();
+    }
 
     private static void ensureSchemasLoaded() {
         if (schemasLoaded) return;
@@ -93,20 +104,6 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
-    private final List<CompletionItem> snippetItems = new ArrayList<>();
-    private final List<CompletionItem> cachedDocKeys = new ArrayList<>();
-    private final FastTrie docKeysTrie = new FastTrie();
-    /**
-     * Cache for keys extracted from the document itself.
-     */
-    private int lastTextHash = 0;
-    private File currentFile;
-
-    public JsonAutoCompleteEngine(Context context) {
-        super(context);
-        loadSnippets();
-    }
-
     public void setCurrentFile(File file) {
         this.currentFile = file;
     }
@@ -120,6 +117,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Snippet loading
+
     /**
      * Reads complex dictionary keys and developer-defined boilerplate schemas out of the JSON asset.
      */
@@ -148,6 +146,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Document key scanning via AST
+
     /**
      * Scans the full JSON document for object keys using JsonSyntaxTree and caches them.
      * Only re-scans when the document content has changed.
@@ -185,7 +184,8 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
     // Main entry point
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
-        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length()) return new ArrayList<>();
+        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
+            return new ArrayList<>();
 
         if (isInsideComment(fullText, cursorPos)) {
             return new ArrayList<>();
@@ -355,19 +355,23 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         if ("tsconfig.json".equals(fileName)) {
             if ("target".equals(keyName)) {
                 String[] targets = {"\"ES2022\"", "\"ES2021\"", "\"ES2020\"", "\"ES2019\"", "\"ES2018\"", "\"ES2015\"", "\"ES6\"", "\"ESNext\""};
-                for (String t : targets) list.add(new CompletionItem(t, t, "ECMAScript target", CompletionItem.Type.VALUE, 0));
+                for (String t : targets)
+                    list.add(new CompletionItem(t, t, "ECMAScript target", CompletionItem.Type.VALUE, 0));
                 return list;
             } else if ("module".equals(keyName)) {
                 String[] mods = {"\"ESNext\"", "\"NodeNext\"", "\"Node16\"", "\"CommonJS\"", "\"AMD\"", "\"System\"", "\"UMD\""};
-                for (String m : mods) list.add(new CompletionItem(m, m, "Module system", CompletionItem.Type.VALUE, 0));
+                for (String m : mods)
+                    list.add(new CompletionItem(m, m, "Module system", CompletionItem.Type.VALUE, 0));
                 return list;
             } else if ("moduleResolution".equals(keyName)) {
                 String[] res = {"\"bundler\"", "\"node\"", "\"node16\"", "\"nodenext\"", "\"classic\""};
-                for (String r : res) list.add(new CompletionItem(r, r, "Module resolution", CompletionItem.Type.VALUE, 0));
+                for (String r : res)
+                    list.add(new CompletionItem(r, r, "Module resolution", CompletionItem.Type.VALUE, 0));
                 return list;
             } else if ("jsx".equals(keyName)) {
                 String[] jsx = {"\"react-jsx\"", "\"react-jsxdev\"", "\"react\"", "\"preserve\"", "\"react-native\""};
-                for (String j : jsx) list.add(new CompletionItem(j, j, "JSX mode", CompletionItem.Type.VALUE, 0));
+                for (String j : jsx)
+                    list.add(new CompletionItem(j, j, "JSX mode", CompletionItem.Type.VALUE, 0));
                 return list;
             } else if ("strict".equals(keyName) || "esModuleInterop".equals(keyName) || "skipLibCheck".equals(keyName)
                     || "declaration".equals(keyName) || "sourceMap".equals(keyName) || "resolveJsonModule".equals(keyName)
@@ -382,11 +386,13 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         if ("manifest.json".equals(fileName)) {
             if ("display".equals(keyName)) {
                 String[] modes = {"\"standalone\"", "\"fullscreen\"", "\"minimal-ui\"", "\"browser\""};
-                for (String m : modes) list.add(new CompletionItem(m, m, "Display mode", CompletionItem.Type.VALUE, 0));
+                for (String m : modes)
+                    list.add(new CompletionItem(m, m, "Display mode", CompletionItem.Type.VALUE, 0));
                 return list;
             } else if ("orientation".equals(keyName)) {
                 String[] orients = {"\"portrait\"", "\"landscape\"", "\"any\"", "\"natural\""};
-                for (String o : orients) list.add(new CompletionItem(o, o, "Orientation", CompletionItem.Type.VALUE, 0));
+                for (String o : orients)
+                    list.add(new CompletionItem(o, o, "Orientation", CompletionItem.Type.VALUE, 0));
                 return list;
             }
         }

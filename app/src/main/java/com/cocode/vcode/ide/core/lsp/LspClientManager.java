@@ -2,9 +2,8 @@ package com.cocode.vcode.ide.core.lsp;
 
 import android.content.Context;
 
-import com.cocode.vcode.ide.utils.ExecutorProvider;
-
 import com.cocode.vcode.ide.core.model.Problem;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.util.Collections;
 import java.util.List;

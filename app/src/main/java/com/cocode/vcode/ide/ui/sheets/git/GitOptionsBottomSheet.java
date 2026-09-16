@@ -14,8 +14,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
+import com.cocode.vcode.ide.utils.FontManager;
 
 import java.util.ArrayList;
 import java.util.List;

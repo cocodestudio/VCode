@@ -3,7 +3,11 @@ package com.cocode.vcode.ide.core.lsp.servers;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.css.CssLexer;
 import com.cocode.vcode.ide.core.language.css.CssLinter;
+import com.cocode.vcode.ide.core.language.css.CssParser;
+import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
+import com.cocode.vcode.ide.core.language.css.CssTokenStream;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -15,11 +19,6 @@ import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
-
-import com.cocode.vcode.ide.core.language.css.CssLexer;
-import com.cocode.vcode.ide.core.language.css.CssParser;
-import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
-import com.cocode.vcode.ide.core.language.css.CssTokenStream;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -61,13 +60,73 @@ public final class CssLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
 
-
     public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
         return LspCompletionConverter.convert(legacy);
     }
 
     // -------------------------------------------------------------------------
     // Completions
+    // -------------------------------------------------------------------------
+
+    private static String extractSelectorAtOffset(String text, int offset) {
+        if (text == null || offset < 0 || offset > text.length()) return null;
+        int start = offset;
+        while (start > 0) {
+            char c = text.charAt(start - 1);
+            if (c == '.' || c == '#') {
+                start--;
+                break;
+            } else if (c == '-' || c == '_' || Character.isLetterOrDigit(c)) {
+                start--;
+            } else {
+                break;
+            }
+        }
+        if (start >= text.length() || (text.charAt(start) != '.' && text.charAt(start) != '#')) {
+            return null;
+        }
+        int end = start + 1;
+        while (end < text.length()) {
+            char c = text.charAt(end);
+            if (c == '-' || c == '_' || Character.isLetterOrDigit(c)) {
+                end++;
+            } else {
+                break;
+            }
+        }
+        if (end > start + 1) {
+            return text.substring(start, end);
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Diagnostics
+    // -------------------------------------------------------------------------
+
+    private static String extractQuotedString(String str) {
+        if (str == null) return null;
+        int firstQuote = -1;
+        char quoteChar = 0;
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == '"' || c == '\'') {
+                firstQuote = i;
+                quoteChar = c;
+                break;
+            }
+        }
+        if (firstQuote != -1) {
+            int secondQuote = str.indexOf(quoteChar, firstQuote + 1);
+            if (secondQuote != -1) {
+                return str.substring(firstQuote + 1, secondQuote);
+            }
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Go to Definition
     // -------------------------------------------------------------------------
 
     @Override
@@ -77,7 +136,7 @@ public final class CssLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Diagnostics
+    // Find References
     // -------------------------------------------------------------------------
 
     @Override
@@ -86,7 +145,7 @@ public final class CssLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Go to Definition
+    // Signature Help — not applicable for CSS
     // -------------------------------------------------------------------------
 
     @Override
@@ -94,18 +153,10 @@ public final class CssLspServer implements LspServer {
         return ready;
     }
 
-    // -------------------------------------------------------------------------
-    // Find References
-    // -------------------------------------------------------------------------
-
     @Override
     public String getLanguageId() {
         return "css";
     }
-
-    // -------------------------------------------------------------------------
-    // Signature Help — not applicable for CSS
-    // -------------------------------------------------------------------------
 
     @Override
     public List<LspCompletionItem> completion(LspDocument doc, LspPosition pos) {
@@ -128,7 +179,7 @@ public final class CssLspServer implements LspServer {
         try {
             File file = new File(doc.uri);
             List<Problem> problems = CssLinter.analyze(file, doc.text);
-            
+
             // Filter out invalid lines
             List<Problem> filtered = new ArrayList<>();
             if (problems != null) {
@@ -248,58 +299,5 @@ public final class CssLspServer implements LspServer {
     @Override
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
         return java.util.Collections.emptyList();
-    }
-
-    private static String extractSelectorAtOffset(String text, int offset) {
-        if (text == null || offset < 0 || offset > text.length()) return null;
-        int start = offset;
-        while (start > 0) {
-            char c = text.charAt(start - 1);
-            if (c == '.' || c == '#') {
-                start--;
-                break;
-            } else if (c == '-' || c == '_' || Character.isLetterOrDigit(c)) {
-                start--;
-            } else {
-                break;
-            }
-        }
-        if (start >= text.length() || (text.charAt(start) != '.' && text.charAt(start) != '#')) {
-            return null;
-        }
-        int end = start + 1;
-        while (end < text.length()) {
-            char c = text.charAt(end);
-            if (c == '-' || c == '_' || Character.isLetterOrDigit(c)) {
-                end++;
-            } else {
-                break;
-            }
-        }
-        if (end > start + 1) {
-            return text.substring(start, end);
-        }
-        return null;
-    }
-
-    private static String extractQuotedString(String str) {
-        if (str == null) return null;
-        int firstQuote = -1;
-        char quoteChar = 0;
-        for (int i = 0; i < str.length(); i++) {
-            char c = str.charAt(i);
-            if (c == '"' || c == '\'') {
-                firstQuote = i;
-                quoteChar = c;
-                break;
-            }
-        }
-        if (firstQuote != -1) {
-            int secondQuote = str.indexOf(quoteChar, firstQuote + 1);
-            if (secondQuote != -1) {
-                return str.substring(firstQuote + 1, secondQuote);
-            }
-        }
-        return null;
     }
 }

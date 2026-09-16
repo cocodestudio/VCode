@@ -19,8 +19,8 @@ import com.cocode.vcode.ide.ui.commitdetails.CommitDetailsActivity;
 import com.cocode.vcode.ide.ui.commitdetails.CommitDetailsViewModel;
 import com.cocode.vcode.ide.ui.dialogs.HardResetConfirmDialog;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
-import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
+import com.cocode.vcode.ide.utils.FontManager;
 
 /**
  * ResetConfirmBottomSheet allows users to perform Git resets to a specific commit.

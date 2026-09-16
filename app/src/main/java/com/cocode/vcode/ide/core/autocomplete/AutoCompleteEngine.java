@@ -38,17 +38,58 @@ public abstract class AutoCompleteEngine {
         this.context = context != null ? context.getApplicationContext() : null;
     }
 
+    private static boolean isHtmlTagClose(String text, int gtPos) {
+        if (gtPos <= 0 || gtPos >= text.length()) return false;
+        char prev = text.charAt(gtPos - 1);
+        if (prev == ']' || prev == '}' || prev == ')' || prev == '*' || prev == '+' || prev == '^' || prev == '>') {
+            return false;
+        }
+        int i = gtPos - 1;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i < 0) return false;
+
+        if (text.charAt(i) == '/') i--;
+        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
+        if (i < 0) return false;
+
+        while (i >= 0) {
+            char ch = text.charAt(i);
+            if (ch == '>') {
+                return false;
+            }
+            if (ch == '<') {
+                return true;
+            }
+            if (ch == '"' || ch == '\'') {
+                char quote = ch;
+                i--;
+                while (i >= 0 && text.charAt(i) != quote) {
+                    if (text.charAt(i) == '\n') return false;
+                    i--;
+                }
+                if (i < 0) return false;
+                i--;
+                continue;
+            }
+            if (ch == '\n') {
+                return false;
+            }
+            i--;
+        }
+        return false;
+    }
+
     public void setCurrentFile(File file) {
         this.currentFile = file;
     }
+
+    // Text extraction helpers
 
     /**
      * Scans the editor text at the specified cursor pointer to compute valid choices.
      * Implemented individually by language-specific engines.
      */
     public abstract List<CompletionItem> getSuggestions(String fullText, int cursorPos);
-
-    // Text extraction helpers
 
     /**
      * Traces backward from the current cursor location to extract the current word fragment being typed.
@@ -142,47 +183,6 @@ public abstract class AutoCompleteEngine {
         return text.substring(start + 1, pos);
     }
 
-    private static boolean isHtmlTagClose(String text, int gtPos) {
-        if (gtPos <= 0 || gtPos >= text.length()) return false;
-        char prev = text.charAt(gtPos - 1);
-        if (prev == ']' || prev == '}' || prev == ')' || prev == '*' || prev == '+' || prev == '^' || prev == '>') {
-            return false;
-        }
-        int i = gtPos - 1;
-        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
-        if (i < 0) return false;
-
-        if (text.charAt(i) == '/') i--;
-        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
-        if (i < 0) return false;
-
-        while (i >= 0) {
-            char ch = text.charAt(i);
-            if (ch == '>') {
-                return false;
-            }
-            if (ch == '<') {
-                return true;
-            }
-            if (ch == '"' || ch == '\'') {
-                char quote = ch;
-                i--;
-                while (i >= 0 && text.charAt(i) != quote) {
-                    if (text.charAt(i) == '\n') return false;
-                    i--;
-                }
-                if (i < 0) return false;
-                i--;
-                continue;
-            }
-            if (ch == '\n') {
-                return false;
-            }
-            i--;
-        }
-        return false;
-    }
-
     /**
      * Isolates the current text fragment running from the last newline up to the current pointer position.
      */
@@ -238,8 +238,10 @@ public abstract class AutoCompleteEngine {
             }
 
             if (!escaped) {
-                if (c == '"' && !inSingle && (!inBacktick || templateBraceDepth > 0)) inDouble = !inDouble;
-                else if (c == '\'' && !inDouble && (!inBacktick || templateBraceDepth > 0)) inSingle = !inSingle;
+                if (c == '"' && !inSingle && (!inBacktick || templateBraceDepth > 0))
+                    inDouble = !inDouble;
+                else if (c == '\'' && !inDouble && (!inBacktick || templateBraceDepth > 0))
+                    inSingle = !inSingle;
                 else if (c == '`' && !inDouble && !inSingle) {
                     if (!inBacktick) {
                         inBacktick = true;
@@ -457,7 +459,8 @@ public abstract class AutoCompleteEngine {
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
                 return sb.toString();
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
         // JVM Unit test fallback: read directly from assets directory on disk
         java.io.File file = new java.io.File("app/src/main/assets/" + assetPath);
@@ -471,7 +474,8 @@ public abstract class AutoCompleteEngine {
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
                 return sb.toString();
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
         return "[]";
     }

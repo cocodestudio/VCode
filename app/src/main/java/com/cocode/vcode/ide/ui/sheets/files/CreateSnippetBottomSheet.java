@@ -15,9 +15,9 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.data.model.SnippetItem;
 import com.cocode.vcode.ide.databinding.BottomSheetCreateSnippetBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * CreateSnippetBottomSheet provides a form for creating or editing reusable code snippets.

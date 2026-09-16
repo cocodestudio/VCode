@@ -6,9 +6,9 @@ import android.os.Looper;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
+import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import com.cocode.vcode.ide.views.CodeEditText;
 
-import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -43,25 +43,6 @@ public final class LspEditorBridge {
 
     private static final long DIAGNOSTIC_DEBOUNCE_MS = 300L;
     private static final long COMPLETION_DEBOUNCE_MS = 100L;
-
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    /**
-     * Monotonically increasing document version counter — invalidates stale responses.
-     */
-    private final AtomicInteger docVersion = new AtomicInteger(0);
-
-    private CodeEditText editor;
-    private File currentFile;
-    private FileType fileType;
-
-    /**
-     * Whether the bridge is actively connected to an editor instance.
-     */
-    private boolean attached = false;
-    private boolean diagnosticsEnabled = true;
-    private IEditorCallback editorCallback;
-    private final Runnable diagnosticRunnable = this::performDiagnostics;
     /**
      * Tracks whether the one-time incremental project index scan has been started
      * for the current project session. Reset to {@code false} by {@link #reset()}
@@ -69,7 +50,20 @@ public final class LspEditorBridge {
      * a new full index scan on every tab switch, which would wipe live in-memory data.
      */
     private static final java.util.concurrent.atomic.AtomicBoolean hasIndexedProject = new java.util.concurrent.atomic.AtomicBoolean(false);
-
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    /**
+     * Monotonically increasing document version counter — invalidates stale responses.
+     */
+    private final AtomicInteger docVersion = new AtomicInteger(0);
+    private CodeEditText editor;
+    private File currentFile;
+    private FileType fileType;
+    /**
+     * Whether the bridge is actively connected to an editor instance.
+     */
+    private boolean attached = false;
+    private boolean diagnosticsEnabled = true;
+    private IEditorCallback editorCallback;    private final Runnable diagnosticRunnable = this::performDiagnostics;
     /**
      * True from the moment {@link #setFile(File)} switches {@code currentFile} until
      * {@link #textLoadListener} reports the load complete. {@link CodeEditText#setText}
@@ -83,8 +77,13 @@ public final class LspEditorBridge {
      * flag when the load actually completes and triggers the deferred diagnostic pass.
      */
     private boolean contentSyncPending = false;
-
     /**
+     * True when the current language has a registered LSP server.
+     * When true, the legacy autocomplete engine in {@link CodeEditText} is suppressed
+     * and all completions flow exclusively through the LSP pipeline.
+     */
+    private boolean hasLspServer = false;
+    private final Runnable completionRunnable = this::performCompletion;    /**
      * Fires when {@link CodeEditText#setText} finishes loading new content into the editor.
      * Used to detect the moment a file switch's real content has landed (see
      * {@link #contentSyncPending}) and to run the diagnostic pass that {@link #setFile(File)}
@@ -101,57 +100,12 @@ public final class LspEditorBridge {
     // -------------------------------------------------------------------------
     // Debounce runnables — cancelled and rescheduled on every keystroke
     // -------------------------------------------------------------------------
-    /**
-     * True when the current language has a registered LSP server.
-     * When true, the legacy autocomplete engine in {@link CodeEditText} is suppressed
-     * and all completions flow exclusively through the LSP pipeline.
-     */
-    private boolean hasLspServer = false;
-    private final Runnable completionRunnable = this::performCompletion;
     private final Runnable signatureHelpRunnable = this::performSignatureHelp;
-    
     private final Runnable cursorChangeListener = () -> {
         if (!attached || editor == null) return;
         mainHandler.removeCallbacks(signatureHelpRunnable);
         mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
     };
-
-    public void setEditorCallback(IEditorCallback callback) {
-        this.editorCallback = callback;
-    }
-
-    public boolean isLspActive() {
-        return hasLspServer;
-    }
-
-    // -------------------------------------------------------------------------
-    // ContentChangeListener wired to the editor
-    // -------------------------------------------------------------------------
-
-    private final CodeEditText.OnContentChangeListener contentListener = () -> {
-        if (!attached || editor == null) return;
-        docVersion.incrementAndGet();
-        // Reschedule debounced diagnostics
-        mainHandler.removeCallbacks(diagnosticRunnable);
-        mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
-        // Reschedule debounced completion
-        mainHandler.removeCallbacks(completionRunnable);
-        if (!editor.isInsertingCompletion()) {
-            mainHandler.postDelayed(completionRunnable, COMPLETION_DEBOUNCE_MS);
-        } else {
-            editor.dismissAutoCompletePopup();
-        }
-        
-        mainHandler.removeCallbacks(signatureHelpRunnable);
-        mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
-        
-        // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
-        updateProjectIndex();
-    };
-
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
 
     /**
      * Maps an LSP completion kind integer to the editor's {@link CompletionItem.Type} enum.
@@ -179,6 +133,368 @@ public final class LspEditorBridge {
             default:
                 return CompletionItem.Type.BUILTIN;
         }
+    }
+
+    /**
+     * Called only when the entire project session is closed (different from tab close).
+     */
+    public static void resetProjectSession() {
+        hasIndexedProject.set(false);
+    }
+
+    private static boolean isInsideCallArguments(String text, int cursor) {
+        if (cursor <= 0 || cursor > text.length()) return false;
+        int i = cursor - 1;
+        int parenDepth = 0;
+        int braceDepth = 0;
+        boolean inString = false;
+        char stringChar = 0;
+        int maxDepth = 2000;
+        int scanned = 0;
+
+        while (i >= 0 && scanned < maxDepth) {
+            scanned++;
+            char c = text.charAt(i);
+
+            if (inString) {
+                if (c == stringChar) {
+                    int backslashes = 0;
+                    int k = i - 1;
+                    while (k >= 0 && text.charAt(k) == '\\') {
+                        backslashes++;
+                        k--;
+                    }
+                    if (backslashes % 2 == 0) {
+                        inString = false;
+                    }
+                }
+            } else {
+                if (c == '"' || c == '\'' || c == '`') {
+                    inString = true;
+                    stringChar = c;
+                } else if (c == ')') {
+                    parenDepth++;
+                } else if (c == '(') {
+                    if (parenDepth == 0) {
+                        return true;
+                    }
+                    parenDepth--;
+                } else if (c == '}') {
+                    braceDepth++;
+                } else if (c == '{') {
+                    if (braceDepth > 0) {
+                        braceDepth--;
+                    } else if (parenDepth == 0) {
+                        return false;
+                    }
+                } else if (c == ';') {
+                    if (parenDepth == 0) {
+                        return false;
+                    }
+                }
+            }
+            i--;
+        }
+        return false;
+    }
+
+    private static boolean isInsideFunctionDefinition(String text, int cursor) {
+        if (cursor <= 0 || cursor > text.length()) return false;
+
+        // Check for single-arg arrow function (no parens) e.g. `const fn = x =>`
+        int forward = cursor;
+        while (forward < text.length() && forward - cursor < 500) {
+            char c = text.charAt(forward);
+            if (Character.isWhitespace(c) || Character.isLetterOrDigit(c) || c == '_' || c == '$') {
+                forward++;
+            } else if (c == '=' && forward + 1 < text.length() && text.charAt(forward + 1) == '>') {
+                return true;
+            } else {
+                break;
+            }
+        }
+
+        int i = cursor - 1;
+        int parenDepth = 0;
+        int braceDepth = 0;
+        boolean inString = false;
+        char stringChar = 0;
+        int maxDepth = 2000;
+        int scanned = 0;
+
+        while (i >= 0 && scanned < maxDepth) {
+            scanned++;
+            char c = text.charAt(i);
+            if (inString) {
+                if (c == stringChar) {
+                    int backslashes = 0;
+                    int k = i - 1;
+                    while (k >= 0 && text.charAt(k) == '\\') {
+                        backslashes++;
+                        k--;
+                    }
+                    if (backslashes % 2 == 0) inString = false;
+                }
+            } else {
+                if (c == '"' || c == '\'' || c == '`') {
+                    inString = true;
+                    stringChar = c;
+                } else if (c == ')') {
+                    parenDepth++;
+                } else if (c == '(') {
+                    if (parenDepth == 0) {
+                        // Found the opening parenthesis. Now check what precedes it.
+                        int j = i - 1;
+                        while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
+                        if (j < 0) return false;
+
+                        // Check if it's an arrow function: `(...) =>`
+                        int fwd = cursor;
+                        while (fwd < text.length() && fwd - cursor < 500) {
+                            char fc = text.charAt(fwd);
+                            if (Character.isWhitespace(fc) || Character.isLetterOrDigit(fc) ||
+                                    fc == ',' || fc == ')' || fc == ':' || fc == '<' || fc == '>' || fc == '[' || fc == ']' || fc == '_' || fc == '$') {
+                                if (fc == ')') {
+                                    int next = fwd + 1;
+                                    while (next < text.length() && Character.isWhitespace(text.charAt(next)))
+                                        next++;
+                                    if (next + 1 < text.length() && text.charAt(next) == '=' && text.charAt(next + 1) == '>') {
+                                        return true;
+                                    }
+                                    break;
+                                }
+                                fwd++;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        // Check for standard function: `function foo(` or `class A { constructor(` or `foo(` in a class
+                        int endWord = j + 1;
+                        while (j >= 0 && (Character.isLetterOrDigit(text.charAt(j)) || text.charAt(j) == '_' || text.charAt(j) == '$'))
+                            j--;
+                        int startWord = j + 1;
+                        if (startWord <= endWord) {
+                            String word = text.substring(startWord, endWord);
+                            while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
+
+                            if (word.equals("function") || word.equals("constructor") || word.equals("catch")) {
+                                return true;
+                            }
+
+                            // Check if preceded by "function" (e.g. `function foo(`)
+                            if (j >= 7) {
+                                int k = j;
+                                int endKeyword = k + 1;
+                                while (k >= 0 && (Character.isLetterOrDigit(text.charAt(k)) || text.charAt(k) == '_' || text.charAt(k) == '$'))
+                                    k--;
+                                int startKeyword = k + 1;
+                                if (startKeyword < endKeyword) {
+                                    String keyword = text.substring(startKeyword, endKeyword);
+                                    if (keyword.equals("function")) {
+                                        return true;
+                                    }
+                                }
+                            }
+
+                            // Check for class methods by finding the enclosing '{' and tracing back to 'class'
+                            int tempDepth = 0;
+                            int classBrace = -1;
+                            int scanIndex = startWord - 1;
+                            int braceLookDepth = 2000;
+                            while (scanIndex >= 0 && braceLookDepth-- > 0) {
+                                char sc = text.charAt(scanIndex);
+                                if (sc == '}') {
+                                    tempDepth++;
+                                } else if (sc == '{') {
+                                    if (tempDepth == 0) {
+                                        classBrace = scanIndex;
+                                        break;
+                                    }
+                                    tempDepth--;
+                                }
+                                scanIndex--;
+                            }
+
+                            if (classBrace != -1) {
+                                int k = classBrace - 1;
+                                int maxLook = 150;
+                                boolean foundClass = false;
+                                int braceSkipDepth = 0;
+                                while (k >= 0 && maxLook > 0) {
+                                    char sc = text.charAt(k);
+                                    if (sc == '}') {
+                                        braceSkipDepth++;
+                                    } else if (sc == '{') {
+                                        if (braceSkipDepth > 0) {
+                                            braceSkipDepth--;
+                                        } else {
+                                            break; // Hit an unmatched '{' — went too far
+                                        }
+                                    } else if (sc == ';' && braceSkipDepth == 0) {
+                                        break; // Statement boundary outside any brace pair
+                                    } else if (braceSkipDepth == 0 && k >= 4 &&
+                                            text.substring(k - 4, k + 1).equals("class") &&
+                                            (k == 4 || !Character.isLetterOrDigit(text.charAt(k - 5))) &&
+                                            (k == text.length() - 1 || !Character.isLetterOrDigit(text.charAt(k + 1)))) {
+                                        foundClass = true;
+                                        break;
+                                    }
+                                    k--;
+                                    // Only spend the lookback budget on chars OUTSIDE skipped brace
+                                    // pairs (method bodies). Otherwise a class with a couple of
+                                    // sibling methods before the current one burns through maxLook
+                                    // while skipping their bodies and never reaches the `class`
+                                    // keyword, incorrectly reporting foundClass = false.
+                                    if (braceSkipDepth == 0) maxLook--;
+                                }
+
+                                if (foundClass && j >= 0) {
+                                    // Extra guard: ensure the context looks like a class body, not an object literal.
+                                    // In a class body, the first non-whitespace after '{' should be a modifier, method name,
+                                    // or '#'. In an object literal, a property is always followed by ':' or '('.
+                                    // We verify: at no point between classBrace+1 and startWord does a bare ':' appear
+                                    // at depth 0 (outside of nested parens/braces/strings). If it does, it's object literal.
+                                    boolean looksLikeClassBody = true;
+                                    int checkDepth = 0;
+                                    boolean inStr = false;
+                                    char strCh = 0;
+                                    for (int ci = classBrace + 1; ci < startWord && ci < text.length(); ci++) {
+                                        char ch = text.charAt(ci);
+                                        if (inStr) {
+                                            if (ch == strCh) inStr = false;
+                                        } else if (ch == '"' || ch == '\'' || ch == '`') {
+                                            inStr = true;
+                                            strCh = ch;
+                                        } else if (ch == '(' || ch == '[' || ch == '{') {
+                                            checkDepth++;
+                                        } else if (ch == ')' || ch == ']' || ch == '}') {
+                                            checkDepth--;
+                                        } else if (ch == ':' && checkDepth == 0) {
+                                            // A bare ':' can be either:
+                                            //   - Object literal property separator: { key: value, ... }
+                                            //   - TypeScript type annotation: class { prop: Type; method() }
+                                            // Distinguish by checking if a ';' appears before the next unbalanced ','
+                                            // If yes: it's a TS type annotation — don't disqualify.
+                                            // If no: it's an object literal separator — disqualify.
+                                            boolean foundSemicolon = false;
+                                            int lookahead = ci + 1;
+                                            int laDepth = 0;
+                                            while (lookahead < startWord && lookahead < text.length()) {
+                                                char lc = text.charAt(lookahead);
+                                                if (lc == '(' || lc == '[' || lc == '{') laDepth++;
+                                                else if (lc == ')' || lc == ']' || lc == '}')
+                                                    laDepth--;
+                                                else if (lc == ';' && laDepth == 0) {
+                                                    foundSemicolon = true;
+                                                    break;
+                                                } else if (lc == ',' && laDepth == 0)
+                                                    break; // object literal separator
+                                                lookahead++;
+                                            }
+                                            if (!foundSemicolon) {
+                                                looksLikeClassBody = false;
+                                                break;
+                                            }
+                                            // else: it's a type annotation — continue scanning
+                                        }
+                                    }
+
+                                    if (!looksLikeClassBody) {
+                                        return false; // object literal, not a class body
+                                    }
+
+                                    char beforeName = text.charAt(j);
+                                    if (beforeName == '{' || beforeName == '}' || beforeName == ';') {
+                                        return true;
+                                    }
+
+                                    // Modifiers (static, async, get, set, etc.)
+                                    int m = j;
+                                    int endMod = m + 1;
+                                    while (m >= 0 && (Character.isLetterOrDigit(text.charAt(m)) || text.charAt(m) == '_' || text.charAt(m) == '$'))
+                                        m--;
+                                    int startMod = m + 1;
+                                    if (startMod < endMod) {
+                                        String mod = text.substring(startMod, endMod);
+                                        if (mod.equals("static") || mod.equals("async") || mod.equals("get") || mod.equals("set") ||
+                                                mod.equals("public") || mod.equals("private") || mod.equals("protected") || mod.equals("readonly")) {
+                                            return true;
+                                        }
+                                    }
+
+                                    // Fallback for methods preceded by comments e.g. /* ... */ method()
+                                    return beforeName == '/' || beforeName == '*';
+                                }
+                            }
+                        }
+                        return false; // Found a `(`, but doesn't look like a definition
+                    }
+                    parenDepth--;
+                } else if (c == '}') {
+                    braceDepth++;
+                } else if (c == '{') {
+                    if (braceDepth > 0) braceDepth--;
+                    else if (parenDepth == 0) return false;
+                } else if (c == ';') {
+                    if (parenDepth == 0) return false;
+                }
+            }
+            i--;
+        }
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // ContentChangeListener wired to the editor
+    // -------------------------------------------------------------------------
+
+    private static List<LspCompletionItem> filterForArgumentContext(List<LspCompletionItem> items) {
+        List<LspCompletionItem> filtered = new ArrayList<>();
+        for (LspCompletionItem item : items) {
+            int k = item.kind;
+            if (k == LspCompletionItem.KIND_FUNCTION
+                    || k == LspCompletionItem.KIND_VARIABLE
+                    || k == LspCompletionItem.KIND_VALUE
+                    || k == LspCompletionItem.KIND_TEXT
+                    || k == LspCompletionItem.KIND_PROPERTY
+                    || k == LspCompletionItem.KIND_FILE
+                    || k == LspCompletionItem.KIND_FOLDER) {
+                filtered.add(item);
+            }
+        }
+        return filtered;
+    }    private final CodeEditText.OnContentChangeListener contentListener = () -> {
+        if (!attached || editor == null) return;
+        docVersion.incrementAndGet();
+        // Reschedule debounced diagnostics
+        mainHandler.removeCallbacks(diagnosticRunnable);
+        mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
+        // Reschedule debounced completion
+        mainHandler.removeCallbacks(completionRunnable);
+        if (!editor.isInsertingCompletion()) {
+            mainHandler.postDelayed(completionRunnable, COMPLETION_DEBOUNCE_MS);
+        } else {
+            editor.dismissAutoCompletePopup();
+        }
+
+        mainHandler.removeCallbacks(signatureHelpRunnable);
+        mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
+
+        // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
+        updateProjectIndex();
+    };
+
+    // -------------------------------------------------------------------------
+    // Public API
+    // -------------------------------------------------------------------------
+
+    public void setEditorCallback(IEditorCallback callback) {
+        this.editorCallback = callback;
+    }
+
+    public boolean isLspActive() {
+        return hasLspServer;
     }
 
     /**
@@ -244,7 +560,7 @@ public final class LspEditorBridge {
         //    a disk read from the incremental scanner.
         if (file != null) {
             String uri = file.getAbsolutePath();
-            boolean incrementalWillRun = hasIndexedProject.get() == false; // about to be flipped below
+            boolean incrementalWillRun = !hasIndexedProject.get(); // about to be flipped below
             if (!incrementalWillRun && ProjectIndex.getInstance().getDocument(uri) == null) {
                 // Only schedule a single-file read when the incremental scan has ALREADY run.
                 // If it hasn't run yet, the upcoming indexProjectIncremental() will cover it.
@@ -288,7 +604,6 @@ public final class LspEditorBridge {
             }, 800L);
         }
     }
-
 
     public void clearContentSyncPending() {
         if (!attached || !contentSyncPending) return;
@@ -366,6 +681,10 @@ public final class LspEditorBridge {
         });
     }
 
+    // -------------------------------------------------------------------------
+    // Private — debounced operations
+    // -------------------------------------------------------------------------
+
     /**
      * Requests all locations of the symbol to be renamed.
      *
@@ -394,10 +713,6 @@ public final class LspEditorBridge {
             }
         });
     }
-
-    // -------------------------------------------------------------------------
-    // Private — debounced operations
-    // -------------------------------------------------------------------------
 
     /**
      * Requests signature help at the current caret position.
@@ -444,13 +759,6 @@ public final class LspEditorBridge {
         // across all tabs. Only resetProjectSession() should reset it.
     }
 
-    /**
-     * Called only when the entire project session is closed (different from tab close).
-     */
-    public static void resetProjectSession() {
-        hasIndexedProject.set(false);
-    }
-
     // -------------------------------------------------------------------------
     // Private — LSP → legacy CompletionItem conversion
     // -------------------------------------------------------------------------
@@ -484,7 +792,7 @@ public final class LspEditorBridge {
         }
 
         final int capturedVersion = doc.version;
-        
+
         if (editorCallback != null && currentFile != null) {
             editorCallback.reportDiagnosticLoading(currentFile);
         }
@@ -535,7 +843,7 @@ public final class LspEditorBridge {
             editor.dismissAutoCompletePopup();
             return;
         }
-        
+
         final boolean isInsideCallArgs = isInsideCallArguments(doc.text, flatCursor);
         final boolean isInsideFuncDef = isInsideFunctionDefinition(doc.text, flatCursor);
 
@@ -567,11 +875,11 @@ public final class LspEditorBridge {
             @Override
             public void onResult(List<LspCompletionItem> result) {
                 if (capturedVersion != docVersion.get() || !attached || editor == null) return;
-                
+
                 if (result != null && isInsideCallArgs) {
                     result = filterForArgumentContext(result);
                 }
-                
+
                 if (result != null && !result.isEmpty()) {
                     editor.showLspCompletions(convertToLegacy(result));
                 } else {
@@ -590,316 +898,6 @@ public final class LspEditorBridge {
         });
     }
 
-    private static boolean isInsideCallArguments(String text, int cursor) {
-        if (cursor <= 0 || cursor > text.length()) return false;
-        int i = cursor - 1;
-        int parenDepth = 0;
-        int braceDepth = 0;
-        boolean inString = false;
-        char stringChar = 0;
-        int maxDepth = 2000;
-        int scanned = 0;
-        
-        while (i >= 0 && scanned < maxDepth) {
-            scanned++;
-            char c = text.charAt(i);
-            
-            if (inString) {
-                if (c == stringChar) {
-                    int backslashes = 0;
-                    int k = i - 1;
-                    while (k >= 0 && text.charAt(k) == '\\') {
-                        backslashes++;
-                        k--;
-                    }
-                    if (backslashes % 2 == 0) {
-                        inString = false;
-                    }
-                }
-            } else {
-                if (c == '"' || c == '\'' || c == '`') {
-                    inString = true;
-                    stringChar = c;
-                } else if (c == ')') {
-                    parenDepth++;
-                } else if (c == '(') {
-                    if (parenDepth == 0) {
-                        return true;
-                    }
-                    parenDepth--;
-                } else if (c == '}') {
-                    braceDepth++;
-                } else if (c == '{') {
-                    if (braceDepth > 0) {
-                        braceDepth--;
-                    } else if (parenDepth == 0) {
-                        return false;
-                    }
-                } else if (c == ';') {
-                    if (parenDepth == 0) {
-                        return false;
-                    }
-                }
-            }
-            i--;
-        }
-        return false;
-    }
-
-    private static boolean isInsideFunctionDefinition(String text, int cursor) {
-        if (cursor <= 0 || cursor > text.length()) return false;
-        
-        // Check for single-arg arrow function (no parens) e.g. `const fn = x =>`
-        int forward = cursor;
-        while (forward < text.length() && forward - cursor < 500) {
-            char c = text.charAt(forward);
-            if (Character.isWhitespace(c) || Character.isLetterOrDigit(c) || c == '_' || c == '$') {
-                forward++;
-            } else if (c == '=' && forward + 1 < text.length() && text.charAt(forward + 1) == '>') {
-                return true;
-            } else {
-                break;
-            }
-        }
-
-        int i = cursor - 1;
-        int parenDepth = 0;
-        int braceDepth = 0;
-        boolean inString = false;
-        char stringChar = 0;
-        int maxDepth = 2000;
-        int scanned = 0;
-        
-        while (i >= 0 && scanned < maxDepth) {
-            scanned++;
-            char c = text.charAt(i);
-            if (inString) {
-                if (c == stringChar) {
-                    int backslashes = 0;
-                    int k = i - 1;
-                    while (k >= 0 && text.charAt(k) == '\\') { backslashes++; k--; }
-                    if (backslashes % 2 == 0) inString = false;
-                }
-            } else {
-                if (c == '"' || c == '\'' || c == '`') {
-                    inString = true;
-                    stringChar = c;
-                } else if (c == ')') {
-                    parenDepth++;
-                } else if (c == '(') {
-                    if (parenDepth == 0) {
-                        // Found the opening parenthesis. Now check what precedes it.
-                        int j = i - 1;
-                        while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
-                        if (j < 0) return false;
-                        
-                        // Check if it's an arrow function: `(...) =>`
-                        int fwd = cursor;
-                        while (fwd < text.length() && fwd - cursor < 500) {
-                            char fc = text.charAt(fwd);
-                            if (Character.isWhitespace(fc) || Character.isLetterOrDigit(fc) || 
-                                fc == ',' || fc == ')' || fc == ':' || fc == '<' || fc == '>' || fc == '[' || fc == ']' || fc == '_' || fc == '$') {
-                                if (fc == ')') {
-                                    int next = fwd + 1;
-                                    while (next < text.length() && Character.isWhitespace(text.charAt(next))) next++;
-                                    if (next + 1 < text.length() && text.charAt(next) == '=' && text.charAt(next + 1) == '>') {
-                                        return true;
-                                    }
-                                    break;
-                                }
-                                fwd++;
-                            } else {
-                                break;
-                            }
-                        }
-                        
-                        // Check for standard function: `function foo(` or `class A { constructor(` or `foo(` in a class
-                        int endWord = j + 1;
-                        while (j >= 0 && (Character.isLetterOrDigit(text.charAt(j)) || text.charAt(j) == '_' || text.charAt(j) == '$')) j--;
-                        int startWord = j + 1;
-                        if (startWord <= endWord) {
-                            String word = text.substring(startWord, endWord);
-                            while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
-                            
-                            if (word.equals("function") || word.equals("constructor") || word.equals("catch")) {
-                                return true;
-                            }
-                            
-                            // Check if preceded by "function" (e.g. `function foo(`)
-                            if (j >= 7) {
-                                int k = j;
-                                int endKeyword = k + 1;
-                                while (k >= 0 && (Character.isLetterOrDigit(text.charAt(k)) || text.charAt(k) == '_' || text.charAt(k) == '$')) k--;
-                                int startKeyword = k + 1;
-                                if (startKeyword < endKeyword) {
-                                    String keyword = text.substring(startKeyword, endKeyword);
-                                    if (keyword.equals("function")) {
-                                        return true;
-                                    }
-                                }
-                            }
-                            
-                            // Check for class methods by finding the enclosing '{' and tracing back to 'class'
-                            int tempDepth = 0;
-                            int classBrace = -1;
-                            int scanIndex = startWord - 1;
-                            int braceLookDepth = 2000;
-                            while (scanIndex >= 0 && braceLookDepth-- > 0) {
-                                char sc = text.charAt(scanIndex);
-                                if (sc == '}') {
-                                    tempDepth++;
-                                } else if (sc == '{') {
-                                    if (tempDepth == 0) {
-                                        classBrace = scanIndex;
-                                        break;
-                                    }
-                                    tempDepth--;
-                                }
-                                scanIndex--;
-                            }
-
-                            if (classBrace != -1) {
-                                int k = classBrace - 1;
-                                int maxLook = 150;
-                                boolean foundClass = false;
-                                int braceSkipDepth = 0;
-                                while (k >= 0 && maxLook > 0) {
-                                    char sc = text.charAt(k);
-                                    if (sc == '}') {
-                                        braceSkipDepth++;
-                                    } else if (sc == '{') {
-                                        if (braceSkipDepth > 0) {
-                                            braceSkipDepth--;
-                                        } else {
-                                            break; // Hit an unmatched '{' — went too far
-                                        }
-                                    } else if (sc == ';' && braceSkipDepth == 0) {
-                                        break; // Statement boundary outside any brace pair
-                                    } else if (braceSkipDepth == 0 && k >= 4 &&
-                                               text.substring(k - 4, k + 1).equals("class") &&
-                                               (k == 4 || !Character.isLetterOrDigit(text.charAt(k - 5))) &&
-                                               (k == text.length() - 1 || !Character.isLetterOrDigit(text.charAt(k + 1)))) {
-                                        foundClass = true;
-                                        break;
-                                    }
-                                    k--;
-                                    // Only spend the lookback budget on chars OUTSIDE skipped brace
-                                    // pairs (method bodies). Otherwise a class with a couple of
-                                    // sibling methods before the current one burns through maxLook
-                                    // while skipping their bodies and never reaches the `class`
-                                    // keyword, incorrectly reporting foundClass = false.
-                                    if (braceSkipDepth == 0) maxLook--;
-                                }
-                                
-                                if (foundClass && j >= 0) {
-                                    // Extra guard: ensure the context looks like a class body, not an object literal.
-                                    // In a class body, the first non-whitespace after '{' should be a modifier, method name,
-                                    // or '#'. In an object literal, a property is always followed by ':' or '('.
-                                    // We verify: at no point between classBrace+1 and startWord does a bare ':' appear
-                                    // at depth 0 (outside of nested parens/braces/strings). If it does, it's object literal.
-                                    boolean looksLikeClassBody = true;
-                                    int checkDepth = 0;
-                                    boolean inStr = false;
-                                    char strCh = 0;
-                                    for (int ci = classBrace + 1; ci < startWord && ci < text.length(); ci++) {
-                                        char ch = text.charAt(ci);
-                                        if (inStr) {
-                                            if (ch == strCh) inStr = false;
-                                        } else if (ch == '"' || ch == '\'' || ch == '`') {
-                                            inStr = true; strCh = ch;
-                                        } else if (ch == '(' || ch == '[' || ch == '{') {
-                                            checkDepth++;
-                                        } else if (ch == ')' || ch == ']' || ch == '}') {
-                                            checkDepth--;
-                                        } else if (ch == ':' && checkDepth == 0) {
-                                            // A bare ':' can be either:
-                                            //   - Object literal property separator: { key: value, ... }
-                                            //   - TypeScript type annotation: class { prop: Type; method() }
-                                            // Distinguish by checking if a ';' appears before the next unbalanced ','
-                                            // If yes: it's a TS type annotation — don't disqualify.
-                                            // If no: it's an object literal separator — disqualify.
-                                            boolean foundSemicolon = false;
-                                            int lookahead = ci + 1;
-                                            int laDepth = 0;
-                                            while (lookahead < startWord && lookahead < text.length()) {
-                                                char lc = text.charAt(lookahead);
-                                                if (lc == '(' || lc == '[' || lc == '{') laDepth++;
-                                                else if (lc == ')' || lc == ']' || lc == '}') laDepth--;
-                                                else if (lc == ';' && laDepth == 0) { foundSemicolon = true; break; }
-                                                else if (lc == ',' && laDepth == 0) break; // object literal separator
-                                                lookahead++;
-                                            }
-                                            if (!foundSemicolon) {
-                                                looksLikeClassBody = false;
-                                                break;
-                                            }
-                                            // else: it's a type annotation — continue scanning
-                                        }
-                                    }
-                                    
-                                    if (!looksLikeClassBody) {
-                                        return false; // object literal, not a class body
-                                    }
-                                    
-                                    char beforeName = text.charAt(j);
-                                    if (beforeName == '{' || beforeName == '}' || beforeName == ';') {
-                                        return true;
-                                    }
-                                    
-                                    // Modifiers (static, async, get, set, etc.)
-                                    int m = j;
-                                    int endMod = m + 1;
-                                    while (m >= 0 && (Character.isLetterOrDigit(text.charAt(m)) || text.charAt(m) == '_' || text.charAt(m) == '$')) m--;
-                                    int startMod = m + 1;
-                                    if (startMod < endMod) {
-                                        String mod = text.substring(startMod, endMod);
-                                        if (mod.equals("static") || mod.equals("async") || mod.equals("get") || mod.equals("set") || 
-                                            mod.equals("public") || mod.equals("private") || mod.equals("protected") || mod.equals("readonly")) {
-                                            return true;
-                                        }
-                                    }
-                                    
-                                    // Fallback for methods preceded by comments e.g. /* ... */ method()
-                                    if (beforeName == '/' || beforeName == '*') {
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                        return false; // Found a `(`, but doesn't look like a definition
-                    }
-                    parenDepth--;
-                } else if (c == '}') {
-                    braceDepth++;
-                } else if (c == '{') {
-                    if (braceDepth > 0) braceDepth--;
-                    else if (parenDepth == 0) return false;
-                } else if (c == ';') {
-                    if (parenDepth == 0) return false;
-                }
-            }
-            i--;
-        }
-        return false;
-    }
-
-    private static List<LspCompletionItem> filterForArgumentContext(List<LspCompletionItem> items) {
-        List<LspCompletionItem> filtered = new ArrayList<>();
-        for (LspCompletionItem item : items) {
-            int k = item.kind;
-            if (k == LspCompletionItem.KIND_FUNCTION
-                    || k == LspCompletionItem.KIND_VARIABLE
-                    || k == LspCompletionItem.KIND_VALUE
-                    || k == LspCompletionItem.KIND_TEXT
-                    || k == LspCompletionItem.KIND_PROPERTY
-                    || k == LspCompletionItem.KIND_FILE
-                    || k == LspCompletionItem.KIND_FOLDER) {
-                filtered.add(item);
-            }
-        }
-        return filtered;
-    }
-
     private void performSignatureHelp() {
         if (!attached || editor == null || !hasLspServer) return;
         LspDocument doc = buildSnapshot();
@@ -907,7 +905,7 @@ public final class LspEditorBridge {
 
         LspPosition pos = cursorPosition();
         final int capturedVersion = docVersion.get();
-        
+
         LspClientManager.getInstance().requestSignatureHelp(doc, pos, new LspCallback<LspSignatureHelp>() {
             @Override
             public void onResult(LspSignatureHelp result) {
@@ -927,10 +925,6 @@ public final class LspEditorBridge {
             }
         });
     }
-
-    // -------------------------------------------------------------------------
-    // Private — helpers
-    // -------------------------------------------------------------------------
 
     /**
      * Converts a list of {@link LspCompletionItem} objects returned by the LSP server
@@ -984,6 +978,10 @@ public final class LspEditorBridge {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Private — helpers
+    // -------------------------------------------------------------------------
+
     /**
      * Reads the flat cursor offset from the editor using the public
      * {@link CodeEditText#getSelectionStart()} accessor.
@@ -1006,6 +1004,12 @@ public final class LspEditorBridge {
             ProjectIndex.getInstance().updateDocument(doc);
         }
     }
+
+
+
+
+
+
 
 
 }

@@ -4,11 +4,11 @@ import androidx.annotation.NonNull;
 
 import com.cocode.vcode.ide.VCodeApplication;
 import com.cocode.vcode.ide.git.model.BranchItem;
+import com.cocode.vcode.ide.git.model.CommitInfo;
 import com.cocode.vcode.ide.git.model.CommitItem;
+import com.cocode.vcode.ide.git.model.FileStatus;
 import com.cocode.vcode.ide.git.model.GitFileItem;
 import com.cocode.vcode.ide.utils.DateUtils;
-import com.cocode.vcode.ide.git.model.CommitInfo;
-import com.cocode.vcode.ide.git.model.FileStatus;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand;
@@ -48,6 +48,77 @@ public class GitRepository {
     private String configuredDefaultBranch = "main";
     private File repoDir;
 
+    public static GitOperationResult cloneRepo(android.content.Context context, String url, File targetDir,
+                                               String username, String token,
+                                               CloneProgressCallback callback) {
+        try {
+            org.eclipse.jgit.api.CloneCommand clone = Git.cloneRepository()
+                    .setURI(url)
+                    .setDirectory(targetDir);
+
+            if (url.startsWith("http")) {
+                clone.setCredentialsProvider(
+                        new org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(
+                                token != null ? token : "token",
+                                token != null ? token : ""));
+            } else {
+                clone.setTransportConfigCallback(SshKeyManager.getTransportConfigCallback(context));
+            }
+
+            clone.setProgressMonitor(new org.eclipse.jgit.lib.ProgressMonitor() {
+                private int totalWork;
+                private int completedWork;
+                private String currentTask;
+                private long lastUpdateTime;
+
+                @Override
+                public void start(int totalTasks) {
+                }
+
+                @Override
+                public void beginTask(String title, int total) {
+                    this.currentTask = title;
+                    this.totalWork = total;
+                    this.completedWork = 0;
+                    this.lastUpdateTime = System.currentTimeMillis();
+                    if (callback != null) callback.onProgress(title, 0, total);
+                }
+
+                @Override
+                public void update(int completed) {
+                    this.completedWork += completed;
+                    if (callback != null) {
+                        long now = System.currentTimeMillis();
+                        if (now - lastUpdateTime > 200 || completedWork == totalWork) {
+                            callback.onProgress(currentTask, completedWork, totalWork);
+                            callback.onUpdate(completedWork);
+                            lastUpdateTime = now;
+                        }
+                    }
+                }
+
+                @Override
+                public void endTask() {
+                    if (callback != null) callback.onTaskDone();
+                }
+
+                @Override
+                public boolean isCancelled() {
+                    return false;
+                }
+
+                @Override
+                public void showDuration(boolean enabled) {
+                }
+            });
+            Git result = clone.call();
+            result.close();
+            return GitOperationResult.success("Repository cloned successfully");
+        } catch (org.eclipse.jgit.api.errors.GitAPIException e) {
+            return GitOperationResult.error("Clone failed: " + e.getMessage());
+        }
+    }
+
     /**
      * Configures the initial tracking branch naming preference used during fresh repository setups.
      */
@@ -79,6 +150,10 @@ public class GitRepository {
 
     public File getRepoDir() {
         return repoDir;
+    }
+
+    public void setRepoDir(File repoDir) {
+        this.repoDir = repoDir;
     }
 
     /**
@@ -748,10 +823,6 @@ public class GitRepository {
         git.checkout().setAllPaths(true).call();
     }
 
-    public void setRepoDir(File repoDir) {
-        this.repoDir = repoDir;
-    }
-
     public boolean isGitRepo() {
         return repoDir != null && new File(repoDir, ".git").exists();
     }
@@ -793,83 +864,6 @@ public class GitRepository {
             git.close();
             git = null;
         }
-    }
-
-    public static GitOperationResult cloneRepo(android.content.Context context, String url, File targetDir,
-                                               String username, String token,
-                                               CloneProgressCallback callback) {
-        try {
-            org.eclipse.jgit.api.CloneCommand clone = Git.cloneRepository()
-                    .setURI(url)
-                    .setDirectory(targetDir);
-
-            if (url.startsWith("http")) {
-                clone.setCredentialsProvider(
-                        new org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(
-                                token != null ? token : "token",
-                                token != null ? token : ""));
-            } else {
-                clone.setTransportConfigCallback(SshKeyManager.getTransportConfigCallback(context));
-            }
-
-            clone.setProgressMonitor(new org.eclipse.jgit.lib.ProgressMonitor() {
-                private int totalWork;
-                private int completedWork;
-                private String currentTask;
-                private long lastUpdateTime;
-
-                @Override
-                public void start(int totalTasks) {
-                }
-
-                @Override
-                public void beginTask(String title, int total) {
-                    this.currentTask = title;
-                    this.totalWork = total;
-                    this.completedWork = 0;
-                    this.lastUpdateTime = System.currentTimeMillis();
-                    if (callback != null) callback.onProgress(title, 0, total);
-                }
-
-                @Override
-                public void update(int completed) {
-                    this.completedWork += completed;
-                    if (callback != null) {
-                        long now = System.currentTimeMillis();
-                        if (now - lastUpdateTime > 200 || completedWork == totalWork) {
-                            callback.onProgress(currentTask, completedWork, totalWork);
-                            callback.onUpdate(completedWork);
-                            lastUpdateTime = now;
-                        }
-                    }
-                }
-
-                @Override
-                public void endTask() {
-                    if (callback != null) callback.onTaskDone();
-                }
-
-                @Override
-                public boolean isCancelled() {
-                    return false;
-                }
-
-                @Override
-                public void showDuration(boolean enabled) {
-                }
-            });
-            Git result = clone.call();
-            result.close();
-            return GitOperationResult.success("Repository cloned successfully");
-        } catch (org.eclipse.jgit.api.errors.GitAPIException e) {
-            return GitOperationResult.error("Clone failed: " + e.getMessage());
-        }
-    }
-
-    public interface CloneProgressCallback {
-        void onProgress(String task, int done, int total);
-        void onUpdate(int completed);
-        void onTaskDone();
     }
 
     public List<CommitInfo> getCommitLog(int maxCount, int skip) {
@@ -953,6 +947,14 @@ public class GitRepository {
             android.util.Log.e("VCode", "Error getting changed files", e);
         }
         return changedFiles;
+    }
+
+    public interface CloneProgressCallback {
+        void onProgress(String task, int done, int total);
+
+        void onUpdate(int completed);
+
+        void onTaskDone();
     }
 
     /**

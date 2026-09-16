@@ -63,8 +63,6 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     private FileTreeAdapter adapter;
     private FileSelectionListener selectionListener;
     private File selectedImportDestination = null;
-    private DrawerLayout.DrawerListener drawerListener = null;
-    private DrawerLayout attachedDrawerLayout = null;
     /**
      * Result launcher for importing multiple files from the system picker.
      */
@@ -85,6 +83,8 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
                 }
             }
     );
+    private DrawerLayout.DrawerListener drawerListener = null;
+    private DrawerLayout attachedDrawerLayout = null;
 
     @Override
     public void onAttach(@NonNull Context context) {
@@ -528,6 +528,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
      */
     public interface FileSelectionListener {
         void onFileSelected(FileNode fileNode);
+
         void onFindInFile(FileNode fileNode);
     }
 }

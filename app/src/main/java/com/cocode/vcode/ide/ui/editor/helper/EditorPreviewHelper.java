@@ -40,7 +40,7 @@ public class EditorPreviewHelper {
         if (localWebServer == null) {
             localWebServer = new LocalWebServer(viewModel.getProjectRoot());
         }
-        
+
         LocalWebServer finalLocalWebServer = localWebServer;
         Runnable startAction = () -> {
             finalLocalWebServer.start();

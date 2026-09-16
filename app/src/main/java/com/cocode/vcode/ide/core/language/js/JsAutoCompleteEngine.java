@@ -9,7 +9,6 @@ import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.completion.staticdata.JsStaticCompletionDispatcher;
 import com.cocode.vcode.ide.core.model.CompletionItem;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -42,13 +41,29 @@ import java.util.regex.Pattern;
  */
 public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
+    public static final Map<String, String> BuiltinTypeTable = new HashMap<>();
     // JSDoc type pattern
     private static final Pattern PAT_JSDOC_TYPE = Pattern.compile("@(?:type|returns?|param)\\s*\\{([^}]+)\\}");
 
-    public static final Map<String, String> BuiltinTypeTable = new HashMap<>();
-
     static {
         loadBuiltinTypeTable();
+    }
+
+    // Instance state
+    private final List<CompletionItem> builtinItems = new ArrayList<>();
+    private final List<CompletionItem> cachedGenericSymbols = new ArrayList<>();
+    private final Map<String, String> varTypeMap = new HashMap<>();
+    private int lastTextHash = 0;
+    private File currentFile;
+    private JsSyntaxTree cachedTree;
+    private com.cocode.vcode.ide.core.diagnostic.util.TokenStream cachedTokens;
+    private ScopeTree cachedScopeTree;
+    public JsAutoCompleteEngine(Context context) {
+        super(context);
+        if (BuiltinTypeTable.isEmpty()) {
+            loadBuiltinTypeTable();
+        }
+        loadKeywords();
     }
 
     /**
@@ -94,22 +109,70 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return BuiltinTypeTable.get(lookupType + "." + memberName);
     }
 
-    // Instance state
-    private final List<CompletionItem> builtinItems = new ArrayList<>();
-    private final List<CompletionItem> cachedGenericSymbols = new ArrayList<>();
-    private final Map<String, String> varTypeMap = new HashMap<>();
-    private int lastTextHash = 0;
-    private File currentFile;
-    private JsSyntaxTree cachedTree;
-    private com.cocode.vcode.ide.core.diagnostic.util.TokenStream cachedTokens;
-    private ScopeTree cachedScopeTree;
+    private static String getBaseMemberName(String label) {
+        if (label == null) return "";
+        int paren = label.indexOf('(');
+        return (paren >= 0 ? label.substring(0, paren) : label).trim();
+    }
 
-    public JsAutoCompleteEngine(Context context) {
-        super(context);
-        if (BuiltinTypeTable.isEmpty()) {
-            loadBuiltinTypeTable();
+    private static boolean isIgnoredClassMember(String name) {
+        return "constructor".equals(name) || "prototype".equals(name) || "function".equals(name);
+    }
+
+    private static boolean isArrowIdentity(String args) {
+        if (args == null) return false;
+        int arrowIdx = args.indexOf("=>");
+        if (arrowIdx == -1) return false;
+        String after = args.substring(arrowIdx + 2).trim();
+        if (after.isEmpty()) return false;
+        for (int i = 0; i < after.length(); i++) {
+            char c = after.charAt(i);
+            if (i == 0) {
+                if (!Character.isLetter(c) && c != '_' && c != '$') return false;
+            } else {
+                if (!Character.isLetterOrDigit(c) && c != '_' && c != '$') return false;
+            }
         }
-        loadKeywords();
+        return true;
+    }
+
+    private static List<String> extractObjectKeys(String text, boolean allowEquals) {
+        List<String> keys = new ArrayList<>();
+        if (text == null || text.isEmpty()) return keys;
+        int len = text.length();
+        int i = 0;
+        while (i < len) {
+            char c = text.charAt(i);
+            if (Character.isLetter(c) || c == '_' || c == '$') {
+                int start = i;
+                while (i < len && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_' || text.charAt(i) == '$')) {
+                    i++;
+                }
+                String id = text.substring(start, i);
+                while (i < len && Character.isWhitespace(text.charAt(i))) {
+                    i++;
+                }
+                if (i < len) {
+                    char next = text.charAt(i);
+                    if (next == ':' || (allowEquals && next == '=')) {
+                        if (!keys.contains(id)) {
+                            keys.add(id);
+                        }
+                    }
+                }
+            } else if (c == '"' || c == '\'' || c == '`') {
+                char quote = c;
+                i++;
+                while (i < len && text.charAt(i) != quote) {
+                    if (text.charAt(i) == '\\' && i + 1 < len) i++;
+                    i++;
+                }
+                if (i < len) i++;
+            } else {
+                i++;
+            }
+        }
+        return keys;
     }
 
     public void setCurrentFile(File file) {
@@ -131,7 +194,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 builtinItems.addAll(items);
                 return;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         try {
             String json = loadAssetJson("completions/js_keywords.json");
             JSONArray arr = new JSONArray(json);
@@ -161,6 +225,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             // Non-critical
         }
     }
+
+    // Object literal key suggestions
 
     // Main entry point
     @Override
@@ -213,8 +279,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         if (cachedTokens != null && cursorPos >= 0 && cursorPos < cachedTokens.length) {
             byte type = cachedTokens.types[cursorPos];
             if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_COMMENT ||
-                type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
-                type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
+                    type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
+                    type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
                 if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE && isInsideTemplateExpression(fullText, cursorPos)) {
                     // Inside ${...} template interpolation: allow completions!
                 } else if (cursorPos != cachedTokens.tokenStart[cursorPos]) {
@@ -225,7 +291,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         // Member access completions following a dot accessor
         int dotCheckPos = cursorPos - word.length() - 1;
-        
+
         int enclosingNode = 0;
         if (cachedTree != null && cachedTree.nodesByOffset != null) {
             int low = 1, high = cachedTree.nodeCount - 1;
@@ -280,34 +346,41 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 }
             }
         }
-        
+
         for (CompletionItem item : cachedGenericSymbols) {
             if (added.add(item.getLabel())) {
                 all.add(item);
             }
         }
-        
+
         return fuzzyFilter(all, word);
     }
-    
+
     private CompletionItem.Type mapKindToCompletionType(int kind) {
         switch (kind) {
-            case JsSyntaxTree.N_CLASS_DECL: return CompletionItem.Type.KEYWORD;
+            case JsSyntaxTree.N_CLASS_DECL:
+                return CompletionItem.Type.KEYWORD;
             case JsSyntaxTree.N_FUNC_DECL:
             case JsSyntaxTree.N_ARROW_FUNC:
-            case JsSyntaxTree.N_METHOD: return CompletionItem.Type.FUNCTION;
-            default: return CompletionItem.Type.VALUE;
+            case JsSyntaxTree.N_METHOD:
+                return CompletionItem.Type.FUNCTION;
+            default:
+                return CompletionItem.Type.VALUE;
         }
     }
-    
+
     private String getDetailForKind(int kind) {
         switch (kind) {
-            case JsSyntaxTree.N_CLASS_DECL: return "Class";
+            case JsSyntaxTree.N_CLASS_DECL:
+                return "Class";
             case JsSyntaxTree.N_FUNC_DECL:
             case JsSyntaxTree.N_ARROW_FUNC:
-            case JsSyntaxTree.N_METHOD: return "Function";
-            case JsSyntaxTree.N_PARAM: return "Parameter";
-            default: return "Variable";
+            case JsSyntaxTree.N_METHOD:
+                return "Function";
+            case JsSyntaxTree.N_PARAM:
+                return "Parameter";
+            default:
+                return "Variable";
         }
     }
 
@@ -328,7 +401,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return prefixed;
     }
 
-    // Object literal key suggestions
     /**
      * Detects if cursor is in an object literal key position and suggests known keys.
      * Returns null if not in object literal context, empty list if in context but no suggestions.
@@ -587,7 +659,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     parseResult = new com.cocode.vcode.ide.core.language.js.ParseResult(targetFile, content, tokens, tree, null, com.cocode.vcode.ide.core.language.js.ParseResult.MODE_FULL);
                     com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().updateParseResult(loc.uri, parseResult);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         if (parseResult == null || parseResult.tree == null) return null;
 
@@ -654,6 +727,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return out;
     }
 
+    // Dot-member completion
+
     /**
      * K.3: build the import-statement auto-insert for a
      * cross-file completion. The caller (the editor's
@@ -668,7 +743,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
      * @param currentFileUri the URI of the file the user is editing
      * @param currentText    the current text of the editing file
      * @return the import statement and insertion offset, or null if
-     *         the two files are the same
+     * the two files are the same
      */
     public com.cocode.vcode.ide.core.lsp.ImportStatementBuilder.Result buildImportInsert(
             String name, String sourceFileUri, String currentFileUri, String currentText) {
@@ -762,7 +837,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 || lower.endsWith(".tsx") || lower.endsWith(".json") || lower.endsWith(".mjs");
     }
 
-    // Dot-member completion
     /**
      * Computes member completions for the object/expression before the dot.
      *
@@ -773,13 +847,13 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         String objectToken = extractObjectBeforeDot(text, dotPos);
         if (objectToken.isEmpty()) return new ArrayList<>();
 
-    // this. → current class member completions
+        // this. → current class member completions
         if (objectToken.equals("this")) {
             List<CompletionItem> thisMembers = getCurrentClassMembers(dotPos);
             if (!thisMembers.isEmpty()) return fuzzyFilter(thisMembers, word);
         }
 
-    // ShapeTable lookup
+        // ShapeTable lookup
         if (cachedTree != null && cachedScopeTree != null) {
             int currentScope = cachedScopeTree.findScopeAt(dotPos, cachedTree);
             int[] resolved = cachedScopeTree.lookupSymbol(objectToken, currentScope, dotPos, cachedTree);
@@ -802,19 +876,19 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-    // a. Check known static namespaces
+        // a. Check known static namespaces
         for (String[] pair : JsStandardLibrary.DOT_METHODS) {
             if (pair[0].equalsIgnoreCase(objectToken) || objectToken.endsWith(pair[0])) {
                 return buildMemberList(pair[0], pair[1].split(","), word, CompletionItem.Type.BUILTIN);
             }
         }
 
-    // b. Functions that always return Promise (e.g. fetch)
+        // b. Functions that always return Promise (e.g. fetch)
         if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(objectToken)) {
             return buildMemberList("Promise", JsStandardLibrary.PROTOTYPE_METHODS.get("promise"), word, CompletionItem.Type.FUNCTION);
         }
 
-    // c. Chain return type — e.g. "arr.filter(...)" → array methods
+        // c. Chain return type — e.g. "arr.filter(...)" → array methods
         String chainType = JsStandardLibrary.CHAIN_RETURN_TYPES.get(objectToken);
         if (chainType != null) {
             String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(chainType);
@@ -871,7 +945,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                             if (cachedTree.shapeTable.containsKey(declNodeId)) {
                                 inferredType = "@INLINE_SHAPE_NODE:" + declNodeId;
                             } else if (inferredType == null) {
-                                inferredType = cachedTree.nodeTypeAnn[declNodeId]; 
+                                inferredType = cachedTree.nodeTypeAnn[declNodeId];
                             }
                             if (inferredType == null) {
                                 int parentId = cachedTree.nodeParent[declNodeId];
@@ -961,11 +1035,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 }
             }
-            
+
             // resolve the chain
             for (int k = 1; k < chain.size(); k++) {
                 String member = chain.get(k);
-                
+
                 if (member.equals("!AWAIT")) {
                     if (inferredType != null && inferredType.startsWith("@PROMISE_INLINE_SHAPE:")) {
                         inferredType = "@INLINE_SHAPE:" + inferredType.substring(22);
@@ -974,7 +1048,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     }
                     continue;
                 }
-                
+
                 if (member.startsWith("!THEN:")) {
                     String args = member.substring(6);
                     if (inferredType != null && inferredType.startsWith("@PROMISE_INLINE_SHAPE:")) {
@@ -982,7 +1056,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                             // identity
                         } else if (args.contains("=>")) {
                             String afterArrow = args.substring(args.indexOf("=>") + 2).trim();
-                            if (afterArrow.startsWith("(") && afterArrow.endsWith(")")) afterArrow = afterArrow.substring(1, afterArrow.length() - 1).trim();
+                            if (afterArrow.startsWith("(") && afterArrow.endsWith(")"))
+                                afterArrow = afterArrow.substring(1, afterArrow.length() - 1).trim();
                             if (afterArrow.startsWith("{")) {
                                 List<String> keys = extractObjectKeys(afterArrow, true);
                                 inferredType = "@PROMISE_INLINE_SHAPE:" + String.join(",", keys);
@@ -994,7 +1069,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
                 boolean isMethod = member.endsWith("()");
                 String memberName = isMethod ? member.substring(0, member.length() - 2) : member;
-                
+
                 if (memberName.startsWith("[")) {
                     if (activeTree != null && activeNodeId > 0) {
                         int childObj = findChildObjectLiteral(activeTree, activeNodeId);
@@ -1011,9 +1086,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     } else if (inferredType != null && inferredType.equals("@ARRAY_OF_STRING")) {
                         inferredType = "@STRING";
                     } else if (inferredType != null && inferredType.equals("@ARRAY")) {
-                        inferredType = "@ANY"; 
+                        inferredType = "@ANY";
                     } else {
-                        inferredType = "@ANY"; 
+                        inferredType = "@ANY";
                     }
                     continue;
                 }
@@ -1030,7 +1105,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                 inferredType = "@INLINE_SHAPE_NODE:" + retObj;
                             } else {
                                 String[] retShape = findReturnShapeDFS(activeTree, expNode);
-                                if (retShape != null) inferredType = "@INLINE_SHAPE:" + String.join(",", retShape);
+                                if (retShape != null)
+                                    inferredType = "@INLINE_SHAPE:" + String.join(",", retShape);
                                 else inferredType = "@ANY";
                             }
                         } else {
@@ -1068,7 +1144,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                 inferredType = "@INLINE_SHAPE_NODE:" + retObj;
                             } else {
                                 String[] retShape = findReturnShapeDFS(activeTree, nestedNodeId);
-                                if (retShape != null) inferredType = "@INLINE_SHAPE:" + String.join(",", retShape);
+                                if (retShape != null)
+                                    inferredType = "@INLINE_SHAPE:" + String.join(",", retShape);
                                 else inferredType = "@ANY";
                             }
                         } else {
@@ -1132,7 +1209,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             if (inferredType != null && (inferredType.startsWith("@") || inferredType.equals("string") || inferredType.equals("array") || inferredType.equals("number") || inferredType.equals("boolean") || inferredType.equals("promise"))) {
                 if (inferredType.startsWith("@PROMISE") || inferredType.equals("promise")) {
                     String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get("promise");
-                    if (methods != null) return buildMemberList("Promise", methods, word, CompletionItem.Type.FUNCTION);
+                    if (methods != null)
+                        return buildMemberList("Promise", methods, word, CompletionItem.Type.FUNCTION);
                 } else if (inferredType.startsWith("@INLINE_SHAPE:")) {
                     String[] keys = inferredType.substring(14).split(",");
                     List<CompletionItem> shapeMembers = new ArrayList<>();
@@ -1182,7 +1260,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     List<CompletionItem> result = new ArrayList<>(merged.values());
                     return fuzzyFilter(result, word);
                 }
-                
+
                 // Check if it's an interface in activeTree
                 if (activeTree != null) {
                     for (int i = 1; i < activeTree.nodeCount; i++) {
@@ -1209,7 +1287,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-    // e. Heuristic name-based guess
+        // e. Heuristic name-based guess
         String lower = objectToken.toLowerCase();
         for (Map.Entry<String, String[]> entry : JsStandardLibrary.PROTOTYPE_METHODS.entrySet()) {
             String key = entry.getKey();
@@ -1362,7 +1440,10 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     if (ch == ')') depth++;
                     else if (ch == '(') {
                         depth--;
-                        if (depth == 0) { i--; break; }
+                        if (depth == 0) {
+                            i--;
+                            break;
+                        }
                     }
                     i--;
                 }
@@ -1405,20 +1486,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return chain;
     }
 
-    private static class ResolvedSymbol {
-        final JsSyntaxTree tree;
-        final int nodeId;
-        final String typeAnn;
-        final boolean isNamespace;
-
-        ResolvedSymbol(JsSyntaxTree tree, int nodeId, String typeAnn, boolean isNamespace) {
-            this.tree = tree;
-            this.nodeId = nodeId;
-            this.typeAnn = typeAnn;
-            this.isNamespace = isNamespace;
-        }
-    }
-
     private String[] findReturnShapeDFS(JsSyntaxTree tree, int nodeId) {
         return findReturnShapeDFS(tree, nodeId, 0);
     }
@@ -1432,9 +1499,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 String[] shape = tree.shapeTable.get(child);
                 if (shape != null) return shape;
             }
-            if (tree.nodeType[child] != JsSyntaxTree.N_FUNC_DECL && 
-                tree.nodeType[child] != JsSyntaxTree.N_ARROW_FUNC && 
-                tree.nodeType[child] != JsSyntaxTree.N_METHOD) {
+            if (tree.nodeType[child] != JsSyntaxTree.N_FUNC_DECL &&
+                    tree.nodeType[child] != JsSyntaxTree.N_ARROW_FUNC &&
+                    tree.nodeType[child] != JsSyntaxTree.N_METHOD) {
                 String[] found = findReturnShapeDFS(tree, child, depth + 1);
                 if (found != null) return found;
             }
@@ -1459,9 +1526,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
                 return child;
             }
-            if (tree.nodeType[child] != JsSyntaxTree.N_FUNC_DECL && 
-                tree.nodeType[child] != JsSyntaxTree.N_ARROW_FUNC && 
-                tree.nodeType[child] != JsSyntaxTree.N_METHOD) {
+            if (tree.nodeType[child] != JsSyntaxTree.N_FUNC_DECL &&
+                    tree.nodeType[child] != JsSyntaxTree.N_ARROW_FUNC &&
+                    tree.nodeType[child] != JsSyntaxTree.N_METHOD) {
                 int found = findReturnObjectLiteralNode(tree, child, depth + 1);
                 if (found > 0) return found;
             }
@@ -1471,7 +1538,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private String getShapeOfProperty(JsSyntaxTree tree, int objNodeId, String propName) {
-        if (tree == null || objNodeId <= 0 || objNodeId >= tree.nodeCount || propName == null) return null;
+        if (tree == null || objNodeId <= 0 || objNodeId >= tree.nodeCount || propName == null)
+            return null;
         int child = tree.nodeChild[objNodeId];
         int childLoop = 0;
         while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
@@ -1479,8 +1547,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 int propChild = tree.nodeChild[child];
                 int propLoop = 0;
                 while (propChild > 0 && propChild < tree.nodeCount && ++propLoop <= tree.nodeCount) {
-                    if ((tree.nodeType[propChild] == JsSyntaxTree.N_PROPERTY || tree.nodeType[propChild] == JsSyntaxTree.N_STATEMENT) 
-                        && propName.equals(tree.nodeName[propChild])) {
+                    if ((tree.nodeType[propChild] == JsSyntaxTree.N_PROPERTY || tree.nodeType[propChild] == JsSyntaxTree.N_STATEMENT)
+                            && propName.equals(tree.nodeName[propChild])) {
                         String[] keys = tree.shapeTable.get(propChild);
                         if (keys != null && keys.length > 0) {
                             return "@INLINE_SHAPE:" + String.join(",", keys);
@@ -1499,7 +1567,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private int findPropertyNodeId(JsSyntaxTree tree, int parentNodeId, String propName) {
-        if (tree == null || parentNodeId <= 0 || parentNodeId >= tree.nodeCount || propName == null) return 0;
+        if (tree == null || parentNodeId <= 0 || parentNodeId >= tree.nodeCount || propName == null)
+            return 0;
         int target = parentNodeId;
         if (tree.nodeType[target] != JsSyntaxTree.N_OBJECT_LITERAL) {
             int child = tree.nodeChild[target];
@@ -1517,10 +1586,10 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         int propChild = tree.nodeChild[target];
         int propLoop = 0;
         while (propChild > 0 && propChild < tree.nodeCount && ++propLoop <= tree.nodeCount) {
-            if ((tree.nodeType[propChild] == JsSyntaxTree.N_PROPERTY || 
-                 tree.nodeType[propChild] == JsSyntaxTree.N_METHOD ||
-                 tree.nodeType[propChild] == JsSyntaxTree.N_STATEMENT) 
-                && propName.equals(tree.nodeName[propChild])) {
+            if ((tree.nodeType[propChild] == JsSyntaxTree.N_PROPERTY ||
+                    tree.nodeType[propChild] == JsSyntaxTree.N_METHOD ||
+                    tree.nodeType[propChild] == JsSyntaxTree.N_STATEMENT)
+                    && propName.equals(tree.nodeName[propChild])) {
                 return propChild;
             }
             propChild = tree.nodeSibling[propChild];
@@ -1652,9 +1721,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     return new ResolvedSymbol(null, 0, "@INLINE_SHAPE:" + String.join(",", keyList), false);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return null;
     }
+
+    // Class member helpers
 
     private List<CompletionItem> getMembersForNode(JsSyntaxTree tree, int nodeId, String word) {
         if (tree == null || nodeId <= 0) return new ArrayList<>();
@@ -1764,16 +1836,15 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return last;
     }
 
-    // Class member helpers
     /**
      * Returns class members for `this.` by finding which class body the cursor is inside.
      */
     private List<CompletionItem> getCurrentClassMembers(int dotPos) {
         if (cachedTree == null || cachedScopeTree == null) return new ArrayList<>();
-        
+
         int scopeId = cachedScopeTree.findScopeAt(dotPos, cachedTree);
         int nodeId = cachedScopeTree.scopeNode[scopeId];
-        
+
         int current = nodeId;
         while (current > 0) {
             if (cachedTree.nodeType[current] == JsSyntaxTree.N_CLASS_DECL) {
@@ -1850,17 +1921,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
     }
-
-    private static String getBaseMemberName(String label) {
-        if (label == null) return "";
-        int paren = label.indexOf('(');
-        return (paren >= 0 ? label.substring(0, paren) : label).trim();
-    }
-
-    private static boolean isIgnoredClassMember(String name) {
-        return "constructor".equals(name) || "prototype".equals(name) || "function".equals(name);
-    }
-
 
     // Document symbol indexing
     private void ensureDocumentIndexed(String text) {
@@ -1957,8 +2017,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     while (end > start && !isWordChar(text.charAt(end - 1))) end--;
                     if (end - start >= 3) {
                         String w = text.substring(start, end);
-                        if (!builtinNames.contains(w) 
-                                && !classMembers.contains(w) 
+                        if (!builtinNames.contains(w)
+                                && !classMembers.contains(w)
                                 && (cachedScopeTree == null || !cachedScopeTree.symbols.containsKey(w))) {
                             cachedGenericSymbols.add(new CompletionItem(w, w, "Word", CompletionItem.Type.VALUE, 0));
                         }
@@ -2013,8 +2073,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (!cls.isEmpty() && isWordChar(cls.charAt(0))) {
                     varTypeMap.put(varName, cls);
                 }
-            }
-            else if (snippet.startsWith("new Promise")) varTypeMap.put(varName, "promise");
+            } else if (snippet.startsWith("new Promise")) varTypeMap.put(varName, "promise");
             else if (snippet.startsWith("fetch(") || snippet.startsWith("axios"))
                 varTypeMap.put(varName, "promise");
             else if (snippet.startsWith("new Map")) varTypeMap.put(varName, "map");
@@ -2054,63 +2113,22 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             else if (snippet.contains(".split(")) varTypeMap.put(varName, "array");
             else if (snippet.contains(".toString(") || snippet.contains(".trim(") || snippet.contains(".replace("))
                 varTypeMap.put(varName, "string");
-            else if (!snippet.isEmpty() && Character.isDigit(snippet.charAt(0))) varTypeMap.put(varName, "number");
+            else if (!snippet.isEmpty() && Character.isDigit(snippet.charAt(0)))
+                varTypeMap.put(varName, "number");
         }
     }
 
-    private static boolean isArrowIdentity(String args) {
-        if (args == null) return false;
-        int arrowIdx = args.indexOf("=>");
-        if (arrowIdx == -1) return false;
-        String after = args.substring(arrowIdx + 2).trim();
-        if (after.isEmpty()) return false;
-        for (int i = 0; i < after.length(); i++) {
-            char c = after.charAt(i);
-            if (i == 0) {
-                if (!Character.isLetter(c) && c != '_' && c != '$') return false;
-            } else {
-                if (!Character.isLetterOrDigit(c) && c != '_' && c != '$') return false;
-            }
-        }
-        return true;
-    }
+    private static class ResolvedSymbol {
+        final JsSyntaxTree tree;
+        final int nodeId;
+        final String typeAnn;
+        final boolean isNamespace;
 
-    private static List<String> extractObjectKeys(String text, boolean allowEquals) {
-        List<String> keys = new ArrayList<>();
-        if (text == null || text.isEmpty()) return keys;
-        int len = text.length();
-        int i = 0;
-        while (i < len) {
-            char c = text.charAt(i);
-            if (Character.isLetter(c) || c == '_' || c == '$') {
-                int start = i;
-                while (i < len && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_' || text.charAt(i) == '$')) {
-                    i++;
-                }
-                String id = text.substring(start, i);
-                while (i < len && Character.isWhitespace(text.charAt(i))) {
-                    i++;
-                }
-                if (i < len) {
-                    char next = text.charAt(i);
-                    if (next == ':' || (allowEquals && next == '=')) {
-                        if (!keys.contains(id)) {
-                            keys.add(id);
-                        }
-                    }
-                }
-            } else if (c == '"' || c == '\'' || c == '`') {
-                char quote = c;
-                i++;
-                while (i < len && text.charAt(i) != quote) {
-                    if (text.charAt(i) == '\\' && i + 1 < len) i++;
-                    i++;
-                }
-                if (i < len) i++;
-            } else {
-                i++;
-            }
+        ResolvedSymbol(JsSyntaxTree tree, int nodeId, String typeAnn, boolean isNamespace) {
+            this.tree = tree;
+            this.nodeId = nodeId;
+            this.typeAnn = typeAnn;
+            this.isNamespace = isNamespace;
         }
-        return keys;
     }
 }

@@ -29,9 +29,15 @@ public final class JsCommentAttachment {
 
     public JsCommentAttachment(int initialCapacity) {
         commentStart = new int[initialCapacity];
-        commentEnd   = new int[initialCapacity];
+        commentEnd = new int[initialCapacity];
         attachedNode = new int[initialCapacity];
-        isLeading    = new boolean[initialCapacity];
+        isLeading = new boolean[initialCapacity];
+    }
+
+    private static int[] grow(int[] a, int newCap) {
+        int[] n = new int[newCap];
+        System.arraycopy(a, 0, n, 0, a.length);
+        return n;
     }
 
     /**
@@ -78,7 +84,7 @@ public final class JsCommentAttachment {
         if (count >= commentStart.length) {
             int newCap = commentStart.length * 2;
             commentStart = grow(commentStart, newCap);
-            commentEnd   = grow(commentEnd,   newCap);
+            commentEnd = grow(commentEnd, newCap);
             attachedNode = grow(attachedNode, newCap);
             // boolean[] does not need resize because boolean defaults to false.
             boolean[] grown = new boolean[newCap];
@@ -123,16 +129,10 @@ public final class JsCommentAttachment {
             }
         }
         commentStart[count] = srcStart;
-        commentEnd[count]   = srcEnd;
+        commentEnd[count] = srcEnd;
         attachedNode[count] = best;
-        isLeading[count]    = leading;
+        isLeading[count] = leading;
         count++;
-    }
-
-    private static int[] grow(int[] a, int newCap) {
-        int[] n = new int[newCap];
-        System.arraycopy(a, 0, n, 0, a.length);
-        return n;
     }
 
     /**
@@ -175,7 +175,9 @@ public final class JsCommentAttachment {
         return found;
     }
 
-    /** True if the byte range [start, end) contains any comment. */
+    /**
+     * True if the byte range [start, end) contains any comment.
+     */
     public boolean rangeContainsComment(int start, int end) {
         for (int i = 0; i < count; i++) {
             int cs = commentStart[i];

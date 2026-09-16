@@ -2,8 +2,6 @@ package com.cocode.vcode.ide.core.language.js;
 
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -63,7 +61,7 @@ public class JsLexer {
         if (oldStart > 0 && oldStart < oldLen) {
             int ts = existing.tokenStart[oldStart];
             if (ts < start && ts >= 0) {
-                start = ts; 
+                start = ts;
             }
         }
         if (start < 0) start = 0;
@@ -203,14 +201,14 @@ public class JsLexer {
                 while (i < endOffset) {
                     char sc = source.charAt(i);
                     if (sc == '\\') {
-                        i += 2; 
+                        i += 2;
                         continue;
                     }
                     if (sc == quote) {
                         i++;
                         break;
                     }
-                    if (sc == '\n') break; 
+                    if (sc == '\n') break;
                     i++;
                 }
                 for (int k = start; k < Math.min(i, endOffset); k++) {
@@ -273,8 +271,14 @@ public class JsLexer {
                                 int sStart = i;
                                 i++;
                                 while (i < endOffset) {
-                                    if (source.charAt(i) == '\\') { i += 2; continue; }
-                                    if (source.charAt(i) == sq) { i++; break; }
+                                    if (source.charAt(i) == '\\') {
+                                        i += 2;
+                                        continue;
+                                    }
+                                    if (source.charAt(i) == sq) {
+                                        i++;
+                                        break;
+                                    }
                                     i++;
                                 }
                                 for (int k = sStart; k < Math.min(i, endOffset); k++) {
@@ -286,21 +290,37 @@ public class JsLexer {
                             } else if (q2 == '`') {
                                 i++;
                                 while (i < endOffset) {
-                                    if (source.charAt(i) == '\\') { i += 2; continue; }
-                                    if (source.charAt(i) == '`') { i++; break; }
+                                    if (source.charAt(i) == '\\') {
+                                        i += 2;
+                                        continue;
+                                    }
+                                    if (source.charAt(i) == '`') {
+                                        i++;
+                                        break;
+                                    }
                                     if (source.charAt(i) == '$' && i + 1 < endOffset && source.charAt(i + 1) == '{') {
                                         i += 2;
                                         int innerDepth = 1;
                                         while (i < endOffset && innerDepth > 0) {
                                             char q3 = source.charAt(i);
-                                            if (q3 == '{') { innerDepth++; i++; }
-                                            else if (q3 == '}') { innerDepth--; i++; }
-                                            else if (q3 == '\'' || q3 == '"' || q3 == '`') {
+                                            if (q3 == '{') {
+                                                innerDepth++;
+                                                i++;
+                                            } else if (q3 == '}') {
+                                                innerDepth--;
+                                                i++;
+                                            } else if (q3 == '\'' || q3 == '"' || q3 == '`') {
                                                 char innerQuote = q3;
                                                 i++;
                                                 while (i < endOffset) {
-                                                    if (source.charAt(i) == '\\') { i += 2; continue; }
-                                                    if (source.charAt(i) == innerQuote) { i++; break; }
+                                                    if (source.charAt(i) == '\\') {
+                                                        i += 2;
+                                                        continue;
+                                                    }
+                                                    if (source.charAt(i) == innerQuote) {
+                                                        i++;
+                                                        break;
+                                                    }
                                                     i++;
                                                 }
                                             } else {
@@ -426,9 +446,9 @@ public class JsLexer {
                         tokenStart[k] = start;
                     }
                 }
-                
+
                 if ("return".equals(word) || "typeof".equals(word) || "instanceof".equals(word)
-                        || "in".equals(word) || "new".equals(word) || "delete".equals(word) 
+                        || "in".equals(word) || "new".equals(word) || "delete".equals(word)
                         || "void".equals(word) || "throw".equals(word) || "yield".equals(word)) {
                     lastTokenType = 0;
                 } else {
@@ -441,8 +461,8 @@ public class JsLexer {
             if (quote == '?' && i + 1 < endOffset && source.charAt(i + 1) == '.') {
                 types[i] = TokenStream.TK_PUNCT;
                 tokenStart[i] = i;
-                types[i+1] = TokenStream.TK_PUNCT;
-                tokenStart[i+1] = i;
+                types[i + 1] = TokenStream.TK_PUNCT;
+                tokenStart[i + 1] = i;
                 lastTokenType = 0;
                 i += 2;
                 continue;
@@ -451,13 +471,13 @@ public class JsLexer {
             if (quote == '=' && i + 1 < endOffset && source.charAt(i + 1) == '>') {
                 types[i] = TokenStream.TK_OPERATOR;
                 tokenStart[i] = i;
-                types[i+1] = TokenStream.TK_OPERATOR;
-                tokenStart[i+1] = i;
+                types[i + 1] = TokenStream.TK_OPERATOR;
+                tokenStart[i + 1] = i;
                 lastTokenType = 0;
                 i += 2;
                 continue;
             }
-            
+
             types[i] = isPunct(quote) ? TokenStream.TK_PUNCT : TokenStream.TK_OPERATOR;
             tokenStart[i] = i;
 
@@ -471,7 +491,7 @@ public class JsLexer {
     }
 
     private static boolean isPunct(char c) {
-        return c == '{' || c == '}' || c == '(' || c == ')' || c == '[' || c == ']' 
-            || c == ',' || c == ';' || c == '.' || c == ':';
+        return c == '{' || c == '}' || c == '(' || c == ')' || c == '[' || c == ']'
+                || c == ',' || c == ';' || c == '.' || c == ':';
     }
 }

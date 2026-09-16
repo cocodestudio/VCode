@@ -32,13 +32,10 @@ import java.util.List;
  */
 public final class JsonStaticCompletionDispatcher {
 
-    private JsonStaticCompletionDispatcher() {}
+    private static volatile List<CompletionItem> CACHED_KEYS = null;
+    private static volatile List<CompletionItem> CACHED_VALUES = null;
 
-    public enum Position {
-        KEY,
-        VALUE,
-        FILE_EMPTY,
-        NONE
+    private JsonStaticCompletionDispatcher() {
     }
 
     /**
@@ -51,7 +48,10 @@ public final class JsonStaticCompletionDispatcher {
         // File empty / whitespace-only: FILE_EMPTY.
         boolean allWs = true;
         for (int i = 0; i < len; i++) {
-            if (!Character.isWhitespace(source.charAt(i))) { allWs = false; break; }
+            if (!Character.isWhitespace(source.charAt(i))) {
+                allWs = false;
+                break;
+            }
         }
         if (allWs) return Position.FILE_EMPTY;
 
@@ -96,8 +96,9 @@ public final class JsonStaticCompletionDispatcher {
                     }
                     continue;
                 }
-                if (cj == ']' || cj == '}') { depth--; }
-                else if (cj == '[') {
+                if (cj == ']' || cj == '}') {
+                    depth--;
+                } else if (cj == '[') {
                     if (depth == 0) return Position.VALUE;
                     depth++;
                 } else if (cj == '{') {
@@ -109,9 +110,6 @@ public final class JsonStaticCompletionDispatcher {
         }
         return Position.NONE;
     }
-
-    private static volatile List<CompletionItem> CACHED_KEYS = null;
-    private static volatile List<CompletionItem> CACHED_VALUES = null;
 
     public static void clearCachesForTest() {
         CACHED_KEYS = null;
@@ -126,7 +124,7 @@ public final class JsonStaticCompletionDispatcher {
      * {@code null} if unknown.
      */
     public static List<CompletionItem> buildCompletions(Position position,
-                                                         String currentFileName) {
+                                                        String currentFileName) {
         if (position == Position.KEY) {
             if (CACHED_KEYS == null) {
                 List<CompletionItem> out = new ArrayList<>();
@@ -179,5 +177,12 @@ public final class JsonStaticCompletionDispatcher {
         int cursorOffset = r != null ? r.cursorOffset : 0;
         return new CompletionItem(k.label, insertText, k.detail,
                 CompletionItem.Type.SNIPPET, cursorOffset);
+    }
+
+    public enum Position {
+        KEY,
+        VALUE,
+        FILE_EMPTY,
+        NONE
     }
 }

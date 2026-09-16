@@ -8,7 +8,7 @@ package com.cocode.vcode.ide.core.language.base;
 public abstract class BaseFormatter {
 
     protected String indentUnit = "  "; // 2 tabs
-    private String[] indentCache = new String[50];
+    private final String[] indentCache = new String[50];
 
     protected BaseFormatter() {
         buildIndentCache();

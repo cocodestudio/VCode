@@ -17,22 +17,26 @@ import java.util.Map;
  */
 public final class StaticAssetReader {
 
-    private StaticAssetReader() {}
-
     private static final Map<String, String> overrides = new HashMap<>();
     private static volatile Context appContext;
+    private StaticAssetReader() {
+    }
 
-    /** Set the application context used for asset reads in
-     *  production. Idempotent. */
+    /**
+     * Set the application context used for asset reads in
+     * production. Idempotent.
+     */
     public static void setAppContext(Context context) {
         if (context != null) {
             appContext = context.getApplicationContext();
         }
     }
 
-    /** Test injection: provide a raw JSON string for an asset
-     *  path. The string is used in preference to the real asset
-     *  (which is fine for unit tests that don't want asset IO). */
+    /**
+     * Test injection: provide a raw JSON string for an asset
+     * path. The string is used in preference to the real asset
+     * (which is fine for unit tests that don't want asset IO).
+     */
     public static void setAssetOverride(String assetPath, String json) {
         if (assetPath == null) return;
         if (json == null) {
@@ -42,7 +46,9 @@ public final class StaticAssetReader {
         }
     }
 
-    /** Drop all overrides and the cached context (test-only). */
+    /**
+     * Drop all overrides and the cached context (test-only).
+     */
     public static synchronized void resetForTest() {
         overrides.clear();
         appContext = null;
@@ -84,7 +90,8 @@ public final class StaticAssetReader {
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
                 return sb.toString();
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
         return "";
     }

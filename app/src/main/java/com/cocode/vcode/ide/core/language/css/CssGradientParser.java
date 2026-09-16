@@ -13,7 +13,8 @@ import java.util.List;
  */
 public final class CssGradientParser {
 
-    private CssGradientParser() {}
+    private CssGradientParser() {
+    }
 
     public static boolean isGradientFunction(String name) {
         if (name == null) return false;
@@ -193,16 +194,6 @@ public final class CssGradientParser {
         return arg.startsWith("circle") || arg.startsWith("ellipse") || arg.startsWith("at ");
     }
 
-    private static class ParsedStop {
-        final int color;
-        final Float position;
-
-        ParsedStop(int color, Float position) {
-            this.color = color;
-            this.position = position;
-        }
-    }
-
     private static ParsedStop parseStop(String stopStr) {
         stopStr = stopStr.trim();
         int lastSpace = stopStr.lastIndexOf(' ');
@@ -231,5 +222,15 @@ public final class CssGradientParser {
         }
 
         return null;
+    }
+
+    private static class ParsedStop {
+        final int color;
+        final Float position;
+
+        ParsedStop(int color, Float position) {
+            this.color = color;
+            this.position = position;
+        }
     }
 }

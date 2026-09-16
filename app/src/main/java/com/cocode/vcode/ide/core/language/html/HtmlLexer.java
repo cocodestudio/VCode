@@ -1,7 +1,7 @@
 package com.cocode.vcode.ide.core.language.html;
 
 /**
- * Full-file tokenizer for HTML. 
+ * Full-file tokenizer for HTML.
  * Implements a zero-allocation state machine that outputs a flat-array HtmlTokenStream.
  * Handles tags, attributes, text nodes, comments, doctypes, and raw-text script/style blocks.
  */
@@ -22,6 +22,7 @@ public class HtmlLexer {
 
     /**
      * Tokenizes an HTML source string into a new HtmlTokenStream.
+     *
      * @param source The HTML source code
      * @return A populated HtmlTokenStream
      */
@@ -32,9 +33,10 @@ public class HtmlLexer {
 
     /**
      * Tokenizes a sub-region of an HTML source string into a new HtmlTokenStream.
-     * @param source The HTML source code
+     *
+     * @param source      The HTML source code
      * @param startOffset start offset in source
-     * @param endOffset end offset in source
+     * @param endOffset   end offset in source
      * @return A populated HtmlTokenStream with source-relative offsets
      */
     public static HtmlTokenStream tokenizeRegion(String source, int startOffset, int endOffset) {
@@ -50,7 +52,7 @@ public class HtmlLexer {
         int currentTokenStart = regionStart;
         byte currentTokenType = HtmlTokenStream.TK_TEXT;
         char quoteChar = 0;
-        
+
         boolean isClosingTag = false;
         String rawTextClosingNeedle = null;
         int lastTagNameStart = -1;
@@ -68,10 +70,14 @@ public class HtmlLexer {
                             currentTokenStart = i;
                             currentTokenType = HtmlTokenStream.TK_COMMENT;
                             state = STATE_COMMENT;
-                            types[i] = currentTokenType; starts[i] = currentTokenStart;
-                            types[i+1] = currentTokenType; starts[i+1] = currentTokenStart;
-                            types[i+2] = currentTokenType; starts[i+2] = currentTokenStart;
-                            types[i+3] = currentTokenType; starts[i+3] = currentTokenStart;
+                            types[i] = currentTokenType;
+                            starts[i] = currentTokenStart;
+                            types[i + 1] = currentTokenType;
+                            starts[i + 1] = currentTokenStart;
+                            types[i + 2] = currentTokenType;
+                            starts[i + 2] = currentTokenStart;
+                            types[i + 3] = currentTokenType;
+                            starts[i + 3] = currentTokenStart;
                             advance = false;
                             i += 4;
                         } else if (i + 1 < regionEnd && source.charAt(i + 1) == '!') {
@@ -162,7 +168,7 @@ public class HtmlLexer {
                         currentTokenType = HtmlTokenStream.TK_TAG_NAME;
                         state = STATE_TAG_NAME;
                         lastTagNameStart = i;
-                        advance = false; 
+                        advance = false;
                     }
                     break;
 
@@ -298,9 +304,12 @@ public class HtmlLexer {
 
                 case STATE_COMMENT:
                     if (c == '-' && i + 2 < regionEnd && source.charAt(i + 1) == '-' && source.charAt(i + 2) == '>') {
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
-                        types[i+1] = currentTokenType; starts[i+1] = currentTokenStart;
-                        types[i+2] = currentTokenType; starts[i+2] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
+                        types[i + 1] = currentTokenType;
+                        starts[i + 1] = currentTokenStart;
+                        types[i + 2] = currentTokenType;
+                        starts[i + 2] = currentTokenStart;
                         state = STATE_TEXT;
                         currentTokenType = HtmlTokenStream.TK_TEXT;
                         currentTokenStart = i + 3;
@@ -311,7 +320,8 @@ public class HtmlLexer {
 
                 case STATE_DOCTYPE:
                     if (c == '>') {
-                        types[i] = currentTokenType; starts[i] = currentTokenStart;
+                        types[i] = currentTokenType;
+                        starts[i] = currentTokenStart;
                         state = STATE_TEXT;
                         currentTokenType = HtmlTokenStream.TK_TEXT;
                         currentTokenStart = i + 1;

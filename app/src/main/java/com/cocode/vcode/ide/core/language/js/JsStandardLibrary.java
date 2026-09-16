@@ -18,32 +18,16 @@ import java.util.Set;
  */
 public class JsStandardLibrary {
 
-    private static final Object lock = new Object();
-    private static volatile boolean loaded = false;
-
-    public static String[][] DOT_METHODS;
-    public static String[] EVENT_NAMES;
     public static final Map<String, String[]> PROTOTYPE_METHODS = new HashMap<>();
     public static final Map<String, String> CHAIN_RETURN_TYPES = new HashMap<>();
     public static final Set<String> PROMISE_FUNCTIONS = new HashSet<>();
-
     public static final Map<String, Map<String, SignatureInfo>> SIGNATURES_BY_CONTAINER = new HashMap<>();
     public static final Map<String, SignatureInfo> GLOBAL_SIGNATURES = new HashMap<>();
     public static final Map<String, SignatureInfo> PROTOTYPE_SIGNATURES_BY_NAME = new HashMap<>();
-
-    public static final class SignatureInfo {
-        public final String name;
-        public final String detail;
-        public final String doc;
-        public final java.util.List<String> parameters;
-
-        public SignatureInfo(String name, String detail, String doc, java.util.List<String> parameters) {
-            this.name = name;
-            this.detail = detail != null ? detail : name;
-            this.doc = doc != null ? doc : "";
-            this.parameters = parameters != null ? Collections.unmodifiableList(parameters) : Collections.emptyList();
-        }
-    }
+    private static final Object lock = new Object();
+    public static String[][] DOT_METHODS;
+    public static String[] EVENT_NAMES;
+    private static volatile boolean loaded = false;
 
     static {
         ensureLoaded();
@@ -217,7 +201,7 @@ public class JsStandardLibrary {
     /**
      * Resolves built-in signature info for a function or method invocation.
      *
-     * @param funcName full function or member expression string (e.g. "console.log", "fetch", "arr.push")
+     * @param funcName     full function or member expression string (e.g. "console.log", "fetch", "arr.push")
      * @param receiverType optional inferred receiver type (e.g. "@ARRAY", "@STRING", "element")
      * @return matching SignatureInfo or null if not found
      */
@@ -321,6 +305,20 @@ public class JsStandardLibrary {
         if (EVENT_NAMES == null) EVENT_NAMES = new String[0];
         if (PROMISE_FUNCTIONS.isEmpty()) {
             Collections.addAll(PROMISE_FUNCTIONS, "fetch", "axios", "axios.get", "axios.post", "axios.put", "axios.delete");
+        }
+    }
+
+    public static final class SignatureInfo {
+        public final String name;
+        public final String detail;
+        public final String doc;
+        public final java.util.List<String> parameters;
+
+        public SignatureInfo(String name, String detail, String doc, java.util.List<String> parameters) {
+            this.name = name;
+            this.detail = detail != null ? detail : name;
+            this.doc = doc != null ? doc : "";
+            this.parameters = parameters != null ? Collections.unmodifiableList(parameters) : Collections.emptyList();
         }
     }
 }

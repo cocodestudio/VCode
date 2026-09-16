@@ -71,6 +71,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Tag loading
+
     /**
      * Initialises HTML tag completions and per-tag attribute lists from the JSON asset.
      */
@@ -170,9 +171,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             if (ampIdx >= 0) {
                 String afterAmp = lineBefore.substring(ampIdx + 1);
                 if (!afterAmp.contains(";") && !afterAmp.contains(" ") && afterAmp.length() <= 10) {
-                    HtmlTagParser.HtmlContext ctx = tagParser.parseContext(fullText, cursorPos);
-                    boolean insideCode = (ctx.unclosedTag != null &&
-                            ("script".equalsIgnoreCase(ctx.unclosedTag) || "style".equalsIgnoreCase(ctx.unclosedTag)))
+                    HtmlTagParser.HtmlContext ctx = HtmlTagParser.parseContext(fullText, cursorPos);
+                    boolean insideCode = (("script".equalsIgnoreCase(ctx.unclosedTag) || "style".equalsIgnoreCase(ctx.unclosedTag)))
                             || (ctx.isInsideAttributeValue && ctx.currentAttributeName != null &&
                             (ctx.currentAttributeName.startsWith("on") || "style".equalsIgnoreCase(ctx.currentAttributeName)));
                     if (!insideCode) {
@@ -251,10 +251,11 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     if (elem > 0 && parseRes.htmlTree.nodeName[elem] != null) {
                         unclosedTag = parseRes.htmlTree.nodeName[elem];
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
 
                 if (unclosedTag == null) {
-                    HtmlTagParser.HtmlContext c = tagParser.parseContext(fullText, cursorPos);
+                    HtmlTagParser.HtmlContext c = HtmlTagParser.parseContext(fullText, cursorPos);
                     unclosedTag = c.unclosedTag;
                 }
 
@@ -285,7 +286,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        HtmlTagParser.HtmlContext ctx = tagParser.parseContext(fullText, cursorPos);
+        HtmlTagParser.HtmlContext ctx = HtmlTagParser.parseContext(fullText, cursorPos);
         if (ctx.isInsideComment) {
             return new ArrayList<>();
         }
@@ -403,7 +404,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                         || emmetAbbr.equals("!")
                         || emmetAbbr.startsWith("lorem")
                         || EmmetParser.isHtmlAlias(emmetAbbr);
-                
+
                 if (isComplex) {
                     CompletionItem emmetItem = new CompletionItem(emmetAbbr, expanded,
                             "Emmet Abbreviation", CompletionItem.Type.SNIPPET, 0);
@@ -417,7 +418,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                             emmetItem.setReplaceAfterLength(1);
                         }
                     }
-                    
+
                     List<CompletionItem> res = new ArrayList<>();
                     res.add(emmetItem);
                     return res;
@@ -489,7 +490,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
             List<CompletionItem> staticTags = com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.buildCompletions(
                     com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.TAG_NAME, fullText, cursorPos);
-            
+
             if (!staticTags.isEmpty()) {
                 finalResults.addAll(fuzzyFilter(staticTags, word != null ? word : ""));
             } else {
@@ -523,6 +524,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Emmet brace and bracket detection
+
     /**
      * Returns true if the cursor is inside unmatched curly braces on the current line.
      * This indicates the user is typing Emmet text content like {@code a{Click me|}}
@@ -582,6 +584,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Embedded block content extraction
+
     /**
      * Finds the content start position of the last unclosed &lt;style&gt; or &lt;script&gt; block
      * before the cursor. Returns the position right after the closing '>' of the opening tag.
@@ -622,6 +625,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // File / folder path suggestions
+
     /**
      * Provides VS Code-style file/folder path completions for path-bearing attributes
      * (src, href, action…). Shows the immediate directory contents when a slash is

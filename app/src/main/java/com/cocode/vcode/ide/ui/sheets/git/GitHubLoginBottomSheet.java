@@ -21,10 +21,10 @@ import com.cocode.vcode.ide.databinding.BottomSheetGithubLoginBinding;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.git.github.GitHubApiClient;
 import com.cocode.vcode.ide.git.github.GitHubDeviceFlowClient;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 

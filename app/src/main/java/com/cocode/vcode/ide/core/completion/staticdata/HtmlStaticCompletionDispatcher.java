@@ -33,13 +33,26 @@ import java.util.List;
  */
 public final class HtmlStaticCompletionDispatcher {
 
-    private HtmlStaticCompletionDispatcher() {}
-
-    public enum Position {
-        TAG_NAME,
-        ATTRIBUTE_NAME,
-        CLOSING_TAG,
-        NONE
+    private static final java.util.Set<String> BOOLEAN_ATTRS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "hidden", "inert", "popover", "autofocus", "disabled", "checked", "readonly",
+            "required", "multiple", "novalidate", "formnovalidate", "reversed", "allowfullscreen",
+            "ismap", "loop", "muted", "playsinline", "default", "open", "async", "defer", "nomodule"
+    ));
+    /**
+     * Build the static completion list for the cursor's current
+     * position.
+     *
+     * <p>For {@link Position#TAG_NAME}: one
+     * {@link CompletionItem} per tag from
+     * {@link StaticCompletionLoader#getHtmlTags()}, with the
+     * tag's snippet applied through
+     * {@link SnippetCursorParser}.
+     */
+    private static volatile List<CompletionItem> CACHED_TAG_COMPLETIONS = null;
+    private static volatile List<CompletionItem> CACHED_GLOBAL_ATTRS = null;
+    private static volatile List<CompletionItem> CACHED_GLOBAL_PREFIXES = null;
+    private static volatile java.util.Map<String, List<CompletionItem>> CACHED_TAG_ATTRS = null;
+    private HtmlStaticCompletionDispatcher() {
     }
 
     /**
@@ -50,8 +63,14 @@ public final class HtmlStaticCompletionDispatcher {
         int lastLt = -1, lastGt = -1;
         for (int i = cursor - 1; i >= 0; i--) {
             char c = source.charAt(i);
-            if (c == '<') { lastLt = i; break; }
-            if (c == '>') { lastGt = i; break; }
+            if (c == '<') {
+                lastLt = i;
+                break;
+            }
+            if (c == '>') {
+                lastGt = i;
+                break;
+            }
         }
         if (lastLt < 0) return Position.NONE;
         if (lastGt > lastLt) return Position.NONE;
@@ -82,7 +101,10 @@ public final class HtmlStaticCompletionDispatcher {
             char c = source.charAt(i);
             if (inValue) {
                 if (quote != 0) {
-                    if (c == quote) { inValue = false; quote = 0; }
+                    if (c == quote) {
+                        inValue = false;
+                        quote = 0;
+                    }
                 } else {
                     if (Character.isWhitespace(c) || c == '>' || c == '/') {
                         inValue = false;
@@ -92,8 +114,14 @@ public final class HtmlStaticCompletionDispatcher {
                 continue;
             }
             // inName
-            if (Character.isWhitespace(c)) { i++; continue; }
-            if (c == '/' || c == '>') { i++; continue; }
+            if (Character.isWhitespace(c)) {
+                i++;
+                continue;
+            }
+            if (c == '/' || c == '>') {
+                i++;
+                continue;
+            }
             // Start of an attribute. Read its name.
             int attrStart = i;
             while (i < cursor) {
@@ -145,7 +173,10 @@ public final class HtmlStaticCompletionDispatcher {
         int lastLt = -1;
         for (int i = cursor - 1; i >= 0; i--) {
             char c = source.charAt(i);
-            if (c == '<') { lastLt = i; break; }
+            if (c == '<') {
+                lastLt = i;
+                break;
+            }
             if (c == '>') return null;
         }
         if (lastLt < 0) return null;
@@ -163,27 +194,6 @@ public final class HtmlStaticCompletionDispatcher {
         if (i == nameStart) return null;
         return source.substring(nameStart, i).toLowerCase();
     }
-
-    /**
-     * Build the static completion list for the cursor's current
-     * position.
-     *
-     * <p>For {@link Position#TAG_NAME}: one
-     * {@link CompletionItem} per tag from
-     * {@link StaticCompletionLoader#getHtmlTags()}, with the
-     * tag's snippet applied through
-     * {@link SnippetCursorParser}.
-     */
-    private static volatile List<CompletionItem> CACHED_TAG_COMPLETIONS = null;
-    private static volatile List<CompletionItem> CACHED_GLOBAL_ATTRS = null;
-    private static volatile List<CompletionItem> CACHED_GLOBAL_PREFIXES = null;
-    private static volatile java.util.Map<String, List<CompletionItem>> CACHED_TAG_ATTRS = null;
-
-    private static final java.util.Set<String> BOOLEAN_ATTRS = new java.util.HashSet<>(java.util.Arrays.asList(
-            "hidden", "inert", "popover", "autofocus", "disabled", "checked", "readonly",
-            "required", "multiple", "novalidate", "formnovalidate", "reversed", "allowfullscreen",
-            "ismap", "loop", "muted", "playsinline", "default", "open", "async", "defer", "nomodule"
-    ));
 
     public static boolean isHtmlBooleanAttribute(String attr) {
         return attr != null && BOOLEAN_ATTRS.contains(attr.toLowerCase());
@@ -209,16 +219,16 @@ public final class HtmlStaticCompletionDispatcher {
 
     private static void initHtmlCaches() {
         if (CACHED_TAG_COMPLETIONS != null) return;
-        
+
         List<CompletionItem> tags = new ArrayList<>();
         java.util.Map<String, List<CompletionItem>> attrs = new java.util.HashMap<>();
-        
+
         for (StaticCompletionItem t : StaticCompletionLoader.getHtmlTags()) {
             SnippetCursorParser.Result r = SnippetCursorParser.parse(t.insertText);
             tags.add(new CompletionItem(t.label, r != null ? r.insertText : t.insertText,
                     "HTML " + (t.detail == null ? "tag" : t.detail),
                     CompletionItem.Type.TAG, r != null ? r.cursorOffset : 0));
-                    
+
             if (t.attributes != null) {
                 List<CompletionItem> tagAttrs = new ArrayList<>();
                 for (String a : t.attributes) {
@@ -236,10 +246,10 @@ public final class HtmlStaticCompletionDispatcher {
         }
         CACHED_TAG_ATTRS = attrs;
         CACHED_TAG_COMPLETIONS = tags;
-        
+
         List<CompletionItem> globals = new ArrayList<>();
         java.util.Set<String> globalNames = new java.util.HashSet<>();
-        
+
         for (CompletionItem ci : com.cocode.vcode.ide.core.language.html.HtmlDefinitions.getGlobalAttrs()) {
             globals.add(ci);
             globalNames.add(ci.getLabel().toLowerCase());
@@ -251,7 +261,7 @@ public final class HtmlStaticCompletionDispatcher {
             }
         }
         CACHED_GLOBAL_ATTRS = globals;
-        
+
         List<CompletionItem> prefixes = new ArrayList<>();
         for (String p : StaticCompletionLoader.getHtmlGlobalAttributePrefixes()) {
             prefixes.add(new CompletionItem(p, p + "=\"|\"", "Global attribute prefix", CompletionItem.Type.ATTRIBUTE, 0));
@@ -324,7 +334,10 @@ public final class HtmlStaticCompletionDispatcher {
         int lastLt = -1;
         for (int i = cursor - 1; i >= 0; i--) {
             char c = source.charAt(i);
-            if (c == '<') { lastLt = i; break; }
+            if (c == '<') {
+                lastLt = i;
+                break;
+            }
             if (c == '>') return out;
         }
         if (lastLt < 0) return out;
@@ -377,14 +390,16 @@ public final class HtmlStaticCompletionDispatcher {
             String attrName = source.substring(attrStart, attrEnd);
 
             // Skip past '=' and value
-            while (i < tagEnd && (Character.isWhitespace(source.charAt(i)) || source.charAt(i) == '=')) i++;
+            while (i < tagEnd && (Character.isWhitespace(source.charAt(i)) || source.charAt(i) == '='))
+                i++;
             if (i < tagEnd && (source.charAt(i) == '"' || source.charAt(i) == '\'')) {
                 char quote = source.charAt(i);
                 i++;
                 while (i < tagEnd && source.charAt(i) != quote) i++;
                 if (i < tagEnd) i++;
             } else {
-                while (i < tagEnd && !Character.isWhitespace(source.charAt(i)) && source.charAt(i) != '>') i++;
+                while (i < tagEnd && !Character.isWhitespace(source.charAt(i)) && source.charAt(i) != '>')
+                    i++;
             }
 
             // If the cursor is currently inside or right at the end of this attribute name,
@@ -397,5 +412,12 @@ public final class HtmlStaticCompletionDispatcher {
             }
         }
         return out;
+    }
+
+    public enum Position {
+        TAG_NAME,
+        ATTRIBUTE_NAME,
+        CLOSING_TAG,
+        NONE
     }
 }

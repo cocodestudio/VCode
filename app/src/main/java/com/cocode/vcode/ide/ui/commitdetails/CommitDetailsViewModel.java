@@ -11,10 +11,10 @@ import androidx.lifecycle.MutableLiveData;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.model.GitFileItem;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.io.File;
 import java.util.List;
-import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 /**
  * CommitDetailsViewModel manages the state and logic for inspecting a single commit.
@@ -25,7 +25,6 @@ public class CommitDetailsViewModel extends AndroidViewModel {
 
     private final GitRepository repository;
     private final GitCredentialStore credentialStore;
-
 
 
     // Observable metadata fields

@@ -333,8 +333,8 @@ public class JsSignatureParser {
                 for (com.cocode.vcode.ide.core.lsp.SymbolEntry entry : entries) {
                     if (entry.name.equals(baseIdentifier) &&
                             (entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_FUNCTION ||
-                             entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_METHOD ||
-                             entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS)) {
+                                    entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_METHOD ||
+                                    entry.kind == com.cocode.vcode.ide.core.lsp.SymbolEntry.KIND_CLASS)) {
                         targetEntry = entry;
                         break;
                     }
@@ -408,7 +408,8 @@ public class JsSignatureParser {
     }
 
     private static List<String> extractClassConstructorParams(JsSyntaxTree tree, int classNodeId, com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree, int scopeId) {
-        if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) return Collections.emptyList();
+        if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount)
+            return Collections.emptyList();
         int child = tree.nodeChild[classNodeId];
         int guard = 0;
         while (child > 0 && child < tree.nodeCount && ++guard <= tree.nodeCount) {
@@ -462,8 +463,9 @@ public class JsSignatureParser {
         for (int i = searchFrom; i < text.length(); i++) {
             char c = text.charAt(i);
             if (c == '<') depth++;
-            else if (c == '>') { if (depth > 0) depth--; }
-            else if (c == '(' && depth == 0) return i;
+            else if (c == '>') {
+                if (depth > 0) depth--;
+            } else if (c == '(' && depth == 0) return i;
             else if (depth == 0 && !Character.isWhitespace(c) && c != '\n' && c != '\r') break;
         }
         for (int i = start; i < text.length(); i++) {
@@ -619,9 +621,18 @@ public class JsSignatureParser {
                 }
             }
 
-            if (c == '\'') { inSingle = true; continue; }
-            if (c == '"') { inDouble = true; continue; }
-            if (c == '`') { inTemplate = true; continue; }
+            if (c == '\'') {
+                inSingle = true;
+                continue;
+            }
+            if (c == '"') {
+                inDouble = true;
+                continue;
+            }
+            if (c == '`') {
+                inTemplate = true;
+                continue;
+            }
 
             if (c == '(' || c == '[' || c == '{') {
                 depth++;
@@ -681,9 +692,18 @@ public class JsSignatureParser {
                 }
             }
 
-            if (c == '\'') { inSingle = true; continue; }
-            if (c == '"') { inDouble = true; continue; }
-            if (c == '`') { inTemplate = true; continue; }
+            if (c == '\'') {
+                inSingle = true;
+                continue;
+            }
+            if (c == '"') {
+                inDouble = true;
+                continue;
+            }
+            if (c == '`') {
+                inTemplate = true;
+                continue;
+            }
 
             if (c == '(') {
                 depth++;

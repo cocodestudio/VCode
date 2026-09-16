@@ -8,15 +8,15 @@ import java.util.Arrays;
  */
 public final class CssSyntaxTree {
 
-    public static final int N_NONE        = 0;
-    public static final int MAX_NODES     = 100_000;
-    public static final int N_RULE        = 1;
-    public static final int N_SELECTOR    = 2;
+    public static final int N_NONE = 0;
+    public static final int MAX_NODES = 100_000;
+    public static final int N_RULE = 1;
+    public static final int N_SELECTOR = 2;
     public static final int N_DECLARATION = 3;
-    public static final int N_AT_RULE     = 4;
-    public static final int N_PROPERTY    = 5;
-    public static final int N_VALUE       = 6;
-    public static final int N_ERROR       = 7;
+    public static final int N_AT_RULE = 4;
+    public static final int N_PROPERTY = 5;
+    public static final int N_VALUE = 6;
+    public static final int N_ERROR = 7;
 
     public int[] nodesByOffset; // Sorted node IDs
 
@@ -54,9 +54,9 @@ public final class CssSyntaxTree {
         nodeName = new String[initialCapacity];
         nodeValue = new String[initialCapacity];
         nodeExtra = new int[initialCapacity];
-        
+
         // Node 0 is reserved as "null/root"
-        nodeCount = 1; 
+        nodeCount = 1;
     }
 
     /**
@@ -146,12 +146,18 @@ public final class CssSyntaxTree {
 
     private void medianOfThree(int a, int b, int c) {
         if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+            int t = nodesByOffset[a];
+            nodesByOffset[a] = nodesByOffset[b];
+            nodesByOffset[b] = t;
         }
         if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
-            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            int t = nodesByOffset[b];
+            nodesByOffset[b] = nodesByOffset[c];
+            nodesByOffset[c] = t;
             if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+                int t2 = nodesByOffset[a];
+                nodesByOffset[a] = nodesByOffset[b];
+                nodesByOffset[b] = t2;
             }
         }
     }
@@ -261,8 +267,8 @@ public final class CssSyntaxTree {
         nodeStart[id] = start;
         nodeEnd[id] = end;
         nodeParent[id] = parent;
-        nodeChild[id] = 0;   
-        nodeSibling[id] = 0; 
+        nodeChild[id] = 0;
+        nodeSibling[id] = 0;
         nodeLastChild[id] = 0;
         nodeName[id] = name;
         nodeValue[id] = value;

@@ -15,18 +15,16 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.editor.search.SearchEngine;
+import com.cocode.vcode.ide.core.lsp.LspDocument;
+import com.cocode.vcode.ide.core.lsp.LspLocation;
+import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.model.SearchResult;
 import com.cocode.vcode.ide.databinding.BottomSheetProjectSearchBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.span.SolidHighlightSpan;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
-
-import com.cocode.vcode.ide.core.lsp.LspDocument;
-import com.cocode.vcode.ide.core.lsp.LspLocation;
-import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -41,31 +39,71 @@ import java.util.Map;
  */
 public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
-    public enum Mode {
-        FIND_IN_FILES,
-        FIND_USAGES
-    }
-
     private Mode mode = Mode.FIND_IN_FILES;
     private File projectRoot;
     private SearchEngine searchEngine;
     private SearchAdapter adapter;
     private ProjectSearchListener listener;
-
     private BottomSheetProjectSearchBinding binding;
-
     private Runnable pendingSearch;
     private boolean isRegex = false;
     private boolean isCaseSensitive = false;
     private boolean isWholeWord = false;
-    
     // Store latest results for replace all
     private List<FileGroup> currentResults = new ArrayList<>();
-
     // Usages mode state
     private String customTitle;
     private String queryWord;
     private List<LspLocation> locations;
+
+    static ProjectSearchResult createMatchSnippet(File file, int lineNum, String rawLine,
+                                                  int colStart, int colEnd, String query) {
+        String line = rawLine != null ? rawLine.replace('\r', ' ').replace('\n', ' ') : "";
+
+        if (colStart < 0 || colEnd <= colStart || colStart >= line.length()) {
+            if (query != null && !query.isEmpty()) {
+                int idx = line.indexOf(query);
+                if (idx < 0) {
+                    idx = line.toLowerCase().indexOf(query.toLowerCase());
+                }
+                if (idx >= 0) {
+                    colStart = idx;
+                    colEnd = idx + query.length();
+                }
+            }
+        }
+
+        if (colEnd < colStart) {
+            colEnd = colStart;
+        }
+
+        int indent = 0;
+        while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
+            indent++;
+        }
+
+        String snippet;
+        int matchStart;
+        int matchEnd;
+
+        int trimmedLen = line.length() - indent;
+        if (trimmedLen <= 120) {
+            snippet = line.substring(indent);
+            matchStart = Math.max(0, colStart - indent);
+            matchEnd = Math.min(snippet.length(), Math.max(matchStart, colEnd - indent));
+        } else {
+            int winStart = Math.max(indent, colStart - 25);
+            int winEnd = Math.min(line.length(), Math.max(colEnd + 35, winStart + 80));
+            String prefix = winStart > indent ? "..." : "";
+            String suffix = winEnd < line.length() ? "..." : "";
+            snippet = prefix + line.substring(winStart, winEnd) + suffix;
+            matchStart = prefix.length() + Math.max(0, colStart - winStart);
+            matchEnd = matchStart + Math.max(0, colEnd - colStart);
+            matchEnd = Math.min(snippet.length(), matchEnd);
+        }
+
+        return new ProjectSearchResult(file, lineNum, snippet, matchStart, matchEnd);
+    }
 
     public void setProjectRoot(File root) {
         this.projectRoot = root;
@@ -177,35 +215,35 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
     private void setupReplaceAll() {
         binding.btnReplaceAll.setOnClickListener(v -> {
             if (currentResults == null || currentResults.isEmpty()) return;
-            
+
             String query = binding.etSearchQuery.getText() != null ? binding.etSearchQuery.getText().toString() : "";
             if (query.trim().isEmpty()) return;
-            
+
             android.view.View dialogView = android.view.LayoutInflater.from(requireContext()).inflate(R.layout.dialog_replace_all_confirm, null);
             androidx.appcompat.app.AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
                     .setView(dialogView)
                     .setCancelable(true)
                     .create();
-            
+
             android.widget.TextView tvTitle = dialogView.findViewById(R.id.tv_replace_title);
             android.widget.TextView tvDesc = dialogView.findViewById(R.id.tv_replace_desc);
             com.google.android.material.button.MaterialButton btnCancel = dialogView.findViewById(R.id.btn_cancel_replace);
             com.google.android.material.button.MaterialButton btnConfirm = dialogView.findViewById(R.id.btn_confirm_replace);
-            
+
             tvTitle.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiSemiBold(requireContext()));
             tvDesc.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiMedium(requireContext()));
             btnCancel.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiSemiBold(requireContext()));
             btnConfirm.setTypeface(com.cocode.vcode.ide.utils.FontManager.getInstance().getUiSemiBold(requireContext()));
-            
+
             tvDesc.setText(requireContext().getString(R.string.vcode_confirm_replace_all_desc, currentResults.size()));
-            
+
             btnCancel.setOnClickListener(v2 -> dialog.dismiss());
             btnConfirm.setOnClickListener(v2 -> {
                 dialog.dismiss();
                 performReplaceAll();
             });
             dialog.show();
-            
+
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
                 int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
@@ -218,7 +256,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
     private void performReplaceAll() {
         if (currentResults == null || currentResults.isEmpty()) return;
-        
+
         String query = binding.etSearchQuery.getText() != null ? binding.etSearchQuery.getText().toString() : "";
         String replaceText = binding.etReplaceQuery.getText() != null ? binding.etReplaceQuery.getText().toString() : "";
         if (query.isEmpty()) return;
@@ -390,55 +428,6 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
         return lines;
     }
 
-    static ProjectSearchResult createMatchSnippet(File file, int lineNum, String rawLine,
-                                                  int colStart, int colEnd, String query) {
-        String line = rawLine != null ? rawLine.replace('\r', ' ').replace('\n', ' ') : "";
-
-        if (colStart < 0 || colEnd <= colStart || colStart >= line.length()) {
-            if (query != null && !query.isEmpty()) {
-                int idx = line.indexOf(query);
-                if (idx < 0) {
-                    idx = line.toLowerCase().indexOf(query.toLowerCase());
-                }
-                if (idx >= 0) {
-                    colStart = idx;
-                    colEnd = idx + query.length();
-                }
-            }
-        }
-
-        if (colEnd < colStart) {
-            colEnd = colStart;
-        }
-
-        int indent = 0;
-        while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
-            indent++;
-        }
-
-        String snippet;
-        int matchStart;
-        int matchEnd;
-
-        int trimmedLen = line.length() - indent;
-        if (trimmedLen <= 120) {
-            snippet = line.substring(indent);
-            matchStart = Math.max(0, colStart - indent);
-            matchEnd = Math.min(snippet.length(), Math.max(matchStart, colEnd - indent));
-        } else {
-            int winStart = Math.max(indent, colStart - 25);
-            int winEnd = Math.min(line.length(), Math.max(colEnd + 35, winStart + 80));
-            String prefix = winStart > indent ? "..." : "";
-            String suffix = winEnd < line.length() ? "..." : "";
-            snippet = prefix + line.substring(winStart, winEnd) + suffix;
-            matchStart = prefix.length() + Math.max(0, colStart - winStart);
-            matchEnd = matchStart + Math.max(0, colEnd - colStart);
-            matchEnd = Math.min(snippet.length(), matchEnd);
-        }
-
-        return new ProjectSearchResult(file, lineNum, snippet, matchStart, matchEnd);
-    }
-
     private void searchInDirectory(File dir, String query, List<FileGroup> outResults) {
         File[] files = dir.listFiles();
         if (files == null) return;
@@ -500,6 +489,11 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
                 }
             }
         }
+    }
+
+    public enum Mode {
+        FIND_IN_FILES,
+        FIND_USAGES
     }
 
     public interface ProjectSearchListener {

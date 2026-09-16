@@ -19,7 +19,8 @@ import java.util.Arrays;
  */
 public final class WordWrapHelper {
 
-    private WordWrapHelper() {}
+    private WordWrapHelper() {
+    }
 
     /**
      * Computes the sub-row start column offsets for a line of text.
@@ -28,7 +29,7 @@ public final class WordWrapHelper {
      * @param lineLen     the length of the line
      * @param charsPerRow the maximum characters that fit on a single visual row
      * @return an {@code int[]} array of starting column offsets for each sub-row
-     *         ({@code [0, break1, break2, ...]}), or {@code null} if the line fits on 1 sub-row
+     * ({@code [0, break1, break2, ...]}), or {@code null} if the line fits on 1 sub-row
      */
     public static int[] computeLineWrapBreaks(CharSequence line, int lineLen, int charsPerRow) {
         if (lineLen <= charsPerRow || charsPerRow <= 0 || line == null) {
@@ -110,10 +111,7 @@ public final class WordWrapHelper {
             return true;
         }
         // Break before opening delimiters or fluent dot calls
-        if (curr == '(' || curr == '[' || curr == '{' || curr == '.') {
-            return true;
-        }
-        return false;
+        return curr == '(' || curr == '[' || curr == '{' || curr == '.';
     }
 
     /**
@@ -129,8 +127,7 @@ public final class WordWrapHelper {
         if (prev == '+' && (curr == '+' || curr == '=')) return true;
         if (prev == '-' && (curr == '-' || curr == '=' || curr == '>')) return true;
         if (prev == '*' && (curr == '*' || curr == '=')) return true;
-        if (prev == '/' && (curr == '/' || curr == '*')) return true;
-        return false;
+        return prev == '/' && (curr == '/' || curr == '*');
     }
 
     /**

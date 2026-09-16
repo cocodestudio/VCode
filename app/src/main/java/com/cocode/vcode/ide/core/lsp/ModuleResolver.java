@@ -29,7 +29,7 @@ public class ModuleResolver {
         if (base == null) return null;
 
         ProjectIndex index = ProjectIndex.getInstance();
-        
+
         // Try exact path first (e.g. for .js, .json)
         File target = new File(base, importPath);
         if (target.getParentFile() != null && existsCaseSensitive(target.getParentFile(), target.getName()) && target.isFile()) {
@@ -41,7 +41,7 @@ public class ModuleResolver {
                 return new LspLocation(targetNorm, new LspRange(0, 0, 0, 0));
             }
         }
-        
+
         // Try common JS/TS extensions if extension was omitted
         for (String ext : new String[]{".js", ".ts", ".mjs", ".cjs", ".tsx", ".jsx"}) {
             File extTarget = new File(base, importPath + ext);
@@ -55,14 +55,14 @@ public class ModuleResolver {
                 }
             }
         }
-        
+
         // Try index files (e.g. ./utils/index.js)
         if (target.isDirectory()) {
-             for (String ext : new String[]{"index.js", "index.ts", "index.mjs", "index.cjs", "index.tsx", "index.jsx"}) {
-                 if (existsCaseSensitive(target, ext)) {
-                     return new LspLocation(normalize(new File(target, ext)), new LspRange(0, 0, 0, 0));
-                 }
-             }
+            for (String ext : new String[]{"index.js", "index.ts", "index.mjs", "index.cjs", "index.tsx", "index.jsx"}) {
+                if (existsCaseSensitive(target, ext)) {
+                    return new LspLocation(normalize(new File(target, ext)), new LspRange(0, 0, 0, 0));
+                }
+            }
         }
         if (index != null) {
             for (String ext : new String[]{"index.js", "index.ts", "index.mjs", "index.cjs", "index.tsx", "index.jsx"}) {
@@ -73,7 +73,7 @@ public class ModuleResolver {
                 }
             }
         }
-        
+
         return null;
     }
 

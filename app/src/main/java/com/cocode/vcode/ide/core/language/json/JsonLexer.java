@@ -32,12 +32,42 @@ public class JsonLexer {
             }
 
             // Punctuation
-            if (c == '{') { types[i] = JsonTokenStream.TK_BRACE_OPEN; starts[i] = i; i++; continue; }
-            if (c == '}') { types[i] = JsonTokenStream.TK_BRACE_CLOSE; starts[i] = i; i++; continue; }
-            if (c == '[') { types[i] = JsonTokenStream.TK_BRACKET_OPEN; starts[i] = i; i++; continue; }
-            if (c == ']') { types[i] = JsonTokenStream.TK_BRACKET_CLOSE; starts[i] = i; i++; continue; }
-            if (c == ':') { types[i] = JsonTokenStream.TK_COLON; starts[i] = i; i++; continue; }
-            if (c == ',') { types[i] = JsonTokenStream.TK_COMMA; starts[i] = i; i++; continue; }
+            if (c == '{') {
+                types[i] = JsonTokenStream.TK_BRACE_OPEN;
+                starts[i] = i;
+                i++;
+                continue;
+            }
+            if (c == '}') {
+                types[i] = JsonTokenStream.TK_BRACE_CLOSE;
+                starts[i] = i;
+                i++;
+                continue;
+            }
+            if (c == '[') {
+                types[i] = JsonTokenStream.TK_BRACKET_OPEN;
+                starts[i] = i;
+                i++;
+                continue;
+            }
+            if (c == ']') {
+                types[i] = JsonTokenStream.TK_BRACKET_CLOSE;
+                starts[i] = i;
+                i++;
+                continue;
+            }
+            if (c == ':') {
+                types[i] = JsonTokenStream.TK_COLON;
+                starts[i] = i;
+                i++;
+                continue;
+            }
+            if (c == ',') {
+                types[i] = JsonTokenStream.TK_COMMA;
+                starts[i] = i;
+                i++;
+                continue;
+            }
 
             // Comments (JSONC)
             if (c == '/' && i + 1 < regionEnd) {
@@ -52,8 +82,12 @@ public class JsonLexer {
                     continue;
                 } else if (c2 == '*') { // Block comment
                     int start = i;
-                    types[i] = JsonTokenStream.TK_COMMENT; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_COMMENT; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_COMMENT;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_COMMENT;
+                    starts[i] = start;
+                    i++;
                     while (i < regionEnd) {
                         types[i] = JsonTokenStream.TK_COMMENT;
                         starts[i] = start;
@@ -125,31 +159,57 @@ public class JsonLexer {
             if (c == 't' && i + 3 < regionEnd && source.charAt(i + 1) == 'r' && source.charAt(i + 2) == 'u' && source.charAt(i + 3) == 'e') {
                 if (i + 4 >= regionEnd || !isIdentPart(source.charAt(i + 4))) {
                     int start = i;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
                     continue;
                 }
             }
             if (c == 'f' && i + 4 < regionEnd && source.charAt(i + 1) == 'a' && source.charAt(i + 2) == 'l' && source.charAt(i + 3) == 's' && source.charAt(i + 4) == 'e') {
                 if (i + 5 >= regionEnd || !isIdentPart(source.charAt(i + 5))) {
                     int start = i;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
                     continue;
                 }
             }
             if (c == 'n' && i + 3 < regionEnd && source.charAt(i + 1) == 'u' && source.charAt(i + 2) == 'l' && source.charAt(i + 3) == 'l') {
                 if (i + 4 >= regionEnd || !isIdentPart(source.charAt(i + 4))) {
                     int start = i;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
-                    types[i] = JsonTokenStream.TK_KEYWORD; starts[i] = start; i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
+                    types[i] = JsonTokenStream.TK_KEYWORD;
+                    starts[i] = start;
+                    i++;
                     continue;
                 }
             }
@@ -161,9 +221,9 @@ public class JsonLexer {
             i++;
             while (i < regionEnd) {
                 char curr = source.charAt(i);
-                if (Character.isWhitespace(curr) || curr == '{' || curr == '}' || curr == '[' || curr == ']' || 
-                    curr == ':' || curr == ',' || curr == '"' || curr == '/' || curr == '-' || 
-                    (curr >= '0' && curr <= '9')) {
+                if (Character.isWhitespace(curr) || curr == '{' || curr == '}' || curr == '[' || curr == ']' ||
+                        curr == ':' || curr == ',' || curr == '"' || curr == '/' || curr == '-' ||
+                        (curr >= '0' && curr <= '9')) {
                     break;
                 }
                 types[i] = JsonTokenStream.TK_ERROR;

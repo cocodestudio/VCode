@@ -48,9 +48,8 @@ public final class KnownElements {
     public static final Set<String> CSS_PURE_COLOR_PROPERTIES = new HashSet<>();
     public static final Set<String> CSS_MULTI_COLOR_PROPERTIES = new HashSet<>();
     public static final Set<String> CSS_BORDER_SHORTHAND_PROPERTIES = new HashSet<>();
-
-    private static volatile boolean isLoaded = false;
     private static final Object lock = new Object();
+    private static volatile boolean isLoaded = false;
 
     static {
         // Fallback bootstrap records for void & block elements so queries never fail

@@ -4,8 +4,6 @@ import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.json.JsonLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.model.Problem;
-import java.io.File;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -14,8 +12,9 @@ import com.cocode.vcode.ide.core.lsp.LspServer;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.core.model.Problem;
 
-import java.util.ArrayList;
+import java.io.File;
 import java.util.Collections;
 import java.util.List;
 

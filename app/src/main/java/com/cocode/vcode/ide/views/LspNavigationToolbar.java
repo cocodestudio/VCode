@@ -33,20 +33,11 @@ public class LspNavigationToolbar {
     private final PopupWindow popupWindow;
     private CodeEditText editor;
     private LspEditorBridge bridge;
-
-    public interface NavigationListener {
-        void onNavigate(LspLocation loc);
-        void onShowReferences(List<LspLocation> refs);
-        void onRenameSymbol(String newName, List<LspLocation> locations);
-    }
     private NavigationListener navigationListener;
-
     private LspLocation cachedDefinition = null;
     private List<LspLocation> cachedReferences = null;
     private List<LspLocation> cachedRename = null;
-    
     private int probeGeneration = 0;
-
     // Track the offset that the current popup is displaying for
     private int currentOffset = -1;
 
@@ -115,15 +106,18 @@ public class LspNavigationToolbar {
                 cachedDefinition = result;
                 hasDef[0] = result != null;
                 defChecked[0] = true;
-                if (refChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+                if (refChecked[0] && renameChecked[0])
+                    showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
+
             @Override
             public void onError(String errorMessage) {
                 if (myGeneration != probeGeneration) return;
                 if (editor.getSelectionStart() != flatOffset) return;
                 cachedDefinition = null;
                 defChecked[0] = true;
-                if (refChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+                if (refChecked[0] && renameChecked[0])
+                    showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
         };
 
@@ -135,15 +129,18 @@ public class LspNavigationToolbar {
                 cachedReferences = result;
                 hasRef[0] = result != null && !result.isEmpty();
                 refChecked[0] = true;
-                if (defChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+                if (defChecked[0] && renameChecked[0])
+                    showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
+
             @Override
             public void onError(String errorMessage) {
                 if (myGeneration != probeGeneration) return;
                 if (editor.getSelectionStart() != flatOffset) return;
                 cachedReferences = null;
                 refChecked[0] = true;
-                if (defChecked[0] && renameChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+                if (defChecked[0] && renameChecked[0])
+                    showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
         };
 
@@ -155,15 +152,18 @@ public class LspNavigationToolbar {
                 cachedRename = result;
                 hasRename[0] = result != null && !result.isEmpty();
                 renameChecked[0] = true;
-                if (defChecked[0] && refChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+                if (defChecked[0] && refChecked[0])
+                    showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
+
             @Override
             public void onError(String errorMessage) {
                 if (myGeneration != probeGeneration) return;
                 if (editor.getSelectionStart() != flatOffset) return;
                 cachedRename = null;
                 renameChecked[0] = true;
-                if (defChecked[0] && refChecked[0]) showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
+                if (defChecked[0] && refChecked[0])
+                    showIfAvailable(flatOffset, hasDef[0], hasRef[0], hasRename[0]);
             }
         };
 
@@ -181,7 +181,7 @@ public class LspNavigationToolbar {
         binding.btnDefinition.setVisibility(hasDef ? View.VISIBLE : View.GONE);
         binding.btnReferences.setVisibility(hasRef ? View.VISIBLE : View.GONE);
         binding.btnRename.setVisibility(hasRename ? View.VISIBLE : View.GONE);
-        
+
         currentOffset = flatOffset;
 
         if (!popupWindow.isShowing()) {
@@ -323,5 +323,13 @@ public class LspNavigationToolbar {
         if (context != null) {
             TooltipCompat.setTooltipText(binding.btnRename, context.getString(R.string.vcode_action_rename));
         }
+    }
+
+    public interface NavigationListener {
+        void onNavigate(LspLocation loc);
+
+        void onShowReferences(List<LspLocation> refs);
+
+        void onRenameSymbol(String newName, List<LspLocation> locations);
     }
 }

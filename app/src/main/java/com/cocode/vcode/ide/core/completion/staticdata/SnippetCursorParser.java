@@ -20,18 +20,7 @@ package com.cocode.vcode.ide.core.completion.staticdata;
  */
 public final class SnippetCursorParser {
 
-    private SnippetCursorParser() {}
-
-    /** Result of parsing a snippet. */
-    public static final class Result {
-        public final String insertText;
-        /** Cursor offset in {@code insertText} (0-based, character
-         *  index where the next keystroke should land). */
-        public final int cursorOffset;
-        public Result(String insertText, int cursorOffset) {
-            this.insertText = insertText;
-            this.cursorOffset = cursorOffset;
-        }
+    private SnippetCursorParser() {
     }
 
     /**
@@ -67,5 +56,22 @@ public final class SnippetCursorParser {
     public static String stripMarker(String snippet) {
         Result r = parse(snippet);
         return r != null ? r.insertText : snippet;
+    }
+
+    /**
+     * Result of parsing a snippet.
+     */
+    public static final class Result {
+        public final String insertText;
+        /**
+         * Cursor offset in {@code insertText} (0-based, character
+         * index where the next keystroke should land).
+         */
+        public final int cursorOffset;
+
+        public Result(String insertText, int cursorOffset) {
+            this.insertText = insertText;
+            this.cursorOffset = cursorOffset;
+        }
     }
 }

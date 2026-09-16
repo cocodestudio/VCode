@@ -14,20 +14,20 @@ public class TsSyntaxHighlighter extends JsSyntaxHighlighter {
         super(context);
     }
 
-    public static TsSyntaxHighlighter forTest() {
-        return new TsSyntaxHighlighter((Void) null);
-    }
-
-    public static TsSyntaxHighlighter forTestWithColors(int comment, int string, int keyword, int number, int function, int booleanCol, int operator) {
-        return new TsSyntaxHighlighter(comment, string, keyword, number, function, booleanCol, operator);
-    }
-
     TsSyntaxHighlighter(Void unusedForTest) {
         super((Void) null);
     }
 
     TsSyntaxHighlighter(int comment, int string, int keyword, int number, int function, int booleanCol, int operator) {
         super(comment, string, keyword, number, function, booleanCol, operator);
+    }
+
+    public static TsSyntaxHighlighter forTest() {
+        return new TsSyntaxHighlighter((Void) null);
+    }
+
+    public static TsSyntaxHighlighter forTestWithColors(int comment, int string, int keyword, int number, int function, int booleanCol, int operator) {
+        return new TsSyntaxHighlighter(comment, string, keyword, number, function, booleanCol, operator);
     }
 
     @Override

@@ -58,8 +58,6 @@ public class ApiTesterViewer implements IFileViewer {
 
     private String currentMethod = "GET";
     private boolean isUpdating = false;
-    private JSONObject apiHeadersDict;
-
     private final TextWatcher stateWatcher = new TextWatcher() {
         @Override
         public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -74,6 +72,7 @@ public class ApiTesterViewer implements IFileViewer {
             saveStateToVirtualFile();
         }
     };
+    private JSONObject apiHeadersDict;
 
     @Override
     public View getView(Context context, ViewGroup parent) {
@@ -191,12 +190,16 @@ public class ApiTesterViewer implements IFileViewer {
         popup.setAnchorView(target);
         int height = UiUtils.dpToPx(context, 200);
         popup.setHeight(height);
-        
+
         target.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
             @Override
             public void afterTextChanged(Editable s) {
                 if (s.length() < 1) {
@@ -205,7 +208,7 @@ public class ApiTesterViewer implements IFileViewer {
                 }
                 String text = s.toString().toLowerCase(Locale.ROOT);
                 List<String> suggestions = new java.util.ArrayList<>();
-                
+
                 if (isKey) {
                     Iterator<String> keys = apiHeadersDict.keys();
                     while (keys.hasNext()) {
@@ -225,10 +228,11 @@ public class ApiTesterViewer implements IFileViewer {
                                     suggestions.add(val);
                                 }
                             }
-                        } catch (JSONException ignored) {}
+                        } catch (JSONException ignored) {
+                        }
                     }
                 }
-                
+
                 if (suggestions.isEmpty()) {
                     popup.dismiss();
                 } else {
@@ -254,7 +258,7 @@ public class ApiTesterViewer implements IFileViewer {
                 }
             }
         });
-        
+
         popup.setOnItemClickListener((parent, view, position, id) -> {
             String selected = (String) parent.getItemAtPosition(position);
             target.setText(selected);
@@ -446,8 +450,9 @@ public class ApiTesterViewer implements IFileViewer {
 
     private String formatByteSize(int bytes) {
         if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format(Locale.getDefault(), "%.1f KB", bytes / 1024f);
-        return String.format(Locale.getDefault(),"%.2f MB", bytes / (1024f * 1024f));
+        if (bytes < 1024 * 1024)
+            return String.format(Locale.getDefault(), "%.1f KB", bytes / 1024f);
+        return String.format(Locale.getDefault(), "%.2f MB", bytes / (1024f * 1024f));
     }
 
     private void postResult(CharSequence result, int statusCode, String statusMessage, long timeTaken, String sizeStr, boolean success) {

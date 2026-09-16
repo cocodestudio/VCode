@@ -3,7 +3,6 @@ package com.cocode.vcode.ide.core.language.js;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
-import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.ModuleResolver;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
@@ -11,7 +10,6 @@ import com.cocode.vcode.ide.core.lsp.SymbolEntry;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -35,35 +33,38 @@ public class JsSemanticLinter {
 
         // Function call arity and signature validation
         checkArity(file, text, mask, index, scopeTree, tree, problems);
-        
+
         // Undefined symbol detection against active scope, standard library, and project index
         checkUndefined(file, text, mask, scopeTree, tree, problems);
-        
+
         // AST structural rules and syntax checks
-        try { checkAdditionalAstRules(file, text, mask, tree, problems); } catch (Exception ignored) {}
+        try {
+            checkAdditionalAstRules(file, text, mask, tree, problems);
+        } catch (Exception ignored) {
+        }
     }
-    
+
     private static void checkDuplicateDeclarations(File file, String text, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
         for (java.util.Map.Entry<String, int[]> entry : scopeTree.symbols.entrySet()) {
             String name = entry.getKey();
             int[] tuples = entry.getValue();
             if (tuples.length <= 3) continue;
-            
+
             java.util.Map<Integer, java.util.List<Integer>> scopeToNodes = new java.util.HashMap<>();
             for (int i = 0; i < tuples.length; i += 3) {
                 int scopeId = tuples[i];
-                int nodeId = tuples[i+1];
+                int nodeId = tuples[i + 1];
                 scopeToNodes.computeIfAbsent(scopeId, k -> new java.util.ArrayList<>()).add(nodeId);
             }
-            
+
             for (java.util.Map.Entry<Integer, java.util.List<Integer>> scopeEntry : scopeToNodes.entrySet()) {
                 java.util.List<Integer> nodes = scopeEntry.getValue();
                 if (nodes.size() > 1) {
                     boolean hasBlockLevel = false;
                     for (int nodeId : nodes) {
-                        if (tree.nodeType[nodeId] == JsSyntaxTree.N_CLASS_DECL || 
-                            tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_CONST || 
-                            tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_LET) {
+                        if (tree.nodeType[nodeId] == JsSyntaxTree.N_CLASS_DECL ||
+                                tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_CONST ||
+                                tree.nodeExtra[nodeId] == JsSyntaxTree.FLAG_LET) {
                             hasBlockLevel = true;
                             break;
                         }
@@ -82,7 +83,7 @@ public class JsSemanticLinter {
             }
         }
     }
-    
+
     private static void checkConstReassignment(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
@@ -91,13 +92,13 @@ public class JsSemanticLinter {
                 if (parentId != 0 && tree.nodeType[parentId] == JsSyntaxTree.N_VAR_DECL && tree.nodeName[i].equals(tree.nodeName[parentId])) {
                     continue;
                 }
-                
+
                 String name = tree.nodeName[i];
                 if (name == null || name.isEmpty() || "{destructure}".equals(name)) continue;
-                
+
                 int endOffset = tree.nodeEnd[i];
                 int nextTok = -1;
-                
+
                 int low = 0;
                 int high = mask.types.length - 1;
                 int startTokenIdx = high;
@@ -110,31 +111,31 @@ public class JsSemanticLinter {
                         low = mid + 1;
                     }
                 }
-                
+
                 for (int t = startTokenIdx; t < mask.types.length; t++) {
                     if (mask.types[t] != TokenStream.TK_WHITESPACE && mask.types[t] != TokenStream.TK_COMMENT) {
                         nextTok = t;
                         break;
                     }
                 }
-                
+
                 boolean isAssign = false;
 
                 if (nextTok != -1 && mask.types[nextTok] == TokenStream.TK_OPERATOR) {
                     char ch = text.charAt(mask.tokenStart[nextTok]);
-                    
+
                     if (ch == '=') {
                         isAssign = true;
                         // Ignore '==' or '==='
-                        if (nextTok + 1 < mask.types.length && mask.tokenStart[nextTok+1] == mask.tokenStart[nextTok] + 1) {
-                            if (mask.types[nextTok+1] == TokenStream.TK_OPERATOR && text.charAt(mask.tokenStart[nextTok+1]) == '=') {
+                        if (nextTok + 1 < mask.types.length && mask.tokenStart[nextTok + 1] == mask.tokenStart[nextTok] + 1) {
+                            if (mask.types[nextTok + 1] == TokenStream.TK_OPERATOR && text.charAt(mask.tokenStart[nextTok + 1]) == '=') {
                                 isAssign = false;
                             }
                         }
                     } else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%') {
-                        if (nextTok + 1 < mask.types.length && mask.tokenStart[nextTok+1] == mask.tokenStart[nextTok] + 1) {
-                            if (mask.types[nextTok+1] == TokenStream.TK_OPERATOR) {
-                                char nextCh = text.charAt(mask.tokenStart[nextTok+1]);
+                        if (nextTok + 1 < mask.types.length && mask.tokenStart[nextTok + 1] == mask.tokenStart[nextTok] + 1) {
+                            if (mask.types[nextTok + 1] == TokenStream.TK_OPERATOR) {
+                                char nextCh = text.charAt(mask.tokenStart[nextTok + 1]);
                                 if (nextCh == '=' || (ch == '+' && nextCh == '+') || (ch == '-' && nextCh == '-')) {
                                     isAssign = true;
                                 }
@@ -175,22 +176,22 @@ public class JsSemanticLinter {
                         }
                     }
                 }
-                    
+
                 if (isAssign) {
-                
+
                     String baseIdentifier = name;
                     int dotIdx = name.indexOf('.');
                     if (dotIdx >= 0) {
                         // assigning to a property of a const variable is allowed!
                         continue;
                     }
-                    
+
                     int scopeId = scopeTree.findScopeAt(tree.nodeStart[i], tree);
                     int[] resolved = scopeTree.lookupSymbol(baseIdentifier, scopeId, tree.nodeStart[i], tree);
-                    
+
                     if (resolved != null && resolved[2] == JsSyntaxTree.N_VAR_DECL) {
                         int declNodeId = resolved[1];
-                        
+
                         if ((tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_CONST || tree.nodeExtra[declNodeId] == JsSyntaxTree.FLAG_CONST) {
                             int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                             int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
@@ -201,17 +202,6 @@ public class JsSemanticLinter {
                     }
                 }
             }
-        }
-    }
-
-    private static final class ResolvedImport {
-        final JsSyntaxTree tree;
-        final int nodeId;
-        final ScopeTree scopeTree;
-        ResolvedImport(JsSyntaxTree tree, int nodeId, ScopeTree scopeTree) {
-            this.tree = tree;
-            this.nodeId = nodeId;
-            this.scopeTree = scopeTree;
         }
     }
 
@@ -281,18 +271,6 @@ public class JsSemanticLinter {
             }
         }
         return best;
-    }
-
-    public static final class ResolvedMethod {
-        public final JsSyntaxTree tree;
-        public final int methodNode;
-        public final boolean isCrossFile;
-
-        public ResolvedMethod(JsSyntaxTree tree, int methodNode, boolean isCrossFile) {
-            this.tree = tree;
-            this.methodNode = methodNode;
-            this.isCrossFile = isCrossFile;
-        }
     }
 
     public static int findMethodInClass(JsSyntaxTree tree, int classNodeId, String methodName) {
@@ -379,7 +357,8 @@ public class JsSemanticLinter {
             JsSyntaxTree tree,
             ScopeTree scopeTree,
             ProjectIndex index) {
-        if (receiver == null || receiver.isEmpty() || methodName == null || methodName.isEmpty()) return null;
+        if (receiver == null || receiver.isEmpty() || methodName == null || methodName.isEmpty())
+            return null;
 
         String className = null;
         if (receiver.startsWith("new ") || receiver.startsWith("(new ")) {
@@ -423,7 +402,8 @@ public class JsSemanticLinter {
                         int newIdx = declText.indexOf("new ");
                         if (newIdx >= 0) {
                             int idStart = newIdx + 4;
-                            while (idStart < declText.length() && Character.isWhitespace(declText.charAt(idStart))) idStart++;
+                            while (idStart < declText.length() && Character.isWhitespace(declText.charAt(idStart)))
+                                idStart++;
                             int idEnd = idStart;
                             while (idEnd < declText.length() && (Character.isLetterOrDigit(declText.charAt(idEnd)) || declText.charAt(idEnd) == '_' || declText.charAt(idEnd) == '$' || declText.charAt(idEnd) == '.')) {
                                 idEnd++;
@@ -449,7 +429,8 @@ public class JsSemanticLinter {
                     int newIdx = prefixText.indexOf("new ", lastAssign);
                     if (newIdx >= 0) {
                         int idStart = newIdx + 4;
-                        while (idStart < prefixText.length() && Character.isWhitespace(prefixText.charAt(idStart))) idStart++;
+                        while (idStart < prefixText.length() && Character.isWhitespace(prefixText.charAt(idStart)))
+                            idStart++;
                         int idEnd = idStart;
                         while (idEnd < prefixText.length() && (Character.isLetterOrDigit(prefixText.charAt(idEnd)) || prefixText.charAt(idEnd) == '_' || prefixText.charAt(idEnd) == '$' || prefixText.charAt(idEnd) == '.')) {
                             idEnd++;
@@ -515,7 +496,7 @@ public class JsSemanticLinter {
             if (tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR) {
                 String identifier = tree.nodeName[i];
                 if (identifier == null) continue;
-                
+
                 String baseIdentifier = identifier;
                 int dotIdx = identifier.lastIndexOf('.');
                 if (dotIdx >= 0) {
@@ -612,7 +593,7 @@ public class JsSemanticLinter {
                                 }
                             } else if (tTree.nodeType[tNode] == JsSyntaxTree.N_VAR_DECL) {
                                 int child = tTree.nodeChild[tNode];
-                                if (child > 0 && child < tTree.nodeCount && (tTree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL 
+                                if (child > 0 && child < tTree.nodeCount && (tTree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL
                                         || tTree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC)) {
                                     int pChild = tTree.nodeChild[child];
                                     int pLoop = 0;
@@ -644,13 +625,13 @@ public class JsSemanticLinter {
                         } else {
                             if (declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeType[declNodeId] == JsSyntaxTree.N_VAR_DECL) {
                                 int child = tree.nodeChild[declNodeId];
-                                if (child > 0 && child < tree.nodeCount && (tree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC 
+                                if (child > 0 && child < tree.nodeCount && (tree.nodeType[child] == JsSyntaxTree.N_ARROW_FUNC
                                         || tree.nodeType[child] == JsSyntaxTree.N_FUNC_DECL
                                         || tree.nodeType[child] == JsSyntaxTree.N_CLASS_DECL)) {
                                     targetNodeId = child;
                                 }
                             }
-                            
+
                             int targetType = (targetNodeId > 0 && targetNodeId < tree.nodeCount) ? tree.nodeType[targetNodeId] : 0;
                             if (targetType == JsSyntaxTree.N_CLASS_DECL) {
                                 int[] ctorInfo = resolveClassConstructorParams(tree, targetNodeId, scopeTree, scopeId, index);
@@ -734,9 +715,9 @@ public class JsSemanticLinter {
                                     continue;
                                 }
                             } else if (targetEntry.detail != null) {
-                                String detail = targetEntry.detail; 
+                                String detail = targetEntry.detail;
                                 if (detail.contains("...")) isVariadic = true;
-                                
+
                                 String[] declaredParams = detail.trim().isEmpty() ? new String[0] : detail.split(",");
                                 totalParams = declaredParams.length;
                                 minParams = 0;
@@ -766,9 +747,9 @@ public class JsSemanticLinter {
                         }
                     }
                 }
-                
+
                 if (isVariadic) continue;
-                
+
                 int actualArgs = 0;
                 int child = tree.nodeChild[i];
                 int argLoop = 0;
@@ -778,7 +759,7 @@ public class JsSemanticLinter {
                     }
                     child = tree.nodeSibling[child];
                 }
-                
+
                 if (actualArgs < minParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
@@ -920,7 +901,7 @@ public class JsSemanticLinter {
         // Default ES6 constructor takes 0 arguments when no explicit constructor exists
         return new int[]{0, 0, 0};
     }
-    
+
     private static void checkUndefined(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
         int ieCount = 0;
         int[] ieStart = new int[16];
@@ -936,7 +917,7 @@ public class JsSemanticLinter {
                 ieCount++;
             }
         }
-        
+
         for (int t = 0; t < mask.length; t++) {
             if (mask.types[t] != TokenStream.TK_IDENTIFIER) continue;
             int offset = mask.tokenStart[t];
@@ -970,7 +951,8 @@ public class JsSemanticLinter {
 
             // Allow object keys in object literals: { key: value }
             int postIndex = idEnd;
-            while (postIndex < text.length() && Character.isWhitespace(text.charAt(postIndex))) postIndex++;
+            while (postIndex < text.length() && Character.isWhitespace(text.charAt(postIndex)))
+                postIndex++;
             if (postIndex < text.length() && text.charAt(postIndex) == ':') {
                 int preTok = offset - 1;
                 while (preTok >= 0 && (mask.types[preTok] == TokenStream.TK_WHITESPACE || mask.types[preTok] == TokenStream.TK_COMMENT)) {
@@ -1041,11 +1023,11 @@ public class JsSemanticLinter {
             }
         }
     }
-    
+
     private static boolean isDeclarationSite(String text, int start) {
         int i = start - 1;
         while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
-        
+
         if (i >= 0) {
             char c = text.charAt(i);
             if (c == '{' || c == '[' || c == '(' || c == ',') {
@@ -1058,27 +1040,26 @@ public class JsSemanticLinter {
                 else if (sub.endsWith("interface")) kwLen = 9;
                 else if (sub.endsWith("namespace")) kwLen = 9;
                 else if (sub.endsWith("declare")) kwLen = 7;
-                else if (sub.endsWith("class") || sub.endsWith("catch") || sub.endsWith("const")) kwLen = 5;
+                else if (sub.endsWith("class") || sub.endsWith("catch") || sub.endsWith("const"))
+                    kwLen = 5;
                 else if (sub.endsWith("enum") || sub.endsWith("type")) kwLen = 4;
                 else kwLen = 3; // let, var, get, set
                 int wordStart = (i + 1) - kwLen;
-                if (wordStart >= 0 && (wordStart == 0 || !Character.isLetterOrDigit(text.charAt(wordStart - 1)))) {
-                    return true;
-                }
+                return wordStart >= 0 && (wordStart == 0 || !Character.isLetterOrDigit(text.charAt(wordStart - 1)));
             }
         }
         return false;
     }
-    
+
     private static void checkAdditionalAstRules(File file, String text, TokenStream mask, JsSyntaxTree tree, List<Problem> problems) {
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
-            
+
             // checkConsole
             if (type == JsSyntaxTree.N_MEMBER_EXPR || type == JsSyntaxTree.N_CALL_EXPR) {
-                if ("console.log".equals(tree.nodeName[i]) || "console.error".equals(tree.nodeName[i]) || 
-                    "console.warn".equals(tree.nodeName[i]) || "console.info".equals(tree.nodeName[i])) {
-                    
+                if ("console.log".equals(tree.nodeName[i]) || "console.error".equals(tree.nodeName[i]) ||
+                        "console.warn".equals(tree.nodeName[i]) || "console.info".equals(tree.nodeName[i])) {
+
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, tree.nodeName[i].length(),
@@ -1087,7 +1068,7 @@ public class JsSemanticLinter {
                 }
             }
         }
-        
+
         // Token stream rules
         int tokenCount = mask.length;
         for (int i = 0; i < tokenCount; i++) {
@@ -1192,6 +1173,30 @@ public class JsSemanticLinter {
                             Problem.Severity.WARNING));
                 }
             }
+        }
+    }
+
+    private static final class ResolvedImport {
+        final JsSyntaxTree tree;
+        final int nodeId;
+        final ScopeTree scopeTree;
+
+        ResolvedImport(JsSyntaxTree tree, int nodeId, ScopeTree scopeTree) {
+            this.tree = tree;
+            this.nodeId = nodeId;
+            this.scopeTree = scopeTree;
+        }
+    }
+
+    public static final class ResolvedMethod {
+        public final JsSyntaxTree tree;
+        public final int methodNode;
+        public final boolean isCrossFile;
+
+        public ResolvedMethod(JsSyntaxTree tree, int methodNode, boolean isCrossFile) {
+            this.tree = tree;
+            this.methodNode = methodNode;
+            this.isCrossFile = isCrossFile;
         }
     }
 }

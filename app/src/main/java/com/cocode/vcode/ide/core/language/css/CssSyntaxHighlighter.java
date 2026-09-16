@@ -32,14 +32,6 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         colorBracket = getColor(R.color.vcode_color_html_bracket);
     }
 
-    public static CssSyntaxHighlighter forTest() {
-        return new CssSyntaxHighlighter((Void) null);
-    }
-
-    public static CssSyntaxHighlighter forTestWithColors(int comment, int selector, int property, int value, int atRule, int bracket) {
-        return new CssSyntaxHighlighter(comment, selector, property, value, atRule, bracket);
-    }
-
     CssSyntaxHighlighter(Void unusedForTest) {
         super((Void) null);
         this.colorSelector = 0;
@@ -56,6 +48,14 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         this.colorValue = value;
         this.colorAtRule = atRule;
         this.colorBracket = bracket;
+    }
+
+    public static CssSyntaxHighlighter forTest() {
+        return new CssSyntaxHighlighter((Void) null);
+    }
+
+    public static CssSyntaxHighlighter forTestWithColors(int comment, int selector, int property, int value, int atRule, int bracket) {
+        return new CssSyntaxHighlighter(comment, selector, property, value, atRule, bracket);
     }
 
     protected boolean isWordStart(char c) {
@@ -356,8 +356,14 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
                 char q = inStringDouble ? '"' : '\'';
                 int j = i;
                 while (j < len) {
-                    if (line.charAt(j) == '\\') { j += 2; continue; }
-                    if (line.charAt(j) == q) { j++; break; }
+                    if (line.charAt(j) == '\\') {
+                        j += 2;
+                        continue;
+                    }
+                    if (line.charAt(j) == q) {
+                        j++;
+                        break;
+                    }
                     j++;
                 }
                 if (j < len || (j == len && line.charAt(len - 1) == q && (len < 2 || line.charAt(len - 2) != '\\'))) {
@@ -409,8 +415,14 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
             if (quote == '"' || quote == '\'') {
                 int j = i + 1;
                 while (j < len) {
-                    if (line.charAt(j) == '\\') { j += 2; continue; }
-                    if (line.charAt(j) == quote) { j++; break; }
+                    if (line.charAt(j) == '\\') {
+                        j += 2;
+                        continue;
+                    }
+                    if (line.charAt(j) == quote) {
+                        j++;
+                        break;
+                    }
                     j++;
                 }
                 if (j >= len && (len < 1 || line.charAt(len - 1) != quote || (len >= 2 && line.charAt(len - 2) == '\\'))) {

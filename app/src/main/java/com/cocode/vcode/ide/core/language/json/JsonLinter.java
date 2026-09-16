@@ -18,13 +18,13 @@ public class JsonLinter {
     public static List<Problem> analyze(File file, String text) {
         List<Problem> problems = new ArrayList<>();
         if (text == null || text.isEmpty()) return problems;
-        
+
         JsonTokenStream stream = JsonLexer.tokenize(text);
-        
+
         int mode = com.cocode.vcode.ide.core.language.base.ParseModeGate.select(
-                com.cocode.vcode.ide.core.language.base.ParseModeGate.SizeMetric.NODES, 
+                com.cocode.vcode.ide.core.language.base.ParseModeGate.SizeMetric.NODES,
                 stream.length, 1000, 5000, 15000);
-                
+
         if (mode == com.cocode.vcode.ide.core.language.js.ParseResult.MODE_TOKENIZE_ONLY) {
             return problems;
         }
@@ -49,23 +49,23 @@ public class JsonLinter {
                 }
             }
         }
-        
+
         JsonSyntaxTree tree = JsonParser.parse(stream, text);
 
         for (int i = 1; i < tree.nodeCount; i++) {
             byte type = tree.nodeType[i];
-            
+
             if (type == JsonSyntaxTree.N_ERROR) {
                 int start = tree.nodeStart[i];
                 int end = tree.nodeEnd[i];
                 int len = Math.max(1, end - start);
-                
+
                 int line = LinterUtils.getLine(text, start);
                 int col = LinterUtils.getColumn(text, start);
-                
+
                 String msg = tree.nodeName[i];
                 if (msg == null || msg.isEmpty()) msg = "Syntax error";
-                
+
                 problems.add(new Problem(file, line, col, len, msg, Problem.Severity.ERROR));
             } else if (type == JsonSyntaxTree.N_OBJECT) {
                 Set<String> seenKeys = new HashSet<>();
@@ -82,7 +82,7 @@ public class JsonLinter {
                                 int len = Math.max(1, end - start);
                                 int line = LinterUtils.getLine(text, start);
                                 int col = LinterUtils.getColumn(text, start);
-                                
+
                                 problems.add(new Problem(file, line, col, len, "Duplicate object key: " + keyName, Problem.Severity.WARNING));
                             }
                         }
@@ -91,7 +91,7 @@ public class JsonLinter {
                 }
             }
         }
-        
+
         return problems;
     }
 

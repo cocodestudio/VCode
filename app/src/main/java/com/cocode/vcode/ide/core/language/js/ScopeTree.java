@@ -9,26 +9,24 @@ import java.util.HashMap;
  */
 public final class ScopeTree {
 
-    // Parallel arrays for scopes. The index is the "scope ID".
-    public int[] scopeParent;
-    public int[] scopeNode; // Points back to the JsSyntaxTree node ID that defines this scope
-
-    /**
-     * Maps a JsSyntaxTree node ID to its enclosing Scope ID.
-     * Populated during build() to enable O(1) scope lookups for any AST node.
-     */
-    public int[] nodeToScope;
-
-    /**
-     * Number of active scopes currently in the tree.
-     */
-    public int scopeCount;
-
+    public static final int MAX_SCOPES = 32_768;
     /**
      * Maps a variable/symbol name to a flat array of tuples [scopeId, nodeId, kind].
      * During resolution, the engine iterates this array to find the deepest matching scope.
      */
     public final HashMap<String, int[]> symbols;
+    // Parallel arrays for scopes. The index is the "scope ID".
+    public int[] scopeParent;
+    public int[] scopeNode; // Points back to the JsSyntaxTree node ID that defines this scope
+    /**
+     * Maps a JsSyntaxTree node ID to its enclosing Scope ID.
+     * Populated during build() to enable O(1) scope lookups for any AST node.
+     */
+    public int[] nodeToScope;
+    /**
+     * Number of active scopes currently in the tree.
+     */
+    public int scopeCount;
 
     /**
      * Constructs a ScopeTree with a pre-allocated capacity to avoid GC pauses.
@@ -39,61 +37,9 @@ public final class ScopeTree {
         scopeParent = new int[initialCapacity];
         scopeNode = new int[initialCapacity];
         symbols = new HashMap<>(initialCapacity);
-        
+
         // Scope 0 is reserved as the global/file root scope
         scopeCount = 1;
-    }
-
-    /**
-     * Resets the tree for re-use without re-allocating the arrays or map entirely.
-     */
-    public void reset() {
-        scopeCount = 1;
-        symbols.clear();
-        nodeToScope = null;
-    }
-
-    public static final int MAX_SCOPES = 32_768;
-
-    /**
-     * Manually inserts a new scope and handles array resizing if capacity is exceeded.
-     * Returns the assigned scope ID.
-     */
-    public int addScope(int parent, int nodeId) {
-        if (scopeCount >= MAX_SCOPES) {
-            return 0;
-        }
-        if (scopeCount >= scopeParent.length) {
-            int newCap = Math.min(MAX_SCOPES, scopeParent.length * 2);
-            if (newCap <= scopeParent.length) {
-                return 0;
-            }
-            scopeParent = Arrays.copyOf(scopeParent, newCap);
-            scopeNode = Arrays.copyOf(scopeNode, newCap);
-        }
-
-        int id = scopeCount++;
-        scopeParent[id] = parent;
-        scopeNode[id] = nodeId;
-        return id;
-    }
-
-    /**
-     * Registers a symbol declaration in a specific scope, pointing to its AST node and type.
-     */
-    public void addSymbol(String name, int scopeId, int nodeId, int kind) {
-        int[] tuples = symbols.get(name);
-        if (tuples == null) {
-            tuples = new int[] { scopeId, nodeId, kind };
-            symbols.put(name, tuples);
-        } else {
-            int len = tuples.length;
-            int[] newTuples = Arrays.copyOf(tuples, len + 3);
-            newTuples[len] = scopeId;
-            newTuples[len + 1] = nodeId;
-            newTuples[len + 2] = kind;
-            symbols.put(name, newTuples);
-        }
     }
 
     /**
@@ -193,12 +139,12 @@ public final class ScopeTree {
                                 break;
                             }
                             int creatorType = tree.nodeType[scopeCreatorNode];
-                            if (creatorType == JsSyntaxTree.N_FUNC_DECL || 
-                                creatorType == JsSyntaxTree.N_ARROW_FUNC || 
-                                creatorType == JsSyntaxTree.N_METHOD || 
-                                creatorType == JsSyntaxTree.N_GETTER || 
-                                creatorType == JsSyntaxTree.N_SETTER ||
-                                creatorType == JsSyntaxTree.N_CLASS_DECL) {
+                            if (creatorType == JsSyntaxTree.N_FUNC_DECL ||
+                                    creatorType == JsSyntaxTree.N_ARROW_FUNC ||
+                                    creatorType == JsSyntaxTree.N_METHOD ||
+                                    creatorType == JsSyntaxTree.N_GETTER ||
+                                    creatorType == JsSyntaxTree.N_SETTER ||
+                                    creatorType == JsSyntaxTree.N_CLASS_DECL) {
                                 break;
                             } else {
                                 targetScope = scopeTree.scopeParent[targetScope];
@@ -253,48 +199,96 @@ public final class ScopeTree {
     }
 
     private static boolean isScopeCreator(int type) {
-        return type == JsSyntaxTree.N_FUNC_DECL || 
-               type == JsSyntaxTree.N_ARROW_FUNC || 
-               type == JsSyntaxTree.N_CLASS_DECL || 
-               type == JsSyntaxTree.N_METHOD ||
-               type == JsSyntaxTree.N_GETTER ||
-               type == JsSyntaxTree.N_SETTER ||
-               type == JsSyntaxTree.N_BLOCK ||
-               type == JsSyntaxTree.N_FOR_STMT ||
-               type == JsSyntaxTree.N_CATCH_CLAUSE ||
-               type == JsSyntaxTree.N_ENUM ||
-               type == JsSyntaxTree.N_INTERFACE;
+        return type == JsSyntaxTree.N_FUNC_DECL ||
+                type == JsSyntaxTree.N_ARROW_FUNC ||
+                type == JsSyntaxTree.N_CLASS_DECL ||
+                type == JsSyntaxTree.N_METHOD ||
+                type == JsSyntaxTree.N_GETTER ||
+                type == JsSyntaxTree.N_SETTER ||
+                type == JsSyntaxTree.N_BLOCK ||
+                type == JsSyntaxTree.N_FOR_STMT ||
+                type == JsSyntaxTree.N_CATCH_CLAUSE ||
+                type == JsSyntaxTree.N_ENUM ||
+                type == JsSyntaxTree.N_INTERFACE;
     }
 
     private static boolean isDeclaration(int type, int nodeId, JsSyntaxTree tree) {
         if (type == JsSyntaxTree.N_FUNC_DECL ||
-            type == JsSyntaxTree.N_ARROW_FUNC ||
-            type == JsSyntaxTree.N_CLASS_DECL ||
-            type == JsSyntaxTree.N_METHOD ||
-            type == JsSyntaxTree.N_GETTER ||
-            type == JsSyntaxTree.N_SETTER ||
-            type == JsSyntaxTree.N_VAR_DECL ||
-            type == JsSyntaxTree.N_PARAM ||
-            type == JsSyntaxTree.N_IMPORT ||
-            type == JsSyntaxTree.N_ENUM ||
-            type == JsSyntaxTree.N_INTERFACE ||
-            type == JsSyntaxTree.N_TYPE_ALIAS) {
+                type == JsSyntaxTree.N_ARROW_FUNC ||
+                type == JsSyntaxTree.N_CLASS_DECL ||
+                type == JsSyntaxTree.N_METHOD ||
+                type == JsSyntaxTree.N_GETTER ||
+                type == JsSyntaxTree.N_SETTER ||
+                type == JsSyntaxTree.N_VAR_DECL ||
+                type == JsSyntaxTree.N_PARAM ||
+                type == JsSyntaxTree.N_IMPORT ||
+                type == JsSyntaxTree.N_ENUM ||
+                type == JsSyntaxTree.N_INTERFACE ||
+                type == JsSyntaxTree.N_TYPE_ALIAS) {
             return true;
         }
         if (type == JsSyntaxTree.N_PROPERTY && nodeId > 0 && tree != null && nodeId < tree.nodeCount) {
             int pId = tree.nodeParent[nodeId];
-            if (pId > 0 && pId < tree.nodeCount && tree.nodeType[pId] == JsSyntaxTree.N_ENUM) {
-                return true;
-            }
+            return pId > 0 && pId < tree.nodeCount && tree.nodeType[pId] == JsSyntaxTree.N_ENUM;
         }
         return false;
+    }
+
+    /**
+     * Resets the tree for re-use without re-allocating the arrays or map entirely.
+     */
+    public void reset() {
+        scopeCount = 1;
+        symbols.clear();
+        nodeToScope = null;
+    }
+
+    /**
+     * Manually inserts a new scope and handles array resizing if capacity is exceeded.
+     * Returns the assigned scope ID.
+     */
+    public int addScope(int parent, int nodeId) {
+        if (scopeCount >= MAX_SCOPES) {
+            return 0;
+        }
+        if (scopeCount >= scopeParent.length) {
+            int newCap = Math.min(MAX_SCOPES, scopeParent.length * 2);
+            if (newCap <= scopeParent.length) {
+                return 0;
+            }
+            scopeParent = Arrays.copyOf(scopeParent, newCap);
+            scopeNode = Arrays.copyOf(scopeNode, newCap);
+        }
+
+        int id = scopeCount++;
+        scopeParent[id] = parent;
+        scopeNode[id] = nodeId;
+        return id;
+    }
+
+    /**
+     * Registers a symbol declaration in a specific scope, pointing to its AST node and type.
+     */
+    public void addSymbol(String name, int scopeId, int nodeId, int kind) {
+        int[] tuples = symbols.get(name);
+        if (tuples == null) {
+            tuples = new int[]{scopeId, nodeId, kind};
+            symbols.put(name, tuples);
+        } else {
+            int len = tuples.length;
+            int[] newTuples = Arrays.copyOf(tuples, len + 3);
+            newTuples[len] = scopeId;
+            newTuples[len + 1] = nodeId;
+            newTuples[len + 2] = kind;
+            symbols.put(name, newTuples);
+        }
     }
 
     /**
      * Resolves a symbol name starting from a specific scope, traversing up to the global scope.
      * Uses a single hash lookup and a fast array scan to model lexical shadowing perfectly.
      *
-     * @param name The symbol name to resolve.
+     * @param name      The symbol name to resolve.
      * @param atScopeId The scope ID where the lookup originates.
      * @return An array [scopeId, nodeId, kind] if found, or null if unresolved.
      */
@@ -312,17 +306,17 @@ public final class ScopeTree {
             // Scan the tuple array backward to return the latest declaration in the currentScope
             for (int i = tuples.length - 3; i >= 0; i -= 3) {
                 if (tuples[i] == currentScope) {
-                    int declNodeId = tuples[i+1];
+                    int declNodeId = tuples[i + 1];
                     if (currentScope == atScopeId && tree != null && declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeStart[declNodeId] > usageOffset) {
-                        int kind = tuples[i+2];
+                        int kind = tuples[i + 2];
                         boolean isHoisted = kind == JsSyntaxTree.N_FUNC_DECL || kind == JsSyntaxTree.N_IMPORT ||
-                                          (kind == JsSyntaxTree.N_VAR_DECL && (tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR);
+                                (kind == JsSyntaxTree.N_VAR_DECL && (tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR);
                         if (!isHoisted) continue;
                     }
-                    return new int[] { tuples[i], tuples[i+1], tuples[i+2] };
+                    return new int[]{tuples[i], tuples[i + 1], tuples[i + 2]};
                 }
             }
-            
+
             if (currentScope == 0) break;
             currentScope = scopeParent[currentScope];
         }
@@ -334,17 +328,17 @@ public final class ScopeTree {
      */
     public int findScopeAt(int offset, JsSyntaxTree tree) {
         if (nodeToScope == null || tree.nodesByOffset == null || tree.nodeCount <= 1) return 0;
-        
+
         int deepest = 0;
         int minLen = Integer.MAX_VALUE;
-        
+
         int n = tree.nodeCount - 1;
         if (n <= 0) return 0;
 
         int low = 1;
         int high = n;
         int searchIdx = n;
-        
+
         while (low <= high) {
             int mid = (low + high) >>> 1;
             int midNodeId = tree.nodesByOffset[mid];
@@ -366,16 +360,16 @@ public final class ScopeTree {
                 }
             }
         }
-        
+
         return (deepest > 0 && deepest < nodeToScope.length) ? nodeToScope[deepest] : 0;
     }
 
     /**
      * Finds all N_IDENTIFIER nodes that resolve to the same declaration as the name at the given scope.
-     * 
-     * @param name The symbol name to search for.
+     *
+     * @param name      The symbol name to search for.
      * @param atScopeId The scope from which to resolve the target declaration.
-     * @param tree The syntax tree containing the nodes.
+     * @param tree      The syntax tree containing the nodes.
      * @return An array of JsSyntaxTree node IDs representing all references to the declaration.
      */
     public int[] findAllReferences(String name, int atScopeId, JsSyntaxTree tree) {
@@ -395,7 +389,7 @@ public final class ScopeTree {
             } else if (tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
                 matches = name.equals(tree.nodeName[i]) || (tree.nodeName[i] != null && tree.nodeName[i].startsWith(name + "."));
             }
-            
+
             if (matches) {
                 int scope = nodeToScope[i];
                 int[] resolved = lookupSymbol(name, scope, Integer.MAX_VALUE, tree);

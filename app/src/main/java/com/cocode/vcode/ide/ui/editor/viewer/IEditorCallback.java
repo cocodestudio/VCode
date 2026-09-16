@@ -9,6 +9,7 @@ import com.cocode.vcode.ide.core.model.Problem;
 public interface IEditorCallback {
 
     void reportDiagnosticLoading(java.io.File file);
+
     void reportProblems(java.io.File file, java.util.List<Problem> problems);
 
     void navigateToLocation(com.cocode.vcode.ide.core.lsp.LspLocation location);

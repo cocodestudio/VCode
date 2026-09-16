@@ -11,13 +11,13 @@ import java.util.Map;
  */
 public class ProjectState {
 
+    private final Map<String, String> virtualFiles; // relative path -> content
     private String projectId;
     private List<String> openFilePaths;
     private int activeTabIndex;
     private Map<String, Integer> cursorPositions; // relative path -> cursor offset
     private Map<String, Integer> scrollPositions; // relative path -> scrollY px
     private Map<String, Boolean> previewStates;   // relative path -> preview active
-    private final Map<String, String> virtualFiles; // relative path -> content
 
     public ProjectState() {
         this.openFilePaths = new ArrayList<>();

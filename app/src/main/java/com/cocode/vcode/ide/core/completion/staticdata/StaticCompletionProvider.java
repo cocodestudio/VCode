@@ -47,13 +47,13 @@ import java.util.List;
  */
 public final class StaticCompletionProvider {
 
-    private StaticCompletionProvider() {}
-
-    public static final String LANG_JS   = "javascript";
-    public static final String LANG_TS   = "typescript";
-    public static final String LANG_CSS  = "css";
+    public static final String LANG_JS = "javascript";
+    public static final String LANG_TS = "typescript";
+    public static final String LANG_CSS = "css";
     public static final String LANG_HTML = "html";
     public static final String LANG_JSON = "json";
+    private StaticCompletionProvider() {
+    }
 
     /**
      * Compute the static completion candidates for the cursor's

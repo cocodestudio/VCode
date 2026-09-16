@@ -20,13 +20,13 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.SnippetItem;
 import com.cocode.vcode.ide.data.repository.SnippetRepository;
 import com.cocode.vcode.ide.databinding.BottomSheetSnippetManagerBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.ui.sheets.files.CreateSnippetBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
 import com.cocode.vcode.ide.ui.snippets.SnippetsAdapter;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.MarginItemDecorator;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 

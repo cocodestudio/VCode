@@ -15,9 +15,9 @@ import androidx.fragment.app.FragmentManager;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetNewProjectBinding;
 import com.cocode.vcode.ide.databinding.LayoutChooseTemplateBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 

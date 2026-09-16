@@ -17,7 +17,7 @@ public class CssParser {
     public static CssSyntaxTree parse(CssTokenStream stream, String source) {
         CssSyntaxTree tree = new CssSyntaxTree(stream.length / 4 + 10);
         int root = 0; // Node 0 is reserved
-        
+
         int p = 0;
         int currentParent = root;
         int[] parentStack = new int[256];
@@ -25,7 +25,7 @@ public class CssParser {
 
         while (p < stream.length) {
             byte type = stream.types[p];
-            
+
             if (type == CssTokenStream.TK_NONE || type == CssTokenStream.TK_COMMENT) {
                 p++;
                 continue;
@@ -36,7 +36,7 @@ public class CssParser {
                 int endP = getEndOffset(stream, p, CssTokenStream.TK_SELECTOR);
                 String selectorText = source.substring(startP, endP).trim();
                 boolean isAtRule = selectorText.startsWith("@");
-                
+
                 int nextP = skipWhitespaceAndComments(stream, endP);
                 if (nextP < stream.length && stream.types[nextP] == CssTokenStream.TK_PUNCT) {
                     char punct = source.charAt(nextP);
@@ -44,7 +44,7 @@ public class CssParser {
                         int nodeType = isAtRule ? CssSyntaxTree.N_AT_RULE : CssSyntaxTree.N_RULE;
                         int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, null, null);
                         tree.addNode(CssSyntaxTree.N_SELECTOR, startP, endP, ruleNode, selectorText, null);
-                        
+
                         if (depth >= parentStack.length) {
                             int[] newStack = new int[parentStack.length * 2];
                             System.arraycopy(parentStack, 0, newStack, 0, parentStack.length);
@@ -105,7 +105,7 @@ public class CssParser {
                 p++;
             }
         }
-        
+
         while (currentParent != root) {
             tree.nodeEnd[currentParent] = stream.length;
             tree.addNode(CssSyntaxTree.N_ERROR, tree.nodeStart[currentParent], Math.min(tree.nodeStart[currentParent] + 1, stream.length), currentParent, "Unclosed CSS block '{'", null);
@@ -124,14 +124,15 @@ public class CssParser {
     public static CssSyntaxTree parseDeclarationList(CssTokenStream stream, String source) {
         CssSyntaxTree tree = new CssSyntaxTree(stream.length / 4 + 10);
         int root = 0; // Node 0 is reserved
-        
+
         int p = 0;
         // fast-forward to the first valid token offset if tokenized from a region
-        while (p < stream.length && (stream.types[p] == CssTokenStream.TK_NONE || stream.types[p] == CssTokenStream.TK_COMMENT)) p++;
+        while (p < stream.length && (stream.types[p] == CssTokenStream.TK_NONE || stream.types[p] == CssTokenStream.TK_COMMENT))
+            p++;
 
         while (p < stream.length) {
             byte type = stream.types[p];
-            
+
             if (type == CssTokenStream.TK_NONE || type == CssTokenStream.TK_COMMENT) {
                 p++;
                 continue;
@@ -146,7 +147,7 @@ public class CssParser {
                 p = endP;
             }
         }
-        
+
         tree.buildNodesByOffset();
         return tree;
     }
@@ -155,21 +156,21 @@ public class CssParser {
         int startP = p;
         int propEnd = getEndOffset(stream, p, CssTokenStream.TK_PROPERTY);
         String propName = source.substring(startP, propEnd).trim();
-        
+
         int nextP = skipWhitespaceAndComments(stream, propEnd);
         if (nextP < stream.length && stream.types[nextP] == CssTokenStream.TK_PUNCT && source.charAt(nextP) == ':') {
             int colonP = nextP;
             nextP = skipWhitespaceAndComments(stream, colonP + 1);
-            
+
             int valStart = nextP;
             int valEnd = valStart;
             if (nextP < stream.length && stream.types[nextP] == CssTokenStream.TK_VALUE) {
                 valEnd = getEndOffset(stream, nextP, CssTokenStream.TK_VALUE);
                 nextP = skipWhitespaceAndComments(stream, valEnd);
             }
-            
+
             String valText = valStart < valEnd ? source.substring(valStart, valEnd).trim() : null;
-            
+
             int declEnd = valEnd;
             if (nextP < stream.length && stream.types[nextP] == CssTokenStream.TK_PUNCT) {
                 char punct = source.charAt(nextP);
@@ -186,7 +187,7 @@ public class CssParser {
             } else {
                 p = nextP; // EOF
             }
-            
+
             int declNode = tree.addNode(CssSyntaxTree.N_DECLARATION, startP, declEnd, currentParent, null, null);
             tree.addNode(CssSyntaxTree.N_PROPERTY, startP, propEnd, declNode, propName, null);
             if (valText != null && !valText.isEmpty()) {

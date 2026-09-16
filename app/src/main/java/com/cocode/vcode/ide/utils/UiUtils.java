@@ -77,7 +77,7 @@ public class UiUtils {
         if (anchor == null || message == null) return;
         Snackbar snackbar = Snackbar.make(anchor, message, Snackbar.LENGTH_LONG);
         snackbar.getView().setBackgroundColor(
-            ContextCompat.getColor(anchor.getContext(), R.color.vcode_accent_error));
+                ContextCompat.getColor(anchor.getContext(), R.color.vcode_accent_error));
         snackbar.show();
     }
 

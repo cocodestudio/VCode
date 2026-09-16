@@ -22,9 +22,8 @@ public class HtmlDefinitions {
     public static final List<CompletionItem> DOCTYPE_ITEMS = new ArrayList<>();
     public static final List<CompletionItem> ENTITY_ITEMS = new ArrayList<>();
     public static final Map<String, String[]> ATTR_VALUES = new HashMap<>();
-
-    private static volatile boolean initialized = false;
     private static final Object LOCK = new Object();
+    private static volatile boolean initialized = false;
 
     public static void ensureLoaded() {
         if (!initialized) {
@@ -80,14 +79,14 @@ public class HtmlDefinitions {
             String lowerTag = tagName.toLowerCase();
             if ("type".equals(lowerAttr)) {
                 if ("button".equals(lowerTag)) {
-                    return new String[] { "button", "submit", "reset" };
+                    return new String[]{"button", "submit", "reset"};
                 } else if ("script".equals(lowerTag)) {
-                    return new String[] { "module", "text/javascript", "application/json" };
+                    return new String[]{"module", "text/javascript", "application/json"};
                 } else if ("style".equals(lowerTag) || "link".equals(lowerTag)) {
-                    return new String[] { "text/css" };
+                    return new String[]{"text/css"};
                 }
             } else if ("method".equals(lowerAttr) && "form".equals(lowerTag)) {
-                return new String[] { "get", "post", "dialog" };
+                return new String[]{"get", "post", "dialog"};
             }
         }
         return ATTR_VALUES.get(lowerAttr);

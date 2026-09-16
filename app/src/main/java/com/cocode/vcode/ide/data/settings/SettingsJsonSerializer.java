@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * SettingsJsonSerializer manages serialization, deserialization, and schema validation
  * for VCode's VS Code-compatible settings.json format.
- *
+ * <p>
  * It supports both clean hierarchical domain objects and flat dot-notation keys,
  * ensuring backwards compatibility and future extensibility.
  */
@@ -96,13 +96,18 @@ public final class SettingsJsonSerializer {
             JSONObject ed = root.optJSONObject("editor");
             if (ed != null) {
                 if (ed.has("fontSize")) s.fontSize = ed.optInt("fontSize", s.fontSize);
-                if (ed.has("showLineNumbers")) s.showLineNumbers = ed.optBoolean("showLineNumbers", s.showLineNumbers);
-                if (ed.has("autoCloseBrackets")) s.autoCloseBrackets = ed.optBoolean("autoCloseBrackets", s.autoCloseBrackets);
-                if (ed.has("autoCloseQuotes")) s.autoCloseQuotes = ed.optBoolean("autoCloseQuotes", s.autoCloseQuotes);
-                if (ed.has("autoCloseHtmlTags")) s.autoCloseHtmlTags = ed.optBoolean("autoCloseHtmlTags", s.autoCloseHtmlTags);
+                if (ed.has("showLineNumbers"))
+                    s.showLineNumbers = ed.optBoolean("showLineNumbers", s.showLineNumbers);
+                if (ed.has("autoCloseBrackets"))
+                    s.autoCloseBrackets = ed.optBoolean("autoCloseBrackets", s.autoCloseBrackets);
+                if (ed.has("autoCloseQuotes"))
+                    s.autoCloseQuotes = ed.optBoolean("autoCloseQuotes", s.autoCloseQuotes);
+                if (ed.has("autoCloseHtmlTags"))
+                    s.autoCloseHtmlTags = ed.optBoolean("autoCloseHtmlTags", s.autoCloseHtmlTags);
                 if (ed.has("wordWrap")) s.wordWrap = ed.optBoolean("wordWrap", s.wordWrap);
                 if (ed.has("autoIndent")) s.autoIndent = ed.optBoolean("autoIndent", s.autoIndent);
-                if (ed.has("rainbowBrackets")) s.rainbowBrackets = ed.optBoolean("rainbowBrackets", s.rainbowBrackets);
+                if (ed.has("rainbowBrackets"))
+                    s.rainbowBrackets = ed.optBoolean("rainbowBrackets", s.rainbowBrackets);
                 if (ed.has("bracketHighlighting")) {
                     s.bracketHighlighting = ed.optBoolean("bracketHighlighting", s.bracketHighlighting);
                     s.matchBrackets = s.bracketHighlighting;
@@ -110,10 +115,14 @@ public final class SettingsJsonSerializer {
                     s.bracketHighlighting = ed.optBoolean("matchBrackets", s.bracketHighlighting);
                     s.matchBrackets = s.bracketHighlighting;
                 }
-                if (ed.has("enableDiagnostics")) s.enableDiagnostics = ed.optBoolean("enableDiagnostics", s.enableDiagnostics);
-                if (ed.has("showSquigglyLines")) s.showSquigglyLines = ed.optBoolean("showSquigglyLines", s.showSquigglyLines);
-                if (ed.has("deleteMatchingPairs")) s.deleteMatchingPairs = ed.optBoolean("deleteMatchingPairs", s.deleteMatchingPairs);
-                if (ed.has("forceLargeFileHighlighting")) s.forceLargeFileHighlighting = ed.optBoolean("forceLargeFileHighlighting", s.forceLargeFileHighlighting);
+                if (ed.has("enableDiagnostics"))
+                    s.enableDiagnostics = ed.optBoolean("enableDiagnostics", s.enableDiagnostics);
+                if (ed.has("showSquigglyLines"))
+                    s.showSquigglyLines = ed.optBoolean("showSquigglyLines", s.showSquigglyLines);
+                if (ed.has("deleteMatchingPairs"))
+                    s.deleteMatchingPairs = ed.optBoolean("deleteMatchingPairs", s.deleteMatchingPairs);
+                if (ed.has("forceLargeFileHighlighting"))
+                    s.forceLargeFileHighlighting = ed.optBoolean("forceLargeFileHighlighting", s.forceLargeFileHighlighting);
             }
         }
 
@@ -129,10 +138,14 @@ public final class SettingsJsonSerializer {
         if (root.has("git")) {
             JSONObject git = root.optJSONObject("git");
             if (git != null) {
-                if (git.has("defaultBranch")) s.gitDefaultBranch = git.optString("defaultBranch", s.gitDefaultBranch);
-                if (git.has("confirmHardReset")) s.gitConfirmHardReset = git.optBoolean("confirmHardReset", s.gitConfirmHardReset);
-                if (git.has("authorName")) s.gitAuthorName = git.optString("authorName", s.gitAuthorName);
-                if (git.has("authorEmail")) s.gitAuthorEmail = git.optString("authorEmail", s.gitAuthorEmail);
+                if (git.has("defaultBranch"))
+                    s.gitDefaultBranch = git.optString("defaultBranch", s.gitDefaultBranch);
+                if (git.has("confirmHardReset"))
+                    s.gitConfirmHardReset = git.optBoolean("confirmHardReset", s.gitConfirmHardReset);
+                if (git.has("authorName"))
+                    s.gitAuthorName = git.optString("authorName", s.gitAuthorName);
+                if (git.has("authorEmail"))
+                    s.gitAuthorEmail = git.optString("authorEmail", s.gitAuthorEmail);
             }
         }
 
@@ -140,20 +153,28 @@ public final class SettingsJsonSerializer {
         if (root.has("general")) {
             JSONObject gen = root.optJSONObject("general");
             if (gen != null) {
-                if (gen.has("openPreviewInApp")) s.openPreviewInApp = gen.optBoolean("openPreviewInApp", s.openPreviewInApp);
+                if (gen.has("openPreviewInApp"))
+                    s.openPreviewInApp = gen.optBoolean("openPreviewInApp", s.openPreviewInApp);
                 if (gen.has("autoSave")) s.autoSave = gen.optBoolean("autoSave", s.autoSave);
             }
         }
 
         // 5. Flat dot-notation fallbacks (compatibility)
         if (root.has("editor.fontSize")) s.fontSize = root.optInt("editor.fontSize", s.fontSize);
-        if (root.has("editor.showLineNumbers")) s.showLineNumbers = root.optBoolean("editor.showLineNumbers", s.showLineNumbers);
-        if (root.has("editor.autoCloseBrackets")) s.autoCloseBrackets = root.optBoolean("editor.autoCloseBrackets", s.autoCloseBrackets);
-        if (root.has("editor.autoCloseQuotes")) s.autoCloseQuotes = root.optBoolean("editor.autoCloseQuotes", s.autoCloseQuotes);
-        if (root.has("editor.autoCloseHtmlTags")) s.autoCloseHtmlTags = root.optBoolean("editor.autoCloseHtmlTags", s.autoCloseHtmlTags);
-        if (root.has("editor.wordWrap")) s.wordWrap = root.optBoolean("editor.wordWrap", s.wordWrap);
-        if (root.has("editor.autoIndent")) s.autoIndent = root.optBoolean("editor.autoIndent", s.autoIndent);
-        if (root.has("editor.rainbowBrackets")) s.rainbowBrackets = root.optBoolean("editor.rainbowBrackets", s.rainbowBrackets);
+        if (root.has("editor.showLineNumbers"))
+            s.showLineNumbers = root.optBoolean("editor.showLineNumbers", s.showLineNumbers);
+        if (root.has("editor.autoCloseBrackets"))
+            s.autoCloseBrackets = root.optBoolean("editor.autoCloseBrackets", s.autoCloseBrackets);
+        if (root.has("editor.autoCloseQuotes"))
+            s.autoCloseQuotes = root.optBoolean("editor.autoCloseQuotes", s.autoCloseQuotes);
+        if (root.has("editor.autoCloseHtmlTags"))
+            s.autoCloseHtmlTags = root.optBoolean("editor.autoCloseHtmlTags", s.autoCloseHtmlTags);
+        if (root.has("editor.wordWrap"))
+            s.wordWrap = root.optBoolean("editor.wordWrap", s.wordWrap);
+        if (root.has("editor.autoIndent"))
+            s.autoIndent = root.optBoolean("editor.autoIndent", s.autoIndent);
+        if (root.has("editor.rainbowBrackets"))
+            s.rainbowBrackets = root.optBoolean("editor.rainbowBrackets", s.rainbowBrackets);
         if (root.has("editor.bracketHighlighting")) {
             s.bracketHighlighting = root.optBoolean("editor.bracketHighlighting", s.bracketHighlighting);
             s.matchBrackets = s.bracketHighlighting;
@@ -161,21 +182,31 @@ public final class SettingsJsonSerializer {
             s.bracketHighlighting = root.optBoolean("editor.matchBrackets", s.bracketHighlighting);
             s.matchBrackets = s.bracketHighlighting;
         }
-        if (root.has("editor.enableDiagnostics")) s.enableDiagnostics = root.optBoolean("editor.enableDiagnostics", s.enableDiagnostics);
-        if (root.has("editor.showSquigglyLines")) s.showSquigglyLines = root.optBoolean("editor.showSquigglyLines", s.showSquigglyLines);
-        if (root.has("editor.deleteMatchingPairs")) s.deleteMatchingPairs = root.optBoolean("editor.deleteMatchingPairs", s.deleteMatchingPairs);
-        if (root.has("editor.forceLargeFileHighlighting")) s.forceLargeFileHighlighting = root.optBoolean("editor.forceLargeFileHighlighting", s.forceLargeFileHighlighting);
+        if (root.has("editor.enableDiagnostics"))
+            s.enableDiagnostics = root.optBoolean("editor.enableDiagnostics", s.enableDiagnostics);
+        if (root.has("editor.showSquigglyLines"))
+            s.showSquigglyLines = root.optBoolean("editor.showSquigglyLines", s.showSquigglyLines);
+        if (root.has("editor.deleteMatchingPairs"))
+            s.deleteMatchingPairs = root.optBoolean("editor.deleteMatchingPairs", s.deleteMatchingPairs);
+        if (root.has("editor.forceLargeFileHighlighting"))
+            s.forceLargeFileHighlighting = root.optBoolean("editor.forceLargeFileHighlighting", s.forceLargeFileHighlighting);
 
         if (root.has("appearance.theme")) parseTheme(root.optString("appearance.theme"), s);
         if (root.has("theme")) parseTheme(root.optString("theme"), s);
 
-        if (root.has("git.defaultBranch")) s.gitDefaultBranch = root.optString("git.defaultBranch", s.gitDefaultBranch);
-        if (root.has("git.confirmHardReset")) s.gitConfirmHardReset = root.optBoolean("git.confirmHardReset", s.gitConfirmHardReset);
-        if (root.has("git.authorName")) s.gitAuthorName = root.optString("git.authorName", s.gitAuthorName);
-        if (root.has("git.authorEmail")) s.gitAuthorEmail = root.optString("git.authorEmail", s.gitAuthorEmail);
+        if (root.has("git.defaultBranch"))
+            s.gitDefaultBranch = root.optString("git.defaultBranch", s.gitDefaultBranch);
+        if (root.has("git.confirmHardReset"))
+            s.gitConfirmHardReset = root.optBoolean("git.confirmHardReset", s.gitConfirmHardReset);
+        if (root.has("git.authorName"))
+            s.gitAuthorName = root.optString("git.authorName", s.gitAuthorName);
+        if (root.has("git.authorEmail"))
+            s.gitAuthorEmail = root.optString("git.authorEmail", s.gitAuthorEmail);
 
-        if (root.has("general.openPreviewInApp")) s.openPreviewInApp = root.optBoolean("general.openPreviewInApp", s.openPreviewInApp);
-        if (root.has("general.autoSave")) s.autoSave = root.optBoolean("general.autoSave", s.autoSave);
+        if (root.has("general.openPreviewInApp"))
+            s.openPreviewInApp = root.optBoolean("general.openPreviewInApp", s.openPreviewInApp);
+        if (root.has("general.autoSave"))
+            s.autoSave = root.optBoolean("general.autoSave", s.autoSave);
 
         if (!s.enableDiagnostics) {
             s.showSquigglyLines = false;

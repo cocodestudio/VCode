@@ -17,9 +17,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetConflictResolutionBinding;
 import com.cocode.vcode.ide.git.core.GitRepository;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 import java.util.List;
 

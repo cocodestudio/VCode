@@ -3,7 +3,6 @@ package com.cocode.vcode.ide.utils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import java.io.File;
 import java.io.FileWriter;

@@ -20,23 +20,24 @@ import java.util.Set;
  */
 public final class JsExportTable {
 
+    /**
+     * Empty table singleton. Returned by {@link #build} when there
+     * is nothing to record.
+     */
+    public static final JsExportTable EMPTY = new JsExportTable();
     public String[] exportName;
     public String[] exportSourceUri;
     public int count;
 
     public JsExportTable(int initialCapacity) {
-        exportName      = new String[initialCapacity];
+        exportName = new String[initialCapacity];
         exportSourceUri = new String[initialCapacity];
     }
 
     private JsExportTable() {
-        exportName      = new String[0];
+        exportName = new String[0];
         exportSourceUri = new String[0];
     }
-
-    /** Empty table singleton. Returned by {@link #build} when there
-     *  is nothing to record. */
-    public static final JsExportTable EMPTY = new JsExportTable();
 
     /**
      * Walk {@code tree} and collect the name of every named export.
@@ -89,7 +90,7 @@ public final class JsExportTable {
                     // emit the same export name twice. Keep the first
                     // occurrence and discard the rest.
                     if (seen.add(cName)) {
-                        t.exportName[t.count]      = cName;
+                        t.exportName[t.count] = cName;
                         t.exportSourceUri[t.count] = sourceUri;
                         t.count++;
                     }
@@ -113,15 +114,6 @@ public final class JsExportTable {
             default:
                 return false;
         }
-    }
-
-    /** True if the table contains an export of the exact given name. */
-    public boolean containsName(String name) {
-        if (name == null) return false;
-        for (int i = 0; i < count; i++) {
-            if (name.equals(exportName[i])) return true;
-        }
-        return false;
     }
 
     /**
@@ -183,7 +175,7 @@ public final class JsExportTable {
         if (tree == null || name == null) return 0;
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
-            if (type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL 
+            if (type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL
                     || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_INTERFACE) {
                 if (name.equals(tree.nodeName[i])) {
                     return i;
@@ -204,5 +196,16 @@ public final class JsExportTable {
             }
         }
         return 0;
+    }
+
+    /**
+     * True if the table contains an export of the exact given name.
+     */
+    public boolean containsName(String name) {
+        if (name == null) return false;
+        for (int i = 0; i < count; i++) {
+            if (name.equals(exportName[i])) return true;
+        }
+        return false;
     }
 }

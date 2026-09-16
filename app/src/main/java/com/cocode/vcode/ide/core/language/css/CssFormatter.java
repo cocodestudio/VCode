@@ -29,7 +29,7 @@ public class CssFormatter extends BaseFormatter {
         // Pass 2 — re-indent the stream
         // This is cleaner than per-char state + indent tracking simultaneously.
 
-    // Pass 1: produce a normalised token stream
+        // Pass 1: produce a normalised token stream
         StringBuilder norm = new StringBuilder();
         int braceDepth = 0; // tracks whether cursor is inside a rule block { }
         for (int i = 0; i < code.length(); i++) {
@@ -125,7 +125,7 @@ public class CssFormatter extends BaseFormatter {
             norm.append(c);
         }
 
-    // Pass 2: re-indent the normalised stream
+        // Pass 2: re-indent the normalised stream
         String[] lines = norm.toString().split("\n", -1);
         boolean lastWasBlank = false;
         for (String rawLine : lines) {

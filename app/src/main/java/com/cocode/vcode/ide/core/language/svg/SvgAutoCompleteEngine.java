@@ -101,7 +101,8 @@ public class SvgAutoCompleteEngine extends AutoCompleteEngine {
                     staticSnippets.add(new CompletionItem(label, insertText, detail, CompletionItem.Type.SNIPPET, 0));
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override

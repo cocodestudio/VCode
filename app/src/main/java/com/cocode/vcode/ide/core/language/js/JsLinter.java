@@ -1,6 +1,5 @@
 package com.cocode.vcode.ide.core.language.js;
 
-import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.model.Problem;
 
@@ -21,18 +20,6 @@ public class JsLinter {
 
     public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         return analyze(file, text, null, index);
-    }
-
-    public static class AnalysisContext {
-        public final JsSyntaxTree tree;
-        public final ScopeTree scopeTree;
-        public final TokenStream stream;
-
-        public AnalysisContext(JsSyntaxTree tree, ScopeTree scopeTree, TokenStream stream) {
-            this.tree = tree;
-            this.scopeTree = scopeTree;
-            this.stream = stream;
-        }
     }
 
     public static AnalysisContext prepareContext(File file, String text, TokenStream mask, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
@@ -84,5 +71,17 @@ public class JsLinter {
         JsSemanticLinter.analyze(file, text, ctx.stream, ctx.tree, ctx.scopeTree, index, problems);
 
         return problems;
+    }
+
+    public static class AnalysisContext {
+        public final JsSyntaxTree tree;
+        public final ScopeTree scopeTree;
+        public final TokenStream stream;
+
+        public AnalysisContext(JsSyntaxTree tree, ScopeTree scopeTree, TokenStream stream) {
+            this.tree = tree;
+            this.scopeTree = scopeTree;
+            this.stream = stream;
+        }
     }
 }

@@ -10,7 +10,6 @@ import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.prefs.PreferenceKeys;
 import com.cocode.vcode.ide.data.settings.SettingsJsonSerializer;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
-import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import org.json.JSONException;
 import org.json.JSONObject;

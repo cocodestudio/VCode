@@ -55,9 +55,9 @@ public final class MdSyntaxTree {
         nodeName = new String[initialCapacity];
         nodeExtra = new int[initialCapacity];
         nodeReference = new Object[initialCapacity];
-        
+
         // Node 0 is reserved as "null/root"
-        nodeCount = 1; 
+        nodeCount = 1;
     }
 
     public void buildNodesByOffset() {
@@ -144,12 +144,18 @@ public final class MdSyntaxTree {
 
     private void medianOfThree(int a, int b, int c) {
         if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+            int t = nodesByOffset[a];
+            nodesByOffset[a] = nodesByOffset[b];
+            nodesByOffset[b] = t;
         }
         if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
-            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            int t = nodesByOffset[b];
+            nodesByOffset[b] = nodesByOffset[c];
+            nodesByOffset[c] = t;
             if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+                int t2 = nodesByOffset[a];
+                nodesByOffset[a] = nodesByOffset[b];
+                nodesByOffset[b] = t2;
             }
         }
     }
@@ -256,8 +262,8 @@ public final class MdSyntaxTree {
         nodeStart[id] = start;
         nodeEnd[id] = end;
         nodeParent[id] = parent;
-        nodeChild[id] = 0;   
-        nodeSibling[id] = 0; 
+        nodeChild[id] = 0;
+        nodeSibling[id] = 0;
         nodeLastChild[id] = 0;
         nodeName[id] = name;
         nodeExtra[id] = 0;

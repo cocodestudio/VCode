@@ -48,7 +48,6 @@ public class GitViewModel extends AndroidViewModel {
     private final MutableLiveData<Boolean> isNotRepository = new MutableLiveData<>(false);
 
 
-
     public GitViewModel(@NonNull Application application) {
         super(application);
         this.repository = new GitRepository();
@@ -289,8 +288,8 @@ public class GitViewModel extends AndroidViewModel {
 
             try {
                 repository.revertCommit(commitSha, resolvedName, resolvedEmail);
-                ExecutorProvider.getInstance().runOnMain(() -> 
-                    android.widget.Toast.makeText(getApplication(), R.string.vcode_revert_successful, android.widget.Toast.LENGTH_SHORT).show());
+                ExecutorProvider.getInstance().runOnMain(() ->
+                        android.widget.Toast.makeText(getApplication(), R.string.vcode_revert_successful, android.widget.Toast.LENGTH_SHORT).show());
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             }
@@ -301,8 +300,8 @@ public class GitViewModel extends AndroidViewModel {
         runAction(() -> {
             try {
                 repository.revertCommit(commitSha, authorName, authorEmail);
-                ExecutorProvider.getInstance().runOnMain(() -> 
-                    android.widget.Toast.makeText(getApplication(), R.string.vcode_revert_successful, android.widget.Toast.LENGTH_SHORT).show());
+                ExecutorProvider.getInstance().runOnMain(() ->
+                        android.widget.Toast.makeText(getApplication(), R.string.vcode_revert_successful, android.widget.Toast.LENGTH_SHORT).show());
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             }

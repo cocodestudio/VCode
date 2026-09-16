@@ -4,33 +4,33 @@ package com.cocode.vcode.ide.core.diagnostic.util;
  * A flat-array data container representing a stream of syntax tokens.
  * This replaces the legacy TokenMask, providing specific token types
  * (keyword, identifier, string, etc.) instead of just boolean masks.
- * 
- * Uses parallel arrays instead of object instances to maintain zero 
+ * <p>
+ * Uses parallel arrays instead of object instances to maintain zero
  * allocation overhead during fast typing.
  */
 public final class TokenStream {
 
     // Token type constants (fits in a byte)
-    public static final byte TK_NONE       = 0;
-    public static final byte TK_KEYWORD    = 1;
+    public static final byte TK_NONE = 0;
+    public static final byte TK_KEYWORD = 1;
     public static final byte TK_IDENTIFIER = 2;
-    public static final byte TK_NUMBER     = 3;
-    public static final byte TK_STRING     = 4;   // ' " ` (formerly inString)
-    public static final byte TK_COMMENT    = 5;   // // /* (formerly inComment)
-    public static final byte TK_REGEX      = 6;   // /.../ (formerly inRegex)
-    public static final byte TK_PUNCT      = 7;   // { } ( ) , ; etc.
-    public static final byte TK_OPERATOR   = 8;   // = + - * etc.
+    public static final byte TK_NUMBER = 3;
+    public static final byte TK_STRING = 4;   // ' " ` (formerly inString)
+    public static final byte TK_COMMENT = 5;   // // /* (formerly inComment)
+    public static final byte TK_REGEX = 6;   // /.../ (formerly inRegex)
+    public static final byte TK_PUNCT = 7;   // { } ( ) , ; etc.
+    public static final byte TK_OPERATOR = 8;   // = + - * etc.
     public static final byte TK_WHITESPACE = 9;
-    public static final byte TK_TEMPLATE   = 10;  // template literal body
+    public static final byte TK_TEMPLATE = 10;  // template literal body
 
     /**
      * Parallel array of token types. One byte per character in the source text.
      */
     public byte[] types;
     public int length;
-    
+
     /**
-     * Parallel array of token start offsets. For any character at index i, 
+     * Parallel array of token start offsets. For any character at index i,
      * tokenStart[i] points to the start offset of the token it belongs to.
      */
     public int[] tokenStart;
@@ -58,7 +58,7 @@ public final class TokenStream {
 
     /**
      * Backward compatibility shim matching the legacy TokenMask behavior.
-     * 
+     *
      * @param offset The character index to check
      * @return true if the character is inside a string, comment, regex, or template literal
      */

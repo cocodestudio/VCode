@@ -23,37 +23,47 @@ import androidx.annotation.NonNull;
 public final class StaticCompletionItem {
 
     public final String label;
-    /** Raw insertion text. May contain a single {@code |} cursor marker
-     *  (handled by {@link SnippetCursorParser}, M.2). */
+    /**
+     * Raw insertion text. May contain a single {@code |} cursor marker
+     * (handled by {@link SnippetCursorParser}, M.2).
+     */
     public final String insertText;
     public final String detail;
     public final String type;
-    /** For HTML tags: the per-tag attribute list. {@code null} for
-     *  non-tag entries. */
+    /**
+     * For HTML tags: the per-tag attribute list. {@code null} for
+     * non-tag entries.
+     */
     public final String[] attributes;
-    /** For CSS properties: the canonical values array. {@code null}
-     *  for non-property entries. */
+    /**
+     * For CSS properties: the canonical values array. {@code null}
+     * for non-property entries.
+     */
     public final String[] values;
-    /** For CSS properties: whether the value is a {@code <color>}. */
+    /**
+     * For CSS properties: whether the value is a {@code <color>}.
+     */
     public final boolean acceptsColor;
-    /** For HTML tags: whether the tag is self-closing (void). */
+    /**
+     * For HTML tags: whether the tag is self-closing (void).
+     */
     public final boolean selfClosing;
 
     public StaticCompletionItem(@NonNull String label,
-                                 @NonNull String insertText,
-                                 String detail,
-                                 String type) {
+                                @NonNull String insertText,
+                                String detail,
+                                String type) {
         this(label, insertText, detail, type, null, null, false, false);
     }
 
     public StaticCompletionItem(@NonNull String label,
-                                 @NonNull String insertText,
-                                 String detail,
-                                 String type,
-                                 String[] attributes,
-                                 String[] values,
-                                 boolean acceptsColor,
-                                 boolean selfClosing) {
+                                @NonNull String insertText,
+                                String detail,
+                                String type,
+                                String[] attributes,
+                                String[] values,
+                                boolean acceptsColor,
+                                boolean selfClosing) {
         this.label = label;
         this.insertText = insertText;
         this.detail = detail;

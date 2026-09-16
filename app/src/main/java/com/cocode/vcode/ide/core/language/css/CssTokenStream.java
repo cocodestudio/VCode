@@ -3,28 +3,28 @@ package com.cocode.vcode.ide.core.language.css;
 /**
  * A flat-array data container representing a stream of CSS syntax tokens.
  * This provides specific token types for CSS instead of generic masks.
- * 
- * Uses parallel arrays instead of object instances to maintain zero 
+ * <p>
+ * Uses parallel arrays instead of object instances to maintain zero
  * allocation overhead during fast typing.
  */
 public final class CssTokenStream {
 
     // Token type constants (fits in a byte)
-    public static final byte TK_NONE       = 0;
-    public static final byte TK_SELECTOR   = 1; // e.g. .class, #id, div
-    public static final byte TK_PROPERTY   = 2; // e.g. color, margin
-    public static final byte TK_VALUE      = 3; // e.g. red, 10px
-    public static final byte TK_PUNCT      = 4; // e.g. {, }, :, ;
-    public static final byte TK_COMMENT    = 5; // e.g. /* comment */
+    public static final byte TK_NONE = 0;
+    public static final byte TK_SELECTOR = 1; // e.g. .class, #id, div
+    public static final byte TK_PROPERTY = 2; // e.g. color, margin
+    public static final byte TK_VALUE = 3; // e.g. red, 10px
+    public static final byte TK_PUNCT = 4; // e.g. {, }, :, ;
+    public static final byte TK_COMMENT = 5; // e.g. /* comment */
 
     /**
      * Parallel array of token types. One byte per character in the source text.
      */
     public byte[] types;
     public int length;
-    
+
     /**
-     * Parallel array of token start offsets. For any character at index i, 
+     * Parallel array of token start offsets. For any character at index i,
      * tokenStart[i] points to the start offset of the token it belongs to.
      */
     public int[] tokenStart;

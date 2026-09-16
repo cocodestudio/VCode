@@ -18,7 +18,6 @@ import java.util.regex.Pattern;
 public class ColorParser {
 
     private static final Object lock = new Object();
-    private static volatile boolean loaded = false;
     private static final Map<String, Integer> NAMED_COLORS = new HashMap<>();
     private static final Pattern RGB_PATTERN = Pattern.compile("rgba?\\(\\s*([\\d.]+)(%?)\\s*[, ]\\s*([\\d.]+)(%?)\\s*[, ]\\s*([\\d.]+)(%?)(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
     private static final Pattern HSL_PATTERN = Pattern.compile("hsla?\\(\\s*([\\d.]+)(deg|rad|grad|turn)?\\s*[, ]\\s*([\\d.]+)%?\\s*[, ]\\s*([\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
@@ -28,6 +27,7 @@ public class ColorParser {
     private static final Pattern OKLAB_PATTERN = Pattern.compile("oklab\\(\\s*([\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
     private static final Pattern OKLCH_PATTERN = Pattern.compile("oklch\\(\\s*([\\d.]+)%?\\s*[, ]\\s*([\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)(deg|rad|grad|turn)?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
     private static final Pattern COLOR_FN_PATTERN = Pattern.compile("color\\(\\s*([\\w-]+)\\s+([\\d.]+)%?\\s+([\\d.]+)%?\\s+([\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static volatile boolean loaded = false;
 
     private static void ensureLoaded() {
         if (loaded) return;
@@ -350,13 +350,13 @@ public class ColorParser {
 
         // D65 reference white
         float X = xr * 0.95047f;
-        float Y = yr * 1.00000f;
+        float Y = yr;
         float Z = zr * 1.08883f;
 
         // XYZ to linear sRGB
-        float rLin =  3.2404542f * X - 1.5371385f * Y - 0.4985314f * Z;
+        float rLin = 3.2404542f * X - 1.5371385f * Y - 0.4985314f * Z;
         float gLin = -0.9692660f * X + 1.8760108f * Y + 0.0415560f * Z;
-        float bLin =  0.0556434f * X - 0.2040259f * Y + 1.0572252f * Z;
+        float bLin = 0.0556434f * X - 0.2040259f * Y + 1.0572252f * Z;
 
         return argb((int) alpha,
                 clamp255(linearToSrgb(rLin) * 255f),
@@ -440,7 +440,7 @@ public class ColorParser {
                     float gLinP3 = srgbToLinear(g);
                     float bLinP3 = srgbToLinear(b);
 
-                    float rLin =  1.2249f * rLinP3 - 0.2247f * gLinP3 - 0.0002f * bLinP3;
+                    float rLin = 1.2249f * rLinP3 - 0.2247f * gLinP3 - 0.0002f * bLinP3;
                     float gLin = -0.0420f * rLinP3 + 1.0419f * gLinP3 + 0.0001f * bLinP3;
                     float bLin = -0.0197f * rLinP3 - 0.0786f * gLinP3 + 1.0983f * bLinP3;
 
@@ -547,15 +547,6 @@ public class ColorParser {
         return result;
     }
 
-    private static class ColorWithWeight {
-        final int color;
-        final float weight;
-        ColorWithWeight(int color, float weight) {
-            this.color = color;
-            this.weight = weight;
-        }
-    }
-
     private static ColorWithWeight parseColorWithWeight(String input) {
         input = input.trim();
         int lastSpace = input.lastIndexOf(' ');
@@ -602,5 +593,15 @@ public class ColorParser {
     private static float srgbToLinear(float c) {
         c = Math.max(0f, Math.min(1f, c));
         return (c <= 0.04045f) ? (c / 12.92f) : (float) Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    private static class ColorWithWeight {
+        final int color;
+        final float weight;
+
+        ColorWithWeight(int color, float weight) {
+            this.color = color;
+            this.weight = weight;
+        }
     }
 }

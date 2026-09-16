@@ -1,10 +1,10 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
+import android.content.Context;
+
 import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-import com.cocode.vcode.ide.core.model.CompletionItem;
-import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -13,8 +13,8 @@ import com.cocode.vcode.ide.core.lsp.LspServer;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.lsp.SymbolExtractor;
-
-import android.content.Context;
+import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -36,12 +36,16 @@ public final class MarkdownLspServer implements LspServer {
     public MarkdownLspServer(Context context) {
         this.markdownEngine = new MarkdownAutoCompleteEngine(context);
     }
-    
+
     /**
      * No-arg constructor for backwards compatibility.
      */
     public MarkdownLspServer() {
         this(null);
+    }
+
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
+        return LspCompletionConverter.convert(legacy);
     }
 
     @Override
@@ -77,10 +81,6 @@ public final class MarkdownLspServer implements LspServer {
 
         List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = markdownEngine.getSuggestions(doc.text, flatOffset);
         return convertCompletions(legacy);
-    }
-
-    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> legacy) {
-        return LspCompletionConverter.convert(legacy);
     }
 
     @Override

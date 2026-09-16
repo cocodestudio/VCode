@@ -1,15 +1,15 @@
 package com.cocode.vcode.ide.core.lsp;
 
-import com.cocode.vcode.ide.utils.ExecutorProvider;
-import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.core.editor.search.SearchEngine;
 import com.cocode.vcode.ide.core.model.SearchResult;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Project-wide symbol index.
  * <p>
@@ -44,7 +44,7 @@ public final class ProjectIndex {
      * Updated after a file is (re-)indexed.
      */
     private final ConcurrentHashMap<String, List<SymbolEntry>> fileSymbols = new ConcurrentHashMap<>();
-    
+
     /**
      * Cache of the latest ParseResult for each file, keyed by absolute file path.
      */
@@ -56,11 +56,11 @@ public final class ProjectIndex {
      * Never read from disk.
      */
     private final ConcurrentHashMap<String, com.cocode.vcode.ide.core.language.js.JsExportTable> exportTables = new ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicBoolean isIncrementalScanRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
     /**
      * Absolute path of the currently indexed project root.
      */
     private volatile String projectRoot;
-    private final java.util.concurrent.atomic.AtomicBoolean isIncrementalScanRunning = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private ProjectIndex() {
     }
@@ -112,6 +112,29 @@ public final class ProjectIndex {
     // -------------------------------------------------------------------------
     // Query API
     // -------------------------------------------------------------------------
+
+    /**
+     * Convert a possibly-relative path into the canonical
+     * {@code File.getAbsolutePath()} form so that all readers
+     * (callers using {@code new File(uri).getAbsolutePath()}) and
+     * writers (the parse pipeline, the file scanner) compare equal.
+     * Returns {@code null} for null input; returns the input as-is
+     * if it cannot be canonicalized.
+     */
+    private static String canonicalize(String uri) {
+        if (uri == null) return null;
+        try {
+            return new java.io.File(uri).getAbsolutePath();
+        } catch (Exception e) {
+            return uri;
+        }
+    }
+
+    private static boolean isIgnoredDirectory(String name) {
+        return name.startsWith(".") || name.equals("node_modules") || name.equals("build")
+                || name.equals("dist") || name.equals("out") || name.equals("vendor")
+                || name.equals(".next") || name.equals(".nuxt") || name.equals("target");
+    }
 
     /**
      * Recursively indexes all supported source files under {@code root} on the IO thread pool.
@@ -172,7 +195,7 @@ public final class ProjectIndex {
         exportTables.clear();
         LspEditorBridge.resetProjectSession();
     }
-    
+
     public void updateParseResult(String uri, com.cocode.vcode.ide.core.language.js.ParseResult result) {
         if (uri == null) return;
         // Canonicalize the key so that look-ups by
@@ -191,23 +214,6 @@ public final class ProjectIndex {
             exportTables.put(key,
                     com.cocode.vcode.ide.core.language.js.JsExportTable.build(
                             result.tree, key));
-        }
-    }
-
-    /**
-     * Convert a possibly-relative path into the canonical
-     * {@code File.getAbsolutePath()} form so that all readers
-     * (callers using {@code new File(uri).getAbsolutePath()}) and
-     * writers (the parse pipeline, the file scanner) compare equal.
-     * Returns {@code null} for null input; returns the input as-is
-     * if it cannot be canonicalized.
-     */
-    private static String canonicalize(String uri) {
-        if (uri == null) return null;
-        try {
-            return new java.io.File(uri).getAbsolutePath();
-        } catch (Exception e) {
-            return uri;
         }
     }
 
@@ -256,7 +262,8 @@ public final class ProjectIndex {
                 updateFileSymbols(uri, syms);
                 return pr;
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         return null;
     }
 
@@ -293,18 +300,6 @@ public final class ProjectIndex {
             }
         }
         return out;
-    }
-
-    /** A (name, sourceUri) pair returned by
-     *  {@link #getExportsByPrefix(String)}. The sourceUri is the
-     *  absolute path of the file that declared the export. */
-    public static final class ExportRef {
-        public final String name;
-        public final String sourceUri;
-        public ExportRef(String name, String sourceUri) {
-            this.name = name;
-            this.sourceUri = sourceUri;
-        }
     }
 
     /**
@@ -415,7 +410,6 @@ public final class ProjectIndex {
     }
 
 
-
     /**
      * Finds all symbols whose name starts with the given prefix (case-insensitive).
      * Searches across every indexed file.
@@ -517,12 +511,6 @@ public final class ProjectIndex {
         return projectRoot;
     }
 
-    private static boolean isIgnoredDirectory(String name) {
-        return name.startsWith(".") || name.equals("node_modules") || name.equals("build")
-                || name.equals("dist") || name.equals("out") || name.equals("vendor")
-                || name.equals(".next") || name.equals(".nuxt") || name.equals("target");
-    }
-
     private void indexDirectory(File dir) {
         File[] files = dir.listFiles();
         if (files == null) return;
@@ -590,6 +578,21 @@ public final class ProjectIndex {
             }
         } catch (Exception ignored) {
             // Skip files that cannot be read
+        }
+    }
+
+    /**
+     * A (name, sourceUri) pair returned by
+     * {@link #getExportsByPrefix(String)}. The sourceUri is the
+     * absolute path of the file that declared the export.
+     */
+    public static final class ExportRef {
+        public final String name;
+        public final String sourceUri;
+
+        public ExportRef(String name, String sourceUri) {
+            this.name = name;
+            this.sourceUri = sourceUri;
         }
     }
 }

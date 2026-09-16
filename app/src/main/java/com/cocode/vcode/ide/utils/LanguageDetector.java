@@ -8,9 +8,9 @@ import com.cocode.vcode.ide.core.model.FileType;
 public class LanguageDetector {
 
     private static final String[] JS_WORDS = {
-        "const ", "let ", "var ", "function ", "async ", "await ", "import ", "export ",
-        "return ", "if (", "if(", "for (", "for(", "while (", "while(",
-        "console.", "document.", "window."
+            "const ", "let ", "var ", "function ", "async ", "await ", "import ", "export ",
+            "return ", "if (", "if(", "for (", "for(", "while (", "while(",
+            "console.", "document.", "window."
     };
 
     /**
@@ -63,7 +63,8 @@ public class LanguageDetector {
     }
 
     private static boolean isCss(String content) {
-        if (content.contains("@media") || content.contains("@import") || content.contains("@keyframes")) return true;
+        if (content.contains("@media") || content.contains("@import") || content.contains("@keyframes"))
+            return true;
         int openBrace = content.indexOf('{');
         int closeBrace = content.indexOf('}', openBrace + 1);
         if (openBrace != -1 && closeBrace != -1) {

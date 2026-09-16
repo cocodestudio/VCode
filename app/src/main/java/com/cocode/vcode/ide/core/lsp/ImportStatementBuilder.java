@@ -17,45 +17,28 @@ import java.io.File;
  */
 public final class ImportStatementBuilder {
 
-    private ImportStatementBuilder() {}
-
-    /**
-     * Result of an import-statement build: the text to insert and
-     * the offset in the current file where it should be inserted.
-     * The editor's text-edit pipeline uses the {@code insertAtOffset}
-     * to splice the {@code insertText} into the buffer.
-     */
-    public static final class Result {
-        /** The import statement, including the trailing newline. */
-        public final String insertText;
-        /** Offset in the current file's text where the import should
-         *  be spliced in. */
-        public final int insertAtOffset;
-        public Result(String insertText, int insertAtOffset) {
-            this.insertText = insertText;
-            this.insertAtOffset = insertAtOffset;
-        }
+    private ImportStatementBuilder() {
     }
 
     /**
      * Build the import statement for {@code name} exported from
      * {@code sourceFileUri} as seen from {@code currentFileUri}.
      *
-     * @param name          the exported symbol name to import
-     * @param sourceFileUri the absolute URI of the file that exports
-     *                      {@code name}
+     * @param name           the exported symbol name to import
+     * @param sourceFileUri  the absolute URI of the file that exports
+     *                       {@code name}
      * @param currentFileUri the absolute URI of the file the user is
      *                       editing (the import is being added here)
-     * @param currentText   the current text of {@code currentFileUri};
-     *                      used only to find the insertion point (top
-     *                      of file, after any existing import
-     *                      statements)
+     * @param currentText    the current text of {@code currentFileUri};
+     *                       used only to find the insertion point (top
+     *                       of file, after any existing import
+     *                       statements)
      * @return the import statement and the offset where it should
-     *         be inserted, or {@code null} if the two files are the
-     *         same (no self-import)
+     * be inserted, or {@code null} if the two files are the
+     * same (no self-import)
      */
     public static Result build(String name, String sourceFileUri,
-                                String currentFileUri, String currentText) {
+                               String currentFileUri, String currentText) {
         if (name == null || name.isEmpty()) return null;
         if (sourceFileUri == null || currentFileUri == null) return null;
         File source = new File(sourceFileUri);
@@ -85,7 +68,7 @@ public final class ImportStatementBuilder {
         String fromPath = fromDir.getAbsolutePath();
         String toPath = toFile.getAbsolutePath();
         String[] fromParts = fromPath.replace('\\', '/').split("/");
-        String[] toParts   = toPath.replace('\\', '/').split("/");
+        String[] toParts = toPath.replace('\\', '/').split("/");
         // Find common prefix length.
         int common = 0;
         int minLen = Math.min(fromParts.length, toParts.length);
@@ -150,10 +133,10 @@ public final class ImportStatementBuilder {
      */
     static int findInsertionOffset(String text) {
         if (text == null || text.isEmpty()) return 0;
-        
+
         com.cocode.vcode.ide.core.diagnostic.util.TokenStream stream = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(text);
         com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseTopLevel(text, stream);
-        
+
         int lastImportEnd = 0;
         for (int id = 1; id < tree.nodeCount; id++) {
             if (tree.nodeType[id] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_IMPORT) {
@@ -165,7 +148,7 @@ public final class ImportStatementBuilder {
         if (lastImportEnd == 0) {
             return 0;
         }
-        
+
         while (lastImportEnd < text.length()) {
             if (text.charAt(lastImportEnd) == '\n') {
                 return lastImportEnd + 1;
@@ -173,6 +156,29 @@ public final class ImportStatementBuilder {
             lastImportEnd++;
         }
         return text.length();
+    }
+
+    /**
+     * Result of an import-statement build: the text to insert and
+     * the offset in the current file where it should be inserted.
+     * The editor's text-edit pipeline uses the {@code insertAtOffset}
+     * to splice the {@code insertText} into the buffer.
+     */
+    public static final class Result {
+        /**
+         * The import statement, including the trailing newline.
+         */
+        public final String insertText;
+        /**
+         * Offset in the current file's text where the import should
+         * be spliced in.
+         */
+        public final int insertAtOffset;
+
+        public Result(String insertText, int insertAtOffset) {
+            this.insertText = insertText;
+            this.insertAtOffset = insertAtOffset;
+        }
     }
 
 

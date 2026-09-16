@@ -276,15 +276,6 @@ public class SettingsViewModel extends ViewModel {
         }
     }
 
-    public interface ImportCallback {
-        void onResult(SettingsJsonSerializer.ValidationResult result);
-    }
-
-    public interface ExportCallback {
-        void onSuccess(File exportedFile);
-        void onError(Exception error);
-    }
-
     /**
      * Imports and applies settings from a user-selected JSON file URI.
      */
@@ -321,6 +312,16 @@ public class SettingsViewModel extends ViewModel {
                 }
             }
         });
+    }
+
+    public interface ImportCallback {
+        void onResult(SettingsJsonSerializer.ValidationResult result);
+    }
+
+    public interface ExportCallback {
+        void onSuccess(File exportedFile);
+
+        void onError(Exception error);
     }
 
     /**

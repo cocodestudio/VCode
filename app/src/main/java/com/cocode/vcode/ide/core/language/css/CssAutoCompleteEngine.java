@@ -6,10 +6,10 @@ import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.EmmetParser;
 import com.cocode.vcode.ide.core.autocomplete.FastTrie;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
-import com.cocode.vcode.ide.core.model.CompletionItem;
-
 import com.cocode.vcode.ide.core.completion.staticdata.CssStaticCompletionDispatcher;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
+import com.cocode.vcode.ide.core.model.CompletionItem;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -35,16 +35,6 @@ import java.util.Map;
  */
 public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
-    // Instance state
-    private final List<CompletionItem> propertyItems = new ArrayList<>();
-    private final Map<String, List<String>> valueMap = new HashMap<>();
-    private final List<CompletionItem> htmlTagItems = new ArrayList<>();
-    private final List<CompletionItem> colorItems = new ArrayList<>();
-    private final List<CompletionItem> globalValueItems = new ArrayList<>();
-    private final List<CompletionItem> cachedCustomProps = new ArrayList<>();
-    private final FastTrie propertyTrie = new FastTrie();
-    private int lastTextHash = 0;
-
     private static final String[] BORDER_STYLES = {
             "none", "hidden", "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset"
     };
@@ -59,6 +49,15 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             "0 4px 6px -1px rgba(0,0,0,0.1)", "0 10px 15px -3px rgba(0,0,0,0.1)",
             "0 20px 25px -5px rgba(0,0,0,0.1)", "inset 0 2px 4px 0 rgba(0,0,0,0.06)"
     };
+    // Instance state
+    private final List<CompletionItem> propertyItems = new ArrayList<>();
+    private final Map<String, List<String>> valueMap = new HashMap<>();
+    private final List<CompletionItem> htmlTagItems = new ArrayList<>();
+    private final List<CompletionItem> colorItems = new ArrayList<>();
+    private final List<CompletionItem> globalValueItems = new ArrayList<>();
+    private final List<CompletionItem> cachedCustomProps = new ArrayList<>();
+    private final FastTrie propertyTrie = new FastTrie();
+    private int lastTextHash = 0;
 
     public CssAutoCompleteEngine(Context context) {
         super(context);
@@ -188,7 +187,8 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos, boolean isInlineStyle) {
-        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length()) return new ArrayList<>();
+        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
+            return new ArrayList<>();
 
         if (isInsideComment(fullText, cursorPos) || isInsideStringLiteral(fullText, cursorPos)) {
             return new ArrayList<>();
@@ -354,26 +354,32 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         String p = propertyName != null ? propertyName.toLowerCase() : "";
         if (p.contains("radius")) {
             for (String r : BORDER_RADII) {
-                if (seen.add(r)) items.add(new CompletionItem(r, r, "Radius", CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(r))
+                    items.add(new CompletionItem(r, r, "Radius", CompletionItem.Type.CSS_VALUE, 0));
             }
         } else if (p.endsWith("-style")) {
             for (String s : BORDER_STYLES) {
-                if (seen.add(s)) items.add(new CompletionItem(s, s, "Border style", CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(s))
+                    items.add(new CompletionItem(s, s, "Border style", CompletionItem.Type.CSS_VALUE, 0));
             }
         } else if (p.endsWith("-width")) {
             for (String w : BORDER_WIDTHS) {
-                if (seen.add(w)) items.add(new CompletionItem(w, w, "Border width", CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(w))
+                    items.add(new CompletionItem(w, w, "Border width", CompletionItem.Type.CSS_VALUE, 0));
             }
         } else if (KnownElements.isBorderShorthandProperty(p) || p.startsWith("outline") || p.startsWith("column-rule")) {
             for (String s : BORDER_STYLES) {
-                if (seen.add(s)) items.add(new CompletionItem(s, s, "Stroke style", CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(s))
+                    items.add(new CompletionItem(s, s, "Stroke style", CompletionItem.Type.CSS_VALUE, 0));
             }
             for (String w : BORDER_WIDTHS) {
-                if (seen.add(w)) items.add(new CompletionItem(w, w, "Stroke width", CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(w))
+                    items.add(new CompletionItem(w, w, "Stroke width", CompletionItem.Type.CSS_VALUE, 0));
             }
         } else if (p.endsWith("shadow")) {
             for (String sp : SHADOW_PRESETS) {
-                if (seen.add(sp)) items.add(new CompletionItem(sp, sp, "Shadow preset", CompletionItem.Type.CSS_VALUE, 0));
+                if (seen.add(sp))
+                    items.add(new CompletionItem(sp, sp, "Shadow preset", CompletionItem.Type.CSS_VALUE, 0));
             }
         }
 
@@ -416,6 +422,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Zone-specific suggestion builders
+
     /**
      * Suggestions for nested selector context (inside a rule block with CSS nesting support).
      * Shows selectors (HTML tags, & prefix, class/id), properties, and Emmet at once —
@@ -534,6 +541,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Helpers
+
     /**
      * Determines if the cursor is inside an at-rule CONDITION (before the opening brace).
      * e.g. "@media screen and (|)" or "@supports (display: grid|)"

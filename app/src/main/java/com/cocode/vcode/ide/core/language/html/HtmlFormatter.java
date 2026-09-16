@@ -6,11 +6,8 @@ import com.cocode.vcode.ide.core.language.css.CssFormatter;
 import com.cocode.vcode.ide.core.language.js.JsFormatter;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

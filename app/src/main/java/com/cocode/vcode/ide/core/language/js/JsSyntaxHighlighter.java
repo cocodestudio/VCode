@@ -10,7 +10,6 @@ import com.cocode.vcode.ide.core.language.base.SyntaxHighlighter;
 import com.cocode.vcode.ide.utils.ColorParser;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,6 +33,7 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         JS_KEYWORDS.addAll(JsKeywords.JS_KEYWORDS);
         JS_KEYWORDS.addAll(JsKeywords.JS_BUILTINS);
     }
+
     protected final int colorFunction;
     protected final int colorBoolean;
 
@@ -41,24 +41,6 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         super(context);
         colorFunction = getColor(R.color.vcode_color_js_function);
         colorBoolean = getColor(R.color.vcode_color_js_boolean);
-    }
-
-    /**
-     * Test-only factory: returns a highlighter that skips colour
-     * resolution so unit tests can construct one without a real
-     * Android {@code Context}. Colours will be {@code 0}; callers
-     * that need actual colours must use the resolver-supplied
-     * {@code highlightViewport} overload.
-     */
-    public static JsSyntaxHighlighter forTest() {
-        return new JsSyntaxHighlighter((Void) null);
-    }
-
-    /**
-     * Test-only factory allowing explicit test colors for JVM testing.
-     */
-    public static JsSyntaxHighlighter forTestWithColors(int comment, int string, int keyword, int number, int function, int booleanCol, int operator) {
-        return new JsSyntaxHighlighter(comment, string, keyword, number, function, booleanCol, operator);
     }
 
     /**
@@ -79,20 +61,22 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         this.colorBoolean = booleanCol;
     }
 
-    @Override
-    protected boolean isKeyword(String word) {
-        return JS_KEYWORDS.contains(word) || JS_BOOLEANS.contains(word);
+    /**
+     * Test-only factory: returns a highlighter that skips colour
+     * resolution so unit tests can construct one without a real
+     * Android {@code Context}. Colours will be {@code 0}; callers
+     * that need actual colours must use the resolver-supplied
+     * {@code highlightViewport} overload.
+     */
+    public static JsSyntaxHighlighter forTest() {
+        return new JsSyntaxHighlighter((Void) null);
     }
 
-    protected boolean isBoolean(CharSequence cs, int start, int end) {
-        int len = end - start;
-        if (len == 4) return match(cs, start, end, "true");
-        if (len == 5) return match(cs, start, end, "false");
-        return false;
-    }
-
-    protected boolean isBoolean(String word) {
-        return word != null && isBoolean((CharSequence) word, 0, word.length());
+    /**
+     * Test-only factory allowing explicit test colors for JVM testing.
+     */
+    public static JsSyntaxHighlighter forTestWithColors(int comment, int string, int keyword, int number, int function, int booleanCol, int operator) {
+        return new JsSyntaxHighlighter(comment, string, keyword, number, function, booleanCol, operator);
     }
 
     public static int getMode(int state) {
@@ -134,7 +118,7 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
     }
 
     private static boolean isRegexAllowedAfterKeyword(String word) {
-        return word != null && isRegexAllowedAfterKeyword((CharSequence) word, 0, word.length());
+        return word != null && isRegexAllowedAfterKeyword(word, 0, word.length());
     }
 
     private static int matchOperator(String s, int pos, int len) {
@@ -200,6 +184,22 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
             default:
                 return 0;
         }
+    }
+
+    @Override
+    protected boolean isKeyword(String word) {
+        return JS_KEYWORDS.contains(word) || JS_BOOLEANS.contains(word);
+    }
+
+    protected boolean isBoolean(CharSequence cs, int start, int end) {
+        int len = end - start;
+        if (len == 4) return match(cs, start, end, "true");
+        if (len == 5) return match(cs, start, end, "false");
+        return false;
+    }
+
+    protected boolean isBoolean(String word) {
+        return word != null && isBoolean(word, 0, word.length());
     }
 
     @Override
@@ -504,10 +504,12 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
                     while (j < len && (isHex(lineStr.charAt(j)) || lineStr.charAt(j) == '_')) j++;
                 } else if (c == '0' && j + 1 < len && (lineStr.charAt(j + 1) == 'b' || lineStr.charAt(j + 1) == 'B')) {
                     j += 2;
-                    while (j < len && (lineStr.charAt(j) == '0' || lineStr.charAt(j) == '1' || lineStr.charAt(j) == '_')) j++;
+                    while (j < len && (lineStr.charAt(j) == '0' || lineStr.charAt(j) == '1' || lineStr.charAt(j) == '_'))
+                        j++;
                 } else if (c == '0' && j + 1 < len && (lineStr.charAt(j + 1) == 'o' || lineStr.charAt(j + 1) == 'O')) {
                     j += 2;
-                    while (j < len && ((lineStr.charAt(j) >= '0' && lineStr.charAt(j) <= '7') || lineStr.charAt(j) == '_')) j++;
+                    while (j < len && ((lineStr.charAt(j) >= '0' && lineStr.charAt(j) <= '7') || lineStr.charAt(j) == '_'))
+                        j++;
                 } else {
                     boolean hasDot = false;
                     while (j < len) {
@@ -519,7 +521,8 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
                             j++;
                         } else if ((ch == 'e' || ch == 'E') && j + 1 < len) {
                             j++;
-                            if (j < len && (lineStr.charAt(j) == '+' || lineStr.charAt(j) == '-')) j++;
+                            if (j < len && (lineStr.charAt(j) == '+' || lineStr.charAt(j) == '-'))
+                                j++;
                             while (j < len && Character.isDigit(lineStr.charAt(j))) j++;
                             break;
                         } else {
@@ -641,8 +644,14 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
                 char quote = (mode == STATE_STRING_DOUBLE) ? '"' : '\'';
                 int j = i;
                 while (j < len) {
-                    if (line.charAt(j) == '\\') { j += 2; continue; }
-                    if (line.charAt(j) == quote) { j++; break; }
+                    if (line.charAt(j) == '\\') {
+                        j += 2;
+                        continue;
+                    }
+                    if (line.charAt(j) == quote) {
+                        j++;
+                        break;
+                    }
                     j++;
                 }
                 if (j < len || (j == len && line.charAt(len - 1) == quote && (len < 2 || line.charAt(len - 2) != '\\'))) {
@@ -660,7 +669,10 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
 
                 while (j < len) {
                     char ch = line.charAt(j);
-                    if (ch == '\\') { j += 2; continue; }
+                    if (ch == '\\') {
+                        j += 2;
+                        continue;
+                    }
                     if (ch == '$' && j + 1 < len && line.charAt(j + 1) == '{') {
                         tokenEnd = j;
                         openedExpr = true;
@@ -728,7 +740,10 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
 
                 while (j < len) {
                     char ch = line.charAt(j);
-                    if (ch == '\\') { j += 2; continue; }
+                    if (ch == '\\') {
+                        j += 2;
+                        continue;
+                    }
                     if (ch == '$' && j + 1 < len && line.charAt(j + 1) == '{') {
                         tokenEnd = j;
                         openedExpr = true;
@@ -767,8 +782,14 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
             if (c == '"' || c == '\'') {
                 int j = i + 1;
                 while (j < len) {
-                    if (line.charAt(j) == '\\') { j += 2; continue; }
-                    if (line.charAt(j) == c) { j++; break; }
+                    if (line.charAt(j) == '\\') {
+                        j += 2;
+                        continue;
+                    }
+                    if (line.charAt(j) == c) {
+                        j++;
+                        break;
+                    }
                     j++;
                 }
                 if (j >= len && (len < 1 || line.charAt(len - 1) != c || (len >= 2 && line.charAt(len - 2) == '\\'))) {
@@ -829,12 +850,12 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         ViewportHighlighter.ColorResolver resolver = new ViewportHighlighter.ColorResolver() {
             @Override
             public int colorFor(byte tokenType) {
-                if (tokenType == TokenStream.TK_KEYWORD)  return colorKeyword;
-                if (tokenType == TokenStream.TK_STRING)   return colorString;
+                if (tokenType == TokenStream.TK_KEYWORD) return colorKeyword;
+                if (tokenType == TokenStream.TK_STRING) return colorString;
                 if (tokenType == TokenStream.TK_TEMPLATE) return colorString;
-                if (tokenType == TokenStream.TK_REGEX)    return colorString;
-                if (tokenType == TokenStream.TK_COMMENT)  return colorComment;
-                if (tokenType == TokenStream.TK_NUMBER)   return colorNumber;
+                if (tokenType == TokenStream.TK_REGEX) return colorString;
+                if (tokenType == TokenStream.TK_COMMENT) return colorComment;
+                if (tokenType == TokenStream.TK_NUMBER) return colorNumber;
                 return -1;
             }
         };
@@ -867,7 +888,7 @@ public class JsSyntaxHighlighter extends SyntaxHighlighter {
         // which is what the editor already spends drawing the slice.
         List<HighlightToken> out = new ArrayList<>(spans.size());
         int line = firstVisibleLine;
-        int col  = 0;
+        int col = 0;
         int cursor = startOffset;
         for (ViewportHighlighter.ViewportSpan s : spans) {
             while (cursor < s.startOffset) {

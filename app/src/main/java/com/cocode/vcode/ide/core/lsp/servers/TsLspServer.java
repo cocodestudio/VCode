@@ -6,7 +6,6 @@ import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
-
 import com.cocode.vcode.ide.core.lsp.LspDocument;
 import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.LspPosition;
@@ -64,9 +63,16 @@ public final class TsLspServer implements LspServer {
     // -------------------------------------------------------------------------
 
 
-
     // -------------------------------------------------------------------------
     // Diagnostics
+    // -------------------------------------------------------------------------
+
+    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> suggestions) {
+        return LspCompletionConverter.convert(suggestions);
+    }
+
+    // -------------------------------------------------------------------------
+    // Go to Definition
     // -------------------------------------------------------------------------
 
     @Override
@@ -75,7 +81,7 @@ public final class TsLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Go to Definition
+    // Find References
     // -------------------------------------------------------------------------
 
     @Override
@@ -84,7 +90,7 @@ public final class TsLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Find References
+    // Signature Help
     // -------------------------------------------------------------------------
 
     @Override
@@ -93,17 +99,13 @@ public final class TsLspServer implements LspServer {
     }
 
     // -------------------------------------------------------------------------
-    // Signature Help
+    // Private helpers
     // -------------------------------------------------------------------------
 
     @Override
     public String getLanguageId() {
         return "typescript";
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
 
     @Override
     public List<LspCompletionItem> completion(LspDocument doc, LspPosition pos) {
@@ -116,10 +118,6 @@ public final class TsLspServer implements LspServer {
         if (suggestions == null) return Collections.emptyList();
 
         return convertCompletions(suggestions);
-    }
-
-    public static List<LspCompletionItem> convertCompletions(List<CompletionItem> suggestions) {
-        return LspCompletionConverter.convert(suggestions);
     }
 
     @Override
@@ -183,7 +181,7 @@ public final class TsLspServer implements LspServer {
         String trimmed = word.trim();
         ProjectIndex projectIndex = ProjectIndex.getInstance();
         List<LspLocation> defs = projectIndex.findDefinitions(trimmed);
-        
+
         final int MAX_REFS = 100;
         for (String uri : projectIndex.getAllUris()) {
             if (result.size() >= MAX_REFS) break;

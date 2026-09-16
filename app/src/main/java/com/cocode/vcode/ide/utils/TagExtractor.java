@@ -9,36 +9,17 @@ import java.util.regex.Pattern;
  */
 public class TagExtractor {
 
-    public static class Result {
-        public boolean success;
-        public String extractedContent;
-        public String modifiedHtml;
-        public String errorMessage;
-
-        public Result(boolean success, String extractedContent, String modifiedHtml, String errorMessage) {
-            this.success = success;
-            this.extractedContent = extractedContent;
-            this.modifiedHtml = modifiedHtml;
-            this.errorMessage = errorMessage;
-        }
-    }
-
-    public enum Type {
-        STYLE, SCRIPT
-    }
-
     // Matches <style ...>...</style> non-greedily, allowing DOTALL to match newlines
     private static final Pattern STYLE_PATTERN = Pattern.compile("<style[^>]*>(.*?)</style>", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
-    
-    // Matches <script ...>...</script> non-greedily. 
+    // Matches <script ...>...</script> non-greedily.
     // We want to exclude scripts that have a 'src=' attribute, as they are already external.
     private static final Pattern SCRIPT_PATTERN = Pattern.compile("<script([^>]*)>(.*?)</script>", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
 
     /**
      * Extracts styles or scripts from the given HTML.
-     * 
-     * @param html The original HTML content.
-     * @param type What to extract (STYLE or SCRIPT).
+     *
+     * @param html           The original HTML content.
+     * @param type           What to extract (STYLE or SCRIPT).
      * @param targetFilename The name of the file being extracted to (to insert the correct link/src tag).
      * @return Result containing extracted text and modified HTML.
      */
@@ -49,7 +30,7 @@ public class TagExtractor {
 
         Pattern pattern = (type == Type.STYLE) ? STYLE_PATTERN : SCRIPT_PATTERN;
         Matcher matcher = pattern.matcher(html);
-        
+
         StringBuilder extracted = new StringBuilder();
         StringBuffer modifiedHtml = new StringBuffer();
         boolean firstMatch = true;
@@ -64,7 +45,7 @@ public class TagExtractor {
                     continue;
                 }
             }
-            
+
             String content = (type == Type.STYLE) ? matcher.group(1) : matcher.group(2);
             if (content != null && !content.trim().isEmpty()) {
                 if (extracted.length() > 0) {
@@ -89,7 +70,7 @@ public class TagExtractor {
                 matcher.appendReplacement(modifiedHtml, "");
             }
         }
-        
+
         matcher.appendTail(modifiedHtml);
 
         if (!foundAny) {
@@ -97,5 +78,23 @@ public class TagExtractor {
         }
 
         return new Result(true, extracted.toString(), modifiedHtml.toString(), null);
+    }
+
+    public enum Type {
+        STYLE, SCRIPT
+    }
+
+    public static class Result {
+        public boolean success;
+        public String extractedContent;
+        public String modifiedHtml;
+        public String errorMessage;
+
+        public Result(boolean success, String extractedContent, String modifiedHtml, String errorMessage) {
+            this.success = success;
+            this.extractedContent = extractedContent;
+            this.modifiedHtml = modifiedHtml;
+            this.errorMessage = errorMessage;
+        }
     }
 }

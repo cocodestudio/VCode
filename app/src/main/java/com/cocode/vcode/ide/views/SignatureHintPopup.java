@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
-import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -48,7 +47,7 @@ public class SignatureHintPopup {
         tvSignature.setTextColor(ContextCompat.getColor(context, R.color.vcode_text_primary));
         tvSignature.setTypeface(FontManager.getInstance().getCodeFont(context));
         tvSignature.setTextSize(14f);
-        
+
         container.addView(tvSignature, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -77,6 +76,34 @@ public class SignatureHintPopup {
         popupWindow.setFocusable(false);
         popupWindow.setElevation(8f);
         popupWindow.setAnimationStyle(android.R.style.Animation_Toast);
+    }
+
+    /**
+     * Extracts only the simple method or function name from a signature prefix string,
+     * stripping any receiver objects, chaining dots (e.g. "a.b.c.foo"), "new" keywords,
+     * generic type arguments, and leading dots.
+     *
+     * @param prefix the text preceding '(' in a signature label, or the full label if no '(' exists
+     * @return the isolated method name
+     */
+    public static String extractMethodName(String prefix) {
+        if (prefix == null) return "";
+        prefix = prefix.trim();
+        if (prefix.startsWith("new ")) {
+            prefix = prefix.substring(4).trim();
+        }
+        int genericStart = prefix.indexOf('<');
+        if (genericStart >= 0 && prefix.endsWith(">")) {
+            prefix = prefix.substring(0, genericStart).trim();
+        }
+        int lastDot = prefix.lastIndexOf('.');
+        if (lastDot >= 0) {
+            prefix = prefix.substring(lastDot + 1).trim();
+        }
+        while (prefix.startsWith(".")) {
+            prefix = prefix.substring(1).trim();
+        }
+        return prefix;
     }
 
     public void show(LspSignatureHelp help, View editorView, int cursorOffset) {
@@ -120,12 +147,12 @@ public class SignatureHintPopup {
             }
         } else {
             sb.append(methodName).append("(");
-            
+
             for (int i = 0; i < activeSig.parameters.size(); i++) {
                 LspSignatureHelp.LspParameterInformation param = activeSig.parameters.get(i);
                 int start = sb.length();
                 sb.append(param != null && param.label != null ? param.label : "");
-                
+
                 boolean isLast = (i == activeSig.parameters.size() - 1);
                 boolean isRest = param != null && param.label != null && param.label.trim().startsWith("...");
                 boolean isActive = (i == help.activeParameter) || (isLast && isRest && help.activeParameter >= i);
@@ -134,15 +161,15 @@ public class SignatureHintPopup {
                     sb.setSpan(new StyleSpan(Typeface.BOLD), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.vcode_accent_primary)), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
-                
+
                 if (i < activeSig.parameters.size() - 1) {
                     sb.append(", ");
                 }
             }
-            
+
             sb.append(suffix);
         }
-        
+
         tvSignature.setText(sb);
 
         // Documentation display
@@ -163,7 +190,7 @@ public class SignatureHintPopup {
         } else {
             tvDoc.setVisibility(View.GONE);
         }
-        
+
         // Position logic similar to AutoCompletePopup
         int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
         int maxPopupWidth = (int) (screenWidth * 0.9f);
@@ -232,33 +259,5 @@ public class SignatureHintPopup {
 
     public boolean isShowing() {
         return popupWindow.isShowing();
-    }
-
-    /**
-     * Extracts only the simple method or function name from a signature prefix string,
-     * stripping any receiver objects, chaining dots (e.g. "a.b.c.foo"), "new" keywords,
-     * generic type arguments, and leading dots.
-     *
-     * @param prefix the text preceding '(' in a signature label, or the full label if no '(' exists
-     * @return the isolated method name
-     */
-    public static String extractMethodName(String prefix) {
-        if (prefix == null) return "";
-        prefix = prefix.trim();
-        if (prefix.startsWith("new ")) {
-            prefix = prefix.substring(4).trim();
-        }
-        int genericStart = prefix.indexOf('<');
-        if (genericStart >= 0 && prefix.endsWith(">")) {
-            prefix = prefix.substring(0, genericStart).trim();
-        }
-        int lastDot = prefix.lastIndexOf('.');
-        if (lastDot >= 0) {
-            prefix = prefix.substring(lastDot + 1).trim();
-        }
-        while (prefix.startsWith(".")) {
-            prefix = prefix.substring(1).trim();
-        }
-        return prefix;
     }
 }

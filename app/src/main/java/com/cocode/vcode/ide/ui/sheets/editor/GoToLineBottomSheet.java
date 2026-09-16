@@ -15,9 +15,9 @@ import androidx.core.content.ContextCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetGoToLineBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * GoToLineBottomSheet provides a numeric input interface for navigating to a specific line in the editor.

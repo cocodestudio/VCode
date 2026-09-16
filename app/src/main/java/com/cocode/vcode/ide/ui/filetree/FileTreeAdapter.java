@@ -52,6 +52,15 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
         this.indentWidthPx = (int) (indentDp * screenDensity);
     }
 
+    private static String normalizePath(String path) {
+        if (path == null) return null;
+        String normalized = path.replace('\\', '/');
+        if (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
     public void setRootPath(String rootPath) {
         this.rootPath = rootPath;
     }
@@ -176,15 +185,6 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
             return false;
         }
         return nodePath.equals(cutPath) || nodePath.startsWith(cutPath + "/");
-    }
-
-    private static String normalizePath(String path) {
-        if (path == null) return null;
-        String normalized = path.replace('\\', '/');
-        if (normalized.endsWith("/") && normalized.length() > 1) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
     }
 
     public File getClipboardFile() {

@@ -11,7 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * One-time loader for the four static-completion JSON datasets.
@@ -49,17 +48,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class StaticCompletionLoader {
 
-    private StaticCompletionLoader() {}
-
     // Asset paths (relative to the assets root).
-    public static final String JS_KEYWORDS_ASSET     = "completions/js_keywords.json";
-    public static final String HTML_TAGS_ASSET        = "completions/html_tags.json";
-    public static final String CSS_PROPERTIES_ASSET   = "completions/css_properties.json";
-    public static final String CSS_COLORS_ASSET       = "completions/css_colors.json";
-    public static final String JSON_SNIPPETS_ASSET    = "completions/json_snippets.json";
+    public static final String JS_KEYWORDS_ASSET = "completions/js_keywords.json";
+    public static final String HTML_TAGS_ASSET = "completions/html_tags.json";
+    public static final String CSS_PROPERTIES_ASSET = "completions/css_properties.json";
+    public static final String CSS_COLORS_ASSET = "completions/css_colors.json";
+    public static final String JSON_SNIPPETS_ASSET = "completions/json_snippets.json";
+    private static final Object lock = new Object();
 
     // --- Cached state ---------------------------------------------------
-
     private static volatile StaticCompletionItem[] jsKeywordsCache;
     private static volatile StaticCompletionItem[] htmlTagsCache;
     private static volatile String[] htmlGlobalAttributesCache;
@@ -72,7 +69,8 @@ public final class StaticCompletionLoader {
     private static volatile String[] cssGlobalFunctionsCache;
     private static volatile StaticCompletionItem[] jsonSnippetsCache;
 
-    private static final Object lock = new Object();
+    private StaticCompletionLoader() {
+    }
 
     // --- Public API ----------------------------------------------------
 
@@ -86,16 +84,20 @@ public final class StaticCompletionLoader {
         return htmlTagsCache;
     }
 
-    /** Attributes valid on every element (e.g. {@code id},
-     *  {@code class}, {@code style}, {@code title}, {@code role}). */
+    /**
+     * Attributes valid on every element (e.g. {@code id},
+     * {@code class}, {@code style}, {@code title}, {@code role}).
+     */
     public static String[] getHtmlGlobalAttributes() {
         if (htmlGlobalAttributesCache == null) loadHtmlTagsFromAssets();
         return htmlGlobalAttributesCache;
     }
 
-    /** Prefix-matched global attributes ({@code data-},
-     *  {@code aria-}). The completion engine should offer
-     *  {@code <typed-prefix>-...} variants. */
+    /**
+     * Prefix-matched global attributes ({@code data-},
+     * {@code aria-}). The completion engine should offer
+     * {@code <typed-prefix>-...} variants.
+     */
     public static String[] getHtmlGlobalAttributePrefixes() {
         if (htmlGlobalAttributePrefixesCache == null) loadHtmlTagsFromAssets();
         return htmlGlobalAttributePrefixesCache;
@@ -106,7 +108,9 @@ public final class StaticCompletionLoader {
         return cssPropertiesCache;
     }
 
-    /** Case-insensitive lookup of a CSS property by name. */
+    /**
+     * Case-insensitive lookup of a CSS property by name.
+     */
     public static StaticCompletionItem getCssProperty(String name) {
         if (name == null) return null;
         if (cssPropertyMapCache == null) loadCssPropertiesFromAssets();
@@ -151,8 +155,10 @@ public final class StaticCompletionLoader {
 
     // --- Reset (test-only) ---------------------------------------------
 
-    /** Drop all cached state. Intended for tests that want to
-     *  inject custom JSON. */
+    /**
+     * Drop all cached state. Intended for tests that want to
+     * inject custom JSON.
+     */
     public static synchronized void resetForTest() {
         jsKeywordsCache = null;
         htmlTagsCache = null;
@@ -224,22 +230,28 @@ public final class StaticCompletionLoader {
 
     // --- Direct-from-JSON loaders (test entry points) ------------------
 
-    /** Public for test injection: parse a JS keywords JSON string
-     *  into {@link StaticCompletionItem} array. */
+    /**
+     * Public for test injection: parse a JS keywords JSON string
+     * into {@link StaticCompletionItem} array.
+     */
     public static StaticCompletionItem[] parseJsKeywords(String json) {
         return parseFlatItemArray(json, false);
     }
 
-    /** Public for test injection: parse an HTML tags JSON string.
-     *  The string may be either a top-level array (legacy) or a
-     *  top-level object with {@code tags}, {@code globalAttributes},
-     *  {@code globalAttributePrefixes} keys. */
+    /**
+     * Public for test injection: parse an HTML tags JSON string.
+     * The string may be either a top-level array (legacy) or a
+     * top-level object with {@code tags}, {@code globalAttributes},
+     * {@code globalAttributePrefixes} keys.
+     */
     public static StaticCompletionItem[] parseHtmlTags(String json) {
         return parseHtmlTags(json, new java.util.ArrayList<>(), new java.util.ArrayList<>());
     }
 
-    /** Overload that also populates {@code outGlobalAttrs} and
-     *  {@code outGlobalPrefixes}. */
+    /**
+     * Overload that also populates {@code outGlobalAttrs} and
+     * {@code outGlobalPrefixes}.
+     */
     public static StaticCompletionItem[] parseHtmlTags(String json,
                                                        List<String> outGlobalAttrs,
                                                        List<String> outGlobalPrefixes) {
@@ -282,7 +294,9 @@ public final class StaticCompletionLoader {
         return out.toArray(new StaticCompletionItem[0]);
     }
 
-    /** Public for test injection: parse a CSS properties JSON string. */
+    /**
+     * Public for test injection: parse a CSS properties JSON string.
+     */
     public static StaticCompletionItem[] parseCssProperties(String json) {
         List<StaticCompletionItem> out = new ArrayList<>();
         try {
@@ -303,28 +317,21 @@ public final class StaticCompletionLoader {
         return out.toArray(new StaticCompletionItem[0]);
     }
 
-    /** Public for test injection: parse a CSS colors JSON object. */
+    /**
+     * Public for test injection: parse a CSS colors JSON object.
+     */
     public static CssColorSets parseCssColors(String json) {
         CssColorSets s = new CssColorSets();
         try {
             JSONObject o = new JSONObject(json);
-            s.colors          = readStringArray(o, "colors");
-            s.colorFunctions  = readStringArray(o, "color_functions");
+            s.colors = readStringArray(o, "colors");
+            s.colorFunctions = readStringArray(o, "color_functions");
             s.globalFunctions = readStringArray(o, "global_functions");
         } catch (JSONException ignored) {
             // Leave defaults.
         }
         return s;
     }
-
-    /** Holder returned by {@link #parseCssColors(String)}. */
-    public static final class CssColorSets {
-        public String[] colors          = new String[0];
-        public String[] colorFunctions  = new String[0];
-        public String[] globalFunctions = new String[0];
-    }
-
-    // --- Internal parsers ------------------------------------------------
 
     private static StaticCompletionItem[] parseFlatItemArray(String json, boolean acceptsColorDefault) {
         List<StaticCompletionItem> out = new ArrayList<>();
@@ -352,6 +359,8 @@ public final class StaticCompletionLoader {
         return out.toArray(new StaticCompletionItem[0]);
     }
 
+    // --- Internal parsers ------------------------------------------------
+
     private static String[] readStringArray(JSONObject o, String key) {
         JSONArray arr = o.optJSONArray(key);
         if (arr == null) return new String[0];
@@ -375,5 +384,14 @@ public final class StaticCompletionLoader {
             }
         }
         return map;
+    }
+
+    /**
+     * Holder returned by {@link #parseCssColors(String)}.
+     */
+    public static final class CssColorSets {
+        public String[] colors = new String[0];
+        public String[] colorFunctions = new String[0];
+        public String[] globalFunctions = new String[0];
     }
 }

@@ -13,9 +13,9 @@ import androidx.fragment.app.FragmentManager;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetRenameBinding;
+import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
-import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 
 /**
  * RenameBottomSheet provides a specialized input form for renaming various project entities.

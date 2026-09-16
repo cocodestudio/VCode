@@ -1,8 +1,9 @@
 package com.cocode.vcode.ide.core.language.html;
 
-import java.util.Arrays;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.language.js.ParseResult;
+
+import java.util.Arrays;
 
 /**
  * Parses an HtmlTokenStream into an HtmlSyntaxTree.
@@ -13,6 +14,7 @@ public class HtmlParser {
 
     /**
      * Parses the given token stream into a flat-array syntax tree.
+     *
      * @param source The original HTML source string
      * @param stream The token stream produced by HtmlLexer
      * @return A populated ParseResult
@@ -60,7 +62,7 @@ public class HtmlParser {
                 int start = stream.tokenStart[p];
                 int openEnd = advancePastToken(stream, p);
                 boolean isClosingTag = (openEnd - start >= 2 && source.charAt(start + 1) == '/');
-                
+
                 p = openEnd;
                 // Skip whitespace (TK_NONE)
                 while (p < stream.length && stream.types[p] == HtmlTokenStream.TK_NONE) p++;
@@ -82,7 +84,7 @@ public class HtmlParser {
                                 break;
                             }
                         }
-                        
+
                         int closeTagEndOffset = p;
                         while (p < stream.length) {
                             if (stream.types[p] == HtmlTokenStream.TK_TAG_CLOSE) {
@@ -114,7 +116,8 @@ public class HtmlParser {
                     } else {
                         // </ but no tag name
                         int closeTagEndOffset = p;
-                        while (p < stream.length && stream.types[p] != HtmlTokenStream.TK_TAG_CLOSE && stream.types[p] != HtmlTokenStream.TK_TAG_OPEN) p++;
+                        while (p < stream.length && stream.types[p] != HtmlTokenStream.TK_TAG_CLOSE && stream.types[p] != HtmlTokenStream.TK_TAG_OPEN)
+                            p++;
                         if (p < stream.length && stream.types[p] == HtmlTokenStream.TK_TAG_CLOSE) {
                             closeTagEndOffset = advancePastToken(stream, p);
                             p = closeTagEndOffset;
@@ -127,8 +130,8 @@ public class HtmlParser {
                 }
 
                 // It's an opening tag
-                int elemId = tree.addNode(HtmlSyntaxTree.N_ELEMENT, start, start, currentParent, tagName, null); 
-                
+                int elemId = tree.addNode(HtmlSyntaxTree.N_ELEMENT, start, start, currentParent, tagName, null);
+
                 boolean selfClosing = false;
                 while (p < stream.length) {
                     byte t = stream.types[p];
@@ -146,13 +149,13 @@ public class HtmlParser {
                         int attrNameEnd = advancePastToken(stream, p);
                         String attrName = source.substring(attrNameStart, attrNameEnd);
                         p = attrNameEnd;
-                        
+
                         String attrValue = null;
                         int attrEnd = attrNameEnd;
                         int valStart = 0;
-                        
+
                         while (p < stream.length && stream.types[p] == HtmlTokenStream.TK_NONE) p++;
-                        
+
                         if (p < stream.length && stream.types[p] == HtmlTokenStream.TK_ATTR_VALUE) {
                             valStart = stream.tokenStart[p];
                             int valEnd = advancePastToken(stream, p);
@@ -160,7 +163,7 @@ public class HtmlParser {
                             attrEnd = valEnd;
                             p = valEnd;
                         }
-                        
+
                         int attrNodeId = tree.addNode(HtmlSyntaxTree.N_ATTRIBUTE, attrNameStart, attrEnd, elemId, attrName, attrValue);
                         if (attrValue != null) {
                             tree.nodeExtra[attrNodeId] = valStart;
@@ -174,13 +177,13 @@ public class HtmlParser {
                         p++;
                     }
                 }
-                
+
                 // If it didn't find a close tag and reached EOF
                 if (tree.nodeEnd[elemId] == start && p == stream.length) {
                     tree.nodeEnd[elemId] = p;
                 }
 
-                if (!selfClosing && tagName != null && isVoidElement(tagName)) {
+                if (!selfClosing && isVoidElement(tagName)) {
                     selfClosing = true;
                 }
 
@@ -194,13 +197,13 @@ public class HtmlParser {
                     depth++;
                     currentParent = elemId;
                 }
-                
+
                 continue;
             }
-            
+
             p++;
         }
-        
+
         // Close unclosed tags at EOF
         for (int i = 0; i < depth; i++) {
             int unclosedId = parentStack[i];
@@ -232,7 +235,7 @@ public class HtmlParser {
                         }
                         child = tree.nodeSibling[child];
                     }
-                    
+
                     if (!hasSrc) {
                         // Extract inner text-node span
                         child = tree.nodeChild[i];
@@ -243,9 +246,9 @@ public class HtmlParser {
                                 int end = tree.nodeEnd[child];
                                 if (start < end) {
                                     // Parse as JS
-                                    com.cocode.vcode.ide.core.diagnostic.util.TokenStream jsStream = 
+                                    com.cocode.vcode.ide.core.diagnostic.util.TokenStream jsStream =
                                             com.cocode.vcode.ide.core.language.js.JsLexer.tokenizeRegion(source, start, end);
-                                    com.cocode.vcode.ide.core.language.js.JsSyntaxTree jsTree = 
+                                    com.cocode.vcode.ide.core.language.js.JsSyntaxTree jsTree =
                                             com.cocode.vcode.ide.core.language.js.JsParser.parseTopLevel(source, jsStream);
                                     ParseResult jsResult = new ParseResult(null, source, jsStream, jsTree, null, ParseResult.MODE_FULL);
                                     tree.nodeReference[i] = jsResult; // attach directly to <script> element
@@ -266,9 +269,9 @@ public class HtmlParser {
                             int end = tree.nodeEnd[child];
                             if (start < end) {
                                 // Parse as CSS
-                                com.cocode.vcode.ide.core.language.css.CssTokenStream cssStream = 
+                                com.cocode.vcode.ide.core.language.css.CssTokenStream cssStream =
                                         com.cocode.vcode.ide.core.language.css.CssLexer.tokenizeRegion(source, start, end);
-                                com.cocode.vcode.ide.core.language.css.CssSyntaxTree cssTree = 
+                                com.cocode.vcode.ide.core.language.css.CssSyntaxTree cssTree =
                                         com.cocode.vcode.ide.core.language.css.CssParser.parse(cssStream, source);
                                 ParseResult cssResult = new ParseResult(null, source, cssStream, cssTree);
                                 tree.nodeReference[i] = cssResult; // attach directly to <style> element
@@ -279,7 +282,7 @@ public class HtmlParser {
                         child = tree.nodeSibling[child];
                     }
                 }
-                
+
                 // Also scan attributes for inline style="color: red" and on*="doThing()"
                 int attr = tree.nodeChild[i];
                 int attrLoop = 0;
@@ -298,9 +301,9 @@ public class HtmlParser {
                                     innerEnd--;
                                 }
                                 if (innerStart < innerEnd) {
-                                    com.cocode.vcode.ide.core.language.css.CssTokenStream cssStream = 
+                                    com.cocode.vcode.ide.core.language.css.CssTokenStream cssStream =
                                             com.cocode.vcode.ide.core.language.css.CssLexer.tokenizeRegion(source, innerStart, innerEnd);
-                                    com.cocode.vcode.ide.core.language.css.CssSyntaxTree cssTree = 
+                                    com.cocode.vcode.ide.core.language.css.CssSyntaxTree cssTree =
                                             com.cocode.vcode.ide.core.language.css.CssParser.parseDeclarationList(cssStream, source);
                                     ParseResult cssResult = new ParseResult(null, source, cssStream, cssTree);
                                     tree.nodeReference[attr] = cssResult;
@@ -319,9 +322,9 @@ public class HtmlParser {
                                     innerEnd--;
                                 }
                                 if (innerStart < innerEnd) {
-                                    com.cocode.vcode.ide.core.diagnostic.util.TokenStream jsStream = 
+                                    com.cocode.vcode.ide.core.diagnostic.util.TokenStream jsStream =
                                             com.cocode.vcode.ide.core.language.js.JsLexer.tokenizeRegion(source, innerStart, innerEnd);
-                                    com.cocode.vcode.ide.core.language.js.JsSyntaxTree jsTree = 
+                                    com.cocode.vcode.ide.core.language.js.JsSyntaxTree jsTree =
                                             com.cocode.vcode.ide.core.language.js.JsParser.parseStatementList(source, jsStream);
                                     ParseResult jsResult = new ParseResult(null, source, jsStream, jsTree, null, ParseResult.MODE_FULL);
                                     tree.nodeReference[attr] = jsResult;

@@ -4,21 +4,21 @@ import java.util.Arrays;
 
 /**
  * A flat-array (Struct of Arrays) data container representing a JSON syntax tree.
- * 
- * Uses parallel arrays instead of Node objects to maintain zero 
+ * <p>
+ * Uses parallel arrays instead of Node objects to maintain zero
  * allocation overhead. Arrays are doubled in size when capacity is reached.
  */
 public class JsonSyntaxTree {
 
-    public static final byte N_OBJECT        = 1;
-    public static final byte N_ARRAY         = 2;
-    public static final byte N_KEY           = 3;
-    public static final byte N_VALUE_STRING  = 4;
-    public static final byte N_VALUE_NUMBER  = 5;
-    public static final byte N_VALUE_BOOL    = 6;
-    public static final byte N_VALUE_NULL    = 7;
-    public static final byte N_ERROR         = 8;
-
+    public static final byte N_OBJECT = 1;
+    public static final byte N_ARRAY = 2;
+    public static final byte N_KEY = 3;
+    public static final byte N_VALUE_STRING = 4;
+    public static final byte N_VALUE_NUMBER = 5;
+    public static final byte N_VALUE_BOOL = 6;
+    public static final byte N_VALUE_NULL = 7;
+    public static final byte N_ERROR = 8;
+    public static final int MAX_NODES = 100_000;
     public byte[] nodeType;
     public int[] nodeStart;
     public int[] nodeEnd;
@@ -27,9 +27,7 @@ public class JsonSyntaxTree {
     public int[] nodeSibling;
     public int[] nodeLastChild;
     public String[] nodeName;
-
     public int nodeCount;
-
     // Cache for quick offset lookup
     private int[] nodesByOffset;
 
@@ -42,15 +40,13 @@ public class JsonSyntaxTree {
         nodeSibling = new int[initialCapacity];
         nodeLastChild = new int[initialCapacity];
         nodeName = new String[initialCapacity];
-        
+
         Arrays.fill(nodeChild, -1);
         Arrays.fill(nodeSibling, -1);
         Arrays.fill(nodeLastChild, -1);
-        
+
         nodeCount = 1; // 0 is reserved as root/null
     }
-
-    public static final int MAX_NODES = 100_000;
 
     public int addNode(byte type, int start, int end, int parent, String name) {
         if (nodeCount >= MAX_NODES) {
@@ -65,12 +61,12 @@ public class JsonSyntaxTree {
             nodeStart = Arrays.copyOf(nodeStart, newCap);
             nodeEnd = Arrays.copyOf(nodeEnd, newCap);
             nodeParent = Arrays.copyOf(nodeParent, newCap);
-            
+
             int[] newChild = new int[newCap];
             System.arraycopy(nodeChild, 0, newChild, 0, nodeChild.length);
             Arrays.fill(newChild, nodeChild.length, newCap, -1);
             nodeChild = newChild;
-            
+
             int[] newSibling = new int[newCap];
             System.arraycopy(nodeSibling, 0, newSibling, 0, nodeSibling.length);
             Arrays.fill(newSibling, nodeSibling.length, newCap, -1);
@@ -80,7 +76,7 @@ public class JsonSyntaxTree {
             System.arraycopy(nodeLastChild, 0, newLastChild, 0, nodeLastChild.length);
             Arrays.fill(newLastChild, nodeLastChild.length, newCap, -1);
             nodeLastChild = newLastChild;
-            
+
             nodeName = Arrays.copyOf(nodeName, newCap);
         }
 
@@ -198,12 +194,18 @@ public class JsonSyntaxTree {
 
     private void medianOfThree(int a, int b, int c) {
         if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-            int t = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t;
+            int t = nodesByOffset[a];
+            nodesByOffset[a] = nodesByOffset[b];
+            nodesByOffset[b] = t;
         }
         if (nodeStart[nodesByOffset[b]] > nodeStart[nodesByOffset[c]]) {
-            int t = nodesByOffset[b]; nodesByOffset[b] = nodesByOffset[c]; nodesByOffset[c] = t;
+            int t = nodesByOffset[b];
+            nodesByOffset[b] = nodesByOffset[c];
+            nodesByOffset[c] = t;
             if (nodeStart[nodesByOffset[a]] > nodeStart[nodesByOffset[b]]) {
-                int t2 = nodesByOffset[a]; nodesByOffset[a] = nodesByOffset[b]; nodesByOffset[b] = t2;
+                int t2 = nodesByOffset[a];
+                nodesByOffset[a] = nodesByOffset[b];
+                nodesByOffset[b] = t2;
             }
         }
     }
@@ -223,7 +225,7 @@ public class JsonSyntaxTree {
 
     public int getNodeAtOffset(int offset) {
         if (nodesByOffset == null || nodesByOffset.length == 0) return 0;
-        
+
         int low = 0;
         int high = nodesByOffset.length - 1;
         int bestMatch = 0;
@@ -231,7 +233,7 @@ public class JsonSyntaxTree {
         while (low <= high) {
             int mid = (low + high) >>> 1;
             int node = nodesByOffset[mid];
-            
+
             if (offset >= nodeStart[node] && offset <= nodeEnd[node]) {
                 return getDeepestNode(node, offset);
             } else if (nodeStart[node] > offset) {

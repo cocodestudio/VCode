@@ -17,9 +17,6 @@ import java.util.TreeSet;
  */
 public final class JsKeywords {
 
-    private static final Object lock = new Object();
-    private static volatile boolean loaded = false;
-
     public static final Set<String> JS_KEYWORDS = new HashSet<>();
     public static final Set<String> TS_KEYWORDS = new TreeSet<>(Arrays.asList(
             "abstract", "any", "as", "asserts", "bigint", "boolean", "declare",
@@ -28,21 +25,23 @@ public final class JsKeywords {
             "private", "protected", "public", "readonly", "satisfies", "set",
             "string", "symbol", "type", "unknown"
     ));
-
     public static final Set<String> JS_BUILTINS = new HashSet<>(Arrays.asList(
             "console", "window", "document", "Math", "JSON", "Promise",
             "Object", "Array", "String", "Number", "Boolean", "RegExp",
             "Date", "Error", "Map", "Set", "Symbol", "globalThis"
     ));
-
     public static final Set<String> JS_BOOLEANS = new HashSet<>(Arrays.asList(
             "true", "false", "null", "undefined"
     ));
-
     public static final Set<String> ALL_JS_TS_KEYWORDS = new HashSet<>();
+    private static final Object lock = new Object();
+    private static volatile boolean loaded = false;
 
     static {
         ensureLoaded();
+    }
+
+    private JsKeywords() {
     }
 
     public static void ensureLoaded() {
@@ -89,6 +88,4 @@ public final class JsKeywords {
         if (word == null) return false;
         return TS_KEYWORDS.contains(word);
     }
-
-    private JsKeywords() {}
 }

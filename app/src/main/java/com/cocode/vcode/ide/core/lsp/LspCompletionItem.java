@@ -66,7 +66,7 @@ public final class LspCompletionItem {
      * Whether inserting this item should trigger a re-request for completions (e.g. after a dot).
      */
     public final boolean commitTriggerReRequest;
-    
+
     /**
      * Length of text to replace before cursor. Defaults to -1 if unspecified.
      */
