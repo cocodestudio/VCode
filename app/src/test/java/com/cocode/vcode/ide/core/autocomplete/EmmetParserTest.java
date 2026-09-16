@@ -212,13 +212,19 @@ public class EmmetParserTest {
     public void testCssNamedAbbreviation() {
         assertEquals("display: flex;", EmmetParser.expandCss("df"));
         assertEquals("background-color: |;", EmmetParser.expandCss("bgc"));
-        assertEquals("position: absolute;", EmmetParser.expandCss("pos:a"));
-        assertEquals("position: relative;", EmmetParser.expandCss("pos:r"));
-        assertEquals("text-align: center;", EmmetParser.expandCss("ta:c"));
-        assertEquals("cursor: pointer;", EmmetParser.expandCss("cur:p"));
-        assertEquals("overflow: hidden;", EmmetParser.expandCss("ov:h"));
-        assertEquals("box-sizing: border-box;", EmmetParser.expandCss("bs:bb"));
-        assertEquals("margin: auto;", EmmetParser.expandCss("m:a"));
+        assertEquals("position: absolute;", EmmetParser.expandCss("posa"));
+        assertEquals("position: relative;", EmmetParser.expandCss("posr"));
+        assertEquals("text-align: center;", EmmetParser.expandCss("tac"));
+        assertEquals("cursor: pointer;", EmmetParser.expandCss("curp"));
+        assertEquals("overflow: hidden;", EmmetParser.expandCss("ovh"));
+        assertEquals("box-sizing: border-box;", EmmetParser.expandCss("bsbb"));
+        assertEquals("box-sizing: border-box;", EmmetParser.expandCss("bxz"));
+        assertEquals("margin: auto;", EmmetParser.expandCss("ma"));
+        assertEquals("width: auto;", EmmetParser.expandCss("wa"));
+        assertEquals("height: auto;", EmmetParser.expandCss("ha"));
+        assertEquals("z-index: auto;", EmmetParser.expandCss("za"));
+        assertEquals("float: left;", EmmetParser.expandCss("fll"));
+        assertEquals("clear: both;", EmmetParser.expandCss("clb"));
     }
 
     @Test

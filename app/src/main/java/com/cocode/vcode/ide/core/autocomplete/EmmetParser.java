@@ -442,7 +442,14 @@ public class EmmetParser {
             return applyImportant(named, important);
         }
 
-        // Shorthands with auto values (e.g. m:a, mt:a, w:a, h:a)
+        // Shorthands with auto values (e.g. ma, mta, wa, ha, za, m:a)
+        if (abbr.endsWith("a") && abbr.length() > 1) {
+            String propKey = abbr.substring(0, abbr.length() - 1);
+            String prop = EmmetCssDefinitions.CSS_PROP_MAP.get(propKey);
+            if (prop != null) {
+                return applyImportant(prop + ": auto;", important);
+            }
+        }
         if (abbr.endsWith(":a")) {
             String propKey = abbr.substring(0, abbr.length() - 2);
             String prop = EmmetCssDefinitions.CSS_PROP_MAP.get(propKey);
