@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.core.language.css;
 import android.content.Context;
 
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.editor.highlight.GradientPreview;
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
 import com.cocode.vcode.ide.core.editor.text.ContentLine;
 import com.cocode.vcode.ide.core.language.base.SyntaxHighlighter;
@@ -241,11 +242,40 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
 
                 if (inValue) {
                     String word = lineStr.substring(i, j);
-                    Integer colorVal = ColorParser.parse(word);
-                    if (colorVal != null) {
-                        tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, colorVal));
-                    } else {
+                    if (j < len && lineStr.charAt(j) == '(') {
+                        int closeIdx = findMatchingParen(lineStr, j);
+                        String fullExpr = null;
+                        if (closeIdx != -1) {
+                            fullExpr = lineStr.substring(i, closeIdx + 1);
+                        } else if (content != null) {
+                            fullExpr = extractMultiLineExpression(lineStr, lineIndex, i, j);
+                        }
+
+                        if (fullExpr != null) {
+                            if (CssGradientParser.isGradientFunction(word)) {
+                                GradientPreview grad = CssGradientParser.parse(fullExpr);
+                                if (grad != null) {
+                                    tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, grad.colors[0], grad));
+                                    i = j;
+                                    continue;
+                                }
+                            } else if (CssGradientParser.isColorFunction(word)) {
+                                Integer fnColor = ColorParser.parse(fullExpr);
+                                if (fnColor != null) {
+                                    tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, fnColor));
+                                    i = j;
+                                    continue;
+                                }
+                            }
+                        }
                         tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
+                    } else {
+                        Integer colorVal = ColorParser.parse(word);
+                        if (colorVal != null) {
+                            tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false, true, colorVal));
+                        } else {
+                            tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
+                        }
                     }
                 } else {
                     int k = j;
@@ -416,5 +446,37 @@ public class CssSyntaxHighlighter extends SyntaxHighlighter {
         if (inStringDouble) endState |= (1 << 13);
         if (inStringSingle) endState |= (1 << 14);
         return endState;
+    }
+
+    private String extractMultiLineExpression(String lineStr, int lineIndex, int startCol, int openParenCol) {
+        if (content == null) return null;
+        StringBuilder sb = new StringBuilder();
+        sb.append(lineStr.substring(startCol));
+        int depth = 0;
+        for (int k = openParenCol; k < lineStr.length(); k++) {
+            char c = lineStr.charAt(k);
+            if (c == '(') depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0) return sb.toString();
+            }
+        }
+        int totalLines = content.lineCount();
+        for (int l = lineIndex + 1; l < Math.min(totalLines, lineIndex + 20); l++) {
+            String nextLine = content.getLine(l).toLineString();
+            sb.append("\n");
+            for (int k = 0; k < nextLine.length(); k++) {
+                char c = nextLine.charAt(k);
+                sb.append(c);
+                if (c == '(') depth++;
+                else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        return sb.toString();
+                    }
+                }
+            }
+        }
+        return null;
     }
 }

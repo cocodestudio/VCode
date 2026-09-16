@@ -7,6 +7,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,6 +29,7 @@ import androidx.core.view.GestureDetectorCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.editor.highlight.GradientPreview;
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
 import com.cocode.vcode.ide.core.editor.indent.BracketMatcher;
 import com.cocode.vcode.ide.core.editor.indent.IndentationEngine;
@@ -201,6 +203,7 @@ public class CodeEditText extends View {
     private boolean[] underlineBuffer = new boolean[1024];
     private boolean[] previewBuffer = new boolean[1024];
     private int[] previewColorBuffer = new int[1024];
+    private GradientPreview[] previewGradientBuffer = new GradientPreview[1024];
     private char[] lineBuffer = new char[1024];
 
     // Bracket match positions
@@ -601,6 +604,7 @@ public class CodeEditText extends View {
                     underlineBuffer = new boolean[newCap];
                     previewBuffer = new boolean[newCap];
                     previewColorBuffer = new int[newCap];
+                    previewGradientBuffer = new GradientPreview[newCap];
                 }
                 content.getLineChars(line, startVisCol, endVisCol, lineBuffer);
 
@@ -615,6 +619,7 @@ public class CodeEditText extends View {
                     Arrays.fill(colorBuffer, 0, renderLen, defaultTextColor);
                     Arrays.fill(underlineBuffer, 0, renderLen, false);
                     Arrays.fill(previewBuffer, 0, renderLen, false);
+                    Arrays.fill(previewGradientBuffer, 0, renderLen, null);
 
                     // Apply tokens (later tokens overwrite earlier ones)
                     for (HighlightToken tok : lineTokens) {
@@ -631,6 +636,7 @@ public class CodeEditText extends View {
                         if (tok.hasPreviewColor && s < renderLen && (tok.startCol >= startVisCol)) {
                             previewBuffer[s] = true;
                             previewColorBuffer[s] = tok.previewColor;
+                            previewGradientBuffer[s] = tok.gradientPreview;
                         }
                     }
 
@@ -644,8 +650,16 @@ public class CodeEditText extends View {
                             float circleY = baseY + (textPaint.ascent() + textPaint.descent()) / 2f;
 
                             textPaint.setStyle(Paint.Style.FILL);
-                            textPaint.setColor(previewColorBuffer[start]);
-                            canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
+                            GradientPreview grad = previewGradientBuffer[start];
+                            if (grad != null) {
+                                Shader shader = grad.createShader(circleX, circleY, circleRadius);
+                                textPaint.setShader(shader);
+                                canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
+                                textPaint.setShader(null);
+                            } else {
+                                textPaint.setColor(previewColorBuffer[start]);
+                                canvas.drawCircle(circleX, circleY, circleRadius, textPaint);
+                            }
 
                             textPaint.setStyle(Paint.Style.STROKE);
                             textPaint.setColor(android.graphics.Color.argb(50, 128, 128, 128));

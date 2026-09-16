@@ -21,7 +21,13 @@ public class ColorParser {
     private static volatile boolean loaded = false;
     private static final Map<String, Integer> NAMED_COLORS = new HashMap<>();
     private static final Pattern RGB_PATTERN = Pattern.compile("rgba?\\(\\s*([\\d.]+)(%?)\\s*[, ]\\s*([\\d.]+)(%?)\\s*[, ]\\s*([\\d.]+)(%?)(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
-    private static final Pattern HSL_PATTERN = Pattern.compile("hsla?\\(\\s*([\\d.]+)(deg|rad|grad|turn)?\\s*[, ]\\s*([\\d.]+)%\\s*[, ]\\s*([\\d.]+)%(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern HSL_PATTERN = Pattern.compile("hsla?\\(\\s*([\\d.]+)(deg|rad|grad|turn)?\\s*[, ]\\s*([\\d.]+)%?\\s*[, ]\\s*([\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern HWB_PATTERN = Pattern.compile("hwb\\(\\s*([\\d.]+)(deg|rad|grad|turn)?\\s*[, ]\\s*([\\d.]+)%?\\s*[, ]\\s*([\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern LAB_PATTERN = Pattern.compile("lab\\(\\s*([\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern LCH_PATTERN = Pattern.compile("lch\\(\\s*([\\d.]+)%?\\s*[, ]\\s*([\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)(deg|rad|grad|turn)?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern OKLAB_PATTERN = Pattern.compile("oklab\\(\\s*([\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern OKLCH_PATTERN = Pattern.compile("oklch\\(\\s*([\\d.]+)%?\\s*[, ]\\s*([\\d.]+)%?\\s*[, ]\\s*([-+]?[\\d.]+)(deg|rad|grad|turn)?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
+    private static final Pattern COLOR_FN_PATTERN = Pattern.compile("color\\(\\s*([\\w-]+)\\s+([\\d.]+)%?\\s+([\\d.]+)%?\\s+([\\d.]+)%?(?:\\s*[,/]\\s*([\\d.]+)(%?))?\\s*\\)");
 
     private static void ensureLoaded() {
         if (loaded) return;
@@ -85,6 +91,38 @@ public class ColorParser {
 
         if (colorStr.startsWith("hsl")) {
             return parseHsl(colorStr);
+        }
+
+        if (colorStr.startsWith("hwb")) {
+            return parseHwb(colorStr);
+        }
+
+        if (colorStr.startsWith("oklch")) {
+            return parseOklch(colorStr);
+        }
+
+        if (colorStr.startsWith("oklab")) {
+            return parseOklab(colorStr);
+        }
+
+        if (colorStr.startsWith("lch")) {
+            return parseLch(colorStr);
+        }
+
+        if (colorStr.startsWith("lab")) {
+            return parseLab(colorStr);
+        }
+
+        if (colorStr.startsWith("color-mix")) {
+            return parseColorMix(colorStr);
+        }
+
+        if (colorStr.startsWith("color(")) {
+            return parseColorFn(colorStr);
+        }
+
+        if (colorStr.startsWith("light-dark")) {
+            return parseLightDark(colorStr);
         }
 
         return null;
@@ -219,5 +257,350 @@ public class ColorParser {
         h = h % 360;
         if (h < 0) h += 360;
         return h;
+    }
+
+    private static Integer parseHwb(String hwbStr) {
+        Matcher matcher = HWB_PATTERN.matcher(hwbStr);
+        if (matcher.find()) {
+            try {
+                float h = parseHue(matcher.group(1), matcher.group(2));
+                float w = parsePercentOrRatio(matcher.group(3));
+                float b = parsePercentOrRatio(matcher.group(4));
+                float a = 255f;
+                if (matcher.group(5) != null) {
+                    a = parseAlpha(matcher.group(5), "%".equals(matcher.group(6)));
+                }
+
+                if (w + b >= 1.0f) {
+                    int gray = clamp255((w / (w + b)) * 255f);
+                    return argb((int) a, gray, gray, gray);
+                }
+
+                float r = hwbComponent(h, 0);
+                float g = hwbComponent(h, 8);
+                float bVal = hwbComponent(h, 4);
+
+                r = r * (1.0f - w - b) + w;
+                g = g * (1.0f - w - b) + w;
+                bVal = bVal * (1.0f - w - b) + w;
+
+                return argb((int) a, clamp255(r * 255f), clamp255(g * 255f), clamp255(bVal * 255f));
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static float hwbComponent(float h, int n) {
+        float k = (n + h / 30f) % 12f;
+        if (k < 0) k += 12f;
+        float val = Math.max(-1f, Math.min(Math.min(k - 3f, 9f - k), 1f));
+        return 0.5f - 0.5f * val;
+    }
+
+    private static Integer parseLab(String labStr) {
+        Matcher matcher = LAB_PATTERN.matcher(labStr);
+        if (matcher.find()) {
+            try {
+                float l = Float.parseFloat(matcher.group(1));
+                float a = Float.parseFloat(matcher.group(2));
+                float b = Float.parseFloat(matcher.group(3));
+                float alpha = 255f;
+                if (matcher.group(4) != null) {
+                    alpha = parseAlpha(matcher.group(4), "%".equals(matcher.group(5)));
+                }
+                return labToRgb(l, a, b, alpha);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Integer parseLch(String lchStr) {
+        Matcher matcher = LCH_PATTERN.matcher(lchStr);
+        if (matcher.find()) {
+            try {
+                float l = Float.parseFloat(matcher.group(1));
+                float c = Float.parseFloat(matcher.group(2));
+                float h = parseHue(matcher.group(3), matcher.group(4));
+                float alpha = 255f;
+                if (matcher.group(5) != null) {
+                    alpha = parseAlpha(matcher.group(5), "%".equals(matcher.group(6)));
+                }
+                double rad = Math.toRadians(h);
+                float a = (float) (c * Math.cos(rad));
+                float b = (float) (c * Math.sin(rad));
+                return labToRgb(l, a, b, alpha);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Integer labToRgb(float l, float a, float b, float alpha) {
+        float fy = (l + 16f) / 116f;
+        float fx = a / 500f + fy;
+        float fz = fy - b / 200f;
+        float eps = 216f / 24389f; // 0.008856
+        float kap = 24389f / 27f;   // 903.3
+
+        float xr = (fx * fx * fx > eps) ? (fx * fx * fx) : ((116f * fx - 16f) / kap);
+        float yr = (l > kap * eps) ? (float) Math.pow(fy, 3) : (l / kap);
+        float zr = (fz * fz * fz > eps) ? (fz * fz * fz) : ((116f * fz - 16f) / kap);
+
+        // D65 reference white
+        float X = xr * 0.95047f;
+        float Y = yr * 1.00000f;
+        float Z = zr * 1.08883f;
+
+        // XYZ to linear sRGB
+        float rLin =  3.2404542f * X - 1.5371385f * Y - 0.4985314f * Z;
+        float gLin = -0.9692660f * X + 1.8760108f * Y + 0.0415560f * Z;
+        float bLin =  0.0556434f * X - 0.2040259f * Y + 1.0572252f * Z;
+
+        return argb((int) alpha,
+                clamp255(linearToSrgb(rLin) * 255f),
+                clamp255(linearToSrgb(gLin) * 255f),
+                clamp255(linearToSrgb(bLin) * 255f));
+    }
+
+    private static Integer parseOklab(String oklabStr) {
+        Matcher matcher = OKLAB_PATTERN.matcher(oklabStr);
+        if (matcher.find()) {
+            try {
+                float l = parsePercentOrRatio(matcher.group(1));
+                float a = Float.parseFloat(matcher.group(2));
+                float b = Float.parseFloat(matcher.group(3));
+                float alpha = 255f;
+                if (matcher.group(4) != null) {
+                    alpha = parseAlpha(matcher.group(4), "%".equals(matcher.group(5)));
+                }
+                return oklabToRgb(l, a, b, alpha);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Integer parseOklch(String oklchStr) {
+        Matcher matcher = OKLCH_PATTERN.matcher(oklchStr);
+        if (matcher.find()) {
+            try {
+                float l = parsePercentOrRatio(matcher.group(1));
+                float c = Float.parseFloat(matcher.group(2));
+                float h = parseHue(matcher.group(3), matcher.group(4));
+                float alpha = 255f;
+                if (matcher.group(5) != null) {
+                    alpha = parseAlpha(matcher.group(5), "%".equals(matcher.group(6)));
+                }
+                double rad = Math.toRadians(h);
+                float a = (float) (c * Math.cos(rad));
+                float b = (float) (c * Math.sin(rad));
+                return oklabToRgb(l, a, b, alpha);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Integer oklabToRgb(float l, float a, float b, float alpha) {
+        float l_ = l + 0.3963377774f * a + 0.2158037573f * b;
+        float m_ = l - 0.1055613458f * a - 0.0638541728f * b;
+        float s_ = l - 0.0894841775f * a - 1.2914855480f * b;
+
+        float lLin = l_ * l_ * l_;
+        float mLin = m_ * m_ * m_;
+        float sLin = s_ * s_ * s_;
+
+        float rLin = +4.0767416621f * lLin - 3.3077115913f * mLin + 0.2309699292f * sLin;
+        float gLin = -1.2684380046f * lLin + 2.6097574011f * mLin - 0.3413193965f * sLin;
+        float bLin = -0.0041960863f * lLin - 0.7034186147f * mLin + 1.7076147010f * sLin;
+
+        return argb((int) alpha,
+                clamp255(linearToSrgb(rLin) * 255f),
+                clamp255(linearToSrgb(gLin) * 255f),
+                clamp255(linearToSrgb(bLin) * 255f));
+    }
+
+    private static Integer parseColorFn(String colorFnStr) {
+        Matcher matcher = COLOR_FN_PATTERN.matcher(colorFnStr);
+        if (matcher.find()) {
+            try {
+                String space = matcher.group(1);
+                float r = parsePercentOrRatio(matcher.group(2));
+                float g = parsePercentOrRatio(matcher.group(3));
+                float b = parsePercentOrRatio(matcher.group(4));
+                float alpha = 255f;
+                if (matcher.group(5) != null) {
+                    alpha = parseAlpha(matcher.group(5), "%".equals(matcher.group(6)));
+                }
+
+                if ("display-p3".equalsIgnoreCase(space)) {
+                    float rLinP3 = srgbToLinear(r);
+                    float gLinP3 = srgbToLinear(g);
+                    float bLinP3 = srgbToLinear(b);
+
+                    float rLin =  1.2249f * rLinP3 - 0.2247f * gLinP3 - 0.0002f * bLinP3;
+                    float gLin = -0.0420f * rLinP3 + 1.0419f * gLinP3 + 0.0001f * bLinP3;
+                    float bLin = -0.0197f * rLinP3 - 0.0786f * gLinP3 + 1.0983f * bLinP3;
+
+                    return argb((int) alpha,
+                            clamp255(linearToSrgb(rLin) * 255f),
+                            clamp255(linearToSrgb(gLin) * 255f),
+                            clamp255(linearToSrgb(bLin) * 255f));
+                } else {
+                    // srgb default
+                    return argb((int) alpha, clamp255(r * 255f), clamp255(g * 255f), clamp255(b * 255f));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Integer parseColorMix(String colorMixStr) {
+        int openParen = colorMixStr.indexOf('(');
+        int closeParen = colorMixStr.lastIndexOf(')');
+        if (openParen == -1 || closeParen <= openParen) return null;
+
+        String inner = colorMixStr.substring(openParen + 1, closeParen).trim();
+        java.util.List<String> parts = splitTopLevelCommas(inner);
+        if (parts.size() < 3) return null;
+
+        String part1 = parts.get(1).trim();
+        String part2 = parts.get(2).trim();
+
+        ColorWithWeight c1 = parseColorWithWeight(part1);
+        ColorWithWeight c2 = parseColorWithWeight(part2);
+        if (c1 == null || c2 == null) return null;
+
+        float p1 = c1.weight;
+        float p2 = c2.weight;
+
+        if (p1 < 0 && p2 < 0) {
+            p1 = 0.5f;
+            p2 = 0.5f;
+        } else if (p1 >= 0 && p2 < 0) {
+            p2 = Math.max(0f, 1.0f - p1);
+        } else if (p1 < 0 && p2 >= 0) {
+            p1 = Math.max(0f, 1.0f - p2);
+        } else {
+            float sum = p1 + p2;
+            if (sum > 0) {
+                p1 /= sum;
+                p2 /= sum;
+            } else {
+                p1 = 0.5f;
+                p2 = 0.5f;
+            }
+        }
+
+        int col1 = c1.color;
+        int col2 = c2.color;
+
+        int a1 = (col1 >>> 24) & 0xFF, r1 = (col1 >>> 16) & 0xFF, g1 = (col1 >>> 8) & 0xFF, b1 = col1 & 0xFF;
+        int a2 = (col2 >>> 24) & 0xFF, r2 = (col2 >>> 16) & 0xFF, g2 = (col2 >>> 8) & 0xFF, b2 = col2 & 0xFF;
+
+        int a = clamp255(a1 * p1 + a2 * p2);
+        int r = clamp255(r1 * p1 + r2 * p2);
+        int g = clamp255(g1 * p1 + g2 * p2);
+        int b = clamp255(b1 * p1 + b2 * p2);
+
+        return argb(a, r, g, b);
+    }
+
+    private static Integer parseLightDark(String lightDarkStr) {
+        int openParen = lightDarkStr.indexOf('(');
+        int closeParen = lightDarkStr.lastIndexOf(')');
+        if (openParen == -1 || closeParen <= openParen) return null;
+
+        String inner = lightDarkStr.substring(openParen + 1, closeParen).trim();
+        java.util.List<String> parts = splitTopLevelCommas(inner);
+        if (parts.isEmpty()) return null;
+
+        Integer first = parse(parts.get(0).trim());
+        if (first != null) return first;
+        if (parts.size() > 1) {
+            return parse(parts.get(1).trim());
+        }
+        return null;
+    }
+
+    public static java.util.List<String> splitTopLevelCommas(String str) {
+        java.util.List<String> result = new java.util.ArrayList<>();
+        int len = str.length();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < len; i++) {
+            char c = str.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') {
+                if (depth > 0) depth--;
+            } else if (c == ',' && depth == 0) {
+                result.add(str.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        if (start < len) {
+            result.add(str.substring(start).trim());
+        }
+        return result;
+    }
+
+    private static class ColorWithWeight {
+        final int color;
+        final float weight;
+        ColorWithWeight(int color, float weight) {
+            this.color = color;
+            this.weight = weight;
+        }
+    }
+
+    private static ColorWithWeight parseColorWithWeight(String input) {
+        input = input.trim();
+        int lastSpace = input.lastIndexOf(' ');
+        if (lastSpace != -1) {
+            String candidateWeight = input.substring(lastSpace + 1).trim();
+            if (candidateWeight.endsWith("%")) {
+                try {
+                    float w = Float.parseFloat(candidateWeight.substring(0, candidateWeight.length() - 1)) / 100f;
+                    String colorPart = input.substring(0, lastSpace).trim();
+                    Integer col = parse(colorPart);
+                    if (col != null) {
+                        return new ColorWithWeight(col, w);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        Integer col = parse(input);
+        if (col != null) {
+            return new ColorWithWeight(col, -1f);
+        }
+        return null;
+    }
+
+    private static int clamp255(float val) {
+        return Math.max(0, Math.min(255, Math.round(val)));
+    }
+
+    private static float parsePercentOrRatio(String val) {
+        if (val == null) return 0f;
+        val = val.trim();
+        if (val.endsWith("%")) {
+            return Float.parseFloat(val.substring(0, val.length() - 1)) / 100f;
+        }
+        float f = Float.parseFloat(val);
+        return f > 1.0f ? f / 100f : f;
+    }
+
+    private static float linearToSrgb(float c) {
+        c = Math.max(0f, Math.min(1f, c));
+        return (c <= 0.0031308f) ? (12.92f * c) : (1.055f * (float) Math.pow(c, 1.0 / 2.4) - 0.055f);
+    }
+
+    private static float srgbToLinear(float c) {
+        c = Math.max(0f, Math.min(1f, c));
+        return (c <= 0.04045f) ? (c / 12.92f) : (float) Math.pow((c + 0.055) / 1.055, 2.4);
     }
 }

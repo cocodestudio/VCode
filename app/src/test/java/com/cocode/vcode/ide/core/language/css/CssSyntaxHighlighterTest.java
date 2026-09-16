@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.css;
 
+import com.cocode.vcode.ide.core.editor.highlight.GradientPreview;
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
 import com.cocode.vcode.ide.core.editor.text.ContentLine;
 import org.junit.Before;
@@ -101,5 +102,94 @@ public class CssSyntaxHighlighterTest {
 
         assertTrue("0% inside @keyframes should be highlighted as selector", foundZeroPercentSelector);
         assertTrue("opacity should be highlighted as property", foundOpacityProperty);
+    }
+
+    @Test
+    public void testLinearGradientPreview() {
+        String code = "  background: linear-gradient(to right, red, blue);";
+        int insideRuleState = 1 << 5;
+        List<HighlightToken> tokens = cssHighlighter.tokenizeLine(code, 0, insideRuleState);
+
+        HighlightToken gradToken = null;
+        for (HighlightToken t : tokens) {
+            String text = code.substring(t.startCol, t.endCol);
+            if ("linear-gradient".equals(text) && t.hasPreviewColor && t.gradientPreview != null) {
+                gradToken = t;
+                break;
+            }
+        }
+
+        assertNotNull("Should find linear-gradient token with gradientPreview", gradToken);
+        assertEquals(GradientPreview.TYPE_LINEAR, gradToken.gradientPreview.type);
+        assertEquals(2, gradToken.gradientPreview.colors.length);
+        assertEquals(0xFFFF0000, gradToken.gradientPreview.colors[0]);
+        assertEquals(0xFF0000FF, gradToken.gradientPreview.colors[1]);
+        assertEquals(90f, gradToken.gradientPreview.angleDegrees, 0.01f);
+    }
+
+    @Test
+    public void testRadialGradientPreview() {
+        String code = "  background-image: radial-gradient(circle, #ff0000, #00ff00);";
+        int insideRuleState = 1 << 5;
+        List<HighlightToken> tokens = cssHighlighter.tokenizeLine(code, 0, insideRuleState);
+
+        HighlightToken gradToken = null;
+        for (HighlightToken t : tokens) {
+            String text = code.substring(t.startCol, t.endCol);
+            if ("radial-gradient".equals(text) && t.hasPreviewColor && t.gradientPreview != null) {
+                gradToken = t;
+                break;
+            }
+        }
+
+        assertNotNull("Should find radial-gradient token with gradientPreview", gradToken);
+        assertEquals(GradientPreview.TYPE_RADIAL, gradToken.gradientPreview.type);
+        assertEquals(2, gradToken.gradientPreview.colors.length);
+        assertEquals(0xFFFF0000, gradToken.gradientPreview.colors[0]);
+        assertEquals(0xFF00FF00, gradToken.gradientPreview.colors[1]);
+    }
+
+    @Test
+    public void testConicGradientPreview() {
+        String code = "  background: conic-gradient(from 45deg, red, yellow, green);";
+        int insideRuleState = 1 << 5;
+        List<HighlightToken> tokens = cssHighlighter.tokenizeLine(code, 0, insideRuleState);
+
+        HighlightToken gradToken = null;
+        for (HighlightToken t : tokens) {
+            String text = code.substring(t.startCol, t.endCol);
+            if ("conic-gradient".equals(text) && t.hasPreviewColor && t.gradientPreview != null) {
+                gradToken = t;
+                break;
+            }
+        }
+
+        assertNotNull("Should find conic-gradient token with gradientPreview", gradToken);
+        assertEquals(GradientPreview.TYPE_CONIC, gradToken.gradientPreview.type);
+        assertEquals(3, gradToken.gradientPreview.colors.length);
+        assertEquals(0xFFFF0000, gradToken.gradientPreview.colors[0]);
+        assertEquals(0xFFFFFF00, gradToken.gradientPreview.colors[1]);
+        assertEquals(0xFF008000, gradToken.gradientPreview.colors[2]);
+        assertEquals(45f, gradToken.gradientPreview.angleDegrees, 0.01f);
+    }
+
+    @Test
+    public void testRepeatingLinearGradientPreview() {
+        String code = "  background: repeating-linear-gradient(45deg, #000000, #ffffff);";
+        int insideRuleState = 1 << 5;
+        List<HighlightToken> tokens = cssHighlighter.tokenizeLine(code, 0, insideRuleState);
+
+        HighlightToken gradToken = null;
+        for (HighlightToken t : tokens) {
+            String text = code.substring(t.startCol, t.endCol);
+            if ("repeating-linear-gradient".equals(text) && t.hasPreviewColor && t.gradientPreview != null) {
+                gradToken = t;
+                break;
+            }
+        }
+
+        assertNotNull("Should find repeating-linear-gradient token with gradientPreview", gradToken);
+        assertEquals(GradientPreview.TYPE_LINEAR, gradToken.gradientPreview.type);
+        assertEquals(45f, gradToken.gradientPreview.angleDegrees, 0.01f);
     }
 }

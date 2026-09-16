@@ -61,6 +61,30 @@ public class SyntaxHighlighter {
         this.colorOperator = operator;
     }
 
+    protected Content content;
+
+    public void setContent(Content content) {
+        this.content = content;
+    }
+
+    public static int findMatchingParen(String s, int openParenIdx) {
+        if (s == null) return -1;
+        int len = s.length();
+        int depth = 0;
+        for (int k = openParenIdx; k < len; k++) {
+            char c = s.charAt(k);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+                if (depth == 0) {
+                    return k;
+                }
+            }
+        }
+        return -1;
+    }
+
     public android.text.SpannableStringBuilder highlight(String code) {
         android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder(code);
         String[] lines = code.split("\n", -1);
@@ -229,14 +253,18 @@ public class SyntaxHighlighter {
                 }
                 if (isKeyword(lineStr, i, j)) {
                     tokens.add(new HighlightToken(lineIndex, i, j, colorKeyword, false));
-                } else if ((match(lineStr, i, j, "rgb") || match(lineStr, i, j, "rgba") || match(lineStr, i, j, "hsl") || match(lineStr, i, j, "hsla")) && j < len && lineStr.charAt(j) == '(') {
-                    int closeIdx = lineStr.indexOf(')', j);
+                } else if (j < len && lineStr.charAt(j) == '(') {
+                    int closeIdx = findMatchingParen(lineStr, j);
                     if (closeIdx != -1) {
-                        Integer fnColor = ColorParser.parse(lineStr.substring(i, closeIdx + 1));
+                        String fnCall = lineStr.substring(i, closeIdx + 1);
+                        Integer fnColor = ColorParser.parse(fnCall);
                         if (fnColor != null) {
-                            tokens.add(new HighlightToken(lineIndex, i, closeIdx + 1, colorNumber, false, true, fnColor));
-                            j = closeIdx + 1;
+                            tokens.add(new HighlightToken(lineIndex, i, j, colorNumber, false, true, fnColor));
+                        } else {
+                            tokens.add(new HighlightToken(lineIndex, i, j, colorKeyword, false));
                         }
+                    } else {
+                        tokens.add(new HighlightToken(lineIndex, i, j, colorKeyword, false));
                     }
                 } else {
                     String word = lineStr.substring(i, j);
