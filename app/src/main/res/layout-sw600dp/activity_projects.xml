@@ -218,8 +218,9 @@
 
                         <EditText
                             android:id="@+id/et_search"
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="match_parent"
+                            android:layout_weight="1"
                             android:background="@null"
                             android:hint="@string/vcode_search_hint"
                             android:imeOptions="actionDone"
@@ -229,6 +230,18 @@
                             android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                             android:textColor="?attr/colorOnSurface"
                             android:textColorHint="?attr/colorOnSurfaceVariant" />
+
+                        <ImageView
+                            android:id="@+id/btn_clear_search_input"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:importantForAccessibility="no"
+                            android:padding="6dp"
+                            android:src="@drawable/ic_xmark"
+                            android:visibility="gone"
+                            app:tint="?attr/colorOnSurfaceVariant"
+                            tools:visibility="visible" />
 
                     </LinearLayout>
 
@@ -247,6 +260,49 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toEndOf="@id/guideline_overview_split"
                 app:layout_constraintTop_toTopOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/layout_search_empty_state"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingHorizontal="32dp"
+                android:paddingTop="48dp"
+                android:paddingBottom="88dp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/guideline_overview_split"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:visibility="visible">
+
+                <ImageView
+                    android:id="@+id/iv_search_empty_icon"
+                    android:layout_width="@dimen/vcode_empty_state_icon_size"
+                    android:layout_height="@dimen/vcode_empty_state_icon_size"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_magnifying_glass"
+                    app:tint="?attr/colorOutlineVariant" />
+
+                <TextView
+                    android:id="@+id/tv_search_empty_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/vcode_no_matching_projects"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+
+                <TextView
+                    android:id="@+id/tv_search_empty_desc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="@string/vcode_no_matching_projects_desc"
+                    android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 

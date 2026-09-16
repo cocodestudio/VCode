@@ -2,10 +2,13 @@ package com.cocode.vcode.ide.utils;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
@@ -129,5 +132,32 @@ public class UiUtils {
         shape.setColor(color);
         view.setBackground(shape);
         view.setClipToOutline(true);
+    }
+
+    /**
+     * Configures an EditText to use the application's primary accent color for its
+     * cursor, selection handles, and highlight color.
+     *
+     * @param editText the target EditText
+     */
+    public static void applyAccentToEditText(EditText editText) {
+        if (editText == null) return;
+        Context context = editText.getContext();
+        int selectionColor = ContextCompat.getColor(context, R.color.vcode_selection_color);
+        editText.setHighlightColor(selectionColor);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Drawable cursor = ContextCompat.getDrawable(context, R.drawable.vcode_cursor_drawable);
+            if (cursor != null) editText.setTextCursorDrawable(cursor);
+
+            Drawable handleMiddle = ContextCompat.getDrawable(context, R.drawable.vcode_text_select_handle_middle);
+            if (handleMiddle != null) editText.setTextSelectHandle(handleMiddle);
+
+            Drawable handleLeft = ContextCompat.getDrawable(context, R.drawable.vcode_text_select_handle_left);
+            if (handleLeft != null) editText.setTextSelectHandleLeft(handleLeft);
+
+            Drawable handleRight = ContextCompat.getDrawable(context, R.drawable.vcode_text_select_handle_right);
+            if (handleRight != null) editText.setTextSelectHandleRight(handleRight);
+        }
     }
 }

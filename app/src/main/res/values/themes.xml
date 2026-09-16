@@ -52,6 +52,17 @@
         <!-- Other -->
         <item name="scrimBackground">@color/vcode_scrim</item>
 
+        <!-- Accent & Control Colors (Ensures native EditText handles and cursor match primary accent) -->
+        <item name="colorControlActivated">@color/vcode_accent_primary</item>
+        <item name="colorAccent">@color/vcode_accent_primary</item>
+        <item name="android:textColorHighlight">@color/vcode_selection_color</item>
+
+        <!-- Native Text Selection Handles & Cursor -->
+        <item name="android:textCursorDrawable">@drawable/vcode_cursor_drawable</item>
+        <item name="android:textSelectHandle">@drawable/vcode_text_select_handle_middle</item>
+        <item name="android:textSelectHandleLeft">@drawable/vcode_text_select_handle_left</item>
+        <item name="android:textSelectHandleRight">@drawable/vcode_text_select_handle_right</item>
+
         <!-- System bars -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/vcode_bg_surface</item>

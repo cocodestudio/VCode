@@ -285,6 +285,9 @@ public class ProjectsActivity extends BaseActivity {
             }
         });
 
+        // Clear search queries via in-bar icon
+        binding.btnClearSearchInput.setOnClickListener(v -> binding.etSearch.setText(""));
+
 
         // Clone Repository workflow
         binding.iconCloneRepo.setOnClickListener(v -> CloneRepoBottomSheet.show(getSupportFragmentManager(), () -> {
@@ -351,41 +354,52 @@ public class ProjectsActivity extends BaseActivity {
 
     /**
      * Filters the project list based on a case-insensitive name match.
+     * Keeps workspace overview and search input visible while toggling between
+     * the project list and dedicated search empty state.
      *
      * @param query The search text.
      */
     private void filterProjects(String query) {
-        if (query == null || query.trim().isEmpty()) {
+        boolean hasQuery = query != null && !query.trim().isEmpty();
+        if (!hasQuery) {
+            binding.btnClearSearchInput.setVisibility(View.GONE);
+            binding.layoutSearchEmptyState.setVisibility(View.GONE);
             adapter.setProjects(allProjects);
-            binding.ivEmptyStateIcon.setImageResource(R.drawable.ic_folder);
-            binding.tvNoProjectsYet.setText(R.string.vcode_no_projects_yet);
-            binding.tvTapPlusToCreate.setText(R.string.vcode_create_project_hint);
-            binding.btnCreateProjectEmpty.setVisibility(View.VISIBLE);
+
+            // If the workspace has zero projects overall, show the full empty state
             updateEmptyStateVisibility(allProjects.isEmpty());
+            if (!allProjects.isEmpty()) {
+                binding.rvProjects.setVisibility(View.VISIBLE);
+            }
         } else {
+            binding.btnClearSearchInput.setVisibility(View.VISIBLE);
             List<Project> filtered = new ArrayList<>();
+            String lowerQuery = query.toLowerCase();
             for (Project p : allProjects) {
-                if (p.getName().toLowerCase().contains(query.toLowerCase())) {
+                if (p.getName().toLowerCase().contains(lowerQuery)) {
                     filtered.add(p);
                 }
             }
             adapter.setProjects(filtered);
+
+            // The full-screen empty state is not used during search filtering
+            binding.layoutEmptyState.setVisibility(View.GONE);
+
             if (filtered.isEmpty()) {
-                binding.ivEmptyStateIcon.setImageResource(R.drawable.ic_magnifying_glass);
-                binding.tvNoProjectsYet.setText(R.string.vcode_no_matching_projects);
-                binding.tvTapPlusToCreate.setText(R.string.vcode_no_matching_projects_desc);
-                binding.btnCreateProjectEmpty.setVisibility(View.GONE);
-                updateEmptyStateVisibility(true);
+                binding.rvProjects.setVisibility(View.GONE);
+                binding.layoutSearchEmptyState.setVisibility(View.VISIBLE);
             } else {
-                updateEmptyStateVisibility(false);
+                binding.layoutSearchEmptyState.setVisibility(View.GONE);
+                binding.rvProjects.setVisibility(View.VISIBLE);
             }
         }
     }
 
     /**
-     * Manages the visibility and animation of the empty state vs the project list.
+     * Manages the visibility and animation of the full-screen empty state vs the project workspace.
+     * This is strictly for when there are 0 projects in the workspace or permissions are required.
      *
-     * @param isEmpty Whether the current project list (after filtering) is empty.
+     * @param isEmpty Whether the entire project list is empty.
      */
     private void updateEmptyStateVisibility(boolean isEmpty) {
         boolean isCurrentlyEmpty = binding.layoutEmptyState.getVisibility() == View.VISIBLE;
@@ -398,8 +412,10 @@ public class ProjectsActivity extends BaseActivity {
             binding.rvProjects.setVisibility(View.GONE);
             binding.fabAddProject.setVisibility(View.GONE);
             binding.cardWorkspaceOverview.setVisibility(View.GONE);
+            binding.layoutSearchEmptyState.setVisibility(View.GONE);
         } else {
             binding.layoutEmptyState.setVisibility(View.GONE);
+            binding.layoutSearchEmptyState.setVisibility(View.GONE);
             binding.rvProjects.setVisibility(View.VISIBLE);
 
             // Animate workspace components into view for a polished feel
@@ -434,8 +450,14 @@ public class ProjectsActivity extends BaseActivity {
         binding.tvTapPlusToCreate.setTypeface(fm.getUiMedium(this));
         binding.btnCreateProjectEmpty.setTypeface(fm.getUiSemiBold(this));
 
+        binding.tvSearchEmptyTitle.setTypeface(fm.getUiSemiBold(this));
+        binding.tvSearchEmptyDesc.setTypeface(fm.getUiMedium(this));
+
         UiUtils.setViewRounded(binding.searchBarLayout, UiUtils.dpToPx(this, 10), ContextCompat.getColor(this, R.color.vcode_bg_elevated));
         UiUtils.setViewRounded(binding.viewMiddleLine, UiUtils.dpToPx(this, 990), ContextCompat.getColor(this, R.color.vcode_bg_elevated));
+
+        // Ensure native EditText cursor and handles use the app's primary accent color
+        UiUtils.applyAccentToEditText(binding.etSearch);
     }
 
     /**
