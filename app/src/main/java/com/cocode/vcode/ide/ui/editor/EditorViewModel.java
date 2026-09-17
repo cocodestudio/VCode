@@ -380,10 +380,19 @@ public class EditorViewModel extends ViewModel {
         });
     }
 
+    private final Runnable refreshFileTreeRunnable = this::executeRefreshFileTree;
+
     /**
      * Rebuilds the file tree representation based on the current disk state.
+     * Debounced by 300ms to coalesce rapid successive triggers.
      */
     public void refreshFileTree() {
+        if (projectRoot == null) return;
+        ExecutorProvider.getInstance().getMainHandler().removeCallbacks(refreshFileTreeRunnable);
+        ExecutorProvider.getInstance().getMainHandler().postDelayed(refreshFileTreeRunnable, 300L);
+    }
+
+    private void executeRefreshFileTree() {
         if (projectRoot == null) return;
         ExecutorProvider.getInstance().runOnIo(() -> {
             List<FileNode> nodes = FileUtils.buildFileTree(projectRoot);
@@ -424,8 +433,18 @@ public class EditorViewModel extends ViewModel {
                 if (!fileOnDisk.exists()) {
                     missingPaths.add(fileOnDisk.getAbsolutePath());
                 } else if (!doc.isBinaryAsset()) {
+                    long diskMod = fileOnDisk.lastModified();
+                    long diskSize = fileOnDisk.length();
+
+                    // If disk timestamp and file size match cached metadata, skip reading file content
+                    if (doc.getLastDiskModified() != -1 && diskMod == doc.getLastDiskModified() && diskSize == doc.getLastDiskSize()) {
+                        continue;
+                    }
+
                     try {
                         String diskContent = com.cocode.vcode.ide.utils.FileUtils.readFile(fileOnDisk);
+                        doc.setLastDiskModified(diskMod);
+                        doc.setLastDiskSize(diskSize);
                         if (!diskContent.equals(doc.getContent())) {
                             updatedContent.put(fileOnDisk.getAbsolutePath(), diskContent);
                         }
@@ -1136,6 +1155,8 @@ public class EditorViewModel extends ViewModel {
     protected void onCleared() {
         super.onCleared();
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
+        ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);
+        ExecutorProvider.getInstance().getMainHandler().removeCallbacks(refreshFileTreeRunnable);
     }
 
 

@@ -38,7 +38,9 @@ public class FileUtils {
      */
     public static String readFile(File file) throws IOException {
         if (file == null || !file.exists()) throw new IOException("File not found: " + file);
-        StringBuilder sb = new StringBuilder();
+        long length = file.length();
+        int initialCapacity = (length > 0 && length <= (16 * 1024 * 1024)) ? (int) length : 16;
+        StringBuilder sb = new StringBuilder(initialCapacity);
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
             String line;

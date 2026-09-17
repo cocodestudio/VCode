@@ -367,10 +367,10 @@ public class ProjectsActivity extends BaseActivity {
             }
         } else {
             binding.btnClearSearchInput.setVisibility(View.VISIBLE);
-            List<Project> filtered = new ArrayList<>();
-            String lowerQuery = query.toLowerCase();
+            List<Project> filtered = new ArrayList<>(allProjects.size());
+            String trimmedQuery = query.trim();
             for (Project p : allProjects) {
-                if (p.getName().toLowerCase().contains(lowerQuery)) {
+                if (containsIgnoreCase(p.getName(), trimmedQuery)) {
                     filtered.add(p);
                 }
             }
@@ -387,6 +387,22 @@ public class ProjectsActivity extends BaseActivity {
                 binding.rvProjects.setVisibility(View.VISIBLE);
             }
         }
+    }
+
+    /**
+     * Checks if the source string contains the search substring ignoring case, without allocating strings.
+     */
+    private static boolean containsIgnoreCase(String src, String what) {
+        if (src == null || what == null) return false;
+        final int length = what.length();
+        if (length == 0) return true;
+        final int max = src.length() - length;
+        for (int i = 0; i <= max; i++) {
+            if (src.regionMatches(true, i, what, 0, length)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

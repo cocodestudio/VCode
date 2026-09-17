@@ -22,6 +22,8 @@ public class EditorFile {
     private boolean readOnly = false;
     private boolean isVirtual = false;
     private boolean manuallyDirty = false;
+    private long lastDiskModified = -1;
+    private long lastDiskSize = -1;
 
     /**
      * For files opened via a content:// URI: the original source URI string.
@@ -47,6 +49,11 @@ public class EditorFile {
 
         if (this.fileType == FileType.API_TESTER) {
             this.isVirtual = true;
+        }
+
+        if (file != null && file.exists()) {
+            this.lastDiskModified = file.lastModified();
+            this.lastDiskSize = file.length();
         }
     }
 
@@ -87,6 +94,10 @@ public class EditorFile {
     public void markSaved() {
         this.savedContent = this.content;
         this.manuallyDirty = false;
+        if (file != null && file.exists()) {
+            this.lastDiskModified = file.lastModified();
+            this.lastDiskSize = file.length();
+        }
     }
 
     public String getFileName() {
@@ -131,6 +142,13 @@ public class EditorFile {
 
     public void setFile(File file) {
         this.file = file;
+        if (file != null && file.exists()) {
+            this.lastDiskModified = file.lastModified();
+            this.lastDiskSize = file.length();
+        } else {
+            this.lastDiskModified = -1;
+            this.lastDiskSize = -1;
+        }
     }
 
     public String getContent() {
@@ -187,5 +205,21 @@ public class EditorFile {
 
     public void setSourceUriString(String sourceUriString) {
         this.sourceUriString = sourceUriString;
+    }
+
+    public long getLastDiskModified() {
+        return lastDiskModified;
+    }
+
+    public void setLastDiskModified(long lastDiskModified) {
+        this.lastDiskModified = lastDiskModified;
+    }
+
+    public long getLastDiskSize() {
+        return lastDiskSize;
+    }
+
+    public void setLastDiskSize(long lastDiskSize) {
+        this.lastDiskSize = lastDiskSize;
     }
 }
