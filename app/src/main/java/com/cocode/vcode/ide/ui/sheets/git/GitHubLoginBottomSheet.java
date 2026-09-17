@@ -20,6 +20,7 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetGithubLoginBinding;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.git.github.GitHubApiClient;
+import com.cocode.vcode.ide.git.github.GitHubAuthNotificationHelper;
 import com.cocode.vcode.ide.git.github.GitHubDeviceFlowClient;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
@@ -75,6 +76,13 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
     public void onDismiss(@NonNull DialogInterface dialog) {
         super.onDismiss(dialog);
         isPollingCancelled.set(true);
+        Context ctx = getContext();
+        if (ctx != null) {
+            GitCredentialStore store = new GitCredentialStore();
+            if (!store.hasCredentials(ctx)) {
+                GitHubAuthNotificationHelper.cancelNotification(ctx.getApplicationContext());
+            }
+        }
     }
 
     private void refreshUIState() {
@@ -111,6 +119,15 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
             deviceFlowClient.requestDeviceCode(new GitHubDeviceFlowClient.DeviceCodeCallback() {
                 @Override
                 public void onSuccess(GitHubDeviceFlowClient.DeviceCodeResponse response) {
+                    Context ctx = getContext();
+                    if (ctx != null) {
+                        GitHubAuthNotificationHelper.showDeviceCodeNotification(
+                                ctx.getApplicationContext(),
+                                response.userCode,
+                                response.verificationUriComplete
+                        );
+                    }
+
                     if (getView() == null) return;
 
                     binding.btnConnectGithub.setVisibility(View.GONE);
@@ -135,6 +152,14 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
 
                         @Override
                         public void onExpired() {
+                            Context currentCtx = getContext();
+                            if (currentCtx != null) {
+                                GitHubAuthNotificationHelper.showStatusNotification(
+                                        currentCtx.getApplicationContext(),
+                                        getString(R.string.vcode_github_auth_expired_title),
+                                        getString(R.string.vcode_github_auth_expired_content)
+                                );
+                            }
                             if (getView() == null) return;
                             binding.authProgress.setVisibility(View.GONE);
                             binding.tvAuthStatus.setText(R.string.vcode_github_code_expired);
@@ -144,6 +169,14 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
 
                         @Override
                         public void onDenied() {
+                            Context currentCtx = getContext();
+                            if (currentCtx != null) {
+                                GitHubAuthNotificationHelper.showStatusNotification(
+                                        currentCtx.getApplicationContext(),
+                                        getString(R.string.vcode_github_auth_denied_title),
+                                        getString(R.string.vcode_github_auth_denied_content)
+                                );
+                            }
                             if (getView() == null) return;
                             binding.authProgress.setVisibility(View.GONE);
                             binding.tvAuthStatus.setText(R.string.vcode_github_auth_cancelled);
@@ -153,6 +186,14 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
 
                         @Override
                         public void onError(String error) {
+                            Context currentCtx = getContext();
+                            if (currentCtx != null) {
+                                GitHubAuthNotificationHelper.showStatusNotification(
+                                        currentCtx.getApplicationContext(),
+                                        getString(R.string.vcode_github_auth_error_title),
+                                        error != null ? error : ""
+                                );
+                            }
                             if (getView() == null) return;
                             binding.authProgress.setVisibility(View.GONE);
                             binding.tvAuthStatus.setText(getString(R.string.vcode_github_error_prefix, error));
@@ -164,6 +205,14 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
 
                 @Override
                 public void onError(String error) {
+                    Context currentCtx = getContext();
+                    if (currentCtx != null) {
+                        GitHubAuthNotificationHelper.showStatusNotification(
+                                currentCtx.getApplicationContext(),
+                                getString(R.string.vcode_github_auth_error_title),
+                                error != null ? error : ""
+                        );
+                    }
                     if (getView() == null) return;
                     setLoadingState(false);
                     Toast.makeText(requireContext(), getString(R.string.vcode_github_error_prefix, error), Toast.LENGTH_LONG).show();
@@ -194,6 +243,9 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
                 store.saveToken(requireContext(), token);
                 store.saveUsername(requireContext(), user.getLogin());
 
+                Context appContext = requireContext().getApplicationContext();
+                GitHubAuthNotificationHelper.showSuccessNotification(appContext, user.getLogin());
+
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (getView() == null) return;
 
@@ -216,6 +268,14 @@ public class GitHubLoginBottomSheet extends BaseBottomSheetDialogFragment {
                 });
             } catch (Exception e) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
+                    Context currentCtx = getContext();
+                    if (currentCtx != null) {
+                        GitHubAuthNotificationHelper.showStatusNotification(
+                                currentCtx.getApplicationContext(),
+                                getString(R.string.vcode_github_auth_error_title),
+                                getString(R.string.vcode_github_fetch_profile_failed)
+                        );
+                    }
                     if (getView() == null) return;
                     binding.authProgress.setVisibility(View.GONE);
                     binding.tvAuthStatus.setText(R.string.vcode_github_fetch_profile_failed);

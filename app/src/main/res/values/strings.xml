@@ -433,6 +433,23 @@
     <string name="vcode_github_device_flow_instructions">Click below to open GitHub in your browser and authorize this device.</string>
     <string name="vcode_github_device_code_label">Your Device Code</string>
 
+    <!-- GitHub Device Flow Notification -->
+    <string name="vcode_notification_channel_github_auth">GitHub Authentication</string>
+    <string name="vcode_notification_channel_github_auth_desc">Status and device codes for GitHub account authorization</string>
+    <string name="vcode_github_auth_notification_title">GitHub Device Code: %1$s</string>
+    <string name="vcode_github_auth_notification_content">Enter this code on GitHub to authorize VCode.</string>
+    <string name="vcode_github_auth_notification_big_text">Device Code: %1$s\nEnter this code in your browser to authorize VCode.</string>
+    <string name="vcode_github_action_copy_code">Copy Code</string>
+    <string name="vcode_github_action_open_page">Open GitHub</string>
+    <string name="vcode_github_code_copied">Device code copied to clipboard.</string>
+    <string name="vcode_github_auth_success_title">GitHub Connected</string>
+    <string name="vcode_github_auth_success_content">Signed in as @%1$s</string>
+    <string name="vcode_github_auth_expired_title">GitHub Code Expired</string>
+    <string name="vcode_github_auth_expired_content">The authorization code has expired. Please try again.</string>
+    <string name="vcode_github_auth_denied_title">GitHub Authorization Cancelled</string>
+    <string name="vcode_github_auth_denied_content">Authorization was denied on GitHub.</string>
+    <string name="vcode_github_auth_error_title">GitHub Authentication Failed</string>
+
     <string name="vcode_cloning_repository">Cloning repository...</string>
     <string name="vcode_initializing">Initializing...</string>
 
@@ -451,6 +468,13 @@
     <string name="vcode_no_browser_app_found_to">No browser app found to open this URL.</string>
     <string name="vcode_open_a_file_first_to">Open a file first to run the preview.</string>
     <string name="vcode_server_stopped">Server stopped</string>
+
+    <!-- Live Web Server Notification -->
+    <string name="vcode_notification_channel_server">Live Web Server</string>
+    <string name="vcode_notification_channel_server_desc">Notifications for active local preview servers</string>
+    <string name="vcode_server_running_title">Live Server Running</string>
+    <string name="vcode_server_running_content">http://localhost:%1$d/ • %2$s</string>
+    <string name="vcode_server_action_stop">Stop</string>
     <string name="vcode_no_project_path_provided">No project path provided</string>
     <string name="vcode_unsaved_changes">Unsaved Changes</string>
     <string name="vcode_unsaved_changes_2">Unsaved Changes</string>

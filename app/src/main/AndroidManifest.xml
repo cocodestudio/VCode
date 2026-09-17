@@ -207,6 +207,14 @@
                 <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\\.txt" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".ui.editor.helper.ServerActionReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".git.github.GitHubAuthActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

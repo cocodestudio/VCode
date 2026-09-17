@@ -24,6 +24,7 @@ public class EditorPreviewHelper {
         if (localWebServer != null && localWebServer.isRunning()) {
             localWebServer.stop();
             stopServerUI.run();
+            ServerNotificationHelper.cancelServerNotification(activity);
             Toast.makeText(activity, R.string.vcode_server_stopped, Toast.LENGTH_SHORT).show();
             callbacks.updateToolbarVisibility();
             return localWebServer;
@@ -45,6 +46,19 @@ public class EditorPreviewHelper {
         Runnable startAction = () -> {
             finalLocalWebServer.start();
             startServerUI.run();
+            ServerNotificationHelper.showServerNotification(
+                    activity,
+                    finalLocalWebServer.getPort(),
+                    viewModel.getProjectName(),
+                    () -> {
+                        if (finalLocalWebServer.isRunning()) {
+                            finalLocalWebServer.stop();
+                        }
+                        stopServerUI.run();
+                        callbacks.updateToolbarVisibility();
+                        Toast.makeText(activity.getApplicationContext(), R.string.vcode_server_stopped, Toast.LENGTH_SHORT).show();
+                    }
+            );
             callbacks.executeActiveFilePreviewIntent();
             callbacks.updateToolbarVisibility();
         };

@@ -1,12 +1,17 @@
 package com.cocode.vcode.ide.ui.editor;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
@@ -29,6 +34,7 @@ import com.cocode.vcode.ide.databinding.ActivityEditorBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.ui.editor.helper.EditorMenuHelper;
 import com.cocode.vcode.ide.ui.editor.helper.EditorPreviewHelper;
+import com.cocode.vcode.ide.ui.editor.helper.ServerNotificationHelper;
 import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import com.cocode.vcode.ide.ui.editor.viewer.IFileViewer;
 import com.cocode.vcode.ide.ui.editor.viewer.ViewerManager;
@@ -302,6 +308,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void handleRunAction() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
+        }
+
         EditorPreviewHelper.PreviewCallbacks callbacks = new EditorPreviewHelper.PreviewCallbacks() {
             @Override
             public void updateToolbarVisibility() {
@@ -924,6 +936,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     protected void onDestroy() {
         super.onDestroy();
         if (localWebServer != null) localWebServer.stop();
+        ServerNotificationHelper.cancelServerNotification(this);
         if (viewerManager != null) viewerManager.destroyAll();
     }
 

@@ -29,6 +29,10 @@ public class LocalWebServer {
         return isRunning;
     }
 
+    public int getPort() {
+        return port;
+    }
+
     /**
      * Starts the embedded server on an auto-allocated local port.
      */
