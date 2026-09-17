@@ -179,8 +179,9 @@ public class GitCloneService extends Service {
         completeIntent.setPackage(getPackageName());
         sendBroadcast(completeIntent);
 
-        if (com.cocode.vcode.ide.ui.projects.ProjectsViewModel.onCloneCompleteListener != null) {
-            com.cocode.vcode.ide.ui.projects.ProjectsViewModel.onCloneCompleteListener.run();
+        Runnable listener = com.cocode.vcode.ide.ui.projects.ProjectsViewModel.onCloneCompleteListener;
+        if (listener != null) {
+            listener.run();
         }
 
         stopSelf();

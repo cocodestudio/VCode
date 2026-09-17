@@ -78,7 +78,7 @@ public class EditorViewModel extends ViewModel {
     private boolean skipDefaultFileOpen = false;
 
     public EditorViewModel(Context appContext, FileRepository fileRepo, ProjectStateRepository stateRepo, SettingsRepository settingsRepo, ProjectRepository projectRepo) {
-        this.appContext = appContext;
+        this.appContext = appContext != null ? appContext.getApplicationContext() : null;
         this.fileRepo = fileRepo;
         this.stateRepo = stateRepo;
         this.settingsRepo = settingsRepo;

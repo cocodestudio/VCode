@@ -3,8 +3,8 @@ package com.cocode.vcode.ide.utils;
 import android.content.Context;
 import android.graphics.Typeface;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Typeface manager and cache for application fonts.
@@ -18,7 +18,7 @@ public class FontManager {
     private static final String UI_MEDIUM = "fonts/Sora-Medium.ttf";
     private static final String UI_SEMIBOLD = "fonts/Sora-SemiBold.ttf";
     private static volatile FontManager instance;
-    private final Map<String, Typeface> cache = new HashMap<>();
+    private final Map<String, Typeface> cache = new ConcurrentHashMap<>();
 
     private FontManager() {
     }
@@ -42,11 +42,13 @@ public class FontManager {
         if (cached != null) return cached;
         try {
             Typeface tf = Typeface.createFromAsset(ctx.getApplicationContext().getAssets(), path);
-            cache.put(path, tf);
-            return tf;
-        } catch (Exception e) {
-            return Typeface.DEFAULT;
+            if (tf != null) {
+                cache.put(path, tf);
+                return tf;
+            }
+        } catch (Exception ignored) {
         }
+        return Typeface.DEFAULT;
     }
 
     public Typeface getCodeFont(Context ctx) {

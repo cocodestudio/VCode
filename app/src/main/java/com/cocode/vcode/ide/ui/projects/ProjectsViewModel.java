@@ -19,7 +19,7 @@ import java.util.List;
  */
 public class ProjectsViewModel extends ViewModel {
 
-    public static Runnable onCloneCompleteListener;
+    public static volatile Runnable onCloneCompleteListener;
 
     private final ProjectRepository projectRepo;
     private final SettingsRepository settingsRepo;
@@ -59,6 +59,7 @@ public class ProjectsViewModel extends ViewModel {
         if (currentProjectsLiveData != null) {
             currentProjectsLiveData.removeObserver(projectsObserver);
         }
+        onCloneCompleteListener = null;
     }
 
     /**
