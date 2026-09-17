@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Lightweight embedded HTTP server running on the device loopback interface.
@@ -16,7 +17,7 @@ public class LocalWebServer {
 
     private final File documentRoot;
     private ServerSocket serverSocket;
-    private boolean isRunning = false;
+    private volatile boolean isRunning = false;
     private int port = 8080;
     private Thread serverThread;
 
@@ -99,27 +100,30 @@ public class LocalWebServer {
             File file = new File(documentRoot, path);
 
             if (!file.getCanonicalPath().startsWith(documentRoot.getCanonicalPath())) {
-                out.write(("HTTP/1.1 403 Forbidden\r\n\r\n").getBytes());
+                out.write(("HTTP/1.1 403 Forbidden\r\n\r\n").getBytes(StandardCharsets.UTF_8));
                 out.flush();
                 return;
             }
 
             if (file.exists() && !file.isDirectory()) {
                 String mimeType = getMimeType(path);
+                long fileLength = file.length();
 
-                byte[] content = new byte[(int) file.length()];
+                out.write(("HTTP/1.1 200 OK\r\n").getBytes(StandardCharsets.UTF_8));
+                out.write(("Content-Type: " + mimeType + "\r\n").getBytes(StandardCharsets.UTF_8));
+                out.write(("Content-Length: " + fileLength + "\r\n").getBytes(StandardCharsets.UTF_8));
+                out.write(("Access-Control-Allow-Origin: *\r\n").getBytes(StandardCharsets.UTF_8));
+                out.write(("\r\n").getBytes(StandardCharsets.UTF_8));
+
                 try (FileInputStream fis = new FileInputStream(file)) {
-                    fis.read(content);
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = fis.read(buffer)) != -1) {
+                        out.write(buffer, 0, bytesRead);
+                    }
                 }
-
-                out.write(("HTTP/1.1 200 OK\r\n").getBytes());
-                out.write(("Content-Type: " + mimeType + "\r\n").getBytes());
-                out.write(("Content-Length: " + content.length + "\r\n").getBytes());
-                out.write(("Access-Control-Allow-Origin: *\r\n").getBytes());
-                out.write(("\r\n").getBytes());
-                out.write(content);
             } else {
-                out.write(("HTTP/1.1 404 Not Found\r\n\r\n").getBytes());
+                out.write(("HTTP/1.1 404 Not Found\r\n\r\n").getBytes(StandardCharsets.UTF_8));
             }
             out.flush();
         } catch (Exception ignored) {

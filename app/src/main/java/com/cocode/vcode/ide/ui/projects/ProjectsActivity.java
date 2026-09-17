@@ -474,9 +474,10 @@ public class ProjectsActivity extends BaseActivity {
             long startOfDay = cal.getTimeInMillis() / 1000L;
 
             for (Project p : projects) {
+                GitRepository git = null;
                 try {
                     File projectDir = new File(FileUtils.getProjectsDir(this), p.getId());
-                    GitRepository git = new GitRepository();
+                    git = new GitRepository();
                     git.setRepoDir(projectDir);
 
                     if (git.isGitRepo()) {
@@ -486,10 +487,16 @@ public class ProjectsActivity extends BaseActivity {
                         for (CommitInfo commit : logs) {
                             if (commit.getTimestamp() >= startOfDay) {
                                 count++;
+                            } else {
+                                break;
                             }
                         }
                     }
                 } catch (Exception ignored) {
+                } finally {
+                    if (git != null) {
+                        git.close();
+                    }
                 }
             }
 

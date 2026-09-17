@@ -295,7 +295,9 @@ public class FileUtils {
         for (File f : files) {
             String name = f.getName();
 
-            if (name.equals(".git") || name.equals(".gitignore") || name.equals(".nomedia") || name.equals(".vcode")) {
+            if (name.equals(".git") || name.equals(".gitignore") || name.equals(".nomedia") || name.equals(".vcode")
+                    || name.equals("node_modules") || name.equals("build") || name.equals("dist")
+                    || name.equals("out") || name.equals("vendor") || name.equals(".next") || name.equals(".nuxt")) {
                 continue;
             }
 
