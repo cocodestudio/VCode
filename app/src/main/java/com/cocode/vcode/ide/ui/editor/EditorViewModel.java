@@ -57,6 +57,7 @@ public class EditorViewModel extends ViewModel {
     private final MutableLiveData<List<FileNode>> fileTreeLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<AppSettings> settingsLiveData = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isEditorLoadingLiveData = new MutableLiveData<>(false);
+    private final MutableLiveData<List<File>> refactoredFilesLiveData = new MutableLiveData<>();
 
     /**
      * Maps repository-relative file paths to their current Git status (e.g., Modified, Untracked).
@@ -106,6 +107,10 @@ public class EditorViewModel extends ViewModel {
 
     public LiveData<List<EditorFile>> getOpenFiles() {
         return openFilesLiveData;
+    }
+
+    public LiveData<List<File>> getRefactoredFiles() {
+        return refactoredFilesLiveData;
     }
 
     public LiveData<Integer> getActiveTabIndex() {
@@ -597,6 +602,7 @@ public class EditorViewModel extends ViewModel {
                 projectRepo.touchProjectById(projectId);
 
                 if (result.referencesUpdatedCount > 0) {
+                    refactoredFilesLiveData.postValue(result.modifiedFiles);
                     ExecutorProvider.getInstance().runOnMain(() -> {
                         Toast.makeText(appContext, appContext.getString(
                                 R.string.vcode_references_updated, result.referencesUpdatedCount),
@@ -634,6 +640,7 @@ public class EditorViewModel extends ViewModel {
                 projectRepo.touchProjectById(projectId);
 
                 if (result.referencesUpdatedCount > 0) {
+                    refactoredFilesLiveData.postValue(result.modifiedFiles);
                     ExecutorProvider.getInstance().runOnMain(() -> {
                         Toast.makeText(appContext, appContext.getString(
                                 R.string.vcode_references_updated, result.referencesUpdatedCount),

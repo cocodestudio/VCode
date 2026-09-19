@@ -61,8 +61,37 @@ public class TabBar extends HorizontalScrollView {
      * @param activeIdx The index of the active file tab.
      */
     public void setTabs(List<EditorFile> files, int activeIdx) {
-        this.tabs = files != null ? new ArrayList<>(files) : new ArrayList<>();
+        List<EditorFile> newTabs = files != null ? new ArrayList<>(files) : new ArrayList<>();
+        boolean sameTabs = this.tabs.size() == newTabs.size() && tabContainer.getChildCount() == newTabs.size();
+        if (sameTabs) {
+            for (int i = 0; i < newTabs.size(); i++) {
+                EditorFile oldF = this.tabs.get(i);
+                EditorFile newF = newTabs.get(i);
+                if (oldF == null || newF == null || !java.util.Objects.equals(oldF.getId(), newF.getId())) {
+                    sameTabs = false;
+                    break;
+                }
+            }
+        }
+
+        this.tabs = newTabs;
         this.activeIndex = activeIdx;
+
+        if (sameTabs) {
+            for (int i = 0; i < tabContainer.getChildCount(); i++) {
+                View child = tabContainer.getChildAt(i);
+                ItemEditorTabBinding binding = (ItemEditorTabBinding) child.getTag();
+                if (binding != null) {
+                    EditorFile file = tabs.get(i);
+                    String displayFileName = getFileName(file);
+                    binding.tvFileName.setText(displayFileName);
+                    updateTabActiveState(binding, i == activeIndex);
+                    updateTabDirtyState(i, file.isDirty());
+                }
+            }
+            scrollToActiveTab();
+            return;
+        }
 
         rebuildTabs();
         scrollToActiveTab();

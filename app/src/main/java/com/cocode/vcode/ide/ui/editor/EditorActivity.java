@@ -676,13 +676,15 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     EditorFile currentActiveFile = files.get(activeIndex);
                     com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
                     if (cfv.getCodeEditor() != null) {
-                        String editorText = cfv.getCodeEditor().getTextAsString();
                         File editorFile = cfv.getCodeEditor().getCurrentFile();
                         boolean fileChanged = (editorFile == null && currentActiveFile.getFile() != null)
                                 || (editorFile != null && !editorFile.equals(currentActiveFile.getFile()));
-                        boolean contentChanged = currentActiveFile.getContent() != null && !currentActiveFile.getContent().equals(editorText);
-                        if (fileChanged || contentChanged) {
-                            cfv.bindFile(currentActiveFile, viewModel);
+                        if (fileChanged) {
+                            cfv.getCodeEditor().setCurrentFile(currentActiveFile.getFile());
+                            cfv.getCodeEditor().setFileType(currentActiveFile.getFileType());
+                            if (cfv.getLspBridge() != null && currentActiveFile.getFile() != null) {
+                                cfv.getLspBridge().setFile(currentActiveFile.getFile());
+                            }
                         }
                     }
                 }
@@ -704,6 +706,31 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 boolean isServerRunning = localWebServer != null && localWebServer.isRunning();
                 binding.ivViewPreview.setVisibility(isServerRunning ? View.VISIBLE : View.GONE);
                 updateToolbarVisibility();
+            }
+        });
+
+        viewModel.getRefactoredFiles().observe(this, modifiedFiles -> {
+            if (modifiedFiles == null || modifiedFiles.isEmpty()) return;
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+                if (cfv.getCodeEditor() != null) {
+                    File currentFile = cfv.getCodeEditor().getCurrentFile();
+                    if (currentFile != null) {
+                        for (File f : modifiedFiles) {
+                            if (f != null && f.equals(currentFile)) {
+                                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+                                List<EditorFile> files = viewModel.getOpenFiles().getValue();
+                                if (activeIndex != null && activeIndex >= 0 && files != null && activeIndex < files.size()) {
+                                    EditorFile ef = files.get(activeIndex);
+                                    if (ef.getContent() != null) {
+                                        cfv.bindFile(ef, viewModel);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         });
 
