@@ -10,12 +10,13 @@ import com.cocode.vcode.ide.R;
 public enum KeyCommand {
     // File
     SAVE_ALL("editor.action.save", R.string.vcode_cmd_save_all, KeyCategory.FILE, "Ctrl+S", Scope.GLOBAL),
+    NEW_FILE("workbench.action.files.newFile", R.string.vcode_cmd_new_file, KeyCategory.FILE, "Ctrl+N", Scope.GLOBAL),
+    NEW_FOLDER("workbench.action.files.newFolder", R.string.vcode_cmd_new_folder, KeyCategory.FILE, "Ctrl+Shift+N", Scope.GLOBAL),
 
     // Workbench / Tabs & Navigation
     CLOSE_TAB("workbench.action.closeActiveEditor", R.string.vcode_cmd_close_tab, KeyCategory.VIEW, "Ctrl+W", Scope.GLOBAL),
     NEXT_TAB("workbench.action.nextEditor", R.string.vcode_cmd_next_tab, KeyCategory.NAVIGATION, "Ctrl+Tab", Scope.GLOBAL),
     PREV_TAB("workbench.action.previousEditor", R.string.vcode_cmd_prev_tab, KeyCategory.NAVIGATION, "Ctrl+Shift+Tab", Scope.GLOBAL),
-    QUICK_OPEN("workbench.action.quickOpen", R.string.vcode_cmd_quick_open, KeyCategory.NAVIGATION, "Ctrl+P", Scope.GLOBAL),
     TOGGLE_SIDEBAR("workbench.action.toggleSidebar", R.string.vcode_cmd_toggle_sidebar, KeyCategory.VIEW, "Ctrl+B", Scope.GLOBAL),
     SHOW_PROBLEMS("workbench.action.showProblems", R.string.vcode_cmd_show_problems, KeyCategory.VIEW, "Ctrl+Shift+M", Scope.GLOBAL),
     SHOW_SNIPPETS("workbench.action.showSnippets", R.string.vcode_cmd_show_snippets, KeyCategory.EDITOR, "Ctrl+Shift+P", Scope.GLOBAL),
@@ -43,7 +44,6 @@ public enum KeyCommand {
     TOGGLE_COMMENT("editor.action.commentLine", R.string.vcode_cmd_toggle_comment, KeyCategory.EDITOR, "Ctrl+/", Scope.EDITOR),
     INDENT("editor.action.indent", R.string.vcode_cmd_indent, KeyCategory.EDITOR, "Tab", Scope.EDITOR),
     OUTDENT("editor.action.outdent", R.string.vcode_cmd_outdent, KeyCategory.EDITOR, "Shift+Tab", Scope.EDITOR),
-    TRIGGER_AUTOCOMPLETE("editor.action.triggerSuggest", R.string.vcode_cmd_trigger_autocomplete, KeyCategory.EDITOR, "Ctrl+Space", Scope.EDITOR),
 
     // Line Operations
     DUPLICATE_LINE("editor.action.duplicateLine", R.string.vcode_cmd_duplicate_line, KeyCategory.LINE, "Ctrl+D", Scope.EDITOR),

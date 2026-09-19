@@ -1767,9 +1767,6 @@ public class CodeEditText extends View {
             case INSERT_LINE_ABOVE:
                 insertLineAbove();
                 return true;
-            case TRIGGER_AUTOCOMPLETE:
-                triggerAutoComplete(true);
-                return true;
             default:
                 return false;
         }

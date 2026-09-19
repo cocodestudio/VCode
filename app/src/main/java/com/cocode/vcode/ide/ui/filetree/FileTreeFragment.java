@@ -282,6 +282,12 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
 
         if (isRoot) {
+            if (canPaste) {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_file_plus, getString(R.string.vcode_paste), () -> {
+                    performPaste(file);
+                });
+                addDivider(popupBinding.popupContainer);
+            }
             addFindInFilesPopupItem(popupBinding.popupContainer, popupWindow, file, node);
         } else {
             addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, getString(R.string.vcode_rename), () -> showRenameDialog(file));

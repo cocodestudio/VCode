@@ -551,10 +551,11 @@
     <string name="vcode_key_category_git">Git</string>
 
     <string name="vcode_cmd_save_all">Save All</string>
+    <string name="vcode_cmd_new_file">New File in Root</string>
+    <string name="vcode_cmd_new_folder">New Folder in Root</string>
     <string name="vcode_cmd_close_tab">Close Active Editor</string>
     <string name="vcode_cmd_next_tab">Next Editor Tab</string>
     <string name="vcode_cmd_prev_tab">Previous Editor Tab</string>
-    <string name="vcode_cmd_quick_open">Quick Open / File Tree Drawer</string>
     <string name="vcode_cmd_toggle_sidebar">Toggle Primary Side Bar</string>
     <string name="vcode_cmd_find">Find</string>
     <string name="vcode_cmd_replace">Replace</string>
@@ -589,7 +590,6 @@
     <string name="vcode_cmd_outdent">Outdent Line</string>
     <string name="vcode_cmd_insert_line_below">Insert Line Below</string>
     <string name="vcode_cmd_insert_line_above">Insert Line Above</string>
-    <string name="vcode_cmd_trigger_autocomplete">Trigger Autocomplete</string>
     <string name="vcode_key_unassigned">Unassigned</string>
     <string name="vcode_key_conflict_warning">Already assigned to: %1$s</string>
     <string name="vcode_keyboard_shortcuts_title">Keyboard Shortcuts</string>

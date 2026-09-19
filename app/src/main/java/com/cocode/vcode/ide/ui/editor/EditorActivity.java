@@ -55,6 +55,8 @@ import com.cocode.vcode.ide.ui.filetree.FileTreeFragment;
 import com.cocode.vcode.ide.ui.sheets.editor.GoToLineBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.editor.ProblemsBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.editor.SnippetsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.NewFileBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.files.NewFolderBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
@@ -389,15 +391,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 }
                 return true;
             }
-            case QUICK_OPEN: {
-                if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                    binding.drawerLayout.closeDrawer(GravityCompat.START);
-                } else {
-                    UiUtils.hideKeyboard(this);
-                    CodeEditText codeEditText = getActiveCodeEditor();
-                    if (codeEditText != null) codeEditText.clearFocus();
-                    binding.drawerLayout.openDrawer(GravityCompat.START);
-                }
+            case NEW_FILE: {
+                openNewFileSheetForRoot();
+                return true;
+            }
+            case NEW_FOLDER: {
+                openNewFolderSheetForRoot();
                 return true;
             }
             case TOGGLE_SIDEBAR: {
@@ -495,6 +494,23 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return activeViewer.getCodeEditor();
         }
         return null;
+    }
+
+    private void openNewFileSheetForRoot() {
+        File root = viewModel.getProjectRoot();
+        if (root != null) {
+            NewFileBottomSheet sheet = NewFileBottomSheet.newInstance();
+            sheet.setListener((fileName, initialContent) -> viewModel.createFile(root, fileName, initialContent));
+            sheet.show(getSupportFragmentManager(), "NewFileBottomSheet");
+        }
+    }
+
+    private void openNewFolderSheetForRoot() {
+        File root = viewModel.getProjectRoot();
+        if (root != null) {
+            NewFolderBottomSheet sheet = NewFolderBottomSheet.newInstance(root);
+            sheet.show(getSupportFragmentManager(), "NewFolderBottomSheet");
+        }
     }
 
     private void handleRunAction() {

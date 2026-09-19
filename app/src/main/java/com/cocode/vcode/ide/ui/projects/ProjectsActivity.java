@@ -564,7 +564,6 @@ public class ProjectsActivity extends BaseActivity {
                     case OPEN_SETTINGS:
                         startActivity(new Intent(this, SettingsActivity.class));
                         return true;
-                    case QUICK_OPEN:
                     case FIND:
                         binding.etSearch.requestFocus();
                         UiUtils.showKeyboard(binding.etSearch);
