@@ -25,6 +25,12 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.cocode.vcode.ide.databinding.DialogUnsavedChangesBinding;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.view.ViewGroup;
+
 import com.cocode.vcode.ide.core.keybinding.KeyCommand;
 import com.cocode.vcode.ide.core.keybinding.KeybindingManager;
 import com.cocode.vcode.ide.ui.git.GitActivity;
@@ -851,13 +857,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         };
 
         if (file.isDirty() && confirm) {
-            new AlertDialog.Builder(this)
-                    .setTitle(R.string.vcode_unsaved_changes_2)
-                    .setMessage("Save changes to " + file.getFileName() + " before closing?")
-                    .setPositiveButton(R.string.vcode_save_close, (d, w) -> viewModel.saveFile(index, doClose))
-                    .setNegativeButton(R.string.vcode_discard_2, (d, w) -> doClose.run())
-                    .setNeutralButton(R.string.vcode_action_cancel, null)
-                    .show();
+            showSingleFileUnsavedDialog(file, index, doClose);
         } else {
             doClose.run();
         }
@@ -1112,15 +1112,89 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     private void navigateWithUnsavedCheck(Runnable navigateAction) {
         if (viewModel.hasUnsavedFiles()) {
-            new AlertDialog.Builder(this)
-                    .setTitle(R.string.vcode_unsaved_changes)
-                    .setMessage(R.string.vcode_you_have_unsaved_files_save)
-                    .setPositiveButton(R.string.vcode_save_all, (d, w) -> viewModel.saveAll(navigateAction))
-                    .setNegativeButton(R.string.vcode_discard, (d, w) -> navigateAction.run())
-                    .setNeutralButton(R.string.vcode_action_cancel, null)
-                    .show();
+            showMultipleFilesUnsavedDialog(navigateAction);
         } else {
             navigateAction.run();
+        }
+    }
+
+    private void showSingleFileUnsavedDialog(EditorFile file, int index, Runnable doClose) {
+        DialogUnsavedChangesBinding dialogBinding = DialogUnsavedChangesBinding.inflate(getLayoutInflater());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(dialogBinding.getRoot())
+                .setCancelable(true)
+                .create();
+
+        FontManager fm = FontManager.getInstance();
+        dialogBinding.tvDialogTitle.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.tvDialogDesc.setTypeface(fm.getUiMedium(this));
+        dialogBinding.btnSave.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.btnDiscard.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.btnCancel.setTypeface(fm.getUiSemiBold(this));
+
+        dialogBinding.tvDialogTitle.setText(R.string.vcode_unsaved_changes_2);
+        dialogBinding.tvDialogDesc.setText(getString(R.string.vcode_save_changes_to_file_before_closing, file.getFileName()));
+        dialogBinding.btnSave.setText(R.string.vcode_save_close);
+        dialogBinding.btnDiscard.setText(R.string.vcode_discard_2);
+
+        dialogBinding.btnSave.setOnClickListener(v -> {
+            dialog.dismiss();
+            viewModel.saveFile(index, doClose);
+        });
+        dialogBinding.btnDiscard.setOnClickListener(v -> {
+            dialog.dismiss();
+            doClose.run();
+        });
+        dialogBinding.btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int maxWidth = getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+            int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+            dialog.getWindow().setLayout(targetWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private void showMultipleFilesUnsavedDialog(Runnable navigateAction) {
+        DialogUnsavedChangesBinding dialogBinding = DialogUnsavedChangesBinding.inflate(getLayoutInflater());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(dialogBinding.getRoot())
+                .setCancelable(true)
+                .create();
+
+        FontManager fm = FontManager.getInstance();
+        dialogBinding.tvDialogTitle.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.tvDialogDesc.setTypeface(fm.getUiMedium(this));
+        dialogBinding.btnSave.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.btnDiscard.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.btnCancel.setTypeface(fm.getUiSemiBold(this));
+
+        dialogBinding.tvDialogTitle.setText(R.string.vcode_unsaved_changes);
+        dialogBinding.tvDialogDesc.setText(R.string.vcode_you_have_unsaved_files_save);
+        dialogBinding.btnSave.setText(R.string.vcode_save_all);
+        dialogBinding.btnDiscard.setText(R.string.vcode_discard);
+
+        dialogBinding.btnSave.setOnClickListener(v -> {
+            dialog.dismiss();
+            viewModel.saveAll(navigateAction);
+        });
+        dialogBinding.btnDiscard.setOnClickListener(v -> {
+            dialog.dismiss();
+            navigateAction.run();
+        });
+        dialogBinding.btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int maxWidth = getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+            int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+            dialog.getWindow().setLayout(targetWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
     }
 

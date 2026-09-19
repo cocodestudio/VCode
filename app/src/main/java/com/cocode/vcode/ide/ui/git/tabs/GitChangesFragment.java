@@ -147,6 +147,12 @@ public class GitChangesFragment extends Fragment implements GitFilesAdapter.GitF
      * Sets up the commit interaction logic, including character counting and author validation.
      */
     private void setupCommitUI() {
+        String draftMsg = viewModel.getDraftCommitMessage();
+        if (draftMsg != null && !draftMsg.isEmpty()) {
+            binding.etCommitMessage.setText(draftMsg);
+            binding.etCommitMessage.setSelection(draftMsg.length());
+        }
+
         // Live character counter for the commit message
         binding.etCommitMessage.addTextChangedListener(new TextWatcher() {
             @Override
@@ -156,6 +162,7 @@ public class GitChangesFragment extends Fragment implements GitFilesAdapter.GitF
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 binding.tvCharCounter.setText(String.valueOf(s.length()).concat(" / 120"));
+                viewModel.setDraftCommitMessage(s != null ? s.toString() : "");
             }
 
             @Override

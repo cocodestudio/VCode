@@ -19,15 +19,20 @@ import androidx.viewpager2.adapter.FragmentStateAdapter;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.ActivityGitBinding;
+import com.cocode.vcode.ide.databinding.DialogUncommittedChangesBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.ui.git.tabs.GitBranchFragment;
 import com.cocode.vcode.ide.ui.git.tabs.GitChangesFragment;
 import com.cocode.vcode.ide.ui.git.tabs.GitHistoryFragment;
 import com.cocode.vcode.ide.ui.git.tabs.GitRemoteFragment;
 import com.cocode.vcode.ide.utils.FontManager;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayoutMediator;
 
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.view.ViewGroup;
 import java.io.File;
 
 /**
@@ -155,21 +160,47 @@ public class GitActivity extends BaseActivity {
 
     /**
      * Verifies if there is uncommitted work before allowing the user to exit the activity.
-     * Prompts for confirmation if staged or unstaged changes exist.
+     * Prompts for confirmation only when files are staged (at least 1) AND a commit message has been written.
      */
     private void handleExitVerificationSequence() {
         boolean hasStagedChanges = viewModel.getStagedFiles().getValue() != null && !viewModel.getStagedFiles().getValue().isEmpty();
-        boolean hasUnstagedChanges = viewModel.getUnstagedFiles().getValue() != null && !viewModel.getUnstagedFiles().getValue().isEmpty();
+        String draftMsg = viewModel.getDraftCommitMessage();
+        boolean hasCommitMessage = draftMsg != null && !draftMsg.trim().isEmpty();
 
-        if (hasStagedChanges || hasUnstagedChanges) {
-            new AlertDialog.Builder(this)
-                    .setTitle(R.string.vcode_uncommitted_changes)
-                    .setMessage(R.string.vcode_you_have_uncommitted_modifications_inside)
-                    .setPositiveButton(R.string.vcode_leave, (dialog, which) -> finish())
-                    .setNegativeButton(R.string.vcode_stay, null)
-                    .show();
+        if (hasStagedChanges && hasCommitMessage) {
+            showUncommittedChangesDialog();
         } else {
             finish();
+        }
+    }
+
+    private void showUncommittedChangesDialog() {
+        DialogUncommittedChangesBinding dialogBinding = DialogUncommittedChangesBinding.inflate(getLayoutInflater());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(dialogBinding.getRoot())
+                .setCancelable(true)
+                .create();
+
+        FontManager fm = FontManager.getInstance();
+        dialogBinding.tvDialogTitle.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.tvDialogDesc.setTypeface(fm.getUiMedium(this));
+        dialogBinding.btnStay.setTypeface(fm.getUiSemiBold(this));
+        dialogBinding.btnLeave.setTypeface(fm.getUiSemiBold(this));
+
+        dialogBinding.btnStay.setOnClickListener(v -> dialog.dismiss());
+        dialogBinding.btnLeave.setOnClickListener(v -> {
+            dialog.dismiss();
+            finish();
+        });
+
+        dialog.show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int maxWidth = getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+            int targetWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+            dialog.getWindow().setLayout(targetWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
     }
 

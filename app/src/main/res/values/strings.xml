@@ -485,6 +485,7 @@
     <string name="vcode_unsaved_changes">Unsaved Changes</string>
     <string name="vcode_unsaved_changes_2">Unsaved Changes</string>
     <string name="vcode_you_have_unsaved_files_save">You have unsaved files. Save them before leaving?</string>
+    <string name="vcode_save_changes_to_file_before_closing">Save changes to %1$s before closing?</string>
     <string name="vcode_save_all">Save All</string>
     <string name="vcode_save_close">Save &amp; Close</string>
     <string name="vcode_discard">Discard</string>
