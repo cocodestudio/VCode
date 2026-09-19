@@ -27,7 +27,7 @@ import com.cocode.vcode.ide.ui.sheets.settings.SettingsOptionsBottomSheet;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.snackbar.Snackbar;
+import com.cocode.vcode.ide.views.VCodeSnackbar;
 
 import java.io.File;
 
@@ -146,7 +146,7 @@ public class SettingsHomeFragment extends Fragment {
                             break;
                     }
                 }
-                Snackbar.make(binding.getRoot(), R.string.vcode_settings_import_success, Snackbar.LENGTH_LONG).show();
+                VCodeSnackbar.success(binding.getRoot(), R.string.vcode_settings_import_success).show();
             } else {
                 showImportErrorDialog(result.errorMessage);
             }
@@ -174,16 +174,16 @@ public class SettingsHomeFragment extends Fragment {
                 String path = exportedFile.getAbsolutePath();
                 String message = getString(R.string.vcode_settings_export_success, path);
 
-                Snackbar snackbar = Snackbar.make(binding.getRoot(), message, Snackbar.LENGTH_LONG);
-                snackbar.setAction(R.string.vcode_settings_copy_path, v -> {
-                    ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
-                    if (clipboard != null) {
-                        ClipData clip = ClipData.newPlainText("Settings Path", path);
-                        clipboard.setPrimaryClip(clip);
-                        Toast.makeText(requireContext(), R.string.vcode_settings_path_copied, Toast.LENGTH_SHORT).show();
-                    }
-                });
-                snackbar.show();
+                VCodeSnackbar.success(binding.getRoot(), message)
+                        .setAction(R.string.vcode_settings_copy_path, v -> {
+                            ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                            if (clipboard != null) {
+                                ClipData clip = ClipData.newPlainText("Settings Path", path);
+                                clipboard.setPrimaryClip(clip);
+                                Toast.makeText(requireContext(), R.string.vcode_settings_path_copied, Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .show();
             }
 
             @Override
@@ -192,7 +192,7 @@ public class SettingsHomeFragment extends Fragment {
                 String errorMsg = error != null && error.getLocalizedMessage() != null
                         ? getString(R.string.vcode_settings_export_error, error.getLocalizedMessage())
                         : getString(R.string.vcode_settings_export_error, "Unknown error");
-                Snackbar.make(binding.getRoot(), errorMsg, Snackbar.LENGTH_LONG).show();
+                VCodeSnackbar.error(binding.getRoot(), errorMsg).show();
             }
         });
     }
@@ -216,7 +216,7 @@ public class SettingsHomeFragment extends Fragment {
                     String errorMsg = error != null && error.getLocalizedMessage() != null
                             ? getString(R.string.vcode_settings_export_error, error.getLocalizedMessage())
                             : getString(R.string.vcode_settings_export_error, "Unknown error");
-                    Snackbar.make(binding.getRoot(), errorMsg, Snackbar.LENGTH_LONG).show();
+                    VCodeSnackbar.error(binding.getRoot(), errorMsg).show();
                 }
             });
             return;

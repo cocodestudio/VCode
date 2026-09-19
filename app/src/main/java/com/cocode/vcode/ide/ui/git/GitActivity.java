@@ -27,7 +27,7 @@ import com.cocode.vcode.ide.ui.git.tabs.GitHistoryFragment;
 import com.cocode.vcode.ide.ui.git.tabs.GitRemoteFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.snackbar.Snackbar;
+import com.cocode.vcode.ide.views.VCodeSnackbar;
 import com.google.android.material.tabs.TabLayoutMediator;
 
 import android.graphics.Color;
@@ -147,12 +147,11 @@ public class GitActivity extends BaseActivity {
             }
         });
 
-        // Surface errors via snackbars with an integrated retry mechanism
+        // Surface errors via custom VCodeSnackbar with an integrated retry mechanism
         viewModel.getErrorMessage().observe(this, errorText -> {
             if (errorText != null && !errorText.trim().isEmpty()) {
-                Snackbar.make(binding.getRoot(), errorText, Snackbar.LENGTH_LONG)
-                        .setAction("Retry", v -> viewModel.refreshAll())
-                        .setActionTextColor(getColor(com.google.android.material.R.color.material_timepicker_button_background))
+                VCodeSnackbar.error(binding.getRoot(), errorText)
+                        .setAction(R.string.vcode_retry, v -> viewModel.refreshAll())
                         .show();
             }
         });

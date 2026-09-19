@@ -25,7 +25,7 @@ import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.sheets.settings.KeyboardOptionsBottomSheet;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
-import com.google.android.material.snackbar.Snackbar;
+import com.cocode.vcode.ide.views.VCodeSnackbar;
 
 import java.io.File;
 import java.util.List;
@@ -160,16 +160,16 @@ public class KeyboardSettingsFragment extends Fragment {
         if (ok) {
             String path = targetFile.getAbsolutePath();
             String message = getString(R.string.vcode_keybindings_export_success, path);
-            Snackbar snackbar = Snackbar.make(binding.getRoot(), message, Snackbar.LENGTH_LONG);
-            snackbar.setAction(R.string.vcode_settings_copy_path, v -> {
-                ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
-                if (clipboard != null) {
-                    ClipData clip = ClipData.newPlainText("Keybindings Path", path);
-                    clipboard.setPrimaryClip(clip);
-                    Toast.makeText(requireContext(), R.string.vcode_settings_path_copied, Toast.LENGTH_SHORT).show();
-                }
-            });
-            snackbar.show();
+            VCodeSnackbar.success(binding.getRoot(), message)
+                    .setAction(R.string.vcode_settings_copy_path, v -> {
+                        ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (clipboard != null) {
+                            ClipData clip = ClipData.newPlainText("Keybindings Path", path);
+                            clipboard.setPrimaryClip(clip);
+                            Toast.makeText(requireContext(), R.string.vcode_settings_path_copied, Toast.LENGTH_SHORT).show();
+                        }
+                    })
+                    .show();
         } else {
             Toast.makeText(requireContext(), R.string.vcode_keybindings_export_error, Toast.LENGTH_SHORT).show();
         }

@@ -357,6 +357,10 @@
     <string name="vcode_action_cancel">Cancel</string>
     <string name="vcode_action_save">Save</string>
 
+    <!--    Custom View: Snackbar-->
+    <string name="vcode_retry">Retry</string>
+    <string name="vcode_dismiss">Dismiss</string>
+
 
     <!--    Custom View: Selection Toolbar-->
     <string name="vcode_action_cut">Cut</string>
