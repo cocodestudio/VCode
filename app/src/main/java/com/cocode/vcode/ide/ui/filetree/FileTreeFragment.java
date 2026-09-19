@@ -469,11 +469,13 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     private void performPaste(File destinationDir) {
         File source = adapter.getClipboardFile();
         boolean isCut = adapter.isCutAction();
-        FileClipboardHelper.performPaste(requireContext(), source, isCut, destinationDir, success -> {
+        FileClipboardHelper.performPaste(requireContext(), source, isCut, destinationDir, (success, src, tgt) -> {
             if (success && isCut) {
                 adapter.setClipboardState(null, false);
+                viewModel.handleNodeMoved(src, tgt);
+            } else {
+                viewModel.refreshFileTree();
             }
-            viewModel.refreshFileTree();
         });
     }
 

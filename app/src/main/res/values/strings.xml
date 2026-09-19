@@ -144,6 +144,7 @@
     <string name="vcode_rename_symbol">Rename Symbol</string>
     <string name="symbol_name">SYMBOL NAME</string>
     <string name="e_g_symbol">e.g., myVariable</string>
+    <string name="vcode_references_updated">Updated %1$d reference(s)</string>
 
     <!--    Bottom Sheet: Create Folder-->
     <string name="vcode_create_folder">Create Folder</string>

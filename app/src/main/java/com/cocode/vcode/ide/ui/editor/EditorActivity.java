@@ -671,6 +671,21 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 binding.tabBar.setVisibility(View.VISIBLE);
                 binding.tabBar.setTabs(files, activeIndex);
                 updateBreadcrumbVisibility();
+
+                if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer && activeIndex >= 0 && activeIndex < files.size()) {
+                    EditorFile currentActiveFile = files.get(activeIndex);
+                    com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+                    if (cfv.getCodeEditor() != null) {
+                        String editorText = cfv.getCodeEditor().getTextAsString();
+                        File editorFile = cfv.getCodeEditor().getCurrentFile();
+                        boolean fileChanged = (editorFile == null && currentActiveFile.getFile() != null)
+                                || (editorFile != null && !editorFile.equals(currentActiveFile.getFile()));
+                        boolean contentChanged = currentActiveFile.getContent() != null && !currentActiveFile.getContent().equals(editorText);
+                        if (fileChanged || contentChanged) {
+                            cfv.bindFile(currentActiveFile, viewModel);
+                        }
+                    }
+                }
             } else {
                 if (!isLoading) {
                     binding.layoutEmptyEditor.setVisibility(View.VISIBLE);

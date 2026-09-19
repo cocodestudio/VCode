@@ -19,10 +19,15 @@ import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.data.repository.ProjectStateRepository;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
 import com.cocode.vcode.ide.git.model.FileStatus;
+import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.autocomplete.VFSManager;
+import com.cocode.vcode.ide.core.lsp.ProjectIndex;
+import com.cocode.vcode.ide.core.refactor.FileReferenceUpdater;
 import com.cocode.vcode.ide.ui.editor.helper.EditorGitHelper;
 import com.cocode.vcode.ide.ui.editor.helper.ProjectMetaHelper;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
+import android.widget.Toast;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -575,30 +580,66 @@ public class EditorViewModel extends ViewModel {
 
                 File renamedFile = new File(file.getParentFile(), newName);
                 List<EditorFile> currentDocs = getOpenFilesList();
-                boolean changed = false;
 
-                for (EditorFile doc : currentDocs) {
-                    if (doc.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
-                        doc.setFile(renamedFile);
-                        // Also update fileType just in case the extension changed
-                        doc.setFileType(FileType.fromExtension(FileUtils.getExtension(renamedFile.getName())));
-                        changed = true;
-                    } else if (doc.getFile().getAbsolutePath().startsWith(file.getAbsolutePath() + "/")) {
-                        String relativePath = doc.getFile().getAbsolutePath().substring(file.getAbsolutePath().length());
-                        File updatedChildFile = new File(renamedFile.getAbsolutePath() + relativePath);
-                        doc.setFile(updatedChildFile);
-                        doc.setFileType(FileType.fromExtension(FileUtils.getExtension(updatedChildFile.getName())));
-                        changed = true;
-                    }
+                FileReferenceUpdater.RefactorResult result = FileReferenceUpdater.updateReferences(
+                        projectRoot, file, renamedFile, currentDocs
+                );
+
+                VFSManager.getInstance().invalidateDirectory(file.getParentFile());
+                if (renamedFile.isDirectory()) {
+                    VFSManager.getInstance().invalidateDirectory(renamedFile);
                 }
 
-                if (changed) {
-                    // Update tabs with a fresh list to trigger RecyclerView/DiffUtil correctly
-                    openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
-                }
+                ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
 
+                openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
                 refreshFileTree();
                 projectRepo.touchProjectById(projectId);
+
+                if (result.referencesUpdatedCount > 0) {
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        Toast.makeText(appContext, appContext.getString(
+                                R.string.vcode_references_updated, result.referencesUpdatedCount),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                }
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    /**
+     * Handles updating open tabs and refactoring cross-file references when a file or directory
+     * is moved (e.g. via Cut & Paste).
+     */
+    public void handleNodeMoved(File source, File destination) {
+        if (source == null || destination == null) return;
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                List<EditorFile> currentDocs = getOpenFilesList();
+                FileReferenceUpdater.RefactorResult result = FileReferenceUpdater.updateReferences(
+                        projectRoot, source, destination, currentDocs
+                );
+
+                VFSManager.getInstance().invalidateDirectory(source.getParentFile());
+                VFSManager.getInstance().invalidateDirectory(destination.getParentFile());
+                if (destination.isDirectory()) {
+                    VFSManager.getInstance().invalidateDirectory(destination);
+                }
+
+                ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
+
+                openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
+                refreshFileTree();
+                projectRepo.touchProjectById(projectId);
+
+                if (result.referencesUpdatedCount > 0) {
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        Toast.makeText(appContext, appContext.getString(
+                                R.string.vcode_references_updated, result.referencesUpdatedCount),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                }
             } catch (Exception ignored) {
             }
         });
