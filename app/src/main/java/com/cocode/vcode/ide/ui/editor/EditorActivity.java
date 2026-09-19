@@ -224,6 +224,18 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private void setupListeners() {
         binding.drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
             @Override
+            public void onDrawerSlide(@NonNull View drawerView, float slideOffset) {
+                if (slideOffset > 0) {
+                    saveCurrentEditorState();
+                }
+            }
+
+            @Override
+            public void onDrawerOpened(@NonNull View drawerView) {
+                saveCurrentEditorState();
+            }
+
+            @Override
             public void onDrawerClosed(@NonNull View drawerView) {
                 Fragment fragment = getSupportFragmentManager().findFragmentById(binding.drawerContainer.getId());
                 if (fragment instanceof FileTreeFragment) {
@@ -233,6 +245,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         });
 
         binding.btnMenu.setOnClickListener(v -> {
+            saveCurrentEditorState();
             UiUtils.hideKeyboard(this);
             CodeEditText codeEditText = getActiveCodeEditor();
             if (codeEditText != null) {
@@ -403,6 +416,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
                     binding.drawerLayout.closeDrawer(GravityCompat.START);
                 } else {
+                    saveCurrentEditorState();
                     UiUtils.hideKeyboard(this);
                     CodeEditText codeEditText = getActiveCodeEditor();
                     if (codeEditText != null) codeEditText.clearFocus();
@@ -510,6 +524,16 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         if (root != null) {
             NewFolderBottomSheet sheet = NewFolderBottomSheet.newInstance(root);
             sheet.show(getSupportFragmentManager(), "NewFolderBottomSheet");
+        }
+    }
+
+    private boolean isSameFile(File f1, File f2) {
+        if (f1 == null || f2 == null) return false;
+        if (f1.equals(f2)) return true;
+        try {
+            return f1.getCanonicalPath().equals(f2.getCanonicalPath());
+        } catch (Exception e) {
+            return f1.getAbsolutePath().equals(f2.getAbsolutePath());
         }
     }
 
@@ -694,7 +718,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     if (cfv.getCodeEditor() != null) {
                         File editorFile = cfv.getCodeEditor().getCurrentFile();
                         boolean fileChanged = (editorFile == null && currentActiveFile.getFile() != null)
-                                || (editorFile != null && !editorFile.equals(currentActiveFile.getFile()));
+                                || (editorFile != null && !isSameFile(editorFile, currentActiveFile.getFile()));
                         if (fileChanged) {
                             cfv.getCodeEditor().setCurrentFile(currentActiveFile.getFile());
                             cfv.getCodeEditor().setFileType(currentActiveFile.getFileType());
@@ -733,13 +757,13 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     File currentFile = cfv.getCodeEditor().getCurrentFile();
                     if (currentFile != null) {
                         for (File f : modifiedFiles) {
-                            if (f != null && f.equals(currentFile)) {
+                            if (f != null && isSameFile(f, currentFile)) {
                                 Integer activeIndex = viewModel.getActiveTabIndex().getValue();
                                 List<EditorFile> files = viewModel.getOpenFiles().getValue();
                                 if (activeIndex != null && activeIndex >= 0 && files != null && activeIndex < files.size()) {
                                     EditorFile ef = files.get(activeIndex);
                                     if (ef.getContent() != null) {
-                                        cfv.bindFile(ef, viewModel);
+                                        cfv.updateRefactoredContent(ef.getContent());
                                     }
                                 }
                                 break;
@@ -1059,6 +1083,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void saveCurrentEditorState() {
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
         CodeEditText codeEditText = getActiveCodeEditor();
         if (codeEditText != null && codeEditText.getTag() != null) {
             List<EditorFile> files = viewModel.getOpenFiles().getValue();

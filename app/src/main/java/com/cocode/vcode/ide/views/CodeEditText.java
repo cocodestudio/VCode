@@ -2889,6 +2889,59 @@ public class CodeEditText extends View {
         post(this::ensureCursorVisible);
     }
 
+    /**
+     * Updates the editor content in-place after an automatic refactoring operation (e.g. file rename or move),
+     * preserving the cursor line and column, viewport scroll position, and undo/redo history.
+     */
+    public void updateRefactoredContent(String newContent) {
+        if (newContent == null) return;
+        String currentText = content.getText();
+        if (currentText.equals(newContent)) return;
+
+        ContentPosition oldCursor = cursor;
+        int oldFlatOffset = getSelectionStart();
+        int oldScrollX = getScrollX();
+        int oldScrollY = getScrollY();
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+
+        undoStack.beginAtomicGroup();
+        try {
+            int lineCount = content.lineCount();
+            int lastLine = lineCount > 0 ? lineCount - 1 : 0;
+            int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
+
+            content.replace(0, 0, lastLine, lastCol, newContent);
+
+            if (oldCursor != null && oldCursor.line < content.lineCount()) {
+                int lineLen = content.lineLength(oldCursor.line);
+                cursor = new ContentPosition(oldCursor.line, Math.min(oldCursor.column, lineLen));
+            } else {
+                cursor = content.positionAt(Math.min(oldFlatOffset, content.totalLength()));
+            }
+            selectionAnchor = null;
+            longestLineLength = content.longestLineLength();
+            longestLineDirty = false;
+            dirtyTracker.reset();
+            dirtyTracker.addEdit(0, 0, content.totalLength());
+            rebuildVisualLayout();
+            UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
+
+            undoStack.recordReplace(0, 0, lastLine, lastCol, currentText, newContent, before, after);
+        } finally {
+            undoStack.endAtomicGroup();
+        }
+
+        cursorVisible = true;
+        scheduleBlink();
+        requestLayout();
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+        scrollTo(oldScrollX, oldScrollY);
+        post(() -> scrollTo(oldScrollX, oldScrollY));
+        dispatchContentChanged();
+    }
+
     public void setSearchDecorations(List<SearchResult> results, int activeIndex) {
         this.searchDecorations = results != null ? results : new ArrayList<>();
         this.searchActiveIndex = activeIndex;

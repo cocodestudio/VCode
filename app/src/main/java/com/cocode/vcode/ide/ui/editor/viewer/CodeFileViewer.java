@@ -130,6 +130,8 @@ public class CodeFileViewer implements IFileViewer {
             flushContentToViewModel();
         }
 
+        if (file == null) return;
+        boolean isDifferentFile = (this.currentFile != file);
         this.currentFile = file;
         this.viewModel = viewModel;
 
@@ -178,7 +180,6 @@ public class CodeFileViewer implements IFileViewer {
                     ExecutorProvider.getInstance().runOnMain(() -> {
                         // Only apply if this viewer is still bound to the same file.
                         if (currentFile == capturedFile && capturedEditor == codeEditText) {
-                            capturedEditor.setText(content);
                             capturedEditor.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
                                 @Override
                                 public void onTextLoadStateChanged(boolean isLoading) {
@@ -186,10 +187,12 @@ public class CodeFileViewer implements IFileViewer {
                                         capturedEditor.removeTextLoadListener(this);
                                         if (currentFile != capturedFile) return;
                                         capturedEditor.scrollTo(0, capturedFile.getScrollY());
+                                        capturedEditor.setSelection(capturedFile.getCursorPosition());
                                         validateCodeIfRequired();
                                     }
                                 }
                             });
+                            capturedEditor.setText(content);
                         }
                     });
                 } catch (Exception ignored) {
@@ -212,7 +215,6 @@ public class CodeFileViewer implements IFileViewer {
         // load so only content for the file we're actually bound to can ever land.
         String currentText = codeEditText.getText() != null ? codeEditText.getText().toString() : "";
         if (!currentText.equals(file.getContent()) || codeEditText.isSettingText()) {
-            codeEditText.setText(file.getContent());
             codeEditText.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
                 @Override
                 public void onTextLoadStateChanged(boolean isLoading) {
@@ -220,17 +222,42 @@ public class CodeFileViewer implements IFileViewer {
                         codeEditText.removeTextLoadListener(this);
                         if (currentFile != file) return;
                         codeEditText.scrollTo(0, file.getScrollY());
+                        codeEditText.setSelection(file.getCursorPosition());
                     }
                 }
             });
+            codeEditText.setText(file.getContent());
         } else {
-            // Text is identical, so no async load is triggered. Restore scroll position only.
-            codeEditText.scrollTo(0, file.getScrollY());
+            // Text is identical, so no async load is triggered. Restore scroll/cursor position only if switching from another file.
+            if (isDifferentFile) {
+                codeEditText.scrollTo(0, file.getScrollY());
+                codeEditText.setSelection(file.getCursorPosition());
+            }
             // Since setText wasn't called, the async load event won't fire, so we must
             // clear the LSP bridge's content-sync guard manually to allow diagnostics to run.
             lspBridge.clearContentSyncPending();
         }
 
+        validateCodeIfRequired();
+    }
+
+    /**
+     * Updates the active editor content in-place when a refactoring operation modifies the file,
+     * preserving live cursor, scroll position, and undo history.
+     */
+    public void updateRefactoredContent(String newContent) {
+        if (codeEditText == null || newContent == null) return;
+        if (currentFile != null) {
+            currentFile.setContent(newContent);
+            if (!currentFile.isDirty()) {
+                currentFile.markSaved();
+            }
+        }
+        codeEditText.updateRefactoredContent(newContent);
+        if (currentFile != null) {
+            currentFile.setCursorPosition(codeEditText.getSelectionStart());
+            currentFile.setScrollY(codeEditText.getScrollY());
+        }
         validateCodeIfRequired();
     }
 
@@ -243,6 +270,7 @@ public class CodeFileViewer implements IFileViewer {
 
     @Override
     public void onPause() {
+        flushContentToViewModel();
         jsonValidationHandler.removeCallbacksAndMessages(null);
         if (editorLayout != null && editorLayout.getSelectionToolbar() != null) {
             editorLayout.getSelectionToolbar().hide();
