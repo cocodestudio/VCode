@@ -529,21 +529,27 @@ public final class Content {
     }
 
     private void insertInternal(int line, int column, CharSequence text) {
+        if (lines.isEmpty()) {
+            lines.add(new ContentLine());
+        }
+        line = Math.max(0, Math.min(line, lines.size() - 1));
+        ContentLine targetLine = lines.get(line);
+        column = Math.max(0, Math.min(column, targetLine.length()));
+
         // Find the first '\n' in the inserted text
         int firstNewline = indexOfNewline(text, 0);
 
         if (firstNewline < 0) {
             // No newline — simple single-line insert
             char[] src = toCharArray(text);
-            ContentLine cl = lines.get(line);
-            cl.insert(column, src, 0, src.length);
+            targetLine.insert(column, src, 0, src.length);
             bitAdd(line, src.length);
             if (cachedMaxLineLength >= 0) {
-                cachedMaxLineLength = Math.max(cachedMaxLineLength, cl.length());
+                cachedMaxLineLength = Math.max(cachedMaxLineLength, targetLine.length());
             }
         } else {
             // There is at least one newline — we need to split the current line and insert new lines
-            ContentLine currentLine = lines.get(line);
+            ContentLine currentLine = targetLine;
 
             // Capture the tail of the current line (what comes after `column`)
             int tailLen = currentLine.length() - column;
@@ -580,10 +586,22 @@ public final class Content {
     }
 
     private void deleteInternal(int startLine, int startColumn, int endLine, int endColumn) {
+        if (lines.isEmpty()) return;
+        startLine = Math.max(0, Math.min(startLine, lines.size() - 1));
+        endLine = Math.max(0, Math.min(endLine, lines.size() - 1));
+        if (startLine > endLine || (startLine == endLine && startColumn > endColumn)) {
+            int tL = startLine; startLine = endLine; endLine = tL;
+            int tC = startColumn; startColumn = endColumn; endColumn = tC;
+        }
+
+        ContentLine first = lines.get(startLine);
+        ContentLine last = lines.get(endLine);
+        startColumn = Math.max(0, Math.min(startColumn, first.length()));
+        endColumn = Math.max(0, Math.min(endColumn, last.length()));
+
         if (startLine == endLine) {
-            ContentLine cl = lines.get(startLine);
-            int oldLen = cl.length();
-            cl.delete(startColumn, endColumn);
+            int oldLen = first.length();
+            first.delete(startColumn, endColumn);
             bitAdd(startLine, -(endColumn - startColumn));
             if (cachedMaxLineLength >= 0 && oldLen >= cachedMaxLineLength) {
                 cachedMaxLineLength = -1;
@@ -591,8 +609,6 @@ public final class Content {
         } else {
             // Merge startLine and endLine: keep [0, startColumn) from startLine and
             // [endColumn, ...) from endLine.
-            ContentLine first = lines.get(startLine);
-            ContentLine last = lines.get(endLine);
 
             // Truncate first line
             first.delete(startColumn, first.length());

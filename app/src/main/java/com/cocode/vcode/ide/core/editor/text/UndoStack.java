@@ -53,11 +53,6 @@ public final class UndoStack {
         boolean isWordChar = isSingleChar && isWordChar(insertedText.charAt(0));
 
         if (atomicDepth > 0) {
-            // Inside an atomic group — always append to the current pending batch.
-            // If there is no pending batch yet, just start one without committing.
-            if (pendingType != null && pendingType != RecordType.INSERT) {
-                commitPending();
-            }
             ContentPosition insertEnd = advancePosition(startLine, startColumn, insertedText);
             UndoRecord record = new UndoRecord(
                     RecordType.INSERT,
@@ -65,7 +60,6 @@ public final class UndoStack {
                     insertEnd.line, insertEnd.column,
                     insertedText, before, after);
             pendingGroup.add(record);
-            pendingType = RecordType.INSERT;
             lastEditTimeMs = now;
             lastAfter = after;
             lastCharWasWordChar = isWordChar;
@@ -117,20 +111,12 @@ public final class UndoStack {
         boolean isBackspace = isSingleChar && after.cursor.isSameAs(rangeStart) && before.cursor.isSameAs(rangeEnd);
 
         if (atomicDepth > 0) {
-            // Inside an atomic group — always append to the current pending batch,
-            // regardless of character class, direction, adjacency, or timeout.
-            // Mirrors recordInsert's atomic branch; previously recordDelete ignored
-            // atomicDepth entirely, so deletes could never be bundled atomically.
-            if (pendingType != null && pendingType != RecordType.DELETE) {
-                commitPending();
-            }
             UndoRecord record = new UndoRecord(
                     RecordType.DELETE,
                     startLine, startColumn,
                     endLine, endColumn,
                     deletedText, before, after);
             pendingGroup.add(record);
-            pendingType = RecordType.DELETE;
             lastEditTimeMs = now;
             lastAfter = after;
             lastWasBackspace = isBackspace;
@@ -192,15 +178,7 @@ public final class UndoStack {
         if (records.isEmpty()) return;
 
         if (atomicDepth > 0) {
-            // Bundle the replace's delete+insert pair into the currently-open atomic
-            // group instead of pushing it as its own standalone unit — otherwise a
-            // selection-replacing keystroke that also triggers an auto-close/auto-indent
-            // side effect would still end up split across two undo units.
-            if (pendingType != null && pendingType != RecordType.INSERT) {
-                commitPending();
-            }
             pendingGroup.addAll(records);
-            pendingType = RecordType.INSERT;
             lastEditTimeMs = System.currentTimeMillis();
             lastAfter = after;
             redoStack.clear();
@@ -208,7 +186,8 @@ public final class UndoStack {
         }
 
         commitPending();
-        pushUndo(new UndoUnit(records.toArray(new UndoRecord[0])));
+        pendingGroup.addAll(records);
+        commitPending();
         redoStack.clear();
     }
 
@@ -222,29 +201,50 @@ public final class UndoStack {
         pendingGroup.clear();
         pendingType = null;
         lastAfter = null;
-        pushUndo(new UndoUnit(records));
+
+        EditorSnapshot unitBefore = null;
+        EditorSnapshot unitAfter = null;
+        for (int i = 0; i < records.length; i++) {
+            if (records[i].before != null) {
+                unitBefore = records[i].before;
+                break;
+            }
+        }
+        for (int i = records.length - 1; i >= 0; i--) {
+            if (records[i].after != null) {
+                unitAfter = records[i].after;
+                break;
+            }
+        }
+
+        pushUndo(new UndoUnit(records, unitBefore, unitAfter));
     }
 
     /**
      * Begins an atomic group: all subsequent {@link #recordInsert} / {@link #recordDelete}
-     * calls will be bundled into the current pending group (or a new one) regardless of
-     * character class, timeout, or whether the text is multi-character.
+     * calls will be bundled into a single atomic undo unit until {@link #endAtomicGroup()} is called.
+     * If an uncommitted typing group exists, it is sealed first.
      * Must be balanced with {@link #endAtomicGroup()}.
-     * <p>
-     * Use this to atomically bundle auto-indent, auto-close-bracket, and auto-close-tag
-     * side-effects with the keystroke that triggered them.
      */
     public void beginAtomicGroup() {
+        if (atomicDepth == 0) {
+            commitPending();
+        }
         atomicDepth++;
     }
 
     /**
      * Ends an atomic group started by {@link #beginAtomicGroup()}.
-     * When the depth reaches zero the group is left open (it will be committed on the
-     * next unrelated edit or timeout), so it still merges with further typing.
+     * When the depth reaches zero, the atomic group is committed immediately into an UndoUnit,
+     * preventing subsequent typing from merging into the atomic action.
      */
     public void endAtomicGroup() {
-        if (atomicDepth > 0) atomicDepth--;
+        if (atomicDepth > 0) {
+            atomicDepth--;
+            if (atomicDepth == 0) {
+                commitPending();
+            }
+        }
     }
 
     public EditorSnapshot undo(Content content) {
@@ -258,7 +258,7 @@ public final class UndoStack {
         for (int i = unit.records.length - 1; i >= 0; i--) {
             snapshot = reverseRecord(unit.records[i], content);
         }
-        return snapshot;
+        return unit.before != null ? unit.before : snapshot;
     }
 
     public EditorSnapshot redo(Content content) {
@@ -271,7 +271,7 @@ public final class UndoStack {
         for (UndoRecord record : unit.records) {
             snapshot = applyRecord(record, content);
         }
-        return snapshot;
+        return unit.after != null ? unit.after : snapshot;
     }
 
     public boolean canUndo() {
@@ -361,9 +361,13 @@ public final class UndoStack {
 
     private static final class UndoUnit {
         final UndoRecord[] records;
+        final EditorSnapshot before;
+        final EditorSnapshot after;
 
-        UndoUnit(UndoRecord[] records) {
+        UndoUnit(UndoRecord[] records, EditorSnapshot before, EditorSnapshot after) {
             this.records = records;
+            this.before = before;
+            this.after = after;
         }
     }
 }

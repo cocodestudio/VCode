@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.ui.settings;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -19,8 +20,11 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.data.settings.SettingsJsonSerializer;
 import com.cocode.vcode.ide.databinding.FragmentSettingsHomeBinding;
+import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.sheets.settings.SettingsOptionsBottomSheet;
+import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
@@ -76,6 +80,9 @@ public class SettingsHomeFragment extends Fragment {
         binding.tvCategoryGitTitle.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvCategoryGitDesc.setTypeface(fm.getUiFont(requireContext()));
 
+        binding.tvCategoryKeyboardTitle.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvCategoryKeyboardDesc.setTypeface(fm.getUiFont(requireContext()));
+
         binding.tvCategoryGeneralTitle.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvCategoryGeneralDesc.setTypeface(fm.getUiFont(requireContext()));
     }
@@ -94,6 +101,9 @@ public class SettingsHomeFragment extends Fragment {
         binding.cardCategoryGit.setOnClickListener(v ->
                 navigateTo(GitSettingsFragment.newInstance()));
 
+        binding.cardCategoryKeyboard.setOnClickListener(v ->
+                navigateTo(KeyboardSettingsFragment.newInstance()));
+
         binding.cardCategoryGeneral.setOnClickListener(v ->
                 navigateTo(GeneralSettingsFragment.newInstance()));
     }
@@ -108,6 +118,11 @@ public class SettingsHomeFragment extends Fragment {
             @Override
             public void onExportSettings() {
                 handleExportSettings();
+            }
+
+            @Override
+            public void onEditSettingsInEditor() {
+                openSettingsInEditor();
             }
         });
         sheet.show(getChildFragmentManager(), "SettingsOptionsBottomSheet");
@@ -180,6 +195,43 @@ public class SettingsHomeFragment extends Fragment {
                 Snackbar.make(binding.getRoot(), errorMsg, Snackbar.LENGTH_LONG).show();
             }
         });
+    }
+
+    private void openSettingsInEditor() {
+        File projectsDir = FileUtils.getProjectsDirectory();
+        if (!projectsDir.exists()) {
+            projectsDir.mkdirs();
+        }
+        File settingsFile = SettingsJsonSerializer.getProjectsExportFile();
+        if (!settingsFile.exists()) {
+            viewModel.exportSettings(new SettingsViewModel.ExportCallback() {
+                @Override
+                public void onSuccess(File exportedFile) {
+                    launchEditorWithFile(projectsDir, exportedFile);
+                }
+
+                @Override
+                public void onError(Exception error) {
+                    if (!isAdded()) return;
+                    String errorMsg = error != null && error.getLocalizedMessage() != null
+                            ? getString(R.string.vcode_settings_export_error, error.getLocalizedMessage())
+                            : getString(R.string.vcode_settings_export_error, "Unknown error");
+                    Snackbar.make(binding.getRoot(), errorMsg, Snackbar.LENGTH_LONG).show();
+                }
+            });
+            return;
+        }
+
+        launchEditorWithFile(projectsDir, settingsFile);
+    }
+
+    private void launchEditorWithFile(@NonNull File projectsDir, @NonNull File file) {
+        if (!isAdded()) return;
+        Intent intent = new Intent(requireContext(), EditorActivity.class);
+        intent.putExtra(EditorActivity.EXTRA_PROJECT_PATH, projectsDir.getAbsolutePath());
+        intent.putExtra(EditorActivity.EXTRA_PROJECT_NAME, "VCodeProjects");
+        intent.putExtra(EditorActivity.EXTRA_OPEN_FILE_PATH, file.getAbsolutePath());
+        startActivity(intent);
     }
 
     private void navigateTo(Fragment fragment) {

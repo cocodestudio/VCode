@@ -11,6 +11,7 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.animation.OvershootInterpolator;
 import android.widget.Toast;
@@ -28,6 +29,8 @@ import androidx.transition.TransitionManager;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.Project;
 import com.cocode.vcode.ide.databinding.ActivityProjectsBinding;
+import com.cocode.vcode.ide.core.keybinding.KeyCommand;
+import com.cocode.vcode.ide.core.keybinding.KeybindingManager;
 import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.github.GitHubApiClient;
@@ -35,6 +38,7 @@ import com.cocode.vcode.ide.git.model.CommitInfo;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.settings.SettingsActivity;
+import com.cocode.vcode.ide.ui.sheets.editor.KeyboardShortcutsBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.NewProjectBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
@@ -540,5 +544,53 @@ public class ProjectsActivity extends BaseActivity {
         intent.putExtra(EditorActivity.EXTRA_PROJECT_ID, projectId);
         intent.putExtra(EditorActivity.EXTRA_PROJECT_NAME, projectName);
         startActivity(intent);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
+                if (binding.etSearch.hasFocus() || binding.etSearch.length() > 0) {
+                    binding.etSearch.setText("");
+                    binding.etSearch.clearFocus();
+                    UiUtils.hideKeyboard(this);
+                    return true;
+                }
+            }
+
+            KeyCommand cmd = KeybindingManager.getInstance(this).findCommand(event);
+            if (cmd != null) {
+                switch (cmd) {
+                    case OPEN_SETTINGS:
+                        startActivity(new Intent(this, SettingsActivity.class));
+                        return true;
+                    case QUICK_OPEN:
+                    case FIND:
+                        binding.etSearch.requestFocus();
+                        UiUtils.showKeyboard(binding.etSearch);
+                        return true;
+                    case SHOW_SHORTCUTS:
+                        KeyboardShortcutsBottomSheet.show(getSupportFragmentManager());
+                        return true;
+                    default:
+                        break;
+                }
+            }
+
+            boolean isCtrl = event.isCtrlPressed() || event.isMetaPressed();
+            if (isCtrl && event.getKeyCode() == KeyEvent.KEYCODE_N) {
+                showNewProjectSheet();
+                return true;
+            }
+            if (isCtrl && event.isShiftPressed() && event.getKeyCode() == KeyEvent.KEYCODE_O) {
+                CloneRepoBottomSheet.show(getSupportFragmentManager(), () -> viewModel.loadProjects());
+                return true;
+            }
+            if (event.getKeyCode() == KeyEvent.KEYCODE_F5 || (isCtrl && event.getKeyCode() == KeyEvent.KEYCODE_R)) {
+                viewModel.loadProjects();
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 }

@@ -63,6 +63,8 @@
     <string name="vcode_settings_category_appearance_desc">Color themes, dark mode, and system display matching</string>
     <string name="vcode_settings_category_git">Git</string>
     <string name="vcode_settings_category_git_desc">Default branch, author credentials and reset safety</string>
+    <string name="vcode_settings_category_keyboard">Keyboard Shortcuts</string>
+    <string name="vcode_settings_category_keyboard_desc">Custom keybindings, physical keyboard mappings</string>
     <string name="vcode_settings_category_general">General</string>
     <string name="vcode_settings_category_general_desc">In-app browser preview, background auto-save</string>
 
@@ -73,6 +75,8 @@
     <string name="vcode_settings_import_desc">Load and apply configuration from a JSON file</string>
     <string name="vcode_settings_export">Export Settings</string>
     <string name="vcode_settings_export_desc">Save settings.json to VCodeProjects folder</string>
+    <string name="vcode_edit_settings_json">Edit settings.json in Editor</string>
+    <string name="vcode_edit_settings_json_desc">Open settings.json directly in code editor</string>
     <string name="vcode_settings_import_success">Settings successfully imported</string>
     <string name="vcode_settings_export_success">Settings saved to %1$s</string>
     <string name="vcode_settings_copy_path">Copy Path</string>
@@ -174,6 +178,7 @@
     <string name="vcode_hint_extract_styles">e.g., styles.css</string>
     <string name="vcode_hint_extract_scripts">e.g., script.js</string>
     <string name="vcode_file_name_is_required">File name is required</string>
+    <string name="vcode_extract_tags_html_only">Extraction is only available for HTML files</string>
 
     <!--    Bottom Sheet: Snippet Manager-->
     <string name="vcode_snippet_manager">Snippet Manager</string>
@@ -349,6 +354,7 @@
 
     <!--    Custom View: Editor Tab-->
     <string name="vcode_action_cancel">Cancel</string>
+    <string name="vcode_action_save">Save</string>
 
 
     <!--    Custom View: Selection Toolbar-->
@@ -528,4 +534,79 @@
     <string name="vcode_version_remote">remote</string>
     <string name="vcode_failed_to_resolve">Failed to resolve: %1$s</string>
     <string name="vcode_failed_to_abort">Failed to abort: %1$s</string>
+
+    <!-- Keyboard Shortcuts & Keybindings -->
+    <string name="vcode_key_category_file">File</string>
+    <string name="vcode_key_category_navigation">Navigation</string>
+    <string name="vcode_key_category_editor">Editor</string>
+    <string name="vcode_key_category_line">Line Operations</string>
+    <string name="vcode_key_category_search"><![CDATA[Find & Replace]]></string>
+    <string name="vcode_key_category_view"><![CDATA[View & Workbench]]></string>
+    <string name="vcode_key_category_git">Git</string>
+
+    <string name="vcode_cmd_save_all">Save All</string>
+    <string name="vcode_cmd_close_tab">Close Active Editor</string>
+    <string name="vcode_cmd_next_tab">Next Editor Tab</string>
+    <string name="vcode_cmd_prev_tab">Previous Editor Tab</string>
+    <string name="vcode_cmd_quick_open">Quick Open / File Tree Drawer</string>
+    <string name="vcode_cmd_toggle_sidebar">Toggle Primary Side Bar</string>
+    <string name="vcode_cmd_find">Find</string>
+    <string name="vcode_cmd_replace">Replace</string>
+    <string name="vcode_cmd_go_to_line">Go to Line</string>
+    <string name="vcode_cmd_format_document">Format Document</string>
+    <string name="vcode_cmd_extract_css">Extract CSS</string>
+    <string name="vcode_cmd_extract_js">Extract JS</string>
+    <string name="vcode_cmd_show_problems">Show Problems</string>
+    <string name="vcode_cmd_show_snippets">Show Snippets / Emmet</string>
+    <string name="vcode_cmd_run_preview">Run Live Preview</string>
+    <string name="vcode_cmd_open_settings">Open Settings</string>
+    <string name="vcode_cmd_open_git">Open Git</string>
+    <string name="vcode_cmd_show_shortcuts">Keyboard Shortcuts</string>
+    <string name="vcode_cmd_toggle_read_only">Toggle Read-Only Mode</string>
+    <string name="vcode_read_only">Read-only</string>
+    <string name="vcode_read_only_enabled">Read-only mode enabled</string>
+    <string name="vcode_read_only_disabled">Read-only mode disabled</string>
+    <string name="vcode_cmd_undo">Undo</string>
+    <string name="vcode_cmd_redo">Redo</string>
+    <string name="vcode_cmd_select_all">Select All</string>
+    <string name="vcode_cmd_cut">Cut</string>
+    <string name="vcode_cmd_copy">Copy</string>
+    <string name="vcode_cmd_paste">Paste</string>
+    <string name="vcode_cmd_duplicate_line">Duplicate Line</string>
+    <string name="vcode_cmd_delete_line">Delete Line</string>
+    <string name="vcode_cmd_move_line_up">Move Line Up</string>
+    <string name="vcode_cmd_move_line_down">Move Line Down</string>
+    <string name="vcode_cmd_copy_line_up">Copy Line Up</string>
+    <string name="vcode_cmd_copy_line_down">Copy Line Down</string>
+    <string name="vcode_cmd_toggle_comment">Toggle Line Comment</string>
+    <string name="vcode_cmd_indent">Indent Line</string>
+    <string name="vcode_cmd_outdent">Outdent Line</string>
+    <string name="vcode_cmd_insert_line_below">Insert Line Below</string>
+    <string name="vcode_cmd_insert_line_above">Insert Line Above</string>
+    <string name="vcode_cmd_trigger_autocomplete">Trigger Autocomplete</string>
+    <string name="vcode_key_unassigned">Unassigned</string>
+    <string name="vcode_key_conflict_warning">Already assigned to: %1$s</string>
+    <string name="vcode_keyboard_shortcuts_title">Keyboard Shortcuts</string>
+    <string name="vcode_search_shortcuts_hint">Search shortcuts</string>
+    <string name="vcode_reset_keybindings">Reset All to Defaults</string>
+    <string name="vcode_reset_keybindings_desc">Restore all shortcuts to factory defaults</string>
+    <string name="vcode_export_keybindings">Export keybindings.json</string>
+    <string name="vcode_export_keybindings_desc">Save a copy of keybindings.json to VCodeProjects</string>
+    <string name="vcode_import_keybindings">Import keybindings.json</string>
+    <string name="vcode_import_keybindings_desc">Load custom shortcuts from keybindings.json</string>
+    <string name="vcode_edit_keybindings_json">Edit keybindings.json in Editor</string>
+    <string name="vcode_edit_keybindings_json_desc">Open keybindings.json directly in code editor</string>
+    <string name="vcode_change_keybinding_title">Change Keybinding</string>
+    <string name="vcode_press_keys_prompt">Press desired key combination on physical keyboard, then press Enter</string>
+    <string name="vcode_listening_for_keys">Listening for keystrokes...</string>
+    <string name="vcode_clear_keybinding">Unbind</string>
+    <string name="vcode_keybindings_reset_success">All keybindings reset to default</string>
+    <string name="vcode_keybindings_export_success">Keybindings exported to %1$s</string>
+    <string name="vcode_keybindings_import_success">Keybindings imported successfully</string>
+    <string name="vcode_keybindings_import_success_conflicts">Keybindings imported successfully (%1$d duplicate shortcut(s) unassigned)</string>
+    <string name="vcode_keybindings_import_error">Failed to parse keybindings file</string>
+    <string name="vcode_keybindings_file_not_found">keybindings.json not found in VCodeProjects</string>
+    <string name="vcode_keybindings_export_error">Failed to export keybindings</string>
+    <string name="vcode_all_files_saved">All files saved</string>
+    <string name="vcode_no_matching_shortcuts">No matching shortcuts found</string>
 </resources>

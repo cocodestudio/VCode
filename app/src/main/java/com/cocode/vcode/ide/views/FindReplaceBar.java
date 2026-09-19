@@ -141,9 +141,14 @@ public class FindReplaceBar extends LinearLayout {
         if (editor == null || results.isEmpty()) return;
         String replacement = binding.etReplace.getText().toString();
 
-        for (int i = results.size() - 1; i >= 0; i--) {
-            SearchResult r = results.get(i);
-            editor.replaceRange(r.absoluteStart, r.absoluteEnd, replacement);
+        editor.getUndoStack().beginAtomicGroup();
+        try {
+            for (int i = results.size() - 1; i >= 0; i--) {
+                SearchResult r = results.get(i);
+                editor.replaceRange(r.absoluteStart, r.absoluteEnd, replacement);
+            }
+        } finally {
+            editor.getUndoStack().endAtomicGroup();
         }
         scheduleSearch();
     }
@@ -160,6 +165,13 @@ public class FindReplaceBar extends LinearLayout {
 
         setVisibility(VISIBLE);
         binding.etSearch.requestFocus();
+    }
+
+    public void focusReplace() {
+        if (getVisibility() != VISIBLE) {
+            slideDown();
+        }
+        binding.etReplace.requestFocus();
     }
 
     public void slideUp() {

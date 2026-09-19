@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
@@ -23,6 +24,12 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 import androidx.lifecycle.ViewModelProvider;
+
+import com.cocode.vcode.ide.core.keybinding.KeyCommand;
+import com.cocode.vcode.ide.core.keybinding.KeybindingManager;
+import com.cocode.vcode.ide.ui.git.GitActivity;
+import com.cocode.vcode.ide.ui.settings.SettingsActivity;
+import com.cocode.vcode.ide.ui.sheets.editor.KeyboardShortcutsBottomSheet;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
@@ -269,35 +276,212 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         binding.btnOverflow.setOnClickListener(v -> showOverflowMenu());
 
-        binding.tabBar.setOnTabClickListener(index -> {
-            // Hide soft keyboard on tab switch
-            android.view.View currentFocus = getCurrentFocus();
-            if (currentFocus != null) {
-                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
-                        getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-                if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
-                currentFocus.clearFocus();
-            }
-
-            // Dismiss signature help if showing
-            com.cocode.vcode.ide.views.CodeEditText activeEditor = getActiveCodeEditor();
-            if (activeEditor != null) activeEditor.dismissSignatureHint();
-
-            // Flush active editor content into its EditorFile before switching.
-            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-                ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
-                viewModel.triggerAutoSave();
-            }
-            // Push ALL open files' latest content to ProjectIndex so cross-file LSP
-            // features (completions, signature help, go-to-definition) see live data.
-            viewModel.syncAllOpenFilesToIndex();
-            viewModel.setActiveTab(index);
-        });
+        binding.tabBar.setOnTabClickListener(this::switchToTab);
 
         binding.tabBar.setOnTabCloseListener(index -> {
             saveCurrentEditorState();
             handleTabClose(index);
         });
+    }
+
+    private void switchToTab(int index) {
+        View currentFocus = getCurrentFocus();
+        if (currentFocus != null) {
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
+            currentFocus.clearFocus();
+        }
+
+        CodeEditText activeEditor = getActiveCodeEditor();
+        if (activeEditor != null) activeEditor.dismissSignatureHint();
+
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            viewModel.triggerAutoSave();
+        }
+        viewModel.syncAllOpenFilesToIndex();
+        viewModel.setActiveTab(index);
+        binding.viewerContainer.post(() -> {
+            CodeEditText newEditor = getActiveCodeEditor();
+            if (newEditor != null) {
+                newEditor.requestFocus();
+            }
+        });
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
+                if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    binding.drawerLayout.closeDrawer(GravityCompat.START);
+                    return true;
+                }
+                if (binding.findReplaceBar.getVisibility() == View.VISIBLE) {
+                    binding.findReplaceBar.slideUp();
+                    return true;
+                }
+            }
+
+            KeyCommand cmd = KeybindingManager.getInstance(this).findCommand(event);
+            if (cmd != null && handleGlobalCommand(cmd)) {
+                return true;
+            }
+
+            // Route editor-scoped shortcuts directly to the active editor
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                boolean findBarFocused = binding.findReplaceBar.getVisibility() == View.VISIBLE
+                        && binding.findReplaceBar.hasFocus();
+                if (!findBarFocused) {
+                    CodeEditText editor = ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).getCodeEditor();
+                    if (editor != null) {
+                        KeyCommand editorCmd = KeybindingManager.getInstance(this).findCommand(event, KeyCommand.Scope.EDITOR);
+                        if (editorCmd != null && editorCmd.getScope() == KeyCommand.Scope.EDITOR
+                                && editor.executeEditorCommand(editorCmd)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean handleGlobalCommand(@NonNull KeyCommand cmd) {
+        switch (cmd) {
+            case SAVE_ALL: {
+                if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                    ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+                }
+                viewModel.saveAll();
+                Toast.makeText(this, R.string.vcode_all_files_saved, Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            case CLOSE_TAB: {
+                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+                if (activeIndex != null && activeIndex >= 0) {
+                    saveCurrentEditorState();
+                    handleTabClose(activeIndex);
+                }
+                return true;
+            }
+            case NEXT_TAB: {
+                List<EditorFile> files = viewModel.getOpenFiles().getValue();
+                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+                if (files != null && files.size() > 1 && activeIndex != null) {
+                    int next = (activeIndex + 1) % files.size();
+                    switchToTab(next);
+                }
+                return true;
+            }
+            case PREV_TAB: {
+                List<EditorFile> files = viewModel.getOpenFiles().getValue();
+                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+                if (files != null && files.size() > 1 && activeIndex != null) {
+                    int prev = (activeIndex - 1 + files.size()) % files.size();
+                    switchToTab(prev);
+                }
+                return true;
+            }
+            case QUICK_OPEN: {
+                if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    binding.drawerLayout.closeDrawer(GravityCompat.START);
+                } else {
+                    UiUtils.hideKeyboard(this);
+                    CodeEditText codeEditText = getActiveCodeEditor();
+                    if (codeEditText != null) codeEditText.clearFocus();
+                    binding.drawerLayout.openDrawer(GravityCompat.START);
+                }
+                return true;
+            }
+            case TOGGLE_SIDEBAR: {
+                if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    binding.drawerLayout.closeDrawer(GravityCompat.START);
+                } else {
+                    UiUtils.hideKeyboard(this);
+                    CodeEditText codeEditText = getActiveCodeEditor();
+                    if (codeEditText != null) codeEditText.clearFocus();
+                    binding.drawerLayout.openDrawer(GravityCompat.START);
+                }
+                return true;
+            }
+            case FIND: {
+                showFindReplaceBar();
+                return true;
+            }
+            case REPLACE: {
+                CodeEditText codeEditText = getActiveCodeEditor();
+                if (codeEditText != null) binding.findReplaceBar.setEditor(codeEditText);
+                binding.findReplaceBar.focusReplace();
+                return true;
+            }
+            case GO_TO_LINE: {
+                showGoToLineDialog();
+                return true;
+            }
+            case FORMAT_DOCUMENT: {
+                formatCurrentFile();
+                return true;
+            }
+            case EXTRACT_CSS: {
+                extractTagsFromCurrentFile(com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE);
+                return true;
+            }
+            case EXTRACT_JS: {
+                extractTagsFromCurrentFile(com.cocode.vcode.ide.utils.TagExtractor.Type.SCRIPT);
+                return true;
+            }
+            case SHOW_PROBLEMS: {
+                ProblemsBottomSheet sheet = new ProblemsBottomSheet();
+                sheet.setListener(this::jumpToLine);
+                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+                if (activeIndex != null && activeIndex >= 0) {
+                    List<EditorFile> openFiles = viewModel.getOpenFiles().getValue();
+                    if (openFiles != null && activeIndex < openFiles.size()) {
+                        sheet.setFilterFile(openFiles.get(activeIndex).getFile());
+                    }
+                }
+                sheet.show(getSupportFragmentManager(), "ProblemsSheet");
+                return true;
+            }
+            case SHOW_SNIPPETS: {
+                showSnippetManager();
+                return true;
+            }
+            case RUN_PREVIEW: {
+                handleRunAction();
+                return true;
+            }
+            case OPEN_SETTINGS: {
+                startActivity(new Intent(this, SettingsActivity.class));
+                return true;
+            }
+            case OPEN_GIT: {
+                if (viewModel.getProjectRoot() != null) {
+                    Intent navToGit = new Intent(this, GitActivity.class);
+                    navToGit.putExtra("project_path", viewModel.getProjectRoot().getAbsolutePath());
+                    navToGit.putExtra("project_name", getIntent().getStringExtra(EXTRA_PROJECT_NAME));
+                    AppSettings settings = viewModel.getSettingsLiveData().getValue();
+                    if (settings != null && settings.gitDefaultBranch != null) {
+                        navToGit.putExtra("default_branch", settings.gitDefaultBranch);
+                    }
+                    startActivity(navToGit);
+                } else {
+                    Toast.makeText(this, R.string.vcode_error_project_directory_not_loaded, Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            }
+            case SHOW_SHORTCUTS: {
+                KeyboardShortcutsBottomSheet.show(getSupportFragmentManager());
+                return true;
+            }
+            case TOGGLE_READ_ONLY: {
+                toggleReadOnly();
+                return true;
+            }
+            default:
+                return false;
+        }
     }
 
     private CodeEditText getActiveCodeEditor() {
@@ -688,8 +872,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
             @Override
             public void onToggleReadOnly() {
-                isReadOnly = !isReadOnly;
-                applyReadOnlyState();
+                toggleReadOnly();
             }
 
             @Override
@@ -709,30 +892,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
             @Override
             public void onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type type) {
-                com.cocode.vcode.ide.ui.sheets.editor.ExtractTagsBottomSheet.show(getSupportFragmentManager(), type, (filename, extractType) -> {
-                    CodeEditText editor = getActiveCodeEditor();
-                    if (editor != null) {
-                        String text = editor.getText().toString();
-                        com.cocode.vcode.ide.utils.TagExtractor.Result result = com.cocode.vcode.ide.utils.TagExtractor.extract(text, extractType, filename);
-                        if (result.success) {
-                            java.io.File currentFile = viewModel.getOpenFiles().getValue().get(viewModel.getActiveTabIndex().getValue()).getFile();
-                            java.io.File newFile = new java.io.File(currentFile.getParentFile(), filename);
-                            try {
-                                com.cocode.vcode.ide.core.model.FileType targetLang = (extractType == com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE) ? com.cocode.vcode.ide.core.model.FileType.CSS : com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT;
-                                String formatted = com.cocode.vcode.ide.utils.CodeFormatter.format(result.extractedContent, targetLang);
-                                com.cocode.vcode.ide.utils.FileUtils.writeFile(newFile, formatted);
-                                editor.replaceRange(0, editor.length(), result.modifiedHtml);
-                                viewModel.saveAll();
-                                viewModel.refreshFileTree();
-                                android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_extracted_to_file, filename), android.widget.Toast.LENGTH_SHORT).show();
-                            } catch (java.io.IOException e) {
-                                android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_failed_to_write_file, e.getMessage()), android.widget.Toast.LENGTH_SHORT).show();
-                            }
-                        } else {
-                            android.widget.Toast.makeText(EditorActivity.this, result.errorMessage, android.widget.Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
+                extractTagsFromCurrentFile(type);
             }
 
             @Override
@@ -750,12 +910,71 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         EditorMenuHelper.showOverflowMenu(this, viewModel, getSupportFragmentManager(), projectName, callbacks);
     }
 
+    private void extractTagsFromCurrentFile(com.cocode.vcode.ide.utils.TagExtractor.Type type) {
+        List<EditorFile> files = viewModel.getOpenFiles().getValue();
+        Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+        CodeEditText editor = getActiveCodeEditor();
+
+        if (files == null || activeIndex == null || activeIndex < 0 || activeIndex >= files.size() || editor == null) {
+            android.widget.Toast.makeText(this, R.string.vcode_no_file_open_to_format, android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        EditorFile activeFile = files.get(activeIndex);
+        if (activeFile.getFileType() != com.cocode.vcode.ide.core.model.FileType.HTML) {
+            android.widget.Toast.makeText(this, R.string.vcode_extract_tags_html_only, android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        com.cocode.vcode.ide.ui.sheets.editor.ExtractTagsBottomSheet.show(getSupportFragmentManager(), type, (filename, extractType) -> {
+            CodeEditText codeEditor = getActiveCodeEditor();
+            if (codeEditor != null) {
+                String text = codeEditor.getText().toString();
+                com.cocode.vcode.ide.utils.TagExtractor.Result result = com.cocode.vcode.ide.utils.TagExtractor.extract(text, extractType, filename);
+                if (result.success) {
+                    java.io.File currentFile = activeFile.getFile();
+                    java.io.File newFile = new java.io.File(currentFile.getParentFile(), filename);
+                    try {
+                        com.cocode.vcode.ide.core.model.FileType targetLang = (extractType == com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE) ? com.cocode.vcode.ide.core.model.FileType.CSS : com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT;
+                        String formatted = com.cocode.vcode.ide.utils.CodeFormatter.format(result.extractedContent, targetLang);
+                        com.cocode.vcode.ide.utils.FileUtils.writeFile(newFile, formatted);
+                        codeEditor.replaceRange(0, codeEditor.length(), result.modifiedHtml);
+                        viewModel.saveAll();
+                        viewModel.refreshFileTree();
+                        android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_extracted_to_file, filename), android.widget.Toast.LENGTH_SHORT).show();
+                    } catch (java.io.IOException e) {
+                        android.widget.Toast.makeText(EditorActivity.this, getString(R.string.vcode_failed_to_write_file, e.getMessage()), android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                } else {
+                    android.widget.Toast.makeText(EditorActivity.this, result.errorMessage, android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    public void toggleReadOnly() {
+        CodeEditText codeEditText = getActiveCodeEditor();
+        if (codeEditText == null) {
+            return;
+        }
+        isReadOnly = !isReadOnly;
+        applyReadOnlyState();
+        int msgRes = isReadOnly ? R.string.vcode_read_only_enabled : R.string.vcode_read_only_disabled;
+        Toast.makeText(this, msgRes, Toast.LENGTH_SHORT).show();
+    }
+
     private void applyReadOnlyState() {
         CodeEditText codeEditText = getActiveCodeEditor();
         if (codeEditText != null) {
             codeEditText.setFocusable(!isReadOnly);
             codeEditText.setFocusableInTouchMode(!isReadOnly);
             codeEditText.setCursorVisible(!isReadOnly);
+            if (!isReadOnly) {
+                codeEditText.requestFocus();
+            } else {
+                codeEditText.clearFocus();
+                UiUtils.hideKeyboard(this);
+            }
         }
     }
 
@@ -882,11 +1101,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     viewModel.notifyFileDirtyStatusChanged();
                     viewModel.triggerAutoSave();
 
-                    codeEditText.setText(formattedCode);
-                    // Restore cursor to its pre-format position so Android's cursor-visibility
-                    // logic scrolls back to the right place instead of jumping to the top.
-                    int safeCursor = Math.min(originalCursor, formattedCode.length());
-                    codeEditText.setSelection(safeCursor);
+                    codeEditText.formatText(formattedCode);
                     Toast.makeText(this, R.string.vcode_formatted_successfully, Toast.LENGTH_SHORT).show();
                 } else {
                     Toast.makeText(this, R.string.vcode_code_is_already_formatted, Toast.LENGTH_SHORT).show();

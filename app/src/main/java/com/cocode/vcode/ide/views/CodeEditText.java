@@ -1,6 +1,7 @@
 package com.cocode.vcode.ide.views;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -28,6 +29,9 @@ import androidx.core.view.GestureDetectorCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.keybinding.KeyCommand;
+import com.cocode.vcode.ide.core.keybinding.KeybindingManager;
+import com.cocode.vcode.ide.ui.editor.helper.EditorCommentHelper;
 import com.cocode.vcode.ide.core.editor.highlight.GradientPreview;
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
 import com.cocode.vcode.ide.core.editor.indent.BracketMatcher;
@@ -1165,47 +1169,124 @@ public class CodeEditText extends View {
             }
         }
 
-        // DEL key → backspace (delete char before cursor)
-        if (keyCode == KeyEvent.KEYCODE_DEL) {
-            performBackspace();
+        // 1. Dispatch configured shortcuts through KeybindingManager
+        KeybindingManager km = KeybindingManager.getInstance(getContext());
+        KeyCommand cmd = km.findCommand(event, KeyCommand.Scope.EDITOR);
+        if (cmd != null && executeEditorCommand(cmd)) {
             return true;
         }
 
-        // ENTER key → newline with auto-indent
-        if (keyCode == KeyEvent.KEYCODE_ENTER) {
-            performInsertText();
+        // 1a. Fallback for Ctrl+Shift+Z / Cmd+Shift+Z (universal Redo alias)
+        if (keyCode == KeyEvent.KEYCODE_Z && (event.isCtrlPressed() || event.isMetaPressed()) && event.isShiftPressed()) {
+            redo();
             return true;
         }
 
-        // Tab key → insert spaces
-        if (keyCode == KeyEvent.KEYCODE_TAB) {
-            int start = getSelectionStart();
-            int end = getSelectionEnd();
-            String spaces = buildTabSpaces();
-            ContentPosition startPos = content.positionAt(start);
-            ContentPosition endPos = content.positionAt(end);
-            ContentPosition selAnchorBefore = selectionAnchor;
-            ContentPosition beforeCursor = cursor;
-            String deleted;
-            try {
-                deleted = content.getSubstring(start, end);
-            } catch (Exception e) {
-                deleted = "";
+        // 1b. If it's a global command and arrived directly at CodeEditText (e.g. via IME sendKeyEvent),
+        // forward it to the host Activity
+        if (cmd == null && (event.isCtrlPressed() || event.isMetaPressed() || event.isAltPressed()
+                || (keyCode >= KeyEvent.KEYCODE_F1 && keyCode <= KeyEvent.KEYCODE_F12))) {
+            KeyCommand globalCmd = km.findCommand(event, KeyCommand.Scope.GLOBAL);
+            if (globalCmd != null && getContext() instanceof Activity) {
+                if (((Activity) getContext()).dispatchKeyEvent(event)) {
+                    return true;
+                }
             }
-            content.replace(startPos.line, startPos.column, endPos.line, endPos.column, spaces);
-            ContentPosition newCursor = content.positionAt(start + spaces.length());
-            if (!deleted.isEmpty()) {
-                undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
-                        deleted, spaces, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(newCursor, null));
-            } else {
-                undoStack.recordInsert(startPos.line, startPos.column, spaces,
-                        snapshotAt(startPos, null), snapshotAt(newCursor, null));
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_ESCAPE) {
+            if (autoCompletePopup != null && autoCompletePopup.isShowing()) {
+                autoCompletePopup.dismiss();
+                return true;
             }
-            cursor = newCursor;
-            selectionAnchor = null;
-            invalidate();
-            scheduleHighlight();
-            return true;
+            if (hasSelection()) {
+                collapseSelection();
+                return true;
+            }
+        }
+
+        boolean isShift = event.isShiftPressed();
+        boolean isCtrl = event.isCtrlPressed() || event.isMetaPressed();
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (isCtrl) {
+                    moveCursorWord(false, isShift);
+                } else {
+                    moveCursorHorizontal(false, isShift);
+                }
+                return true;
+
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (isCtrl) {
+                    moveCursorWord(true, isShift);
+                } else {
+                    moveCursorHorizontal(true, isShift);
+                }
+                return true;
+
+            case KeyEvent.KEYCODE_DPAD_UP:
+                moveCursorVertical(true, isShift);
+                return true;
+
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                moveCursorVertical(false, isShift);
+                return true;
+
+            case KeyEvent.KEYCODE_MOVE_HOME:
+                if (isCtrl) {
+                    moveCursorDocumentBoundary(true, isShift);
+                } else {
+                    moveCursorLineBoundary(true, isShift);
+                }
+                return true;
+
+            case KeyEvent.KEYCODE_MOVE_END:
+                if (isCtrl) {
+                    moveCursorDocumentBoundary(false, isShift);
+                } else {
+                    moveCursorLineBoundary(false, isShift);
+                }
+                return true;
+
+            case KeyEvent.KEYCODE_PAGE_UP:
+                moveCursorPage(true, isShift);
+                return true;
+
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+                moveCursorPage(false, isShift);
+                return true;
+
+            case KeyEvent.KEYCODE_DEL:
+                if (isCtrl) {
+                    deleteWord(false);
+                    return true;
+                }
+                performBackspace();
+                return true;
+
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+                if (isCtrl) {
+                    deleteWord(true);
+                    return true;
+                }
+                performForwardDelete();
+                return true;
+
+            case KeyEvent.KEYCODE_ENTER:
+                performInsertText();
+                return true;
+
+            case KeyEvent.KEYCODE_TAB:
+                if (isCtrl) {
+                    return false;
+                }
+                if (isShift) {
+                    outdent();
+                } else {
+                    indent();
+                }
+                return true;
         }
 
         return super.onKeyDown(keyCode, event);
@@ -1296,10 +1377,902 @@ public class CodeEditText extends View {
         selectionAnchor = null;
         cursorVisible = true;
         scheduleBlink();
+        post(this::ensureCursorVisible);
         invalidate();
         scheduleHighlight();
-        mainHandler.removeCallbacks(bracketMatchRunnable);
-        mainHandler.postDelayed(bracketMatchRunnable, 150);
+        scheduleAutoComplete();
+    }
+
+    /**
+     * Performs a Forward Delete (Delete key) operation from the hardware keyboard.
+     */
+    void performForwardDelete() {
+        if (hasSelection()) {
+            int start = getSelectionStart();
+            int end = getSelectionEnd();
+            if (start < end) {
+                ContentPosition startPos = content.positionAt(start);
+                ContentPosition endPos = content.positionAt(end);
+                ContentPosition selAnchorBefore = selectionAnchor;
+                ContentPosition beforeCursor = cursor;
+                String deleted;
+                try {
+                    deleted = content.getSubstring(start, end);
+                } catch (Exception e) {
+                    deleted = "";
+                }
+                content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
+                undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
+                        deleted, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(startPos, null));
+                cursor = startPos;
+                selectionAnchor = null;
+                cursorVisible = true;
+                scheduleBlink();
+                post(this::ensureCursorVisible);
+                invalidate();
+                scheduleHighlight();
+                notifySelectionChanged();
+                return;
+            }
+            selectionAnchor = null;
+        }
+
+        int cursorFlat = content.flatOffset(cursor);
+        int total = content.totalLength();
+        if (cursorFlat >= total) return;
+
+        ContentPosition endPos = content.positionAt(cursorFlat + 1);
+        String deleted;
+        if (cursor.column < content.lineLength(cursor.line)) {
+            deleted = String.valueOf(content.charAt(cursor.line, cursor.column));
+        } else {
+            deleted = "\n";
+        }
+        ContentPosition fixedCursor = cursor;
+        content.delete(fixedCursor.line, fixedCursor.column, endPos.line, endPos.column);
+        undoStack.recordDelete(fixedCursor.line, fixedCursor.column, endPos.line, endPos.column,
+                deleted, snapshotAt(fixedCursor, null), snapshotAt(fixedCursor, null));
+        cursorVisible = true;
+        scheduleBlink();
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        scheduleAutoComplete();
+    }
+
+    /**
+     * Sets the caret position and updates the selection anchor if selecting.
+     */
+    public void setCursorPosition(int line, int col, boolean select) {
+        line = Math.max(0, Math.min(line, content.lineCount() - 1));
+        col = Math.max(0, Math.min(col, content.lineLength(line)));
+        ContentPosition newPos = new ContentPosition(line, col);
+
+        if (select) {
+            if (selectionAnchor == null) {
+                selectionAnchor = cursor;
+            }
+            cursor = newPos;
+        } else {
+            selectionAnchor = null;
+            cursor = newPos;
+        }
+
+        cursorVisible = true;
+        scheduleBlink();
+        post(this::ensureCursorVisible);
+        invalidate();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Moves caret horizontally left or right by 1 character, wrapping lines if needed.
+     */
+    public void moveCursorHorizontal(boolean right, boolean select) {
+        if (!select && hasSelection()) {
+            cursor = right ? ContentPosition.max(cursor, selectionAnchor)
+                           : ContentPosition.min(cursor, selectionAnchor);
+            selectionAnchor = null;
+            cursorVisible = true;
+            scheduleBlink();
+            post(this::ensureCursorVisible);
+            invalidate();
+            notifySelectionChanged();
+            return;
+        }
+
+        if (right) {
+            if (cursor.column < content.lineLength(cursor.line)) {
+                setCursorPosition(cursor.line, cursor.column + 1, select);
+            } else if (cursor.line < content.lineCount() - 1) {
+                setCursorPosition(cursor.line + 1, 0, select);
+            }
+        } else {
+            if (cursor.column > 0) {
+                setCursorPosition(cursor.line, cursor.column - 1, select);
+            } else if (cursor.line > 0) {
+                setCursorPosition(cursor.line - 1, content.lineLength(cursor.line - 1), select);
+            }
+        }
+    }
+
+    /**
+     * Moves caret vertically up or down by 1 visual row, preserving column position where possible.
+     */
+    public void moveCursorVertical(boolean up, boolean select) {
+        if (!select && hasSelection()) {
+            cursor = up ? ContentPosition.min(cursor, selectionAnchor)
+                        : ContentPosition.max(cursor, selectionAnchor);
+            selectionAnchor = null;
+            cursorVisible = true;
+            scheduleBlink();
+            post(this::ensureCursorVisible);
+            invalidate();
+            notifySelectionChanged();
+            return;
+        }
+
+        if (!wordWrap) {
+            int targetLine = up ? cursor.line - 1 : cursor.line + 1;
+            if (targetLine >= 0 && targetLine < content.lineCount()) {
+                int targetCol = Math.min(cursor.column, content.lineLength(targetLine));
+                setCursorPosition(targetLine, targetCol, select);
+            }
+        } else {
+            int curVisRow = absoluteVisualRow(cursor.line, cursor.column);
+            int targetVisRow = up ? curVisRow - 1 : curVisRow + 1;
+            if (targetVisRow >= 0 && targetVisRow < totalVisualRows) {
+                int targetLine = visualRowToLogicalLine(targetVisRow);
+                int targetSubRow = targetVisRow - visualRowOf(targetLine);
+                int colOffset = getSubRowStart(targetLine, targetSubRow);
+                int colEnd = getSubRowEnd(targetLine, targetSubRow);
+                int subRowLen = Math.max(0, colEnd - colOffset);
+                int colInSub = colInSubRow(cursor.line, cursor.column);
+                int targetCol = colOffset + Math.min(colInSub, subRowLen);
+                setCursorPosition(targetLine, targetCol, select);
+            }
+        }
+    }
+
+    /**
+     * Finds the nearest word boundary backward or forward from the given position.
+     */
+    private ContentPosition findWordBoundary(ContentPosition from, boolean forward) {
+        int line = from.line;
+        int col = from.column;
+        int lineLen = content.lineLength(line);
+
+        if (forward) {
+            if (col >= lineLen) {
+                if (line < content.lineCount() - 1) {
+                    return new ContentPosition(line + 1, 0);
+                }
+                return from;
+            }
+
+            while (col < lineLen && Character.isWhitespace(content.charAt(line, col))) {
+                col++;
+            }
+            if (col >= lineLen) {
+                return new ContentPosition(line, lineLen);
+            }
+
+            boolean isWord = isWordChar(content.charAt(line, col));
+            while (col < lineLen) {
+                char ch = content.charAt(line, col);
+                if (Character.isWhitespace(ch)) break;
+                if (isWordChar(ch) != isWord) break;
+                col++;
+            }
+            return new ContentPosition(line, col);
+        } else {
+            if (col <= 0) {
+                if (line > 0) {
+                    return new ContentPosition(line - 1, content.lineLength(line - 1));
+                }
+                return from;
+            }
+
+            while (col > 0 && Character.isWhitespace(content.charAt(line, col - 1))) {
+                col--;
+            }
+            if (col <= 0) {
+                return new ContentPosition(line, 0);
+            }
+
+            boolean isWord = isWordChar(content.charAt(line, col - 1));
+            while (col > 0) {
+                char ch = content.charAt(line, col - 1);
+                if (Character.isWhitespace(ch)) break;
+                if (isWordChar(ch) != isWord) break;
+                col--;
+            }
+            return new ContentPosition(line, col);
+        }
+    }
+
+    /**
+     * Moves caret to the nearest word boundary backward or forward.
+     */
+    public void moveCursorWord(boolean forward, boolean select) {
+        if (!select && hasSelection()) {
+            cursor = forward ? ContentPosition.max(cursor, selectionAnchor)
+                             : ContentPosition.min(cursor, selectionAnchor);
+            selectionAnchor = null;
+            cursorVisible = true;
+            scheduleBlink();
+            post(this::ensureCursorVisible);
+            invalidate();
+            notifySelectionChanged();
+            return;
+        }
+
+        ContentPosition target = findWordBoundary(cursor, forward);
+        setCursorPosition(target.line, target.column, select);
+    }
+
+    /**
+     * Moves caret to the start or end of the current line.
+     * Smart Home: toggles between first non-whitespace character and column 0.
+     */
+    public void moveCursorLineBoundary(boolean toStart, boolean select) {
+        if (toStart) {
+            int lineLen = content.lineLength(cursor.line);
+            int firstNonWs = 0;
+            while (firstNonWs < lineLen && Character.isWhitespace(content.charAt(cursor.line, firstNonWs))) {
+                firstNonWs++;
+            }
+            int targetCol = (cursor.column == firstNonWs) ? 0 : firstNonWs;
+            setCursorPosition(cursor.line, targetCol, select);
+        } else {
+            setCursorPosition(cursor.line, content.lineLength(cursor.line), select);
+        }
+    }
+
+    /**
+     * Moves caret to the beginning or end of the document.
+     */
+    public void moveCursorDocumentBoundary(boolean toStart, boolean select) {
+        if (toStart) {
+            setCursorPosition(0, 0, select);
+        } else {
+            int lastLine = Math.max(0, content.lineCount() - 1);
+            setCursorPosition(lastLine, content.lineLength(lastLine), select);
+        }
+    }
+
+    /**
+     * Moves caret up or down by 1 page (viewport height).
+     */
+    public void moveCursorPage(boolean up, boolean select) {
+        int linesPerPage = Math.max(1, (getHeight() - getPaddingTop() - getPaddingBottom()) / Math.max(1, lineHeightPx));
+        if (!wordWrap) {
+            int targetLine = up ? Math.max(0, cursor.line - linesPerPage)
+                                : Math.min(content.lineCount() - 1, cursor.line + linesPerPage);
+            int targetCol = Math.min(cursor.column, content.lineLength(targetLine));
+            setCursorPosition(targetLine, targetCol, select);
+        } else {
+            int curVisRow = absoluteVisualRow(cursor.line, cursor.column);
+            int targetVisRow = up ? Math.max(0, curVisRow - linesPerPage)
+                                  : Math.min(totalVisualRows - 1, curVisRow + linesPerPage);
+            int targetLine = visualRowToLogicalLine(targetVisRow);
+            int targetSubRow = targetVisRow - visualRowOf(targetLine);
+            int colOffset = getSubRowStart(targetLine, targetSubRow);
+            int colEnd = getSubRowEnd(targetLine, targetSubRow);
+            int subRowLen = Math.max(0, colEnd - colOffset);
+            int colInSub = colInSubRow(cursor.line, cursor.column);
+            int targetCol = colOffset + Math.min(colInSub, subRowLen);
+            setCursorPosition(targetLine, targetCol, select);
+        }
+    }
+
+    /**
+     * Deletes the word before (forward=false) or after (forward=true) the caret.
+     */
+    public void deleteWord(boolean forward) {
+        if (hasSelection()) {
+            performForwardDelete();
+            return;
+        }
+
+        ContentPosition target = findWordBoundary(cursor, forward);
+        if (target.isSameAs(cursor)) return;
+
+        ContentPosition startPos = forward ? cursor : target;
+        ContentPosition endPos = forward ? target : cursor;
+
+        int startFlat = content.flatOffset(startPos);
+        int endFlat = content.flatOffset(endPos);
+        if (startFlat >= endFlat) return;
+
+        String deleted;
+        try {
+            deleted = content.getSubstring(startFlat, endFlat);
+        } catch (Exception e) {
+            deleted = "";
+        }
+
+        ContentPosition beforeCursor = cursor;
+        content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
+        undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
+                deleted, snapshotAt(beforeCursor, null), snapshotAt(startPos, null));
+
+        cursor = startPos;
+        selectionAnchor = null;
+        cursorVisible = true;
+        if (!isFocused()) {
+            requestFocus();
+        }
+        scheduleBlink();
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Executes an editor-level KeyCommand mapped to text manipulation.
+     * Returns true if handled, false otherwise.
+     */
+    public boolean executeEditorCommand(@NonNull KeyCommand cmd) {
+        switch (cmd) {
+            case UNDO:
+                undo();
+                return true;
+            case REDO:
+                redo();
+                return true;
+            case SELECT_ALL:
+                selectAll();
+                return true;
+            case CUT:
+                executeCut();
+                return true;
+            case COPY:
+                executeCopy();
+                return true;
+            case PASTE:
+                paste();
+                return true;
+            case DUPLICATE_LINE:
+                duplicateLine();
+                return true;
+            case DELETE_LINE:
+                deleteLine();
+                return true;
+            case MOVE_LINE_UP:
+                moveLine(true);
+                return true;
+            case MOVE_LINE_DOWN:
+                moveLine(false);
+                return true;
+            case COPY_LINE_UP:
+                copyLine(true);
+                return true;
+            case COPY_LINE_DOWN:
+                copyLine(false);
+                return true;
+            case TOGGLE_COMMENT:
+                toggleComment();
+                return true;
+            case INDENT:
+                indent();
+                return true;
+            case OUTDENT:
+                outdent();
+                return true;
+            case INSERT_LINE_BELOW:
+                insertLineBelow();
+                return true;
+            case INSERT_LINE_ABOVE:
+                insertLineAbove();
+                return true;
+            case TRIGGER_AUTOCOMPLETE:
+                triggerAutoComplete(true);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Copies active selection to clipboard, or entire current line if no selection.
+     */
+    public void executeCopy() {
+        if (hasSelection()) {
+            copySelection();
+        } else {
+            copyCurrentLine();
+        }
+    }
+
+    private void copyCurrentLine() {
+        int line = cursor.line;
+        if (line < 0 || line >= content.lineCount()) return;
+        String lineText = content.getLineCopy(line) + "\n";
+        ClipboardManager clipboard = (ClipboardManager) getContext()
+                .getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("code", lineText));
+        }
+    }
+
+    /**
+     * Cuts active selection to clipboard, or entire current line if no selection.
+     */
+    public void executeCut() {
+        if (hasSelection()) {
+            cutSelection();
+        } else {
+            cutCurrentLine();
+        }
+    }
+
+    private void cutCurrentLine() {
+        copyCurrentLine();
+        deleteLine();
+    }
+
+    /**
+     * Duplicates current selection or current line.
+     */
+    public void duplicateLine() {
+        if (hasSelection()) {
+            int start = getSelectionStart();
+            int end = getSelectionEnd();
+            if (start < end) {
+                String selected;
+                try {
+                    selected = content.getSubstring(start, end);
+                } catch (Exception e) {
+                    selected = "";
+                }
+                if (!selected.isEmpty()) {
+                    ContentPosition endPos = content.positionAt(end);
+                    UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+                    content.insert(endPos.line, endPos.column, selected);
+                    ContentPosition newEndPos = UndoStack.advancePosition(endPos.line, endPos.column, selected);
+                    selectionAnchor = endPos;
+                    cursor = newEndPos;
+                    UndoStack.EditorSnapshot after = snapshotAt(cursor, selectionAnchor);
+                    undoStack.recordInsert(endPos.line, endPos.column, selected, before, after);
+                    undoStack.commitPending();
+                    invalidate();
+                    scheduleHighlight();
+                    notifySelectionChanged();
+                    return;
+                }
+            }
+        }
+
+        int line = cursor.line;
+        if (line < 0 || line >= content.lineCount()) return;
+        String lineText = content.getLineCopy(line);
+        int col = cursor.column;
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, null);
+
+        int lineLen = content.lineLength(line);
+        content.insert(line, lineLen, "\n" + lineText);
+        ContentPosition newCursor = new ContentPosition(line + 1, Math.min(col, lineText.length()));
+        UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+        undoStack.recordInsert(line, lineLen, "\n" + lineText, before, after);
+        undoStack.commitPending();
+
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        scheduleBlink();
+        if (!isFocused()) {
+            requestFocus();
+        }
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Deletes the entire current line with atomic undo.
+     */
+    public void deleteLine() {
+        int line = cursor.line;
+        int lineCount = content.lineCount();
+        if (lineCount == 0) return;
+
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+        String deletedText;
+        ContentPosition newCursor;
+
+        if (lineCount == 1) {
+            int len = content.lineLength(0);
+            if (len == 0) return;
+            deletedText = content.getLineCopy(0);
+            content.delete(0, 0, 0, len);
+            newCursor = new ContentPosition(0, 0);
+            UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+            undoStack.recordDelete(0, 0, 0, len, deletedText, before, after);
+        } else if (line < lineCount - 1) {
+            deletedText = content.getLineCopy(line) + "\n";
+            content.delete(line, 0, line + 1, 0);
+            int nextLen = content.lineLength(line);
+            newCursor = new ContentPosition(line, Math.min(cursor.column, nextLen));
+            UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+            undoStack.recordDelete(line, 0, line + 1, 0, deletedText, before, after);
+        } else {
+            int prevLen = content.lineLength(line - 1);
+            int curLen = content.lineLength(line);
+            deletedText = "\n" + content.getLineCopy(line);
+            content.delete(line - 1, prevLen, line, curLen);
+            newCursor = new ContentPosition(line - 1, Math.min(cursor.column, prevLen));
+            UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+            undoStack.recordDelete(line - 1, prevLen, line, curLen, deletedText, before, after);
+        }
+
+        undoStack.commitPending();
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        scheduleBlink();
+        if (!isFocused()) {
+            requestFocus();
+        }
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Moves the current line or selected lines up or down.
+     */
+    public void moveLine(boolean up) {
+        int startLine, endLine;
+        if (hasSelection()) {
+            int s = getSelectionStart();
+            int e = getSelectionEnd();
+            startLine = content.positionAt(s).line;
+            ContentPosition endPos = content.positionAt(e);
+            endLine = (endPos.column == 0 && endPos.line > startLine) ? endPos.line - 1 : endPos.line;
+        } else {
+            startLine = cursor.line;
+            endLine = cursor.line;
+        }
+
+        if (up) {
+            if (startLine <= 0) return;
+            undoStack.beginAtomicGroup();
+            try {
+                String prevLineText = content.getLineCopy(startLine - 1);
+                UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+
+                content.delete(startLine - 1, 0, startLine, 0);
+                undoStack.recordDelete(startLine - 1, 0, startLine, 0, prevLineText + "\n", before, null);
+
+                int targetLine = endLine - 1;
+                int targetLineLen = content.lineLength(targetLine);
+                content.insert(targetLine, targetLineLen, "\n" + prevLineText);
+
+                int cursorCol = cursor.column;
+                cursor = new ContentPosition(cursor.line - 1, Math.min(cursorCol, content.lineLength(cursor.line - 1)));
+                if (selectionAnchor != null) {
+                    selectionAnchor = new ContentPosition(selectionAnchor.line - 1,
+                            Math.min(selectionAnchor.column, content.lineLength(selectionAnchor.line - 1)));
+                }
+                UndoStack.EditorSnapshot after = snapshotAt(cursor, selectionAnchor);
+                undoStack.recordInsert(targetLine, targetLineLen, "\n" + prevLineText, null, after);
+            } finally {
+                undoStack.endAtomicGroup();
+            }
+        } else {
+            int lineCount = content.lineCount();
+            if (endLine >= lineCount - 1) return;
+            undoStack.beginAtomicGroup();
+            try {
+                String nextLineText = content.getLineCopy(endLine + 1);
+                UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+
+                if (endLine + 1 == lineCount - 1) {
+                    int lenBefore = content.lineLength(endLine);
+                    content.delete(endLine, lenBefore, endLine + 1, content.lineLength(endLine + 1));
+                    undoStack.recordDelete(endLine, lenBefore, endLine + 1, content.lineLength(endLine + 1),
+                            "\n" + nextLineText, before, null);
+                } else {
+                    content.delete(endLine + 1, 0, endLine + 2, 0);
+                    undoStack.recordDelete(endLine + 1, 0, endLine + 2, 0,
+                            nextLineText + "\n", before, null);
+                }
+                content.insert(startLine, 0, nextLineText + "\n");
+
+                int cursorCol = cursor.column;
+                cursor = new ContentPosition(cursor.line + 1, Math.min(cursorCol, content.lineLength(cursor.line + 1)));
+                if (selectionAnchor != null) {
+                    selectionAnchor = new ContentPosition(selectionAnchor.line + 1,
+                            Math.min(selectionAnchor.column, content.lineLength(selectionAnchor.line + 1)));
+                }
+                UndoStack.EditorSnapshot after = snapshotAt(cursor, selectionAnchor);
+                undoStack.recordInsert(startLine, 0, nextLineText + "\n", null, after);
+            } finally {
+                undoStack.endAtomicGroup();
+            }
+        }
+
+        cursorVisible = true;
+        scheduleBlink();
+        if (!isFocused()) {
+            requestFocus();
+        }
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Copies the current line or selected lines above or below.
+     */
+    public void copyLine(boolean up) {
+        int startLine, endLine;
+        if (hasSelection()) {
+            int s = getSelectionStart();
+            int e = getSelectionEnd();
+            startLine = content.positionAt(s).line;
+            ContentPosition endPos = content.positionAt(e);
+            endLine = (endPos.column == 0 && endPos.line > startLine) ? endPos.line - 1 : endPos.line;
+        } else {
+            startLine = cursor.line;
+            endLine = cursor.line;
+        }
+
+        StringBuilder block = new StringBuilder();
+        for (int l = startLine; l <= endLine; l++) {
+            if (l > startLine) block.append('\n');
+            block.append(content.getLineCopy(l));
+        }
+        String blockText = block.toString();
+        int numLines = endLine - startLine + 1;
+
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+        undoStack.beginAtomicGroup();
+        try {
+            if (up) {
+                content.insert(startLine, 0, blockText + "\n");
+                ContentPosition newCursor = new ContentPosition(cursor.line, cursor.column);
+                UndoStack.EditorSnapshot after = snapshotAt(newCursor, selectionAnchor);
+                undoStack.recordInsert(startLine, 0, blockText + "\n", before, after);
+            } else {
+                ContentPosition newCursor = new ContentPosition(cursor.line + numLines, cursor.column);
+                ContentPosition newAnchor = selectionAnchor != null
+                        ? new ContentPosition(selectionAnchor.line + numLines, selectionAnchor.column) : null;
+                UndoStack.EditorSnapshot after = snapshotAt(newCursor, newAnchor);
+                if (endLine == content.lineCount() - 1) {
+                    int targetCol = content.lineLength(endLine);
+                    content.insert(endLine, targetCol, "\n" + blockText);
+                    undoStack.recordInsert(endLine, targetCol, "\n" + blockText, before, after);
+                } else {
+                    content.insert(endLine + 1, 0, blockText + "\n");
+                    undoStack.recordInsert(endLine + 1, 0, blockText + "\n", before, after);
+                }
+                cursor = newCursor;
+                selectionAnchor = newAnchor;
+            }
+        } finally {
+            undoStack.endAtomicGroup();
+        }
+
+        cursorVisible = true;
+        scheduleBlink();
+        if (!isFocused()) {
+            requestFocus();
+        }
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Inserts a newline below the current line preserving indentation.
+     */
+    public void insertLineBelow() {
+        int line = cursor.line;
+        int lineLen = content.lineLength(line);
+        String lineText = content.getLineCopy(line);
+        String indent = getLeadingWhitespace(lineText);
+
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+        String toInsert = "\n" + indent;
+        content.insert(line, lineLen, toInsert);
+        ContentPosition newCursor = new ContentPosition(line + 1, indent.length());
+        UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+        undoStack.recordInsert(line, lineLen, toInsert, before, after);
+        undoStack.commitPending();
+
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        scheduleBlink();
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Inserts a newline above the current line preserving indentation.
+     */
+    public void insertLineAbove() {
+        int line = cursor.line;
+        String lineText = content.getLineCopy(line);
+        String indent = getLeadingWhitespace(lineText);
+
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+        String toInsert = indent + "\n";
+        content.insert(line, 0, toInsert);
+        ContentPosition newCursor = new ContentPosition(line, indent.length());
+        UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+        undoStack.recordInsert(line, 0, toInsert, before, after);
+        undoStack.commitPending();
+
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        scheduleBlink();
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Indents current line or selected lines.
+     */
+    public void indent() {
+        if (hasSelection()) {
+            int s = getSelectionStart();
+            int e = getSelectionEnd();
+            ContentPosition startPos = content.positionAt(s);
+            ContentPosition endPos = content.positionAt(e);
+            int startLine = startPos.line;
+            int endLine = (endPos.column == 0 && endPos.line > startLine) ? endPos.line - 1 : endPos.line;
+
+            String spaces = buildTabSpaces();
+            UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+            ContentPosition newCursor = new ContentPosition(cursor.line, cursor.column + spaces.length());
+            ContentPosition newAnchor = selectionAnchor != null
+                    ? new ContentPosition(selectionAnchor.line, selectionAnchor.column + spaces.length()) : null;
+            UndoStack.EditorSnapshot after = snapshotAt(newCursor, newAnchor);
+            undoStack.beginAtomicGroup();
+            try {
+                for (int l = startLine; l <= endLine; l++) {
+                    content.insert(l, 0, spaces);
+                    undoStack.recordInsert(l, 0, spaces, before, after);
+                }
+                cursor = newCursor;
+                selectionAnchor = newAnchor;
+            } finally {
+                undoStack.endAtomicGroup();
+            }
+            invalidate();
+            scheduleHighlight();
+            notifySelectionChanged();
+        } else {
+            int start = getSelectionStart();
+            String spaces = buildTabSpaces();
+            ContentPosition startPos = content.positionAt(start);
+            UndoStack.EditorSnapshot before = snapshotAt(cursor, null);
+            content.insert(startPos.line, startPos.column, spaces);
+            ContentPosition newCursor = content.positionAt(start + spaces.length());
+            UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+            undoStack.recordInsert(startPos.line, startPos.column, spaces, before, after);
+            cursor = newCursor;
+            selectionAnchor = null;
+            cursorVisible = true;
+            scheduleBlink();
+            post(this::ensureCursorVisible);
+            invalidate();
+            scheduleHighlight();
+        }
+    }
+
+    /**
+     * Outdents current line or selected lines.
+     */
+    public void outdent() {
+        int startLine, endLine;
+        if (hasSelection()) {
+            int s = getSelectionStart();
+            int e = getSelectionEnd();
+            ContentPosition startPos = content.positionAt(s);
+            ContentPosition endPos = content.positionAt(e);
+            startLine = startPos.line;
+            endLine = (endPos.column == 0 && endPos.line > startLine) ? endPos.line - 1 : endPos.line;
+        } else {
+            startLine = cursor.line;
+            endLine = cursor.line;
+        }
+
+        int tabSize = tabSpaces != null ? tabSpaces.length() : 4;
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+        ContentPosition newCursor = new ContentPosition(cursor.line, Math.max(0, cursor.column - tabSize));
+        ContentPosition newAnchor = selectionAnchor != null
+                ? new ContentPosition(selectionAnchor.line, Math.max(0, selectionAnchor.column - tabSize)) : null;
+        UndoStack.EditorSnapshot after = snapshotAt(newCursor, newAnchor);
+        boolean modified = false;
+
+        undoStack.beginAtomicGroup();
+        try {
+            for (int l = startLine; l <= endLine; l++) {
+                int lineLen = content.lineLength(l);
+                if (lineLen == 0) continue;
+                int removeChars = 0;
+                if (content.charAt(l, 0) == '\t') {
+                    removeChars = 1;
+                } else {
+                    while (removeChars < tabSize && removeChars < lineLen && content.charAt(l, removeChars) == ' ') {
+                        removeChars++;
+                    }
+                }
+                if (removeChars > 0) {
+                    String removed = content.getLineCopy(l).substring(0, removeChars);
+                    content.delete(l, 0, l, removeChars);
+                    undoStack.recordDelete(l, 0, l, removeChars, removed, before, after);
+                    modified = true;
+                }
+            }
+            if (modified) {
+                cursor = newCursor;
+                selectionAnchor = newAnchor;
+            }
+        } finally {
+            undoStack.endAtomicGroup();
+        }
+
+        if (modified) {
+            cursorVisible = true;
+            scheduleBlink();
+            post(this::ensureCursorVisible);
+            invalidate();
+            scheduleHighlight();
+            notifySelectionChanged();
+        }
+    }
+
+    /**
+     * Toggles comment on the current line or selection.
+     */
+    public void toggleComment() {
+        int startLine, endLine;
+        if (hasSelection()) {
+            int s = getSelectionStart();
+            int e = getSelectionEnd();
+            startLine = content.positionAt(s).line;
+            ContentPosition endPos = content.positionAt(e);
+            endLine = (endPos.column == 0 && endPos.line > startLine) ? endPos.line - 1 : endPos.line;
+        } else {
+            startLine = cursor.line;
+            endLine = cursor.line;
+        }
+
+        EditorCommentHelper.CommentResult result = EditorCommentHelper.toggleComment(
+                content, undoStack, startLine, endLine, fileType, cursor, selectionAnchor);
+
+        cursor = result.newCursor;
+        selectionAnchor = result.newSelectionAnchor;
+        cursorVisible = true;
+        scheduleBlink();
+        post(this::ensureCursorVisible);
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    private static String getLeadingWhitespace(String s) {
+        if (s == null) return "";
+        int i = 0;
+        while (i < s.length() && (s.charAt(i) == ' ' || s.charAt(i) == '\t')) {
+            i++;
+        }
+        return s.substring(0, i);
     }
 
     // Hardware-keyboard helpers (called from onKeyDown)
@@ -1551,6 +2524,7 @@ public class CodeEditText extends View {
         content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
         undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
                 deleted, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(startPos, null));
+        undoStack.commitPending();
         cursor = startPos;
         selectionAnchor = null;
         invalidate();
@@ -1633,6 +2607,7 @@ public class CodeEditText extends View {
             undoStack.recordInsert(insertStart.line, insertStart.column, pasteText,
                     snapshotAt(insertStart, null), snapshotAt(newCursor, null));
         }
+        undoStack.commitPending();
         cursor = newCursor;
         selectionAnchor = null;
         invalidate();
@@ -1741,13 +2716,36 @@ public class CodeEditText extends View {
         return isSettingText;
     }
 
+    private float fontSizeSp = 14f;
+
     public void setTextSize(float sizeSp) {
+        this.fontSizeSp = sizeSp;
         textPaint.setTextSize(spToPx(sizeSp, getContext()));
         Paint.FontMetricsInt fm = textPaint.getFontMetricsInt();
         lineHeightPx = fm.descent - fm.ascent + 2;
         charWidth = textPaint.measureText("m");
         requestLayout();
         invalidate();
+    }
+
+    public float getFontSizeSp() {
+        return fontSizeSp;
+    }
+
+    public void zoomIn() {
+        if (fontSizeSp < 36f) {
+            setTextSize(Math.min(36f, fontSizeSp + 2f));
+        }
+    }
+
+    public void zoomOut() {
+        if (fontSizeSp > 8f) {
+            setTextSize(Math.max(8f, fontSizeSp - 2f));
+        }
+    }
+
+    public void zoomReset() {
+        setTextSize(14f);
     }
 
     public Typeface getTypeface() {
@@ -1820,12 +2818,78 @@ public class CodeEditText extends View {
     }
 
     public void replaceRange(int absoluteStart, int absoluteEnd, String replacement) {
-        ContentPosition start = content.positionAt(absoluteStart);
-        ContentPosition end = content.positionAt(absoluteEnd);
-        content.replace(start.line, start.column, end.line, end.column, replacement);
-        cursor = content.positionAt(absoluteStart + (replacement != null ? replacement.length() : 0));
+        int total = content.totalLength();
+        int safeStart = Math.max(0, Math.min(absoluteStart, total));
+        int safeEnd = Math.max(safeStart, Math.min(absoluteEnd, total));
+        String rep = replacement != null ? replacement : "";
+
+        String deletedText;
+        try {
+            deletedText = safeEnd > safeStart ? content.getSubstring(safeStart, safeEnd) : "";
+        } catch (Exception e) {
+            deletedText = "";
+        }
+
+        ContentPosition startPos = content.positionAt(safeStart);
+        ContentPosition endPos = content.positionAt(safeEnd);
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+
+        content.replace(startPos.line, startPos.column, endPos.line, endPos.column, rep);
+
+        ContentPosition newCursor = content.positionAt(safeStart + rep.length());
+        cursor = newCursor;
         selectionAnchor = null;
+        longestLineLength = content.longestLineLength();
+        UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+
+        undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
+                deletedText, rep, before, after);
+
+        cursorVisible = true;
+        scheduleBlink();
         invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+    }
+
+    /**
+     * Applies formatted code to the editor as an atomic undoable operation,
+     * preserving cursor position (clamped) and all prior undo/redo history.
+     */
+    public void formatText(String formattedText) {
+        if (formattedText == null) return;
+        String currentText = content.getText();
+        if (currentText.equals(formattedText)) return;
+
+        int originalCursorFlat = getSelectionStart();
+        UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
+
+        undoStack.beginAtomicGroup();
+        try {
+            int lineCount = content.lineCount();
+            int lastLine = lineCount > 0 ? lineCount - 1 : 0;
+            int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
+
+            content.replace(0, 0, lastLine, lastCol, formattedText);
+
+            int safeCursor = Math.min(originalCursorFlat, formattedText.length());
+            cursor = content.positionAt(safeCursor);
+            selectionAnchor = null;
+            longestLineLength = content.longestLineLength();
+            UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
+
+            undoStack.recordReplace(0, 0, lastLine, lastCol, currentText, formattedText, before, after);
+        } finally {
+            undoStack.endAtomicGroup();
+        }
+
+        cursorVisible = true;
+        scheduleBlink();
+        requestLayout();
+        invalidate();
+        scheduleHighlight();
+        notifySelectionChanged();
+        post(this::ensureCursorVisible);
     }
 
     public void setSearchDecorations(List<SearchResult> results, int activeIndex) {
@@ -2213,25 +3277,49 @@ public class CodeEditText extends View {
         return snippetTemplate.replace("\n", "\n" + baseIndent);
     }
 
+    private ContentPosition clampPosition(ContentPosition pos) {
+        if (pos == null) return ContentPosition.ZERO;
+        int lineCount = content.lineCount();
+        if (lineCount == 0) return ContentPosition.ZERO;
+        int line = Math.max(0, Math.min(pos.line, lineCount - 1));
+        int col = Math.max(0, Math.min(pos.column, content.lineLength(line)));
+        return new ContentPosition(line, col);
+    }
+
     private UndoStack.EditorSnapshot snapshotAt(ContentPosition cur, ContentPosition sel) {
         return new UndoStack.EditorSnapshot(cur, sel, getScrollX(), getScrollY());
     }
 
     public void undo() {
         undoStack.commitPending();
-        UndoStack.EditorSnapshot restored = undoStack.undo(content);
-        if (restored == null) return;
+        if (!undoStack.canUndo()) return;
         isUndoRedoActive = true;
-        cursor = restored.cursor;
-        selectionAnchor = restored.selectionAnchor;
-        longestLineLength = content.longestLineLength();
-        isUndoRedoActive = false;
+        UndoStack.EditorSnapshot restored;
+        try {
+            restored = undoStack.undo(content);
+            if (restored != null) {
+                cursor = clampPosition(restored.cursor);
+                selectionAnchor = restored.selectionAnchor != null ? clampPosition(restored.selectionAnchor) : null;
+            } else {
+                cursor = clampPosition(cursor);
+                selectionAnchor = selectionAnchor != null ? clampPosition(selectionAnchor) : null;
+            }
+            longestLineLength = content.longestLineLength();
+        } finally {
+            isUndoRedoActive = false;
+        }
+        dispatchContentChanged();
+        if (!isFocused()) {
+            requestFocus();
+        }
         requestLayout();
         invalidate();
         scheduleHighlight();
         notifySelectionChanged();
+        final int sx = restored != null ? restored.scrollX : getScrollX();
+        final int sy = restored != null ? restored.scrollY : getScrollY();
         post(() -> {
-            scrollTo(restored.scrollX, restored.scrollY);
+            scrollTo(sx, sy);
             ensureCursorVisible();
         });
     }
@@ -2239,19 +3327,34 @@ public class CodeEditText extends View {
     // Public API — snippet
 
     public void redo() {
-        UndoStack.EditorSnapshot restored = undoStack.redo(content);
-        if (restored == null) return;
+        if (!undoStack.canRedo()) return;
         isUndoRedoActive = true;
-        cursor = restored.cursor;
-        selectionAnchor = restored.selectionAnchor;
-        longestLineLength = content.longestLineLength();
-        isUndoRedoActive = false;
+        UndoStack.EditorSnapshot restored;
+        try {
+            restored = undoStack.redo(content);
+            if (restored != null) {
+                cursor = clampPosition(restored.cursor);
+                selectionAnchor = restored.selectionAnchor != null ? clampPosition(restored.selectionAnchor) : null;
+            } else {
+                cursor = clampPosition(cursor);
+                selectionAnchor = selectionAnchor != null ? clampPosition(selectionAnchor) : null;
+            }
+            longestLineLength = content.longestLineLength();
+        } finally {
+            isUndoRedoActive = false;
+        }
+        dispatchContentChanged();
+        if (!isFocused()) {
+            requestFocus();
+        }
         requestLayout();
         invalidate();
         scheduleHighlight();
         notifySelectionChanged();
+        final int sx = restored != null ? restored.scrollX : getScrollX();
+        final int sy = restored != null ? restored.scrollY : getScrollY();
         post(() -> {
-            scrollTo(restored.scrollX, restored.scrollY);
+            scrollTo(sx, sy);
             ensureCursorVisible();
         });
     }
@@ -2373,6 +3476,34 @@ public class CodeEditText extends View {
     private void scheduleAutoComplete() {
         mainHandler.removeCallbacks(autoCompleteRunnable);
         mainHandler.postDelayed(autoCompleteRunnable, AUTOCOMPLETE_DELAY_MS);
+    }
+
+    public void triggerAutoComplete(boolean force) {
+        if (autoCompleteEngine == null || lspCompletionActive) return;
+        if (force) {
+            int totalLen = content.totalLength();
+            int flatCursor = content.flatOffset(cursor);
+            if (flatCursor < 0 || flatCursor > totalLen) return;
+            String fullText = getCachedFullText();
+            final int capturedCursor = flatCursor;
+            final String capturedText = fullText;
+            ExecutorProvider.getInstance().runOnCpu(() -> {
+                try {
+                    List<CompletionItem> items = autoCompleteEngine.getSuggestions(capturedText, capturedCursor);
+                    mainHandler.post(() -> {
+                        if (content.flatOffset(cursor) != capturedCursor) return;
+                        if (items != null && !items.isEmpty()) {
+                            autoCompletePopup.show(items, CodeEditText.this, capturedCursor);
+                        } else {
+                            autoCompletePopup.dismiss();
+                        }
+                    });
+                } catch (Exception ignored) {
+                }
+            });
+        } else {
+            triggerAutoComplete();
+        }
     }
 
     private void triggerAutoComplete() {
@@ -3357,18 +4488,47 @@ public class CodeEditText extends View {
 
             switch (event.getKeyCode()) {
                 case android.view.KeyEvent.KEYCODE_DEL:
-                    handleBackspace();
+                    if (event.isCtrlPressed() || event.isMetaPressed()) {
+                        editor.deleteWord(false);
+                    } else {
+                        handleBackspace();
+                    }
                     return true;
                 case android.view.KeyEvent.KEYCODE_FORWARD_DEL:
-                    handleForwardDelete();
+                    if (event.isCtrlPressed() || event.isMetaPressed()) {
+                        editor.deleteWord(true);
+                    } else {
+                        editor.performForwardDelete();
+                    }
                     return true;
                 case android.view.KeyEvent.KEYCODE_ENTER:
+                    if (event.isCtrlPressed() || event.isMetaPressed() || event.isShiftPressed() || event.isAltPressed()) {
+                        if (editor.onKeyDown(event.getKeyCode(), event)) {
+                            return true;
+                        }
+                    }
                     commitText("\n", 1);
                     return true;
                 case android.view.KeyEvent.KEYCODE_TAB:
+                    if (event.isCtrlPressed() || event.isMetaPressed()) {
+                        if (editor.getContext() instanceof Activity) {
+                            if (((Activity) editor.getContext()).dispatchKeyEvent(event)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    if (event.isShiftPressed() || event.isAltPressed() || editor.hasSelection()) {
+                        if (editor.onKeyDown(event.getKeyCode(), event)) {
+                            return true;
+                        }
+                    }
                     commitText(editor.buildTabSpaces(), 1);
                     return true;
                 default:
+                    if (editor.onKeyDown(event.getKeyCode(), event)) {
+                        return true;
+                    }
                     return super.sendKeyEvent(event);
             }
         }

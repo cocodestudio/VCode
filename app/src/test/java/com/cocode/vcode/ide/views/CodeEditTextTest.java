@@ -380,4 +380,236 @@ public class CodeEditTextTest {
         assertEquals("p{hello}", editor.getText().toString());
         assertEquals(8, editor.getSelectionStart());
     }
+
+    @Test
+    public void testKeyboardArrowNavigationAndSelection() {
+        editor.setText("Hello\nWorld");
+        editor.setCursorPosition(0, 0, false);
+        assertEquals(0, editor.getSelectionStart());
+        assertEquals(0, editor.getSelectionEnd());
+
+        // Right arrow moves 1 char
+        editor.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
+        assertEquals(1, editor.getSelectionStart());
+
+        // Shift + Right arrow expands selection
+        KeyEvent shiftRight = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, 0, KeyEvent.META_SHIFT_ON);
+        editor.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, shiftRight);
+        assertEquals(1, editor.getSelectionStart());
+        assertEquals(2, editor.getSelectionEnd());
+        assertTrue(editor.hasSelection());
+
+        // Left arrow without shift collapses selection
+        editor.onKeyDown(KeyEvent.KEYCODE_DPAD_LEFT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT));
+        assertFalse(editor.hasSelection());
+        assertEquals(1, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testKeyboardWordNavigationAndDeletion() {
+        editor.setText("const greeting = 'hello';");
+        editor.setCursorPosition(0, 0, false);
+
+        // Ctrl + Right jumps word
+        KeyEvent ctrlRight = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, 0, KeyEvent.META_CTRL_ON);
+        editor.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, ctrlRight);
+        assertEquals(5, editor.getSelectionStart()); // after "const"
+
+        // Next word
+        editor.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, ctrlRight);
+        assertEquals(14, editor.getSelectionStart()); // after "greeting"
+
+        // Ctrl + Backspace deletes word backward
+        KeyEvent ctrlDel = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, 0, KeyEvent.META_CTRL_ON);
+        editor.onKeyDown(KeyEvent.KEYCODE_DEL, ctrlDel);
+        assertEquals("const  = 'hello';", editor.getText().toString());
+    }
+
+    @Test
+    public void testKeyboardHomeEndAndDocBoundaries() {
+        editor.setText("  line one\n  line two");
+        editor.setCursorPosition(0, 0, false);
+
+        // End key
+        editor.onKeyDown(KeyEvent.KEYCODE_MOVE_END, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END));
+        assertEquals(10, editor.getSelectionStart()); // at end of "  line one"
+
+        // Home key (smart home: jumps to first non-whitespace at index 2)
+        editor.onKeyDown(KeyEvent.KEYCODE_MOVE_HOME, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_HOME));
+        assertEquals(2, editor.getSelectionStart());
+
+        // Second Home key jumps to col 0
+        editor.onKeyDown(KeyEvent.KEYCODE_MOVE_HOME, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_HOME));
+        assertEquals(0, editor.getSelectionStart());
+
+        // Ctrl + End (document boundary end)
+        KeyEvent ctrlEnd = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END, 0, KeyEvent.META_CTRL_ON);
+        editor.onKeyDown(KeyEvent.KEYCODE_MOVE_END, ctrlEnd);
+        assertEquals(editor.getText().length(), editor.getSelectionStart());
+
+        // Ctrl + Home (document boundary start)
+        KeyEvent ctrlHome = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_HOME, 0, KeyEvent.META_CTRL_ON);
+        editor.onKeyDown(KeyEvent.KEYCODE_MOVE_HOME, ctrlHome);
+        assertEquals(0, editor.getSelectionStart());
+    }
+
+    @Test
+    public void testForwardDeleteAndCtrlForwardDelete() {
+        editor.setText("foo bar baz");
+        editor.setCursorPosition(0, 0, false);
+
+        // Forward delete 'f'
+        editor.onKeyDown(KeyEvent.KEYCODE_FORWARD_DEL, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL));
+        assertEquals("oo bar baz", editor.getText().toString());
+
+        // Ctrl + Forward delete deletes next word "oo"
+        KeyEvent ctrlForwardDel = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL, 0, KeyEvent.META_CTRL_ON);
+        editor.onKeyDown(KeyEvent.KEYCODE_FORWARD_DEL, ctrlForwardDel);
+        assertEquals(" bar baz", editor.getText().toString());
+    }
+
+    @Test
+    public void testDeleteLineAndUndo() {
+        editor.setText("line1\nline2\nline3");
+        editor.setCursorPosition(1, 2, false);
+
+        KeyEvent ctrlShiftK = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_K, 0, KeyEvent.META_CTRL_ON | KeyEvent.META_SHIFT_ON);
+        boolean handled = editor.onKeyDown(KeyEvent.KEYCODE_K, ctrlShiftK);
+        assertTrue(handled);
+        assertEquals("line1\nline3", editor.getText().toString());
+
+        KeyEvent ctrlZ = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON);
+        boolean undoHandled = editor.onKeyDown(KeyEvent.KEYCODE_Z, ctrlZ);
+        assertTrue(undoHandled);
+        assertEquals("line1\nline2\nline3", editor.getText().toString());
+
+        // Test deleting last line
+        editor.setCursorPosition(2, 2, false); // on "line3"
+        editor.onKeyDown(KeyEvent.KEYCODE_K, ctrlShiftK);
+        assertEquals("line1\nline2", editor.getText().toString());
+
+        editor.onKeyDown(KeyEvent.KEYCODE_Z, ctrlZ);
+        assertEquals("line1\nline2\nline3", editor.getText().toString());
+    }
+
+    @Test
+    public void testCtrlDeleteAndUndo() {
+        editor.setText("hello world foo bar");
+        editor.setCursorPosition(0, 6, false);
+
+        KeyEvent ctrlDel = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL, 0, KeyEvent.META_CTRL_ON);
+        boolean handled = editor.onKeyDown(KeyEvent.KEYCODE_FORWARD_DEL, ctrlDel);
+        assertTrue(handled);
+        assertEquals("hello  foo bar", editor.getText().toString());
+
+        KeyEvent ctrlZ = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON);
+        boolean undoHandled = editor.onKeyDown(KeyEvent.KEYCODE_Z, ctrlZ);
+        assertTrue(undoHandled);
+        assertEquals("hello world foo bar", editor.getText().toString());
+    }
+
+    @Test
+    public void testCtrlTabDoesNotIndent() {
+        editor.setText("line1\nline2");
+        editor.setCursorPosition(0, 0, false);
+
+        KeyEvent ctrlTab = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB, 0, KeyEvent.META_CTRL_ON);
+        boolean handled = editor.onKeyDown(KeyEvent.KEYCODE_TAB, ctrlTab);
+        assertFalse(handled);
+        assertEquals("line1\nline2", editor.getText().toString());
+    }
+
+    @Test
+    public void testFormatTextUndoAndPreservesHistory() {
+        editor.setText("line 1");
+        inputConnection.setSelection(6, 6);
+        inputConnection.commitText("\nline 2", 1);
+        assertEquals("line 1\nline 2", editor.getText().toString());
+        assertTrue(editor.canUndo());
+
+        // Format document
+        editor.formatText("line 1\nline 2\n// formatted");
+        assertEquals("line 1\nline 2\n// formatted", editor.getText().toString());
+        assertTrue("Format should be undoable", editor.canUndo());
+
+        // Undo format
+        editor.undo();
+        assertEquals("line 1\nline 2", editor.getText().toString());
+
+        // Undo typing before format
+        editor.undo();
+        assertEquals("line 1", editor.getText().toString());
+
+        // Redo typing
+        editor.redo();
+        assertEquals("line 1\nline 2", editor.getText().toString());
+
+        // Redo format
+        editor.redo();
+        assertEquals("line 1\nline 2\n// formatted", editor.getText().toString());
+    }
+
+    @Test
+    public void testReplaceRangeUndoRedo() {
+        editor.setText("hello world foo");
+        editor.replaceRange(6, 11, "everyone");
+        assertEquals("hello everyone foo", editor.getText().toString());
+        assertTrue(editor.canUndo());
+
+        editor.undo();
+        assertEquals("hello world foo", editor.getText().toString());
+
+        editor.redo();
+        assertEquals("hello everyone foo", editor.getText().toString());
+    }
+
+    @Test
+    public void testMoveLineUndoRedo() {
+        editor.setText("first\nsecond\nthird");
+        editor.setCursorPosition(1, 2, false);
+
+        editor.moveLine(true); // move "second" up
+        assertEquals("second\nfirst\nthird", editor.getText().toString());
+        assertTrue(editor.canUndo());
+
+        editor.undo();
+        assertEquals("first\nsecond\nthird", editor.getText().toString());
+
+        editor.redo();
+        assertEquals("second\nfirst\nthird", editor.getText().toString());
+    }
+
+    @Test
+    public void testCopyLineDownUndo() {
+        editor.setText("lineA\nlineB");
+        editor.setCursorPosition(0, 2, false);
+
+        editor.copyLine(false); // copy down
+        assertEquals("lineA\nlineA\nlineB", editor.getText().toString());
+        assertTrue(editor.canUndo());
+
+        editor.undo();
+        assertEquals("lineA\nlineB", editor.getText().toString());
+    }
+
+    @Test
+    public void testCtrlShiftZRedo() {
+        editor.setText("abc");
+        inputConnection.setSelection(3, 3);
+        inputConnection.commitText("d", 1);
+        assertEquals("abcd", editor.getText().toString());
+
+        // Undo via Ctrl+Z
+        KeyEvent ctrlZ = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON);
+        boolean undoHandled = editor.onKeyDown(KeyEvent.KEYCODE_Z, ctrlZ);
+        assertTrue(undoHandled);
+        assertEquals("abc", editor.getText().toString());
+        assertTrue(editor.canRedo());
+
+        // Redo via Ctrl+Shift+Z
+        KeyEvent ctrlShiftZ = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON | KeyEvent.META_SHIFT_ON);
+        boolean redoHandled = editor.onKeyDown(KeyEvent.KEYCODE_Z, ctrlShiftZ);
+        assertTrue(redoHandled);
+        assertEquals("abcd", editor.getText().toString());
+    }
 }
