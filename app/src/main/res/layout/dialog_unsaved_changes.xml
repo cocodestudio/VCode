@@ -14,16 +14,6 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <ImageView
-            android:id="@+id/iv_dialog_icon"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ic_triangle_exclamation"
-            app:tint="?attr/colorError" />
-
         <TextView
             android:id="@+id/tv_dialog_title"
             android:layout_width="match_parent"
@@ -68,8 +58,8 @@
                 android:layout_marginTop="8dp"
                 android:text="@string/vcode_discard"
                 android:textAppearance="?attr/textAppearanceLabelMedium"
-                android:textColor="?attr/colorError"
-                app:backgroundTint="?attr/colorErrorContainer" />
+                android:textColor="?attr/colorOnPrimaryContainer"
+                app:backgroundTint="?attr/colorPrimaryContainer" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_cancel"
