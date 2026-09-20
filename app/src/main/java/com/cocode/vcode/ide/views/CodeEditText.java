@@ -1072,7 +1072,7 @@ public class CodeEditText extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         rebuildVisualLayout();
-        if (h != oldh && oldh > 0) {
+        if (h != oldh) {
             post(this::ensureCursorVisible);
         }
     }
@@ -2444,6 +2444,9 @@ public class CodeEditText extends View {
     public void setSelection(int index) {
         cursor = content.positionAt(Math.max(0, Math.min(index, content.totalLength())));
         selectionAnchor = null;
+        cursorVisible = true;
+        scheduleBlink();
+        post(this::ensureCursorVisible);
         invalidate();
         notifySelectionChanged();
     }

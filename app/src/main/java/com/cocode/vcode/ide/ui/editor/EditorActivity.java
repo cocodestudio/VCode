@@ -673,7 +673,13 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     Integer activeIdx = viewModel.getActiveTabIndex().getValue();
                     if (activeIdx != null && activeIdx >= 0 && activeIdx < files.size() && activeViewer != null) {
                         final EditorFile activeFile = files.get(activeIdx);
-                        binding.viewerContainer.post(() -> activeViewer.bindFile(activeFile, viewModel));
+                        binding.viewerContainer.post(() -> {
+                            activeViewer.bindFile(activeFile, viewModel);
+                            CodeEditText editor = getActiveCodeEditor();
+                            if (editor != null && !isReadOnly) {
+                                editor.requestFocus();
+                            }
+                        });
                     }
                 } else {
                     binding.viewerContainer.setVisibility(View.GONE);

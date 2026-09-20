@@ -301,6 +301,7 @@ public class EditorViewModel extends ViewModel {
                     try {
                         EditorFile ef = new EditorFile(UUID.randomUUID().toString(), file, "", fileType);
                         ef.setScrollY(state.getScrollFor(relativePath));
+                        ef.setCursorPosition(state.getCursorFor(relativePath));
                         if (isVirtual) ef.setVirtual(true);
                         ef.setContentLoaded(false);
                         restoredFiles.add(ef);
@@ -734,10 +735,11 @@ public class EditorViewModel extends ViewModel {
                 newFile.markSaved();
                 newFile.setContentLoaded(true);
 
-                // Restore previous scroll if available in the state object
+                // Restore previous scroll and cursor if available in the state object
                 if (currentState != null) {
                     String relativePath = getRelativePath(file);
                     newFile.setScrollY(currentState.getScrollFor(relativePath));
+                    newFile.setCursorPosition(currentState.getCursorFor(relativePath));
                 }
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
@@ -784,6 +786,7 @@ public class EditorViewModel extends ViewModel {
             String content = currentState.getVirtualFile(relativePath);
             newFile.setContent(content != null ? content : "");
             newFile.setScrollY(currentState.getScrollFor(relativePath));
+            newFile.setCursorPosition(currentState.getCursorFor(relativePath));
         }
         newFile.markSaved();
         newFile.setContentLoaded(true);
@@ -1149,6 +1152,7 @@ public class EditorViewModel extends ViewModel {
             String rel = getRelativePath(doc.getFile());
             paths.add(rel);
             currentState.setScrollFor(rel, doc.getScrollY());
+            currentState.setCursorFor(rel, doc.getCursorPosition());
         }
         currentState.setOpenFilePaths(paths);
     }

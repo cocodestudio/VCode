@@ -188,6 +188,7 @@ public class CodeFileViewer implements IFileViewer {
                                         if (currentFile != capturedFile) return;
                                         capturedEditor.scrollTo(0, capturedFile.getScrollY());
                                         capturedEditor.setSelection(capturedFile.getCursorPosition());
+                                        capturedEditor.post(capturedEditor::ensureCursorVisible);
                                         validateCodeIfRequired();
                                     }
                                 }
@@ -223,15 +224,19 @@ public class CodeFileViewer implements IFileViewer {
                         if (currentFile != file) return;
                         codeEditText.scrollTo(0, file.getScrollY());
                         codeEditText.setSelection(file.getCursorPosition());
+                        codeEditText.post(codeEditText::ensureCursorVisible);
                     }
                 }
             });
             codeEditText.setText(file.getContent());
         } else {
-            // Text is identical, so no async load is triggered. Restore scroll/cursor position only if switching from another file.
-            if (isDifferentFile) {
+            // Text is identical, so no async load is triggered.
+            // Restore scroll/cursor position if switching from another file OR if viewport/cursor
+            // is not yet aligned to the file's saved position (e.g. after container became visible).
+            if (isDifferentFile || codeEditText.getScrollY() != file.getScrollY() || codeEditText.getSelectionStart() != file.getCursorPosition()) {
                 codeEditText.scrollTo(0, file.getScrollY());
                 codeEditText.setSelection(file.getCursorPosition());
+                codeEditText.post(codeEditText::ensureCursorVisible);
             }
             // Since setText wasn't called, the async load event won't fire, so we must
             // clear the LSP bridge's content-sync guard manually to allow diagnostics to run.

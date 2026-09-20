@@ -45,7 +45,7 @@ public class ProjectStateRepository {
      */
     private static File getSessionStorageDir(File projectDir) {
         android.content.Context ctx = VCodeApplication.getInstance();
-        String absPath = projectDir.getAbsolutePath();
+        String absPath = projectDir.getAbsolutePath().replace('\\', '/');
 
         if (absPath.contains("/VCodeProjects/") || absPath.contains("/VCodeProjects")) {
             File stateDir = new File(new File(projectDir, ".vcode"), "state");
@@ -55,12 +55,20 @@ public class ProjectStateRepository {
             return stateDir;
         }
 
-        String safeKey = Integer.toHexString(absPath.hashCode());
-        File bucket = new File(ctx.getFilesDir(), "external_sessions/" + safeKey);
-        if (!bucket.exists()) {
-            bucket.mkdirs();
+        if (ctx != null) {
+            String safeKey = Integer.toHexString(absPath.hashCode());
+            File bucket = new File(ctx.getFilesDir(), "external_sessions/" + safeKey);
+            if (!bucket.exists()) {
+                bucket.mkdirs();
+            }
+            return bucket;
         }
-        return bucket;
+
+        File stateDir = new File(new File(projectDir, ".vcode"), "state");
+        if (!stateDir.exists()) {
+            stateDir.mkdirs();
+        }
+        return stateDir;
     }
 
     /**
@@ -147,6 +155,18 @@ public class ProjectStateRepository {
         }
         root.put("scrollPositions", scrolls);
 
+        // Cursor positions
+        JSONObject cursors = new JSONObject();
+        Map<String, Integer> cursorMap = state.getCursorPositions();
+        if (cursorMap != null) {
+            for (Map.Entry<String, Integer> entry : cursorMap.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    cursors.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        root.put("cursorPositions", cursors);
+
         // Preview toggle states
         JSONObject previews = new JSONObject();
         Map<String, Boolean> previewMap = state.getPreviewStates();
@@ -227,6 +247,18 @@ public class ProjectStateRepository {
             }
         }
         state.setScrollPositions(scrollMap);
+
+        // Restore cursor offsets
+        JSONObject cursors = root.optJSONObject("cursorPositions");
+        Map<String, Integer> cursorMap = new HashMap<>();
+        if (cursors != null) {
+            Iterator<String> keys = cursors.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                cursorMap.put(key, cursors.optInt(key, 0));
+            }
+        }
+        state.setCursorPositions(cursorMap);
 
         // Restore preview states
         if (root.has("previewStates")) {
