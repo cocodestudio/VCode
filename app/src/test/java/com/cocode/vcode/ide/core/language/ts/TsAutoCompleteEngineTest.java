@@ -147,4 +147,102 @@ public class TsAutoCompleteEngineTest {
         assertTrue("Expected 'preventDefault' on MouseEvent", hasItem(items, "preventDefault"));
         assertTrue("Expected 'target' on MouseEvent", hasItem(items, "target"));
     }
+
+    @Test
+    public void testUserSnippetTupleMemberAndIndexing() {
+        String code = "let tuple: [\n  string, number\n]\n= [\n  \"hello\", 10\n];\ntuple.";
+        List<CompletionItem> tupleItems = engine.getSuggestions(code, code.length());
+        assertTrue("Expected 'push' on tuple.", hasItem(tupleItems, "push"));
+        assertTrue("Expected 'map' on tuple.", hasItem(tupleItems, "map"));
+        assertTrue("Expected 'slice' on tuple.", hasItem(tupleItems, "slice"));
+
+        String codeElem0 = "let tuple: [\n  string, number\n]\n= [\n  \"hello\", 10\n];\ntuple[0].";
+        List<CompletionItem> elem0Items = engine.getSuggestions(codeElem0, codeElem0.length());
+        assertTrue("Expected 'toUpperCase' on tuple[0].", hasItem(elem0Items, "toUpperCase"));
+        assertTrue("Expected 'toLowerCase' on tuple[0].", hasItem(elem0Items, "toLowerCase"));
+
+        String codeElem1 = "let tuple: [\n  string, number\n]\n= [\n  \"hello\", 10\n];\ntuple[1].";
+        List<CompletionItem> elem1Items = engine.getSuggestions(codeElem1, codeElem1.length());
+        assertTrue("Expected 'toFixed' on tuple[1].", hasItem(elem1Items, "toFixed"));
+    }
+
+    @Test
+    public void testMultilineArrayCompletion() {
+        String code = "let list: number [\n\n]\n\n= [\n  1, 2, 3\n];\nlist.";
+        List<CompletionItem> listItems = engine.getSuggestions(code, code.length());
+        assertTrue("Expected 'push' on multiline array list.", hasItem(listItems, "push"));
+        assertTrue("Expected 'map' on multiline array list.", hasItem(listItems, "map"));
+
+        String codeElem = "let list: number [\n\n]\n\n= [\n  1, 2, 3\n];\nlist[0].";
+        List<CompletionItem> elemItems = engine.getSuggestions(codeElem, codeElem.length());
+        assertTrue("Expected 'toFixed' on list[0].", hasItem(elemItems, "toFixed"));
+    }
+
+    @Test
+    public void testControlFlowTypeNarrowingWithTypeOf() {
+        String code = "let safeValue: unknown = \"hello\";\nif (typeof safeValue === \"string\") {\n  safeValue.\n}";
+        int offset = code.indexOf("safeValue.") + 10;
+        List<CompletionItem> narrowedItems = engine.getSuggestions(code, offset);
+        assertTrue("Expected 'toUpperCase' on safeValue inside typeof check.", hasItem(narrowedItems, "toUpperCase"));
+        assertTrue("Expected 'toLowerCase' on safeValue inside typeof check.", hasItem(narrowedItems, "toLowerCase"));
+        assertTrue("Expected 'trim' on safeValue inside typeof check.", hasItem(narrowedItems, "trim"));
+    }
+
+    @Test
+    public void testAnyTypeCompletions() {
+        String code = "let randomValue: any = 10;\nrandomValue.";
+        List<CompletionItem> items = engine.getSuggestions(code, code.length());
+        assertTrue("Expected 'toString' on randomValue.", hasItem(items, "toString"));
+        assertTrue("Expected 'valueOf' on randomValue.", hasItem(items, "valueOf"));
+    }
+
+    @Test
+    public void testScopeVariablesPriority() {
+        String code = "// Primitive Types\n" +
+                "let isDone: boolean = false;\n" +
+                "let age: number = 30;\n" +
+                "let firstName = \"Alice\";\n" +
+                "let u: undefined = undefined;\n" +
+                "let n: null = null;\n" +
+                "let list: number [] = [ 1, 2, 3 ];\n" +
+                "let tuple: [ string, number ] = [ \"hello\", 10 ];\n" +
+                "let randomValue: any = 10;\n" +
+                "let safeValue: unknown = \"hello\";\n";
+
+        // Querying 'u' should have variable 'u' at top or near top ahead of keywords
+        List<CompletionItem> uItems = engine.getSuggestions(code + "u", (code + "u").length());
+        assertTrue("Expected 'u' in completions", hasItem(uItems, "u"));
+        // 'u' exact match should be at the very top
+        assertTrue("Expected 'u' at index 0", !uItems.isEmpty() && "u".equals(uItems.get(0).getLabel()));
+
+        // Querying 'n' should have variable 'n' at top
+        List<CompletionItem> nItems = engine.getSuggestions(code + "n", (code + "n").length());
+        assertTrue("Expected 'n' in completions", hasItem(nItems, "n"));
+        assertTrue("Expected 'n' at index 0", !nItems.isEmpty() && "n".equals(nItems.get(0).getLabel()));
+
+        // Querying 'tup' should have 'tuple'
+        List<CompletionItem> tupItems = engine.getSuggestions(code + "tup", (code + "tup").length());
+        assertTrue("Expected 'tuple' in completions", hasItem(tupItems, "tuple"));
+
+        // Querying 'rand' should have 'randomValue'
+        List<CompletionItem> randItems = engine.getSuggestions(code + "rand", (code + "rand").length());
+        assertTrue("Expected 'randomValue' in completions", hasItem(randItems, "randomValue"));
+
+        // Querying 'safe' should have 'safeValue'
+        List<CompletionItem> safeItems = engine.getSuggestions(code + "safe", (code + "safe").length());
+        assertTrue("Expected 'safeValue' in completions", hasItem(safeItems, "safeValue"));
+    }
+
+    @Test
+    public void testTypeAnnotationInsideTupleBracket() {
+        String code1 = "let tuple: [ ";
+        List<CompletionItem> items1 = engine.getSuggestions(code1, code1.length());
+        assertTrue("Expected 'string' in tuple type position", hasItem(items1, "string"));
+        assertTrue("Expected 'number' in tuple type position", hasItem(items1, "number"));
+
+        String code2 = "let tuple: [ string, ";
+        List<CompletionItem> items2 = engine.getSuggestions(code2, code2.length());
+        assertTrue("Expected 'number' after comma in tuple", hasItem(items2, "number"));
+        assertTrue("Expected 'boolean' after comma in tuple", hasItem(items2, "boolean"));
+    }
 }

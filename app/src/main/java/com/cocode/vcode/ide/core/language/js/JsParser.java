@@ -1620,7 +1620,7 @@ public class JsParser {
                 int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, i));
                 i = parseTypeAnnotation(source, stream, tree, typeStart, funcNode);
                 if (i > typeStart) {
-                    tree.nodeTypeAnn[funcNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                    tree.nodeTypeAnn[funcNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                 }
                 continue;
             }
@@ -1725,7 +1725,7 @@ public class JsParser {
                         i = parseTypeAnnotation(source, stream, tree, typeStart, paramNodeId);
                         int pNodeId = paramNodeId;
                         if (i > typeStart) {
-                            tree.nodeTypeAnn[pNodeId] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                            tree.nodeTypeAnn[pNodeId] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                         }
                     }
                 }
@@ -1763,7 +1763,7 @@ public class JsParser {
                         i = parseTypeAnnotation(source, stream, tree, typeStart, declNode);
                         int pNodeId = declNode;
                         if (i > typeStart) {
-                            tree.nodeTypeAnn[pNodeId] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                            tree.nodeTypeAnn[pNodeId] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                         }
                     }
                 }
@@ -1968,7 +1968,7 @@ public class JsParser {
                 int typeStart = skipWhitespaceAndComments(stream, i);
                 i = parseTypeAnnotation(source, stream, tree, typeStart, declNode);
                 if (i > typeStart) {
-                    tree.nodeTypeAnn[declNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                    tree.nodeTypeAnn[declNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                 }
 
                 if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ';') {
@@ -2158,7 +2158,7 @@ public class JsParser {
                             int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, i));
                             i = parseTypeAnnotation(source, stream, tree, typeStart, methodNode);
                             if (i > typeStart) {
-                                tree.nodeTypeAnn[methodNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                                tree.nodeTypeAnn[methodNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                             }
                             continue;
                         }
@@ -2176,7 +2176,7 @@ public class JsParser {
                         int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, i));
                         i = parseTypeAnnotation(source, stream, tree, typeStart, propNode);
                         if (i > typeStart) {
-                            tree.nodeTypeAnn[propNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                            tree.nodeTypeAnn[propNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                         }
                     }
                     i = skipToNextStatement(source, stream, tree, i, propNode);
@@ -2240,7 +2240,7 @@ public class JsParser {
                     int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
                     i = parseTypeAnnotation(source, stream, tree, typeStart, declNode);
                     if (i > typeStart) {
-                        tree.nodeTypeAnn[declNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                        tree.nodeTypeAnn[declNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                     }
                     nextTok = skipWhitespaceAndComments(stream, i);
                 }
@@ -2290,7 +2290,7 @@ public class JsParser {
                     int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
                     i = parseTypeAnnotation(source, stream, tree, typeStart, declNode);
                     if (i > typeStart) {
-                        tree.nodeTypeAnn[declNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)).trim();
+                        tree.nodeTypeAnn[declNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
                     }
                     nextTok = skipWhitespaceAndComments(stream, i);
                 }
@@ -2864,7 +2864,7 @@ public class JsParser {
                                 int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, nextColon));
                                 int typeEnd = parseTypeAnnotation(source, stream, tree, typeStart, idNode);
                                 if (typeEnd > typeStart) {
-                                    tree.nodeTypeAnn[idNode] = source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, typeEnd)).trim();
+                                    tree.nodeTypeAnn[idNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, typeEnd)));
                                     curr = typeEnd;
                                 }
                             }
@@ -3173,7 +3173,7 @@ public class JsParser {
                 else if (c == '}' || c == ']' || c == ')' || c == '>') {
                     if (depth > 0) depth--;
                 }
-            } else if (t == TokenStream.TK_IDENTIFIER && tree != null) {
+            } else if ((t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) && tree != null) {
                 // Skip object type property keys ('{ key: Type }')
                 boolean isPropName = false;
                 int nextTok = skipWhitespaceAndComments(stream, skipToken(stream, i));
@@ -3189,6 +3189,20 @@ public class JsParser {
             i = skipToken(stream, i);
         }
         return i;
+    }
+
+    public static String cleanTypeAnnotation(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim();
+        if (s.isEmpty()) return s;
+        // Normalize multiline or space-separated brackets: e.g. "number [\n ]" -> "number[]"
+        s = s.replaceAll("\\[\\s*\\]", "[]");
+        // Collapse internal newlines and multiple spaces into single space
+        s = s.replaceAll("\\s+", " ");
+        // Normalize tuple spacing: "[ string , number ]" -> "[string, number]"
+        s = s.replaceAll("\\[\\s+", "[").replaceAll("\\s+\\]", "]");
+        s = s.replaceAll("\\s*,\\s*", ", ");
+        return s;
     }
 
     private static int skipTypeAnnotation(String source, TokenStream stream, int i) {

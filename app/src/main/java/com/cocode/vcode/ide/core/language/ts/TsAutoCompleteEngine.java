@@ -81,15 +81,34 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
             }
         }
 
-        // TS-specific suggestions go first, then JS base suggestions
         tsItems.addAll(base);
-        return tsItems.size() > MAX_SUGGESTIONS ? tsItems.subList(0, MAX_SUGGESTIONS) : tsItems;
+        Map<String, CompletionItem> dedup = new LinkedHashMap<>();
+        for (CompletionItem ci : tsItems) {
+            if (ci.getLabel() == null) continue;
+            CompletionItem existing = dedup.get(ci.getLabel());
+            if (existing == null) {
+                dedup.put(ci.getLabel(), ci);
+            } else if (existing.getType() == CompletionItem.Type.KEYWORD && "TypeScript".equals(existing.getDetail())) {
+                if (ci.getType() == CompletionItem.Type.VALUE && "Variable".equals(ci.getDetail())) {
+                    dedup.put(ci.getLabel(), ci);
+                }
+            } else if (ci.getSortScore() > existing.getSortScore()) {
+                dedup.put(ci.getLabel(), ci);
+            }
+        }
+        List<CompletionItem> result = new ArrayList<>(dedup.values());
+        Collections.sort(result, (a, b) -> {
+            int scoreDiff = b.getSortScore() - a.getSortScore();
+            if (scoreDiff != 0) return scoreDiff;
+            return b.getTypePriority() - a.getTypePriority();
+        });
+        return result.size() > MAX_SUGGESTIONS ? result.subList(0, MAX_SUGGESTIONS) : result;
     }
 
     /**
      * Checks if the cursor is at a position expecting a type annotation, such as after
      * a colon, generic bracket, union/intersection operator, type alias assignment,
-     * or type assertion keyword.
+     * tuple bracket, or type assertion keyword.
      */
     public static boolean isTypeAnnotationPosition(String text, int cursorPos, String word) {
         if (text == null || cursorPos <= 0 || cursorPos > text.length()) return false;
@@ -108,16 +127,62 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
             return true;
         }
 
-        // Generic type argument ('Promise<' or 'Map<string, ')
+        // Tuple type opening bracket (e.g. 'let tuple: [' or 'type Tuple = [')
+        if (c == '[') {
+            int pre = idx - 1;
+            while (pre >= 0 && Character.isWhitespace(text.charAt(pre))) pre--;
+            if (pre >= 0) {
+                char preC = text.charAt(pre);
+                if (preC == ':' || preC == '=' || preC == '<' || preC == ',' || preC == '|' || preC == '&') {
+                    return true;
+                }
+                int wStart = pre;
+                while (wStart >= 0 && Character.isJavaIdentifierPart(text.charAt(wStart))) wStart--;
+                wStart++;
+                if (wStart <= pre) {
+                    String prevWord = text.substring(wStart, pre + 1);
+                    if ("as".equals(prevWord) || "is".equals(prevWord) ||
+                            "extends".equals(prevWord) || "implements".equals(prevWord)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Generic type argument ('Promise<' or 'Map<string, ') or tuple element position ('[string, ')
         if (c == '<' || c == ',') {
-            int depth = 0;
+            int angleDepth = 0;
+            int bracketDepth = 0;
             for (int j = idx; j >= 0; j--) {
                 char ch = text.charAt(j);
-                if (ch == '>') depth++;
+                if (ch == '>') angleDepth++;
                 else if (ch == '<') {
-                    if (depth > 0) depth--;
+                    if (angleDepth > 0) angleDepth--;
                     else return true;
-                } else if (ch == ';' || ch == '{' || ch == '}' || ch == '\n') {
+                } else if (ch == ']') bracketDepth++;
+                else if (ch == '[') {
+                    if (bracketDepth > 0) bracketDepth--;
+                    else {
+                        int pre = j - 1;
+                        while (pre >= 0 && Character.isWhitespace(text.charAt(pre))) pre--;
+                        if (pre >= 0) {
+                            char preC = text.charAt(pre);
+                            if (preC == ':' || preC == '=' || preC == '<' || preC == ',' || preC == '|' || preC == '&') {
+                                return true;
+                            }
+                            int wStart = pre;
+                            while (wStart >= 0 && Character.isJavaIdentifierPart(text.charAt(wStart))) wStart--;
+                            wStart++;
+                            if (wStart <= pre) {
+                                String prevWord = text.substring(wStart, pre + 1);
+                                if ("as".equals(prevWord) || "is".equals(prevWord) ||
+                                        "extends".equals(prevWord) || "implements".equals(prevWord)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                } else if (ch == ';' || ch == '{' || ch == '}') {
                     break;
                 }
             }

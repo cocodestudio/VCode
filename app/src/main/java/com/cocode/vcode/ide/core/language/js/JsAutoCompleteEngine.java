@@ -1113,6 +1113,13 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 }
 
+                if (cachedTree != null && !baseIsMethod) {
+                    String narrowed = findNarrowedTypeForSymbol(cachedTree, text, baseToken, dotPos);
+                    if (narrowed != null) {
+                        inferredType = narrowed;
+                    }
+                }
+
                 inferredType = normalizeTypeScriptType(inferredType);
             }
 
@@ -1157,6 +1164,22 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (memberName.startsWith("[")) {
                     if (inferredType != null && inferredType.startsWith("@ARRAY_OF_TS:")) {
                         inferredType = normalizeTypeScriptType(inferredType.substring(13));
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.startsWith("@TUPLE_OF_TS:")) {
+                        String tupleData = inferredType.substring(13);
+                        String idxStr = memberName.substring(1, memberName.length() - (memberName.endsWith("]") ? 1 : 0)).trim();
+                        List<String> elems = splitTopLevelCommas(tupleData);
+                        try {
+                            int idx = Integer.parseInt(idxStr);
+                            if (idx >= 0 && idx < elems.size()) {
+                                inferredType = normalizeTypeScriptType(elems.get(idx).trim());
+                            } else {
+                                inferredType = "@ANY";
+                            }
+                        } catch (NumberFormatException e) {
+                            inferredType = !elems.isEmpty() ? normalizeTypeScriptType(elems.get(0).trim()) : "@ANY";
+                        }
                         continue;
                     }
                     if (activeTree != null && activeNodeId > 0) {
@@ -1270,8 +1293,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     continue;
                 }
 
-                if (inferredType != null && inferredType.startsWith("@ARRAY_OF_TS:")) {
-                    String elemType = inferredType.substring(13);
+                if (inferredType != null && (inferredType.startsWith("@ARRAY_OF_TS:") || inferredType.startsWith("@TUPLE_OF_TS:"))) {
+                    String elemType = inferredType.startsWith("@ARRAY_OF_TS:") ? inferredType.substring(13) : inferredType.substring(13);
                     if (memberName.equals("find") || memberName.equals("pop") || memberName.equals("shift") || memberName.equals("at")) {
                         inferredType = normalizeTypeScriptType(elemType);
                     } else if (memberName.equals("filter") || memberName.equals("slice") || memberName.equals("concat") || memberName.equals("toReversed") || memberName.equals("toSorted")) {
@@ -1352,10 +1375,36 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     List<CompletionItem> shapeMembers = getMembersForNode(activeTree, targetNode, word);
                     if (!shapeMembers.isEmpty()) return fuzzyFilter(shapeMembers, word);
                 } else {
-                    String typeName = inferredType.startsWith("@ARRAY_OF_") ? "array" : (inferredType.startsWith("@") ? inferredType.substring(1).toLowerCase() : inferredType.toLowerCase());
+                    String typeName = (inferredType.startsWith("@ARRAY_OF_") || inferredType.startsWith("@TUPLE_OF_")) ? "array" : (inferredType.startsWith("@") ? inferredType.substring(1).toLowerCase() : inferredType.toLowerCase());
                     String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(typeName);
                     if (methods != null) {
                         return buildMemberList(typeName, methods, word, CompletionItem.Type.FUNCTION);
+                    }
+                    if (methods == null && "any".equals(typeName)) {
+                        String initType = null;
+                        if (activeNodeId > 0 && activeNodeId < cachedTree.nodeCount) {
+                            int declPos = cachedTree.nodeEnd[activeNodeId];
+                            if (declPos > 0 && declPos <= text.length()) {
+                                int eqIdx = text.indexOf('=', cachedTree.nodeStart[activeNodeId]);
+                                if (eqIdx > 0 && eqIdx < declPos) {
+                                    String rhs = text.substring(eqIdx + 1, declPos).trim();
+                                    if (rhs.startsWith("\"") || rhs.startsWith("'") || rhs.startsWith("`")) initType = "string";
+                                    else if (!rhs.isEmpty() && (Character.isDigit(rhs.charAt(0)) || rhs.startsWith("-"))) initType = "number";
+                                    else if (rhs.startsWith("[") || rhs.startsWith("Array.")) initType = "array";
+                                }
+                            }
+                        }
+                        if (initType != null) {
+                            String[] specificMethods = JsStandardLibrary.PROTOTYPE_METHODS.get(initType);
+                            if (specificMethods != null) {
+                                return buildMemberList(initType, specificMethods, word, CompletionItem.Type.FUNCTION);
+                            }
+                        }
+                        methods = new String[]{
+                                "toString", "valueOf", "hasOwnProperty", "isPrototypeOf",
+                                "propertyIsEnumerable", "toLocaleString", "constructor"
+                        };
+                        return buildMemberList("Object", methods, word, CompletionItem.Type.FUNCTION);
                     }
                 }
             } else if (inferredType != null) {
@@ -2394,6 +2443,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             t = t.substring(1, t.length() - 1).trim();
         }
 
+        t = t.replaceAll("\\[\\s*\\]", "[]");
+
         if (t.endsWith("[]")) {
             String element = t.substring(0, t.length() - 2).trim();
             return "@ARRAY_OF_TS:" + element;
@@ -2403,6 +2454,19 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             int start = t.indexOf('<');
             String element = t.substring(start + 1, t.length() - 1).trim();
             return "@ARRAY_OF_TS:" + element;
+        }
+
+        // Tuple type: [ string, number ]
+        if (t.startsWith("[") && t.endsWith("]")) {
+            String inner = t.substring(1, t.length() - 1).trim();
+            if (inner.isEmpty()) {
+                return "@ARRAY";
+            }
+            List<String> elems = splitTopLevelCommas(inner);
+            if (elems.isEmpty()) {
+                return "@ARRAY";
+            }
+            return "@TUPLE_OF_TS:" + String.join(",", elems);
         }
 
         if (t.startsWith("Promise<") && t.endsWith(">")) {
@@ -2417,7 +2481,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         if (t.equals("string")) return "@STRING";
         if (t.equals("number")) return "@NUMBER";
         if (t.equals("boolean")) return "@BOOLEAN";
-        if (t.equals("any") || t.equals("unknown") || t.equals("never") || t.equals("void")) return "@ANY";
+        if (t.equals("any")) return "@ANY";
+        if (t.equals("unknown")) return "@UNKNOWN";
+        if (t.equals("never") || t.equals("void")) return "@ANY";
+        if (t.equals("null")) return "@NULL";
+        if (t.equals("undefined")) return "@UNDEFINED";
 
         if (t.endsWith("Element") || t.equals("Element") || t.equals("Node") || t.equals("Document")) {
             return "@DOM_ELEMENT:" + t;
@@ -2434,6 +2502,138 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         return t;
+    }
+
+    public static List<String> splitTopLevelCommas(String text) {
+        List<String> list = new ArrayList<>();
+        if (text == null || text.trim().isEmpty()) return list;
+
+        int start = 0;
+        int angleDepth = 0;
+        int squareDepth = 0;
+        int curlyDepth = 0;
+        int parenDepth = 0;
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '<') angleDepth++;
+            else if (c == '>') { if (angleDepth > 0) angleDepth--; }
+            else if (c == '[') squareDepth++;
+            else if (c == ']') { if (squareDepth > 0) squareDepth--; }
+            else if (c == '{') curlyDepth++;
+            else if (c == '}') { if (curlyDepth > 0) curlyDepth--; }
+            else if (c == '(') parenDepth++;
+            else if (c == ')') { if (parenDepth > 0) parenDepth--; }
+            else if (c == ',' && angleDepth == 0 && squareDepth == 0 && curlyDepth == 0 && parenDepth == 0) {
+                String part = text.substring(start, i).trim();
+                if (!part.isEmpty()) list.add(part);
+                start = i + 1;
+            }
+        }
+        if (start < text.length()) {
+            String part = text.substring(start).trim();
+            if (!part.isEmpty()) list.add(part);
+        }
+        return list;
+    }
+
+    private String findNarrowedTypeForSymbol(JsSyntaxTree tree, String source, String symbol, int offset) {
+        if (tree == null || source == null || symbol == null || offset <= 0 || offset > source.length()) return null;
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int type = tree.nodeType[i];
+            if (type == JsSyntaxTree.N_IF_STMT || type == JsSyntaxTree.N_WHILE_STMT) {
+                int start = tree.nodeStart[i];
+                int end = tree.nodeEnd[i];
+                if (start < offset && (end <= 0 || offset <= end)) {
+                    String narrowed = inspectConditionForTypeGuard(tree, source, i, symbol, offset);
+                    if (narrowed != null) return narrowed;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String inspectConditionForTypeGuard(JsSyntaxTree tree, String source, int ifNode, String symbol, int offset) {
+        int ifStart = tree.nodeStart[ifNode];
+        int openParen = source.indexOf('(', ifStart);
+        if (openParen < 0 || openParen >= offset) return null;
+
+        int closeParen = -1;
+        int depth = 0;
+        int maxScan = Math.min(source.length(), ifStart + 2000);
+        for (int p = openParen; p < maxScan; p++) {
+            char c = source.charAt(p);
+            if (c == '(') depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0) {
+                    closeParen = p;
+                    break;
+                }
+            }
+        }
+        if (closeParen < 0 || offset <= closeParen) return null;
+
+        String cond = source.substring(openParen + 1, closeParen).trim();
+        if (!cond.contains(symbol)) return null;
+
+        boolean isElseBranch = false;
+        int elseIdx = source.indexOf("else", closeParen);
+        if (elseIdx > 0 && elseIdx < offset && (tree.nodeEnd[ifNode] <= 0 || elseIdx < tree.nodeEnd[ifNode])) {
+            isElseBranch = true;
+        }
+
+        return evaluateTypeGuardCondition(cond, symbol, isElseBranch);
+    }
+
+    private String evaluateTypeGuardCondition(String cond, String symbol, boolean isElseBranch) {
+        String typeofPattern = "typeof\\s+" + java.util.regex.Pattern.quote(symbol) + "\\s*(===?|!==?)\\s*['\"]([a-zA-Z]+)['\"]";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(typeofPattern).matcher(cond);
+        if (m.find()) {
+            String op = m.group(1);
+            String type = m.group(2);
+            boolean isEq = op.startsWith("==");
+            if ((isEq && !isElseBranch) || (!isEq && isElseBranch)) {
+                return mapTypeofResultToType(type);
+            }
+        }
+
+        String reverseTypeof = "['\"]([a-zA-Z]+)['\"]\\s*(===?|!==?)\\s*typeof\\s+" + java.util.regex.Pattern.quote(symbol);
+        java.util.regex.Matcher m2 = java.util.regex.Pattern.compile(reverseTypeof).matcher(cond);
+        if (m2.find()) {
+            String type = m2.group(1);
+            String op = m2.group(2);
+            boolean isEq = op.startsWith("==");
+            if ((isEq && !isElseBranch) || (!isEq && isElseBranch)) {
+                return mapTypeofResultToType(type);
+            }
+        }
+
+        String instPattern = java.util.regex.Pattern.quote(symbol) + "\\s+instanceof\\s+([A-Za-z0-9_$]+)";
+        java.util.regex.Matcher mInst = java.util.regex.Pattern.compile(instPattern).matcher(cond);
+        if (mInst.find() && !isElseBranch) {
+            return mInst.group(1);
+        }
+
+        String arrayPattern = "Array\\.isArray\\s*\\(\\s*" + java.util.regex.Pattern.quote(symbol) + "\\s*\\)";
+        if (java.util.regex.Pattern.compile(arrayPattern).matcher(cond).find() && !isElseBranch) {
+            return "@ARRAY";
+        }
+
+        return null;
+    }
+
+    private static String mapTypeofResultToType(String typeStr) {
+        if ("string".equals(typeStr)) return "@STRING";
+        if ("number".equals(typeStr)) return "@NUMBER";
+        if ("boolean".equals(typeStr)) return "@BOOLEAN";
+        if ("function".equals(typeStr)) return "@FUNCTION";
+        if ("object".equals(typeStr)) return "@OBJECT";
+        if ("undefined".equals(typeStr)) return "@UNDEFINED";
+        if ("symbol".equals(typeStr)) return "@SYMBOL";
+        if ("bigint".equals(typeStr)) return "@BIGINT";
+        return "@ANY";
     }
 
     public List<CompletionItem> getEnumMembers(JsSyntaxTree tree, int enumNodeId, String word) {
