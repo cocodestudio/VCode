@@ -87,9 +87,19 @@ public class JsSemanticLinter {
     private static void checkConstReassignment(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
-                // Ignore the identifier when referenced within its own variable declaration
+                // Skip declaration and parameter sites
                 int parentId = tree.nodeParent[i];
-                if (parentId != 0 && tree.nodeType[parentId] == JsSyntaxTree.N_VAR_DECL && tree.nodeName[i].equals(tree.nodeName[parentId])) {
+                if (parentId != 0) {
+                    int pType = tree.nodeType[parentId];
+                    if (pType == JsSyntaxTree.N_VAR_DECL || pType == JsSyntaxTree.N_PARAM) {
+                        continue;
+                    }
+                    int grandParentId = tree.nodeParent[parentId];
+                    if (grandParentId != 0 && tree.nodeType[grandParentId] == JsSyntaxTree.N_VAR_DECL) {
+                        continue;
+                    }
+                }
+                if (isDeclarationSite(text, tree.nodeStart[i])) {
                     continue;
                 }
 
@@ -120,26 +130,62 @@ public class JsSemanticLinter {
                 }
 
                 boolean isAssign = false;
+                int opTokenIdx = -1;
 
                 if (nextTok != -1 && mask.types[nextTok] == TokenStream.TK_OPERATOR) {
-                    char ch = text.charAt(mask.tokenStart[nextTok]);
+                    int off = mask.tokenStart[nextTok];
+                    char ch = text.charAt(off);
 
                     if (ch == '=') {
                         isAssign = true;
-                        // Ignore '==' or '==='
-                        if (nextTok + 1 < mask.types.length && mask.tokenStart[nextTok + 1] == mask.tokenStart[nextTok] + 1) {
-                            if (mask.types[nextTok + 1] == TokenStream.TK_OPERATOR && text.charAt(mask.tokenStart[nextTok + 1]) == '=') {
+                        opTokenIdx = nextTok;
+                        // Exclude comparison and arrow operators (==, ===, =>)
+                        if (off + 1 < text.length()) {
+                            char c1 = text.charAt(off + 1);
+                            if (c1 == '=' || c1 == '>') {
                                 isAssign = false;
+                                opTokenIdx = -1;
                             }
                         }
-                    } else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%') {
-                        if (nextTok + 1 < mask.types.length && mask.tokenStart[nextTok + 1] == mask.tokenStart[nextTok] + 1) {
-                            if (mask.types[nextTok + 1] == TokenStream.TK_OPERATOR) {
-                                char nextCh = text.charAt(mask.tokenStart[nextTok + 1]);
-                                if (nextCh == '=' || (ch == '+' && nextCh == '+') || (ch == '-' && nextCh == '-')) {
+                    } else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' || ch == '&' || ch == '|' || ch == '^') {
+                        if (off + 1 < text.length() && mask.types[off + 1] == TokenStream.TK_OPERATOR) {
+                            char c1 = text.charAt(off + 1);
+                            if (c1 == '=' || (ch == '+' && c1 == '+') || (ch == '-' && c1 == '-')) {
+                                isAssign = true;
+                                opTokenIdx = nextTok;
+                            } else if (ch == '*' && c1 == '*' && off + 2 < text.length() && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '=') {
+                                isAssign = true;
+                                opTokenIdx = nextTok;
+                            } else if (ch == '&' && c1 == '&' && off + 2 < text.length() && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '=') {
+                                isAssign = true;
+                                opTokenIdx = nextTok;
+                            } else if (ch == '|' && c1 == '|' && off + 2 < text.length() && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '=') {
+                                isAssign = true;
+                                opTokenIdx = nextTok;
+                            }
+                        }
+                    } else if (ch == '<' || ch == '>') {
+                        if (off + 1 < text.length() && mask.types[off + 1] == TokenStream.TK_OPERATOR) {
+                            char c1 = text.charAt(off + 1);
+                            if (ch == '<' && c1 == '<' && off + 2 < text.length() && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '=') {
+                                isAssign = true;
+                                opTokenIdx = nextTok;
+                            } else if (ch == '>' && c1 == '>') {
+                                if (off + 2 < text.length() && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '=') {
                                     isAssign = true;
+                                    opTokenIdx = nextTok;
+                                } else if (off + 3 < text.length() && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '>'
+                                        && mask.types[off + 3] == TokenStream.TK_OPERATOR && text.charAt(off + 3) == '=') {
+                                    isAssign = true;
+                                    opTokenIdx = nextTok;
                                 }
                             }
+                        }
+                    } else if (ch == '?') {
+                        if (off + 2 < text.length() && mask.types[off + 1] == TokenStream.TK_OPERATOR && text.charAt(off + 1) == '?'
+                                && mask.types[off + 2] == TokenStream.TK_OPERATOR && text.charAt(off + 2) == '=') {
+                            isAssign = true;
+                            opTokenIdx = nextTok;
                         }
                     }
                 }
@@ -172,6 +218,7 @@ public class JsSemanticLinter {
                             char c2 = text.charAt(mask.tokenStart[prevTok]);
                             if ((c1 == '+' && c2 == '+') || (c1 == '-' && c2 == '-')) {
                                 isAssign = true;
+                                opTokenIdx = prevPrevTok;
                             }
                         }
                     }
@@ -193,8 +240,11 @@ public class JsSemanticLinter {
                         int declNodeId = resolved[1];
 
                         if ((tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_CONST || tree.nodeExtra[declNodeId] == JsSyntaxTree.FLAG_CONST) {
-                            int line = LinterUtils.getLine(text, tree.nodeStart[i]);
-                            int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
+                            int targetOffset = (opTokenIdx != -1 && opTokenIdx < mask.tokenStart.length)
+                                    ? mask.tokenStart[opTokenIdx]
+                                    : tree.nodeStart[i];
+                            int line = LinterUtils.getLine(text, targetOffset);
+                            int col = LinterUtils.getColumn(text, targetOffset);
                             problems.add(new Problem(file, line, col, baseIdentifier.length(),
                                     "Cannot reassign 'const' variable '" + baseIdentifier + "'",
                                     Problem.Severity.ERROR));

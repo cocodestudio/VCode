@@ -12,6 +12,8 @@ import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import org.robolectric.shadows.ShadowLooper;
 
+import java.util.List;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -611,5 +613,71 @@ public class CodeEditTextTest {
         boolean redoHandled = editor.onKeyDown(KeyEvent.KEYCODE_Z, ctrlShiftZ);
         assertTrue(redoHandled);
         assertEquals("abcd", editor.getText().toString());
+    }
+
+    @Test
+    public void testAutomaticReferenceChange_doesNotTriggerAutoComplete() {
+        editor.setFileType(FileType.JAVASCRIPT);
+        editor.setText("const obj = { prop: 123 };\nobj.prop;");
+        editor.setSelection(31);
+
+        editor.updateRefactoredContent("const obj = { renamedProp: 123 };\nobj.renamedProp;");
+        ShadowLooper.idleMainLooper();
+
+        assertFalse("Autocomplete popup must not show on automatic reference changes",
+                editor.isAutoCompleteVisible());
+        assertFalse("Programmatic change flag must be reset", editor.isProgrammaticChange());
+    }
+
+    @Test
+    public void testFormatText_doesNotTriggerAutoComplete() {
+        editor.setFileType(FileType.JAVASCRIPT);
+        editor.setText("const obj = { prop: 123 };\nobj.prop;");
+        editor.setSelection(31);
+
+        editor.formatText("const obj = {\n  prop: 123\n};\nobj.prop;");
+        ShadowLooper.idleMainLooper();
+
+        assertFalse("Autocomplete popup must not show on code formatting",
+                editor.isAutoCompleteVisible());
+        assertFalse("Programmatic change flag must be reset", editor.isProgrammaticChange());
+    }
+
+    @Test
+    public void testDeletion_whenAutoCompleteNotShowing_doesNotTriggerAutoComplete() {
+        editor.setFileType(FileType.JAVASCRIPT);
+        editor.setText("obj.prop");
+        editor.setSelection(8);
+
+        assertFalse("Popup must not be showing initially", editor.isAutoCompleteVisible());
+
+        for (int i = 0; i < 4; i++) {
+            KeyEvent delEvent = new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL);
+            inputConnection.sendKeyEvent(delEvent);
+        }
+        ShadowLooper.idleMainLooper();
+
+        assertEquals("obj.", editor.getText().toString());
+        assertFalse("Deleting characters when autocomplete was closed must NOT open autocomplete popup",
+                editor.isAutoCompleteVisible());
+    }
+
+    @Test
+    public void testDeletion_whenAutoCompleteShowing_retainsVisibilityForFiltering() {
+        editor.setFileType(FileType.JAVASCRIPT);
+        editor.setText("obj.prop");
+        editor.setSelection(8);
+
+        List<CompletionItem> items = new java.util.ArrayList<>();
+        items.add(new CompletionItem("prop", "prop", "number", CompletionItem.Type.VALUE, 0));
+        editor.showLspCompletions(items);
+        assertTrue("Popup must be showing", editor.isAutoCompleteVisible());
+
+        KeyEvent delEvent = new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL);
+        inputConnection.sendKeyEvent(delEvent);
+
+        assertEquals("obj.pro", editor.getText().toString());
+        assertTrue("wasAutoCompleteVisibleBeforeDelete must be true when popup was visible",
+                editor.wasAutoCompleteVisibleBeforeDelete());
     }
 }

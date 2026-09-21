@@ -110,9 +110,14 @@ public final class ScopeTree {
                 boolean isFunctionBody = false;
                 if (type == JsSyntaxTree.N_BLOCK) {
                     int parentNode = tree.nodeParent[nodeId];
-                    if (parentNode > 0 && parentNode < maxNodes) {
+                    if ("global".equals(tree.nodeName[nodeId])) {
+                        isFunctionBody = true;
+                    } else if (parentNode > 0 && parentNode < maxNodes) {
                         int pType = tree.nodeType[parentNode];
-                        if (pType == JsSyntaxTree.N_FUNC_DECL || pType == JsSyntaxTree.N_ARROW_FUNC || pType == JsSyntaxTree.N_METHOD || pType == JsSyntaxTree.N_GETTER || pType == JsSyntaxTree.N_SETTER) {
+                        if (pType == JsSyntaxTree.N_FUNC_DECL || pType == JsSyntaxTree.N_ARROW_FUNC ||
+                                pType == JsSyntaxTree.N_METHOD || pType == JsSyntaxTree.N_GETTER ||
+                                pType == JsSyntaxTree.N_SETTER || pType == JsSyntaxTree.N_FOR_STMT ||
+                                pType == JsSyntaxTree.N_CATCH_CLAUSE) {
                             isFunctionBody = true;
                         }
                     }
@@ -384,9 +389,9 @@ public final class ScopeTree {
 
         for (int i = 1; i < tree.nodeCount && i < nodeToScope.length; i++) {
             boolean matches = false;
-            if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_TYPE_REF) {
                 matches = name.equals(tree.nodeName[i]);
-            } else if (tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
+            } else if (tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR || tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
                 matches = name.equals(tree.nodeName[i]) || (tree.nodeName[i] != null && tree.nodeName[i].startsWith(name + "."));
             }
 

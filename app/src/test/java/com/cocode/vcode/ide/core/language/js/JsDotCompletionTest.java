@@ -308,4 +308,17 @@ public class JsDotCompletionTest extends BaseJsAstTest {
         assertEquals("x detail should be 'MyClass property'", "MyClass property", xItem.getDetail());
         assertEquals("x type should be VALUE", CompletionItem.Type.VALUE, xItem.getType());
     }
+
+    @Test
+    public void testNamespaceAndTopLevelBlockDoNotTriggerObjectLiteralKeyCompletions() {
+        String code = "const config = { apiKey: '123', timeout: 5000 };\n" +
+                      "namespace Service {\n" +
+                      "    {\n" +
+                      "";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        for (CompletionItem item : comps) {
+            org.junit.Assert.assertNotEquals("Should not suggest 'Object key' inside namespace or block",
+                    "Object key", item.getDetail());
+        }
+    }
 }

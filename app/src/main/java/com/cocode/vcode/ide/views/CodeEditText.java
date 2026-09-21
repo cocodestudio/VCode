@@ -177,6 +177,9 @@ public class CodeEditText extends View {
     private boolean isSettingText = false;
     private boolean isTypingText = false;
     private boolean isInsertingCompletion = false;
+    private boolean isProgrammaticChange = false;
+    private boolean isDeletingText = false;
+    private boolean wasAutoCompleteVisibleBeforeDelete = false;
     private List<Problem> currentProblems = new ArrayList<>();
     private float lastSquiggleConfigHash = 0;
     private boolean autoCloseBrackets = true;
@@ -486,7 +489,18 @@ public class CodeEditText extends View {
                 longestLineDirty = true;
                 dirtyTracker.addEdit(content.flatOffset(new ContentPosition(startLine, startCol)), 1, 0);
                 scheduleHighlight();
-                dispatchContentChanged();
+                boolean externalDelete = !isDeletingText && !isProgrammaticChange;
+                if (externalDelete) {
+                    isDeletingText = true;
+                    wasAutoCompleteVisibleBeforeDelete = isAutoCompleteVisible();
+                }
+                try {
+                    dispatchContentChanged();
+                } finally {
+                    if (externalDelete) {
+                        isDeletingText = false;
+                    }
+                }
                 scheduleVisualLayoutRebuild();
             }
         });
@@ -1311,6 +1325,10 @@ public class CodeEditText extends View {
      * Mirrors {@code CodeInputConnection.handleBackspace()} but is accessible from the outer class.
      */
     void performBackspace() {
+        executeDeletion(this::performBackspaceInternal);
+    }
+
+    private void performBackspaceInternal() {
         if (selectionAnchor != null) {
             // Delete selection
             int start = getSelectionStart();
@@ -1380,13 +1398,16 @@ public class CodeEditText extends View {
         post(this::ensureCursorVisible);
         invalidate();
         scheduleHighlight();
-        scheduleAutoComplete();
     }
 
     /**
      * Performs a Forward Delete (Delete key) operation from the hardware keyboard.
      */
     void performForwardDelete() {
+        executeDeletion(this::performForwardDeleteInternal);
+    }
+
+    private void performForwardDeleteInternal() {
         if (hasSelection()) {
             int start = getSelectionStart();
             int end = getSelectionEnd();
@@ -1437,7 +1458,6 @@ public class CodeEditText extends View {
         post(this::ensureCursorVisible);
         invalidate();
         scheduleHighlight();
-        scheduleAutoComplete();
     }
 
     /**
@@ -1693,9 +1713,12 @@ public class CodeEditText extends View {
         }
 
         ContentPosition beforeCursor = cursor;
-        content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
-        undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
-                deleted, snapshotAt(beforeCursor, null), snapshotAt(startPos, null));
+        final String finalDeleted = deleted;
+        executeDeletion(() -> {
+            content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
+            undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
+                    finalDeleted, snapshotAt(beforeCursor, null), snapshotAt(startPos, null));
+        });
 
         cursor = startPos;
         selectionAnchor = null;
@@ -1872,6 +1895,10 @@ public class CodeEditText extends View {
      * Deletes the entire current line with atomic undo.
      */
     public void deleteLine() {
+        executeDeletion(this::deleteLineInternal);
+    }
+
+    private void deleteLineInternal() {
         int line = cursor.line;
         int lineCount = content.lineCount();
         if (lineCount == 0) return;
@@ -2441,6 +2468,43 @@ public class CodeEditText extends View {
         return autoCompletePopup != null && autoCompletePopup.isShowing();
     }
 
+    public boolean isProgrammaticChange() {
+        return isProgrammaticChange;
+    }
+
+    public void setProgrammaticChange(boolean programmatic) {
+        this.isProgrammaticChange = programmatic;
+    }
+
+    public boolean isDeletingText() {
+        return isDeletingText;
+    }
+
+    public boolean wasAutoCompleteVisibleBeforeDelete() {
+        return wasAutoCompleteVisibleBeforeDelete;
+    }
+
+    public void cancelAutoComplete() {
+        mainHandler.removeCallbacks(autoCompleteRunnable);
+        dismissAutoCompletePopup();
+    }
+
+    void executeDeletion(Runnable deletionAction) {
+        boolean wasVisible = isAutoCompleteVisible();
+        isDeletingText = true;
+        wasAutoCompleteVisibleBeforeDelete = wasVisible;
+        try {
+            deletionAction.run();
+        } finally {
+            isDeletingText = false;
+        }
+        if (wasVisible) {
+            scheduleAutoComplete();
+        } else {
+            cancelAutoComplete();
+        }
+    }
+
     public void setSelection(int index) {
         cursor = content.positionAt(Math.max(0, Math.min(index, content.totalLength())));
         selectionAnchor = null;
@@ -2521,9 +2585,12 @@ public class CodeEditText extends View {
         } catch (Exception e) {
             deleted = "";
         }
-        content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
-        undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
-                deleted, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(startPos, null));
+        final String finalDeleted = deleted;
+        executeDeletion(() -> {
+            content.delete(startPos.line, startPos.column, endPos.line, endPos.column);
+            undoStack.recordDelete(startPos.line, startPos.column, endPos.line, endPos.column,
+                    finalDeleted, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(startPos, null));
+        });
         undoStack.commitPending();
         cursor = startPos;
         selectionAnchor = null;
@@ -2834,16 +2901,23 @@ public class CodeEditText extends View {
         ContentPosition endPos = content.positionAt(safeEnd);
         UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
 
-        content.replace(startPos.line, startPos.column, endPos.line, endPos.column, rep);
+        dismissAutoCompletePopup();
+        mainHandler.removeCallbacks(autoCompleteRunnable);
+        isProgrammaticChange = true;
+        try {
+            content.replace(startPos.line, startPos.column, endPos.line, endPos.column, rep);
 
-        ContentPosition newCursor = content.positionAt(safeStart + rep.length());
-        cursor = newCursor;
-        selectionAnchor = null;
-        longestLineLength = content.longestLineLength();
-        UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
+            ContentPosition newCursor = content.positionAt(safeStart + rep.length());
+            cursor = newCursor;
+            selectionAnchor = null;
+            longestLineLength = content.longestLineLength();
+            UndoStack.EditorSnapshot after = snapshotAt(newCursor, null);
 
-        undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
-                deletedText, rep, before, after);
+            undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column,
+                    deletedText, rep, before, after);
+        } finally {
+            isProgrammaticChange = false;
+        }
 
         cursorVisible = true;
         scheduleBlink();
@@ -2864,23 +2938,30 @@ public class CodeEditText extends View {
         int originalCursorFlat = getSelectionStart();
         UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
 
-        undoStack.beginAtomicGroup();
+        dismissAutoCompletePopup();
+        mainHandler.removeCallbacks(autoCompleteRunnable);
+        isProgrammaticChange = true;
         try {
-            int lineCount = content.lineCount();
-            int lastLine = lineCount > 0 ? lineCount - 1 : 0;
-            int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
+            undoStack.beginAtomicGroup();
+            try {
+                int lineCount = content.lineCount();
+                int lastLine = lineCount > 0 ? lineCount - 1 : 0;
+                int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
 
-            content.replace(0, 0, lastLine, lastCol, formattedText);
+                content.replace(0, 0, lastLine, lastCol, formattedText);
 
-            int safeCursor = Math.min(originalCursorFlat, formattedText.length());
-            cursor = content.positionAt(safeCursor);
-            selectionAnchor = null;
-            longestLineLength = content.longestLineLength();
-            UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
+                int safeCursor = Math.min(originalCursorFlat, formattedText.length());
+                cursor = content.positionAt(safeCursor);
+                selectionAnchor = null;
+                longestLineLength = content.longestLineLength();
+                UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
 
-            undoStack.recordReplace(0, 0, lastLine, lastCol, currentText, formattedText, before, after);
+                undoStack.recordReplace(0, 0, lastLine, lastCol, currentText, formattedText, before, after);
+            } finally {
+                undoStack.endAtomicGroup();
+            }
         } finally {
-            undoStack.endAtomicGroup();
+            isProgrammaticChange = false;
         }
 
         cursorVisible = true;
@@ -2907,42 +2988,49 @@ public class CodeEditText extends View {
         int oldScrollY = getScrollY();
         UndoStack.EditorSnapshot before = snapshotAt(cursor, selectionAnchor);
 
-        undoStack.beginAtomicGroup();
+        dismissAutoCompletePopup();
+        mainHandler.removeCallbacks(autoCompleteRunnable);
+        isProgrammaticChange = true;
         try {
-            int lineCount = content.lineCount();
-            int lastLine = lineCount > 0 ? lineCount - 1 : 0;
-            int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
+            undoStack.beginAtomicGroup();
+            try {
+                int lineCount = content.lineCount();
+                int lastLine = lineCount > 0 ? lineCount - 1 : 0;
+                int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
 
-            content.replace(0, 0, lastLine, lastCol, newContent);
+                content.replace(0, 0, lastLine, lastCol, newContent);
 
-            if (oldCursor != null && oldCursor.line < content.lineCount()) {
-                int lineLen = content.lineLength(oldCursor.line);
-                cursor = new ContentPosition(oldCursor.line, Math.min(oldCursor.column, lineLen));
-            } else {
-                cursor = content.positionAt(Math.min(oldFlatOffset, content.totalLength()));
+                if (oldCursor != null && oldCursor.line < content.lineCount()) {
+                    int lineLen = content.lineLength(oldCursor.line);
+                    cursor = new ContentPosition(oldCursor.line, Math.min(oldCursor.column, lineLen));
+                } else {
+                    cursor = content.positionAt(Math.min(oldFlatOffset, content.totalLength()));
+                }
+                selectionAnchor = null;
+                longestLineLength = content.longestLineLength();
+                longestLineDirty = false;
+                dirtyTracker.reset();
+                dirtyTracker.addEdit(0, 0, content.totalLength());
+                rebuildVisualLayout();
+                UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
+
+                undoStack.recordReplace(0, 0, lastLine, lastCol, currentText, newContent, before, after);
+            } finally {
+                undoStack.endAtomicGroup();
             }
-            selectionAnchor = null;
-            longestLineLength = content.longestLineLength();
-            longestLineDirty = false;
-            dirtyTracker.reset();
-            dirtyTracker.addEdit(0, 0, content.totalLength());
-            rebuildVisualLayout();
-            UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
 
-            undoStack.recordReplace(0, 0, lastLine, lastCol, currentText, newContent, before, after);
+            cursorVisible = true;
+            scheduleBlink();
+            requestLayout();
+            invalidate();
+            scheduleHighlight();
+            notifySelectionChanged();
+            scrollTo(oldScrollX, oldScrollY);
+            post(() -> scrollTo(oldScrollX, oldScrollY));
+            dispatchContentChanged();
         } finally {
-            undoStack.endAtomicGroup();
+            isProgrammaticChange = false;
         }
-
-        cursorVisible = true;
-        scheduleBlink();
-        requestLayout();
-        invalidate();
-        scheduleHighlight();
-        notifySelectionChanged();
-        scrollTo(oldScrollX, oldScrollY);
-        post(() -> scrollTo(oldScrollX, oldScrollY));
-        dispatchContentChanged();
     }
 
     public void setSearchDecorations(List<SearchResult> results, int activeIndex) {
@@ -3560,6 +3648,7 @@ public class CodeEditText extends View {
     }
 
     private void triggerAutoComplete() {
+        if (isProgrammaticChange) return;
         if (autoCompleteEngine == null) return;
         // LSP bridge has taken over completions for this language — skip legacy engine.
         if (lspCompletionActive) return;
@@ -4405,7 +4494,12 @@ public class CodeEditText extends View {
 
         @Override
         public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-            if (deleteSelection()) return true;
+            editor.executeDeletion(() -> deleteSurroundingTextInternal(beforeLength, afterLength));
+            return true;
+        }
+
+        private void deleteSurroundingTextInternal(int beforeLength, int afterLength) {
+            if (deleteSelection()) return;
 
             int beforeLineCount = editor.content.lineCount();
 
@@ -4480,8 +4574,6 @@ public class CodeEditText extends View {
             editor.scheduleBlink();
             editor.invalidate();
             editor.scheduleHighlight();
-            editor.scheduleAutoComplete();
-            return true;
         }
 
         @Override
@@ -4759,6 +4851,10 @@ public class CodeEditText extends View {
          * Deletes the character immediately before the cursor (Backspace).
          */
         private void handleBackspace() {
+            editor.executeDeletion(this::handleBackspaceInternal);
+        }
+
+        private void handleBackspaceInternal() {
             if (deleteSelection()) return;
             int cursorFlat = editor.content.flatOffset(editor.cursor);
             if (cursorFlat <= 0) return;
@@ -4810,7 +4906,6 @@ public class CodeEditText extends View {
             editor.scheduleBlink();
             editor.invalidate();
             editor.scheduleHighlight();
-            editor.scheduleAutoComplete();
             editor.mainHandler.removeCallbacks(editor.bracketMatchRunnable);
             editor.mainHandler.postDelayed(editor.bracketMatchRunnable, 150);
         }
@@ -4819,6 +4914,10 @@ public class CodeEditText extends View {
          * Deletes the character immediately after the cursor (Delete key).
          */
         private void handleForwardDelete() {
+            editor.executeDeletion(this::handleForwardDeleteInternal);
+        }
+
+        private void handleForwardDeleteInternal() {
             if (deleteSelection()) return;
             int cursorFlat = editor.content.flatOffset(editor.cursor);
             int total = editor.content.totalLength();
@@ -4845,7 +4944,6 @@ public class CodeEditText extends View {
             editor.post(editor::ensureCursorVisible);
             editor.invalidate();
             editor.scheduleHighlight();
-            editor.scheduleAutoComplete();
         }
     }
 

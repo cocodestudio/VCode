@@ -208,7 +208,7 @@ public class HtmlParser {
         for (int i = 0; i < depth; i++) {
             int unclosedId = parentStack[i];
             String unclosedName = tagStack[i];
-            tree.nodeEnd[unclosedId] = stream.length;
+            tree.nodeEnd[unclosedId] = source.length();
             tree.addNode(HtmlSyntaxTree.N_ERROR, tree.nodeStart[unclosedId], tree.nodeStart[unclosedId] + (unclosedName != null ? unclosedName.length() + 2 : 1), unclosedId, unclosedName, "Unclosed");
         }
 
