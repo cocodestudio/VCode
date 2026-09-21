@@ -245,4 +245,85 @@ public class TsAutoCompleteEngineTest {
         assertTrue("Expected 'number' after comma in tuple", hasItem(items2, "number"));
         assertTrue("Expected 'boolean' after comma in tuple", hasItem(items2, "boolean"));
     }
+
+    @Test
+    public void testDotCompletionsOnAllVariablesInUserSnippet() {
+        String snippet = "// Primitive Types\n" +
+                "\n" +
+                "let isDone: boolean = false;\n" +
+                "\n" +
+                "let age: number = 30;\n" +
+                "\n" +
+                "let firstName = \"Alice\";\n" +
+                "\n" +
+                "let u: undefined = undefined;\n" +
+                "\n" +
+                "let n: null = null;\n" +
+                "// Arrays & Tuples\n" +
+                "\n" +
+                "let list: number [\n" +
+                "\n" +
+                "]\n" +
+                "\n" +
+                "= [\n" +
+                "  1, 2, 3\n" +
+                "];\n" +
+                "\n" +
+                "\n" +
+                "let tuple: [\n" +
+                "  string, number\n" +
+                "]\n" +
+                "\n" +
+                "= [\n" +
+                "  \"hello\", 10\n" +
+                "];\n" +
+                "\n" +
+                "\n" +
+                "// Fixed length and type order\n" +
+                "// Enums\n" +
+                "enum Role {\n" +
+                "  User = \"USER\",\n" +
+                "  Admin = \"ADMIN\",\n" +
+                "\n" +
+                "}\n" +
+                "\n" +
+                "let currentRole: Role = Role.Admin;\n" +
+                "// Any, Unknown, and Never\n" +
+                "\n" +
+                "let randomValue: any = 10;\n" +
+                "// Disables type checking (avoid when possible)\n" +
+                "\n" +
+                "let safeValue: unknown = \"hello\";\n" +
+                "// Requires type checking before use\n" +
+                "if (typeof safeValue === \"string\") {\n" +
+                "  console.log(safeValue.toUpperCase());\n" +
+                "\n" +
+                "}\n" +
+                "\n" +
+                "function throwError(message: string): never {\n" +
+                "  throw new Error(message);\n" +
+                "\n" +
+                "}\n";
+
+        List<CompletionItem> randItems = engine.getSuggestions(snippet + "\nrandomValue.", (snippet + "\nrandomValue.").length());
+        assertTrue("Expected 'toFixed' on randomValue.", hasItem(randItems, "toFixed"));
+        assertTrue("Expected 'toString' on randomValue.", hasItem(randItems, "toString"));
+
+        List<CompletionItem> safeItems = engine.getSuggestions(snippet + "\nsafeValue.", (snippet + "\nsafeValue.").length());
+        assertTrue("Expected 'toUpperCase' on safeValue.", hasItem(safeItems, "toUpperCase"));
+        assertTrue("Expected 'charAt' on safeValue.", hasItem(safeItems, "charAt"));
+
+        List<CompletionItem> uItems = engine.getSuggestions(snippet + "\nu.", (snippet + "\nu.").length());
+        assertTrue("Expected 'toString' on u.", hasItem(uItems, "toString"));
+        assertTrue("Expected 'valueOf' on u.", hasItem(uItems, "valueOf"));
+
+        List<CompletionItem> nItems = engine.getSuggestions(snippet + "\nn.", (snippet + "\nn.").length());
+        assertTrue("Expected 'toString' on n.", hasItem(nItems, "toString"));
+        assertTrue("Expected 'valueOf' on n.", hasItem(nItems, "valueOf"));
+
+        String inLog = snippet.replace("console.log(safeValue.toUpperCase());", "console.log(safeValue.");
+        int offset = inLog.indexOf("console.log(safeValue.") + "console.log(safeValue.".length();
+        List<CompletionItem> inLogItems = engine.getSuggestions(inLog, offset);
+        assertTrue("Expected 'toUpperCase' inside console.log(safeValue.", hasItem(inLogItems, "toUpperCase"));
+    }
 }

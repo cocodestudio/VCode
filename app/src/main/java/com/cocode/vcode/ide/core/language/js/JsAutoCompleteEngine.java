@@ -1380,8 +1380,18 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     if (methods != null) {
                         return buildMemberList(typeName, methods, word, CompletionItem.Type.FUNCTION);
                     }
-                    if (methods == null && "any".equals(typeName)) {
+                    if (methods == null && ("any".equals(typeName) || "unknown".equals(typeName) || "undefined".equals(typeName)
+                            || "null".equals(typeName) || "never".equals(typeName) || "void".equals(typeName) || "object".equals(typeName))) {
                         String initType = null;
+                        if (activeNodeId == 0 && cachedTree != null) {
+                            for (int i = 1; i < cachedTree.nodeCount; i++) {
+                                if (baseToken.equals(cachedTree.nodeName[i]) &&
+                                        (cachedTree.nodeType[i] == JsSyntaxTree.N_VAR_DECL || cachedTree.nodeType[i] == JsSyntaxTree.N_PARAM)) {
+                                    activeNodeId = i;
+                                    break;
+                                }
+                            }
+                        }
                         if (activeNodeId > 0 && activeNodeId < cachedTree.nodeCount) {
                             int declPos = cachedTree.nodeEnd[activeNodeId];
                             if (declPos > 0 && declPos <= text.length()) {
@@ -1391,6 +1401,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                     if (rhs.startsWith("\"") || rhs.startsWith("'") || rhs.startsWith("`")) initType = "string";
                                     else if (!rhs.isEmpty() && (Character.isDigit(rhs.charAt(0)) || rhs.startsWith("-"))) initType = "number";
                                     else if (rhs.startsWith("[") || rhs.startsWith("Array.")) initType = "array";
+                                    else if (rhs.startsWith("true") || rhs.startsWith("false")) initType = "boolean";
+                                    else if (rhs.startsWith("{")) initType = "object";
                                 }
                             }
                         }
@@ -1469,6 +1481,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     || (key.equals("element") && (lower.startsWith("el") || lower.contains("elem") || lower.contains("node") || lower.contains("btn") || lower.contains("div")))) {
                 return buildMemberList(key, entry.getValue(), word, CompletionItem.Type.FUNCTION);
             }
+        }
+
+        if (!objectToken.isEmpty()) {
+            String[] objectMethods = new String[]{
+                    "toString", "valueOf", "hasOwnProperty", "isPrototypeOf",
+                    "propertyIsEnumerable", "toLocaleString", "constructor"
+            };
+            return buildMemberList("Object", objectMethods, word, CompletionItem.Type.FUNCTION);
         }
 
         return new ArrayList<>();
