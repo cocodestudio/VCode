@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.LayoutSnackbarBinding;
@@ -30,7 +31,7 @@ import com.google.android.material.snackbar.Snackbar;
  *   <li>Integrated {@link FontManager} typography (Sora-Medium for message, Sora-SemiBold for action).</li>
  *   <li>Semantic color and iconography badges for {@link Type#SUCCESS}, {@link Type#ERROR},
  *       {@link Type#WARNING}, {@link Type#INFO}, and neutral {@link Type#NORMAL}.</li>
- *   <li>16dp rounded card surface with subtle border matching VCode theme tokens in light &amp; dark modes.</li>
+ *   <li>Clean, minimal flat card surface with zero elevation and crisp 1dp stroke-based visual hierarchy.</li>
  *   <li>Fluent API with support for actions, anchors, dismiss triggers, and callbacks.</li>
  *   <li>Retains 100% CoordinatorLayout swipe-to-dismiss and queuing behavior via underlying {@link Snackbar}.</li>
  * </ul>
@@ -53,6 +54,7 @@ public final class VCodeSnackbar {
     private final LayoutSnackbarBinding binding;
     private final Context context;
     private Type type = Type.NORMAL;
+    private boolean hasCustomActionColor = false;
 
     private VCodeSnackbar(@NonNull View view, @NonNull CharSequence message, int duration) {
         this.context = view.getContext();
@@ -61,6 +63,8 @@ public final class VCodeSnackbar {
         Snackbar.SnackbarLayout layout = (Snackbar.SnackbarLayout) baseSnackbar.getView();
         layout.setBackgroundColor(Color.TRANSPARENT);
         layout.setPadding(0, 0, 0, 0);
+        layout.setElevation(0f);
+        ViewCompat.setElevation(layout, 0f);
 
         View defaultText = layout.findViewById(com.google.android.material.R.id.snackbar_text);
         if (defaultText != null) defaultText.setVisibility(View.GONE);
@@ -70,6 +74,10 @@ public final class VCodeSnackbar {
         this.binding = LayoutSnackbarBinding.inflate(LayoutInflater.from(context), layout, false);
         layout.removeAllViews();
         layout.addView(binding.getRoot(), 0);
+
+        // Enforce zero elevation across card layers
+        binding.cardSnackbar.setCardElevation(0f);
+        binding.cardSnackbar.setMaxCardElevation(0f);
 
         // Apply FontManager typography
         FontManager fm = FontManager.getInstance();
@@ -141,40 +149,55 @@ public final class VCodeSnackbar {
     }
 
     /**
-     * Configures the semantic type, adjusting icon badge and status colors accordingly.
+     * Configures the semantic type, adjusting card stroke, icon badge, and status colors accordingly.
      */
     public VCodeSnackbar setType(Type type) {
         this.type = type != null ? type : Type.NORMAL;
+        int strokeColor;
         switch (this.type) {
             case SUCCESS:
+                strokeColor = ContextCompat.getColor(context, R.color.vcode_accent_success);
                 binding.ivSnackbarIcon.setVisibility(View.VISIBLE);
                 binding.ivSnackbarIcon.setImageResource(R.drawable.ic_circle_check);
-                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(
-                        ContextCompat.getColor(context, R.color.vcode_accent_success)));
+                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(strokeColor));
                 break;
             case ERROR:
+                strokeColor = ContextCompat.getColor(context, R.color.vcode_accent_error);
                 binding.ivSnackbarIcon.setVisibility(View.VISIBLE);
                 binding.ivSnackbarIcon.setImageResource(R.drawable.ic_triangle_exclamation);
-                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(
-                        ContextCompat.getColor(context, R.color.vcode_accent_error)));
+                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(strokeColor));
                 break;
             case WARNING:
+                strokeColor = ContextCompat.getColor(context, R.color.vcode_accent_warning);
                 binding.ivSnackbarIcon.setVisibility(View.VISIBLE);
                 binding.ivSnackbarIcon.setImageResource(R.drawable.ic_triangle_exclamation);
-                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(
-                        ContextCompat.getColor(context, R.color.vcode_accent_warning)));
+                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(strokeColor));
                 break;
             case INFO:
+                strokeColor = ContextCompat.getColor(context, R.color.vcode_accent_primary);
                 binding.ivSnackbarIcon.setVisibility(View.VISIBLE);
                 binding.ivSnackbarIcon.setImageResource(R.drawable.ic_info);
-                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(
-                        ContextCompat.getColor(context, R.color.vcode_accent_primary)));
+                binding.ivSnackbarIcon.setImageTintList(ColorStateList.valueOf(strokeColor));
                 break;
             case NORMAL:
             default:
+                strokeColor = ContextCompat.getColor(context, R.color.vcode_divider);
                 binding.ivSnackbarIcon.setVisibility(View.GONE);
                 break;
         }
+
+        binding.cardSnackbar.setStrokeColor(strokeColor);
+        binding.cardSnackbar.setCardElevation(0f);
+        binding.cardSnackbar.setMaxCardElevation(0f);
+
+        if (!hasCustomActionColor && binding.btnSnackbarAction.getVisibility() == View.VISIBLE) {
+            int actionColor = (this.type == Type.NORMAL)
+                    ? ContextCompat.getColor(context, R.color.vcode_accent_primary)
+                    : strokeColor;
+            binding.btnSnackbarAction.setTextColor(actionColor);
+            binding.btnSnackbarAction.setStrokeColor(ColorStateList.valueOf(actionColor));
+        }
+
         return this;
     }
 
@@ -190,6 +213,13 @@ public final class VCodeSnackbar {
             }
             dismiss();
         });
+        if (!hasCustomActionColor) {
+            int actionColor = (type == Type.NORMAL)
+                    ? ContextCompat.getColor(context, R.color.vcode_accent_primary)
+                    : binding.cardSnackbar.getStrokeColor();
+            binding.btnSnackbarAction.setTextColor(actionColor);
+            binding.btnSnackbarAction.setStrokeColor(ColorStateList.valueOf(actionColor));
+        }
         return this;
     }
 
@@ -201,12 +231,32 @@ public final class VCodeSnackbar {
      * Sets custom text color on the action button.
      */
     public VCodeSnackbar setActionTextColor(@ColorInt int color) {
+        this.hasCustomActionColor = true;
         binding.btnSnackbarAction.setTextColor(color);
+        binding.btnSnackbarAction.setStrokeColor(ColorStateList.valueOf(color));
         return this;
     }
 
     public VCodeSnackbar setActionTextColor(ColorStateList colors) {
+        this.hasCustomActionColor = true;
         binding.btnSnackbarAction.setTextColor(colors);
+        binding.btnSnackbarAction.setStrokeColor(colors);
+        return this;
+    }
+
+    /**
+     * Sets a custom stroke color on the snackbar card.
+     */
+    public VCodeSnackbar setStrokeColor(@ColorInt int color) {
+        binding.cardSnackbar.setStrokeColor(color);
+        return this;
+    }
+
+    /**
+     * Sets custom stroke width in pixels on the snackbar card.
+     */
+    public VCodeSnackbar setStrokeWidth(int widthPx) {
+        binding.cardSnackbar.setStrokeWidth(widthPx);
         return this;
     }
 
