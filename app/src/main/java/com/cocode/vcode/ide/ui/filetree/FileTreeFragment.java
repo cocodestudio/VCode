@@ -32,6 +32,7 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.model.FileNode;
 import com.cocode.vcode.ide.databinding.FragmentFileTreeBinding;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.databinding.ItemCustomPopupBinding;
 import com.cocode.vcode.ide.databinding.LayoutCustomPopupBinding;
 import com.cocode.vcode.ide.ui.dialogs.ImportDestinationDialog;
@@ -508,7 +509,11 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
     @Override
     public void onAddFileClick(File parentDir) {
-        NewFileBottomSheet sheet = NewFileBottomSheet.newInstance();
+        String projectName = viewModel.getProjectName();
+        if (projectName == null || projectName.isEmpty() || (viewModel.getProjectRoot() != null && projectName.equals(viewModel.getProjectRoot().getName()))) {
+            projectName = ProjectRepository.getProjectName(parentDir != null ? parentDir : viewModel.getProjectRoot());
+        }
+        NewFileBottomSheet sheet = NewFileBottomSheet.newInstance(parentDir, projectName);
         sheet.setListener((fileName, initialContent) -> viewModel.createFile(parentDir, fileName, initialContent));
         sheet.show(getChildFragmentManager(), "NewFileBottomSheet");
     }

@@ -1,5 +1,7 @@
 package com.cocode.vcode.ide.utils;
 
+import com.cocode.vcode.ide.core.template.FileTemplateManager;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -25,7 +27,23 @@ public class ProjectFileRecovery {
 
         // Only create metadata files inside VCode-owned project directories
         String absPath = projectRoot.getAbsolutePath();
-        if (!absPath.contains("/VCodeProjects/") && !absPath.endsWith("/VCodeProjects")) {
+        if (!absPath.contains("/VCodeProjects/") && !absPath.endsWith("/VCodeProjects")
+                && !absPath.contains("\\VCodeProjects\\") && !absPath.endsWith("\\VCodeProjects")) {
+            return;
+        }
+
+        // Never generate project metadata or session files for the internal templates directory
+        String rootName = projectRoot.getName();
+        String normalizedAbsPath = absPath.replace('\\', '/').toLowerCase(java.util.Locale.US);
+        String templatesLower = FileTemplateManager.TEMPLATES_DIR_NAME.toLowerCase(java.util.Locale.US);
+        if (rootName.equalsIgnoreCase(FileTemplateManager.TEMPLATES_DIR_NAME)
+                || rootName.equalsIgnoreCase("templates")
+                || normalizedAbsPath.contains("/" + templatesLower + "/")
+                || normalizedAbsPath.endsWith("/" + templatesLower)) {
+            File vcodeDir = new File(projectRoot, ".vcode");
+            if (vcodeDir.exists()) {
+                com.cocode.vcode.ide.utils.FileUtils.deleteRecursive(vcodeDir);
+            }
             return;
         }
 

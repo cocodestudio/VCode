@@ -615,4 +615,43 @@
     <string name="vcode_keybindings_export_error">Failed to export keybindings</string>
     <string name="vcode_all_files_saved">All files saved</string>
     <string name="vcode_no_matching_shortcuts">No matching shortcuts found</string>
+
+    <!-- File Templates -->
+    <string name="vcode_settings_category_templates">File Templates</string>
+    <string name="vcode_settings_category_templates_desc">Manage boilerplate templates linked to file extensions</string>
+    <string name="vcode_file_templates_title">File Templates</string>
+    <string name="vcode_search_templates_hint">Search templates or extensions</string>
+    <string name="vcode_new_template">New Template</string>
+    <string name="vcode_new_template_desc">Create a new template bound to a file extension</string>
+    <string name="vcode_edit_template">Edit Template</string>
+    <string name="vcode_template_name">Template Name</string>
+    <string name="vcode_template_name_hint">e.g. HTML5 Starter</string>
+    <string name="vcode_template_extension">File Extension</string>
+    <string name="vcode_template_extension_hint">e.g. html, js, py</string>
+    <string name="vcode_template_content">Template Content</string>
+    <string name="vcode_template_placeholders_hint"><![CDATA[Placeholders: {fileName} (formatted file title), {projectName} (project name)]]></string>
+    <string name="vcode_template_name_required">Template name cannot be empty</string>
+    <string name="vcode_template_extension_required">File extension cannot be empty</string>
+    <string name="vcode_template_content_required">Template content cannot be empty</string>
+    <string name="vcode_open_in_editor">Open in Editor</string>
+    <string name="vcode_open_in_editor_desc">Open and edit this template directly in the code editor</string>
+    <string name="vcode_reset_templates">Reset All to Defaults</string>
+    <string name="vcode_reset_templates_desc">Restore default templates for all extensions</string>
+    <string name="vcode_export_templates">Export templates.json</string>
+    <string name="vcode_export_templates_desc">Save a copy of templates.json to VCodeProjects</string>
+    <string name="vcode_import_templates">Import templates.json</string>
+    <string name="vcode_import_templates_desc">Load custom templates from templates.json</string>
+    <string name="vcode_edit_templates_json">Edit templates.json in Editor</string>
+    <string name="vcode_edit_templates_json_desc">Open templates.json directly in code editor</string>
+    <string name="vcode_templates_reset_success">All templates reset to defaults</string>
+    <string name="vcode_templates_export_success">Templates exported to %1$s</string>
+    <string name="vcode_templates_import_success">Templates imported successfully</string>
+    <string name="vcode_templates_import_error">Failed to parse templates.json</string>
+    <string name="vcode_templates_file_not_found">templates.json not found in VCodeProjects</string>
+    <string name="vcode_templates_export_error">Failed to export templates</string>
+    <string name="vcode_delete_template">Delete Template</string>
+    <string name="vcode_delete_template_confirm">Are you sure you want to delete template \'%1$s\'?</string>
+    <string name="vcode_no_templates_found">No matching templates found</string>
+    <string name="vcode_file_name_cannot_be_empty">File name cannot be empty</string>
+    <string name="vcode_binary_template_not_supported">Templates cannot be created for binary file extensions</string>
 </resources>

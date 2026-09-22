@@ -47,6 +47,7 @@ import com.cocode.vcode.ide.databinding.ActivityEditorBinding;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
 import com.cocode.vcode.ide.ui.editor.helper.EditorMenuHelper;
 import com.cocode.vcode.ide.ui.editor.helper.EditorPreviewHelper;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.ui.editor.helper.ServerNotificationHelper;
 import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import com.cocode.vcode.ide.ui.editor.viewer.IFileViewer;
@@ -113,7 +114,16 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return;
         }
 
-        if (projectId == null) projectId = projectPath.substring(projectPath.lastIndexOf("/") + 1);
+        File projectDirectory = new File(projectPath);
+        if (projectId == null) projectId = projectDirectory.getName();
+        ProjectFileRecovery.ensureProjectFilesExist(projectDirectory);
+
+        if (projectName == null || projectName.equals("Project") || projectName.equals(projectDirectory.getName())) {
+            String resolved = ProjectRepository.getProjectName(projectDirectory);
+            if (!resolved.isEmpty()) {
+                projectName = resolved;
+            }
+        }
         if (projectName == null) projectName = "Project";
 
         EditorViewModelFactory factory = new EditorViewModelFactory(this);
@@ -124,8 +134,6 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         binding.tvProjectName.setTypeface(FontManager.getInstance().getUiSemiBold(this));
         binding.tvOpenFileFromTree.setTypeface(FontManager.getInstance().getUiMedium(this));
 
-        File projectDirectory = new File(projectPath);
-        ProjectFileRecovery.ensureProjectFilesExist(projectDirectory);
         viewModel.initProject(projectDirectory, projectId, projectName);
 
         setupFragments();
@@ -513,7 +521,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private void openNewFileSheetForRoot() {
         File root = viewModel.getProjectRoot();
         if (root != null) {
-            NewFileBottomSheet sheet = NewFileBottomSheet.newInstance();
+            String projectName = viewModel.getProjectName();
+            if (projectName == null || projectName.isEmpty() || projectName.equals(root.getName())) {
+                projectName = ProjectRepository.getProjectName(root);
+            }
+            NewFileBottomSheet sheet = NewFileBottomSheet.newInstance(root, projectName);
             sheet.setListener((fileName, initialContent) -> viewModel.createFile(root, fileName, initialContent));
             sheet.show(getSupportFragmentManager(), "NewFileBottomSheet");
         }

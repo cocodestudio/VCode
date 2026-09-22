@@ -83,6 +83,9 @@ public class SettingsHomeFragment extends Fragment {
         binding.tvCategoryKeyboardTitle.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvCategoryKeyboardDesc.setTypeface(fm.getUiFont(requireContext()));
 
+        binding.tvCategoryTemplatesTitle.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvCategoryTemplatesDesc.setTypeface(fm.getUiFont(requireContext()));
+
         binding.tvCategoryGeneralTitle.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvCategoryGeneralDesc.setTypeface(fm.getUiFont(requireContext()));
     }
@@ -103,6 +106,9 @@ public class SettingsHomeFragment extends Fragment {
 
         binding.cardCategoryKeyboard.setOnClickListener(v ->
                 navigateTo(KeyboardSettingsFragment.newInstance()));
+
+        binding.cardCategoryTemplates.setOnClickListener(v ->
+                navigateTo(TemplatesSettingsFragment.newInstance()));
 
         binding.cardCategoryGeneral.setOnClickListener(v ->
                 navigateTo(GeneralSettingsFragment.newInstance()));

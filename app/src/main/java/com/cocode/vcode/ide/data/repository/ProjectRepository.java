@@ -3,9 +3,12 @@ package com.cocode.vcode.ide.data.repository;
 import android.content.Context;
 import android.os.Build;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
+import com.cocode.vcode.ide.core.template.FileTemplateManager;
 import com.cocode.vcode.ide.data.model.Project;
 import com.cocode.vcode.ide.data.model.Result;
 import com.cocode.vcode.ide.git.core.GitRepository;
@@ -75,6 +78,50 @@ public class ProjectRepository {
     }
 
     /**
+     * Reads the human-readable project name from .vcode/meta/project.json (or legacy project_meta.json)
+     * for a project directory or any file/folder within it.
+     *
+     * @param file A file or folder inside the project, or the project root directory.
+     * @return The project name stored in project.json, or root folder name as fallback, or empty string if file is null.
+     */
+    @NonNull
+    public static String getProjectName(@Nullable File file) {
+        if (file == null) {
+            return "";
+        }
+        File projectRoot = findProjectRoot(file);
+        if (projectRoot == null) {
+            projectRoot = FileUtils.resolveProjectRoot(file);
+        }
+        if (projectRoot == null) {
+            projectRoot = file.isDirectory() ? file : file.getParentFile();
+        }
+        if (projectRoot != null) {
+            if (FileTemplateManager.TEMPLATES_DIR_NAME.equalsIgnoreCase(projectRoot.getName())
+                    || "templates".equalsIgnoreCase(projectRoot.getName())) {
+                return "templates";
+            }
+            File metaFile = getProjectMetaFile(projectRoot);
+            if (metaFile.exists() && metaFile.isFile()) {
+                try {
+                    String jsonString = FileUtils.readFile(metaFile);
+                    JSONObject json = new JSONObject(jsonString);
+                    String name = json.optString(KEY_NAME, "");
+                    if (name.trim().isEmpty()) {
+                        name = json.optString("projectName", "");
+                    }
+                    if (!name.trim().isEmpty()) {
+                        return name.trim();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            return projectRoot.getName();
+        }
+        return file.getName();
+    }
+
+    /**
      * Loads all projects from the application projects directory, sorted by last modified date descending.
      */
     public LiveData<Result<List<Project>>> getAllProjects() {
@@ -88,6 +135,17 @@ public class ProjectRepository {
                 if (entries != null) {
                     for (File dir : entries) {
                         if (dir.isDirectory()) {
+                            String dirName = dir.getName();
+                            if (dirName.startsWith(".")
+                                    || dirName.equalsIgnoreCase(FileTemplateManager.TEMPLATES_DIR_NAME)
+                                    || dirName.equalsIgnoreCase("templates")) {
+                                // Completely purge any accidental .vcode directory inside templates
+                                File vcodeDir = new File(dir, VCODE_DIR);
+                                if (vcodeDir.exists()) {
+                                    FileUtils.deleteRecursive(vcodeDir);
+                                }
+                                continue;
+                            }
                             File vcodeDir = new File(dir, VCODE_DIR);
                             File metaDir = new File(vcodeDir, META_DIR);
                             File stateDir = new File(vcodeDir, STATE_DIR);
@@ -339,7 +397,11 @@ public class ProjectRepository {
      * Updates the last modified timestamp and file count for a project by ID.
      */
     public void touchProjectById(String projectId) {
-        if (projectId == null || projectId.isEmpty()) return;
+        if (projectId == null || projectId.trim().isEmpty()
+                || projectId.equalsIgnoreCase(FileTemplateManager.TEMPLATES_DIR_NAME)
+                || projectId.equalsIgnoreCase("templates")) {
+            return;
+        }
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 File projectDir = new File(FileUtils.getProjectsDir(appContext), projectId);
