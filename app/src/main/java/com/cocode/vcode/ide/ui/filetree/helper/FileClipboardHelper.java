@@ -64,9 +64,10 @@ public class FileClipboardHelper {
                 success = false;
             } finally {
                 final boolean finalSuccess = success;
+                final File finalTarget = target;
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     opManager.finishOperation("Paste", finalSuccess ? "Pasted successfully" : "Paste failed or cancelled", finalSuccess);
-                    if (callback != null) callback.onPasteComplete(finalSuccess);
+                    if (callback != null) callback.onPasteComplete(finalSuccess, source, finalTarget);
                 });
             }
         });
@@ -86,6 +87,6 @@ public class FileClipboardHelper {
     }
 
     public interface PasteCallback {
-        void onPasteComplete(boolean success);
+        void onPasteComplete(boolean success, File source, File target);
     }
 }

@@ -184,26 +184,32 @@ public class CodeEditorLayout extends LinearLayout {
             return Integer.compare(offsetB, offsetA);
         });
 
-        undoStack.beginAtomicGroup();
-        for (com.cocode.vcode.ide.core.lsp.LspLocation loc : locations) {
-            // Only rename if it's the current file
-            if (!loc.uri.equals(codeEditText.getCurrentFile().getAbsolutePath())) continue;
+        codeEditText.cancelAutoComplete();
+        codeEditText.setProgrammaticChange(true);
+        try {
+            undoStack.beginAtomicGroup();
+            for (com.cocode.vcode.ide.core.lsp.LspLocation loc : locations) {
+                // Only rename if it's the current file
+                if (!loc.uri.equals(codeEditText.getCurrentFile().getAbsolutePath())) continue;
 
-            int startOff = codeEditText.toOffset(loc.range.start);
-            int endOff = codeEditText.toOffset(loc.range.end);
+                int startOff = codeEditText.toOffset(loc.range.start);
+                int endOff = codeEditText.toOffset(loc.range.end);
 
-            if (startOff >= 0 && endOff > startOff) {
-                String oldText = content.getSubstring(startOff, endOff);
+                if (startOff >= 0 && endOff > startOff) {
+                    String oldText = content.getSubstring(startOff, endOff);
 
-                com.cocode.vcode.ide.core.editor.text.ContentPosition startPos = content.positionAt(startOff);
-                com.cocode.vcode.ide.core.editor.text.ContentPosition endPos = content.positionAt(endOff);
+                    com.cocode.vcode.ide.core.editor.text.ContentPosition startPos = content.positionAt(startOff);
+                    com.cocode.vcode.ide.core.editor.text.ContentPosition endPos = content.positionAt(endOff);
 
-                com.cocode.vcode.ide.core.editor.text.UndoStack.EditorSnapshot snap = new com.cocode.vcode.ide.core.editor.text.UndoStack.EditorSnapshot(startPos, null, codeEditText.getScrollX(), codeEditText.getScrollY());
-                undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column, oldText, newName, snap, snap);
-                content.replace(startPos.line, startPos.column, endPos.line, endPos.column, newName);
+                    com.cocode.vcode.ide.core.editor.text.UndoStack.EditorSnapshot snap = new com.cocode.vcode.ide.core.editor.text.UndoStack.EditorSnapshot(startPos, null, codeEditText.getScrollX(), codeEditText.getScrollY());
+                    undoStack.recordReplace(startPos.line, startPos.column, endPos.line, endPos.column, oldText, newName, snap, snap);
+                    content.replace(startPos.line, startPos.column, endPos.line, endPos.column, newName);
+                }
             }
+            codeEditText.getHandler().post(undoStack::endAtomicGroup);
+        } finally {
+            codeEditText.setProgrammaticChange(false);
         }
-        codeEditText.getHandler().post(undoStack::endAtomicGroup);
 
         // Notify the editor of the content change
         codeEditText.invalidate();

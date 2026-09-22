@@ -47,6 +47,10 @@ public class GitViewModel extends AndroidViewModel {
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isNotRepository = new MutableLiveData<>(false);
 
+    private static final String PREF_KEY_DRAFT_COMMIT_PREFIX = "git_draft_commit_msg_";
+    private File currentProjectDir;
+    private String draftCommitMessage = "";
+
 
     public GitViewModel(@NonNull Application application) {
         super(application);
@@ -69,6 +73,8 @@ public class GitViewModel extends AndroidViewModel {
      * @param explicitDefaultBranch Optional branch name to use as default.
      */
     public void initRepo(File projectDir, String explicitDefaultBranch) {
+        this.currentProjectDir = projectDir;
+        loadDraftCommitMessage();
         isLoading.setValue(true);
         String fallbackBranch = (explicitDefaultBranch != null && !explicitDefaultBranch.isEmpty())
                 ? explicitDefaultBranch : resolveDefaultBranchFromPreferences();
@@ -218,6 +224,7 @@ public class GitViewModel extends AndroidViewModel {
             }
 
             repository.commit(message, resolvedName, resolvedEmail);
+            clearDraftCommitMessage();
         });
     }
 
@@ -234,7 +241,10 @@ public class GitViewModel extends AndroidViewModel {
     }
 
     public void amendCommit(String message) {
-        runAction(() -> repository.amendCommit(message));
+        runAction(() -> {
+            repository.amendCommit(message);
+            clearDraftCommitMessage();
+        });
     }
 
     public GitRepository getRepository() {
@@ -445,5 +455,31 @@ public class GitViewModel extends AndroidViewModel {
     @FunctionalInterface
     private interface GitAction {
         void execute() throws Exception;
+    }
+
+    private String getDraftPrefKey() {
+        if (currentProjectDir == null) return PREF_KEY_DRAFT_COMMIT_PREFIX + "default";
+        return PREF_KEY_DRAFT_COMMIT_PREFIX + currentProjectDir.getAbsolutePath().hashCode();
+    }
+
+    private void loadDraftCommitMessage() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplication());
+        draftCommitMessage = prefs.getString(getDraftPrefKey(), "");
+    }
+
+    public String getDraftCommitMessage() {
+        return draftCommitMessage != null ? draftCommitMessage : "";
+    }
+
+    public void setDraftCommitMessage(String message) {
+        this.draftCommitMessage = message != null ? message : "";
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplication());
+        prefs.edit().putString(getDraftPrefKey(), this.draftCommitMessage).apply();
+    }
+
+    public void clearDraftCommitMessage() {
+        this.draftCommitMessage = "";
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplication());
+        prefs.edit().remove(getDraftPrefKey()).apply();
     }
 }

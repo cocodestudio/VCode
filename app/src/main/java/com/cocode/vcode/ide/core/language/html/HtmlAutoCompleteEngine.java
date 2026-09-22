@@ -243,32 +243,44 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                 }
             }
             if (onlyTagChars) {
-                String unclosedTag = null;
+                List<String> unclosedTags = new ArrayList<>();
                 try {
                     HtmlTokenStream tokens = HtmlLexer.tokenize(fullText);
                     com.cocode.vcode.ide.core.language.js.ParseResult parseRes = HtmlParser.parse(fullText, tokens);
                     int elem = parseRes.htmlTree.getEnclosingElement(cursorPos);
-                    if (elem > 0 && parseRes.htmlTree.nodeName[elem] != null) {
-                        unclosedTag = parseRes.htmlTree.nodeName[elem];
+                    while (elem > 0 && elem < parseRes.htmlTree.nodeCount) {
+                        if (parseRes.htmlTree.nodeType[elem] == HtmlSyntaxTree.N_ELEMENT && parseRes.htmlTree.nodeName[elem] != null) {
+                            String name = parseRes.htmlTree.nodeName[elem];
+                            if (!unclosedTags.contains(name)) {
+                                unclosedTags.add(name);
+                            }
+                        }
+                        elem = parseRes.htmlTree.nodeParent[elem];
                     }
                 } catch (Exception ignored) {
                 }
 
-                if (unclosedTag == null) {
+                if (unclosedTags.isEmpty()) {
                     HtmlTagParser.HtmlContext c = HtmlTagParser.parseContext(fullText, cursorPos);
-                    unclosedTag = c.unclosedTag;
+                    if (c.unclosedTag != null && !c.unclosedTag.isEmpty()) {
+                        unclosedTags.add(c.unclosedTag);
+                    }
                 }
 
-                if (unclosedTag != null && !unclosedTag.isEmpty()) {
-                    if (afterSlash.isEmpty() || unclosedTag.toLowerCase().startsWith(afterSlash.toLowerCase())) {
-                        List<CompletionItem> result = new ArrayList<>();
-                        CompletionItem ci = new CompletionItem(
-                                "</" + unclosedTag + ">",
-                                "</" + unclosedTag + ">",
-                                "Close tag <" + unclosedTag + ">",
-                                CompletionItem.Type.TAG, 0);
-                        ci.setReplaceLength(2 + afterSlash.length());
-                        result.add(ci);
+                if (!unclosedTags.isEmpty()) {
+                    List<CompletionItem> result = new ArrayList<>();
+                    for (String unclosedTag : unclosedTags) {
+                        if (afterSlash.isEmpty() || unclosedTag.toLowerCase().startsWith(afterSlash.toLowerCase())) {
+                            CompletionItem ci = new CompletionItem(
+                                    "</" + unclosedTag + ">",
+                                    "</" + unclosedTag + ">",
+                                    "Close tag <" + unclosedTag + ">",
+                                    CompletionItem.Type.TAG, 0);
+                            ci.setReplaceLength(2 + afterSlash.length());
+                            result.add(ci);
+                        }
+                    }
+                    if (!result.isEmpty()) {
                         return result;
                     }
                 }

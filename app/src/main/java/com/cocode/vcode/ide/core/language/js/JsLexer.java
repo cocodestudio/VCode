@@ -66,21 +66,63 @@ public class JsLexer {
         }
         if (start < 0) start = 0;
 
-        // Find safe end boundary beyond the edit
+        // Extend boundary past unclosed block comments or template literals.
+        boolean inBlockComment = false;
+        boolean inTemplate = false;
+        for (int k = start; k < editOffset && k < newLen; k++) {
+            char c = newSource.charAt(k);
+            if (!inBlockComment && !inTemplate) {
+                if (c == '/' && k + 1 < newLen && newSource.charAt(k + 1) == '*') {
+                    inBlockComment = true;
+                    k++;
+                } else if (c == '`') {
+                    inTemplate = true;
+                }
+            } else if (inBlockComment) {
+                if (c == '*' && k + 1 < newLen && newSource.charAt(k + 1) == '/') {
+                    inBlockComment = false;
+                    k++;
+                }
+            } else if (inTemplate) {
+                if (c == '\\') {
+                    k++;
+                } else if (c == '`') {
+                    inTemplate = false;
+                }
+            }
+        }
+
         int newEnd = editOffset;
         while (newEnd < newLen) {
             char c = newSource.charAt(newEnd);
-            if (c == '\n') {
-                newEnd++;
-                break;
-            }
-            if (c == '`') {
-                newEnd++;
-                break;
-            }
-            if (c == '*' && newEnd + 1 < newLen && newSource.charAt(newEnd + 1) == '/') {
-                newEnd += 2;
-                break;
+            if (!inBlockComment && !inTemplate) {
+                if (c == '/' && newEnd + 1 < newLen && newSource.charAt(newEnd + 1) == '*') {
+                    inBlockComment = true;
+                    newEnd += 2;
+                    continue;
+                } else if (c == '`') {
+                    inTemplate = true;
+                    newEnd++;
+                    continue;
+                } else if (c == '\n') {
+                    newEnd++;
+                    break;
+                }
+            } else if (inBlockComment) {
+                if (c == '*' && newEnd + 1 < newLen && newSource.charAt(newEnd + 1) == '/') {
+                    inBlockComment = false;
+                    newEnd += 2;
+                    break;
+                }
+            } else if (inTemplate) {
+                if (c == '\\') {
+                    newEnd += 2;
+                    continue;
+                } else if (c == '`') {
+                    inTemplate = false;
+                    newEnd++;
+                    break;
+                }
             }
             newEnd++;
         }
@@ -124,8 +166,16 @@ public class JsLexer {
                 continue;
             }
             byte t = newTypes[before];
-            if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_NUMBER || t == TokenStream.TK_STRING || t == TokenStream.TK_TEMPLATE || t == TokenStream.TK_REGEX) {
+            if (t == TokenStream.TK_NUMBER || t == TokenStream.TK_STRING || t == TokenStream.TK_TEMPLATE || t == TokenStream.TK_REGEX) {
                 lastTokenType = 1;
+            } else if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) {
+                int tokStart = newTokenStart[before];
+                if (tokStart >= 0 && tokStart <= before) {
+                    String word = newSource.substring(tokStart, before + 1);
+                    lastTokenType = isRegexPrecedingKeyword(word) ? 0 : 1;
+                } else {
+                    lastTokenType = 1;
+                }
             } else if (t == TokenStream.TK_PUNCT) {
                 char c = newSource.charAt(before);
                 if (c == ')' || c == ']') {
@@ -142,9 +192,13 @@ public class JsLexer {
     }
 
     private static void lexRegion(String source, byte[] types, int[] tokenStart, int startOffset, int endOffset, int initialLastTokenType) {
-        int len = source.length();
+        lexRegionInternal(source, types, tokenStart, startOffset, endOffset, initialLastTokenType, false);
+    }
+
+    private static int lexRegionInternal(String source, byte[] types, int[] tokenStart, int startOffset, int endOffset, int initialLastTokenType, boolean stopAtClosingBrace) {
         int i = startOffset;
         int lastTokenType = initialLastTokenType;
+        int braceDepth = stopAtClosingBrace ? 1 : 0;
 
         while (i < endOffset) {
             char quote = source.charAt(i);
@@ -223,154 +277,7 @@ public class JsLexer {
 
             // Template literal `
             if (quote == '`') {
-                int start = i;
-                i++;
-                while (i < endOffset) {
-                    char tc = source.charAt(i);
-                    if (tc == '\\') {
-                        i += 2;
-                        continue;
-                    }
-                    if (tc == '$' && i + 1 < endOffset && source.charAt(i + 1) == '{') {
-                        for (int k = start; k < i && k < endOffset; k++) {
-                            if (k < types.length) {
-                                types[k] = TokenStream.TK_TEMPLATE;
-                                tokenStart[k] = start;
-                            }
-                        }
-                        if (i < types.length) {
-                            types[i] = TokenStream.TK_PUNCT;
-                            tokenStart[i] = i;
-                        }
-                        if (i + 1 < types.length) {
-                            types[i + 1] = TokenStream.TK_PUNCT;
-                            tokenStart[i + 1] = i + 1;
-                        }
-                        i += 2;
-                        int exprStart = i;
-                        int braceDepth = 1;
-                        while (i < endOffset && braceDepth > 0) {
-                            char q2 = source.charAt(i);
-                            if (q2 == '{') {
-                                braceDepth++;
-                                i++;
-                            } else if (q2 == '}') {
-                                braceDepth--;
-                                if (braceDepth == 0) {
-                                    lexRegion(source, types, tokenStart, exprStart, i, 0);
-                                    if (i < types.length) {
-                                        types[i] = TokenStream.TK_PUNCT;
-                                        tokenStart[i] = i;
-                                    }
-                                    i++;
-                                    break;
-                                }
-                                i++;
-                            } else if (q2 == '\'' || q2 == '"') {
-                                char sq = q2;
-                                int sStart = i;
-                                i++;
-                                while (i < endOffset) {
-                                    if (source.charAt(i) == '\\') {
-                                        i += 2;
-                                        continue;
-                                    }
-                                    if (source.charAt(i) == sq) {
-                                        i++;
-                                        break;
-                                    }
-                                    i++;
-                                }
-                                for (int k = sStart; k < Math.min(i, endOffset); k++) {
-                                    if (k < types.length) {
-                                        types[k] = TokenStream.TK_STRING;
-                                        tokenStart[k] = sStart;
-                                    }
-                                }
-                            } else if (q2 == '`') {
-                                i++;
-                                while (i < endOffset) {
-                                    if (source.charAt(i) == '\\') {
-                                        i += 2;
-                                        continue;
-                                    }
-                                    if (source.charAt(i) == '`') {
-                                        i++;
-                                        break;
-                                    }
-                                    if (source.charAt(i) == '$' && i + 1 < endOffset && source.charAt(i + 1) == '{') {
-                                        i += 2;
-                                        int innerDepth = 1;
-                                        while (i < endOffset && innerDepth > 0) {
-                                            char q3 = source.charAt(i);
-                                            if (q3 == '{') {
-                                                innerDepth++;
-                                                i++;
-                                            } else if (q3 == '}') {
-                                                innerDepth--;
-                                                i++;
-                                            } else if (q3 == '\'' || q3 == '"' || q3 == '`') {
-                                                char innerQuote = q3;
-                                                i++;
-                                                while (i < endOffset) {
-                                                    if (source.charAt(i) == '\\') {
-                                                        i += 2;
-                                                        continue;
-                                                    }
-                                                    if (source.charAt(i) == innerQuote) {
-                                                        i++;
-                                                        break;
-                                                    }
-                                                    i++;
-                                                }
-                                            } else {
-                                                i++;
-                                            }
-                                        }
-                                    } else {
-                                        i++;
-                                    }
-                                }
-                            } else {
-                                i++;
-                            }
-                        }
-                        if (braceDepth > 0) {
-                            lexRegion(source, types, tokenStart, exprStart, Math.min(i, endOffset), 0);
-                        }
-                        start = i;
-                        continue;
-                    }
-                    if (tc == '`') {
-                        int currentChunkStart = -1;
-                        for (int k = start; k <= i && k < endOffset; k++) {
-                            if (k < types.length && types[k] == TokenStream.TK_NONE) {
-                                types[k] = TokenStream.TK_TEMPLATE;
-                                if (currentChunkStart == -1) currentChunkStart = k;
-                                tokenStart[k] = currentChunkStart;
-                            } else {
-                                currentChunkStart = -1;
-                            }
-                        }
-                        i++;
-                        start = i;
-                        break;
-                    }
-                    i++;
-                }
-
-                if (i >= endOffset && start < endOffset) {
-                    int currentChunkStart = -1;
-                    for (int k = start; k < Math.min(i, endOffset); k++) {
-                        if (k < types.length && types[k] == TokenStream.TK_NONE) {
-                            types[k] = TokenStream.TK_TEMPLATE;
-                            if (currentChunkStart == -1) currentChunkStart = k;
-                            tokenStart[k] = currentChunkStart;
-                        } else {
-                            currentChunkStart = -1;
-                        }
-                    }
-                }
+                i = lexTemplate(source, types, tokenStart, i, endOffset);
                 lastTokenType = 1;
                 continue;
             }
@@ -416,12 +323,42 @@ public class JsLexer {
                 }
             }
 
-            // Numbers
-            if (Character.isDigit(quote)) {
+            // Numeric literal
+            if (Character.isDigit(quote) || (quote == '.' && i + 1 < endOffset && Character.isDigit(source.charAt(i + 1)))) {
                 int start = i;
-                while (i < endOffset && (Character.isLetterOrDigit(source.charAt(i)) || source.charAt(i) == '.')) {
-                    i++;
+                if (quote == '0' && i + 1 < endOffset) {
+                    char next = source.charAt(i + 1);
+                    if (next == 'x' || next == 'X') {
+                        i += 2;
+                        while (i < endOffset && (isHexDigit(source.charAt(i)) || (source.charAt(i) == '_' && i + 1 < endOffset && isHexDigit(source.charAt(i + 1))))) {
+                            i++;
+                        }
+                        if (i < endOffset && (source.charAt(i) == 'n' || source.charAt(i) == 'N')) {
+                            i++;
+                        }
+                    } else if (next == 'b' || next == 'B') {
+                        i += 2;
+                        while (i < endOffset && (source.charAt(i) == '0' || source.charAt(i) == '1' || (source.charAt(i) == '_' && i + 1 < endOffset && (source.charAt(i + 1) == '0' || source.charAt(i + 1) == '1')))) {
+                            i++;
+                        }
+                        if (i < endOffset && (source.charAt(i) == 'n' || source.charAt(i) == 'N')) {
+                            i++;
+                        }
+                    } else if (next == 'o' || next == 'O') {
+                        i += 2;
+                        while (i < endOffset && ((source.charAt(i) >= '0' && source.charAt(i) <= '7') || (source.charAt(i) == '_' && i + 1 < endOffset && (source.charAt(i + 1) >= '0' && source.charAt(i + 1) <= '7')))) {
+                            i++;
+                        }
+                        if (i < endOffset && (source.charAt(i) == 'n' || source.charAt(i) == 'N')) {
+                            i++;
+                        }
+                    } else {
+                        i = scanDecimalNumber(source, i, endOffset, start);
+                    }
+                } else {
+                    i = scanDecimalNumber(source, i, endOffset, start);
                 }
+
                 for (int k = start; k < Math.min(i, endOffset); k++) {
                     if (k < types.length) {
                         types[k] = TokenStream.TK_NUMBER;
@@ -447,9 +384,7 @@ public class JsLexer {
                     }
                 }
 
-                if ("return".equals(word) || "typeof".equals(word) || "instanceof".equals(word)
-                        || "in".equals(word) || "new".equals(word) || "delete".equals(word)
-                        || "void".equals(word) || "throw".equals(word) || "yield".equals(word)) {
+                if (isRegexPrecedingKeyword(word)) {
                     lastTokenType = 0;
                 } else {
                     lastTokenType = 1;
@@ -481,6 +416,17 @@ public class JsLexer {
             types[i] = isPunct(quote) ? TokenStream.TK_PUNCT : TokenStream.TK_OPERATOR;
             tokenStart[i] = i;
 
+            if (stopAtClosingBrace) {
+                if (quote == '{') {
+                    braceDepth++;
+                } else if (quote == '}') {
+                    braceDepth--;
+                    if (braceDepth == 0) {
+                        return i + 1;
+                    }
+                }
+            }
+
             if (quote == ')' || quote == ']') {
                 lastTokenType = 1;
             } else {
@@ -488,6 +434,136 @@ public class JsLexer {
             }
             i++;
         }
+        return i;
+    }
+
+    private static int lexTemplate(String source, byte[] types, int[] tokenStart, int i, int endOffset) {
+        int tmplStart = i;
+        if (i < types.length) {
+            types[i] = TokenStream.TK_TEMPLATE;
+            tokenStart[i] = tmplStart;
+        }
+        i++; // skip opening `
+
+        int chunkStart = i;
+        while (i < endOffset) {
+            char tc = source.charAt(i);
+            if (tc == '\\') {
+                i += 2;
+                continue;
+            }
+            if (tc == '$' && i + 1 < endOffset && source.charAt(i + 1) == '{') {
+                // Interpolated expression: ${...}
+                for (int k = chunkStart; k < i && k < endOffset; k++) {
+                    if (k < types.length) {
+                        types[k] = TokenStream.TK_TEMPLATE;
+                        tokenStart[k] = chunkStart;
+                    }
+                }
+                if (i < types.length) {
+                    types[i] = TokenStream.TK_PUNCT;
+                    tokenStart[i] = i;
+                }
+                if (i + 1 < types.length) {
+                    types[i + 1] = TokenStream.TK_PUNCT;
+                    tokenStart[i + 1] = i + 1;
+                }
+                i += 2;
+
+                i = lexRegionInternal(source, types, tokenStart, i, endOffset, 0, true);
+                chunkStart = i;
+                continue;
+            }
+            if (tc == '`') {
+                for (int k = chunkStart; k < i && k < endOffset; k++) {
+                    if (k < types.length) {
+                        types[k] = TokenStream.TK_TEMPLATE;
+                        tokenStart[k] = chunkStart;
+                    }
+                }
+                if (i < types.length) {
+                    types[i] = TokenStream.TK_TEMPLATE;
+                    tokenStart[i] = tmplStart;
+                }
+                i++;
+                return i;
+            }
+            i++;
+        }
+
+        // Trailing unclosed template at EOF
+        for (int k = chunkStart; k < Math.min(i, endOffset); k++) {
+            if (k < types.length) {
+                types[k] = TokenStream.TK_TEMPLATE;
+                tokenStart[k] = chunkStart;
+            }
+        }
+        return i;
+    }
+
+    private static int scanDecimalNumber(String source, int i, int endOffset, int start) {
+        if (source.charAt(i) == '.') {
+            i++; // leading dot .5
+            while (i < endOffset && (Character.isDigit(source.charAt(i)) || (source.charAt(i) == '_' && i + 1 < endOffset && Character.isDigit(source.charAt(i + 1))))) {
+                i++;
+            }
+        } else {
+            while (i < endOffset && (Character.isDigit(source.charAt(i)) || (source.charAt(i) == '_' && i + 1 < endOffset && Character.isDigit(source.charAt(i + 1))))) {
+                i++;
+            }
+            if (i < endOffset && source.charAt(i) == '.') {
+                if (i + 1 < endOffset && Character.isDigit(source.charAt(i + 1))) {
+                    i++;
+                    while (i < endOffset && (Character.isDigit(source.charAt(i)) || (source.charAt(i) == '_' && i + 1 < endOffset && Character.isDigit(source.charAt(i + 1))))) {
+                        i++;
+                    }
+                }
+            }
+        }
+
+        // Exponent part: e[+-]?[0-9]+
+        if (i < endOffset && (source.charAt(i) == 'e' || source.charAt(i) == 'E')) {
+            int probe = i + 1;
+            if (probe < endOffset && (source.charAt(probe) == '+' || source.charAt(probe) == '-')) {
+                probe++;
+            }
+            if (probe < endOffset && Character.isDigit(source.charAt(probe))) {
+                i = probe + 1;
+                while (i < endOffset && (Character.isDigit(source.charAt(i)) || (source.charAt(i) == '_' && i + 1 < endOffset && Character.isDigit(source.charAt(i + 1))))) {
+                    i++;
+                }
+            }
+        }
+
+        // BigInt suffix 'n' (integers only)
+        if (i < endOffset && (source.charAt(i) == 'n' || source.charAt(i) == 'N')) {
+            boolean hasDotOrExp = false;
+            for (int k = start; k < i; k++) {
+                char c = source.charAt(k);
+                if (c == '.' || c == 'e' || c == 'E') {
+                    hasDotOrExp = true;
+                    break;
+                }
+            }
+            if (!hasDotOrExp) {
+                i++;
+            }
+        }
+        return i;
+    }
+
+    private static boolean isHexDigit(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    private static boolean isRegexPrecedingKeyword(String word) {
+        return "return".equals(word) || "typeof".equals(word) || "instanceof".equals(word)
+                || "in".equals(word) || "new".equals(word) || "delete".equals(word)
+                || "void".equals(word) || "throw".equals(word) || "yield".equals(word)
+                || "await".equals(word) || "case".equals(word) || "of".equals(word)
+                || "from".equals(word) || "as".equals(word) || "export".equals(word)
+                || "import".equals(word) || "extends".equals(word) || "else".equals(word)
+                || "do".equals(word) || "default".equals(word);
     }
 
     private static boolean isPunct(char c) {

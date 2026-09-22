@@ -16,7 +16,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.cocode.vcode.ide.R;
-import com.google.android.material.snackbar.Snackbar;
+import com.cocode.vcode.ide.views.VCodeSnackbar;
 
 /**
  * UI utility methods for density conversions, soft keyboard management, Snackbars, window insets, and view styling.
@@ -63,22 +63,35 @@ public class UiUtils {
     }
 
     /**
-     * Displays a standard Snackbar message.
+     * Displays a standard custom VCodeSnackbar message.
      */
     public static void showSnackbar(View anchor, String message, int duration) {
         if (anchor == null || message == null) return;
-        Snackbar.make(anchor, message, duration).show();
+        com.cocode.vcode.ide.views.VCodeSnackbar.make(anchor, message, duration).show();
     }
 
     /**
-     * Displays an error Snackbar with the error accent color.
+     * Displays an error custom VCodeSnackbar with error styling.
      */
     public static void showErrorSnackbar(View anchor, String message) {
         if (anchor == null || message == null) return;
-        Snackbar snackbar = Snackbar.make(anchor, message, Snackbar.LENGTH_LONG);
-        snackbar.getView().setBackgroundColor(
-                ContextCompat.getColor(anchor.getContext(), R.color.vcode_accent_error));
-        snackbar.show();
+        com.cocode.vcode.ide.views.VCodeSnackbar.error(anchor, message).show();
+    }
+
+    /**
+     * Displays a success custom VCodeSnackbar with success styling.
+     */
+    public static void showSuccessSnackbar(View anchor, String message) {
+        if (anchor == null || message == null) return;
+        com.cocode.vcode.ide.views.VCodeSnackbar.success(anchor, message).show();
+    }
+
+    /**
+     * Displays a warning custom VCodeSnackbar with warning styling.
+     */
+    public static void showWarningSnackbar(View anchor, String message) {
+        if (anchor == null || message == null) return;
+        com.cocode.vcode.ide.views.VCodeSnackbar.warning(anchor, message).show();
     }
 
     /**

@@ -59,7 +59,8 @@ public final class JsKeywords {
                 "default", "delete", "do", "else", "enum", "export", "extends", "false",
                 "finally", "for", "function", "if", "import", "in", "instanceof", "new",
                 "null", "return", "super", "switch", "this", "throw", "true", "try",
-                "typeof", "var", "void", "while", "with", "yield", "let", "static", "async"
+                "typeof", "var", "void", "while", "with", "yield", "let", "static", "async",
+                "of", "from"
         );
 
         try {

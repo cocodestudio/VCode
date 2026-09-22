@@ -78,4 +78,105 @@ public class JsLinterBugsTest extends BaseJsAstTest {
                     p.getMessage().contains("Unexpected console statement"));
         }
     }
+
+    @Test
+    public void testCompoundConstReassignment() {
+        String js = "const a = 1;\n" +
+                    "a **= 2;\n" +
+                    "const b = 2;\n" +
+                    "b &= 1;\n" +
+                    "const c = 3;\n" +
+                    "c |= 1;\n" +
+                    "const d = 4;\n" +
+                    "d ^= 1;\n" +
+                    "const e = 5;\n" +
+                    "e <<= 1;\n" +
+                    "const f = 6;\n" +
+                    "f >>= 1;\n" +
+                    "const g = 7;\n" +
+                    "g >>>= 1;\n" +
+                    "const h = null;\n" +
+                    "h ??= 10;\n" +
+                    "const i = true;\n" +
+                    "i &&= false;\n" +
+                    "const j = false;\n" +
+                    "j ||= true;\n";
+        setupEngine(js);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
+        int constErrors = 0;
+        for (com.cocode.vcode.ide.core.model.Problem p : problems) {
+            if (p.getMessage().contains("Cannot reassign 'const' variable")) {
+                constErrors++;
+            }
+        }
+        org.junit.Assert.assertEquals("All 10 compound assignments to const must report error", 10, constErrors);
+
+        // Property assignments on a const object should not trigger const error
+        String jsProp = "const obj = {};\nobj.prop = 1;\nobj.prop += 2;\nobj.prop **= 2;\n";
+        setupEngine(jsProp);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> propProblems = JsLinter.analyze(mockFile, jsProp, mockIndex);
+        for (com.cocode.vcode.ide.core.model.Problem p : propProblems) {
+            org.junit.Assert.assertFalse("Property mutation on const object is valid: " + p.getMessage(),
+                    p.getMessage().contains("Cannot reassign 'const' variable"));
+        }
+    }
+
+    @Test
+    public void testArrowFunctionSingleParamAndExpressionBody() {
+        String js = "const double = x => x * 2;\n" +
+                    "const greet = name => 'Hello ' + name;\n";
+        setupEngine(js);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
+        for (com.cocode.vcode.ide.core.model.Problem p : problems) {
+            org.junit.Assert.assertFalse("Single-param arrow parameter should not be reported undefined: " + p.getMessage(),
+                    p.getMessage().contains("'x' is not defined") || p.getMessage().contains("'name' is not defined"));
+        }
+    }
+
+    @Test
+    public void testForOfAndForInLoopVariablesInScope() {
+        String js = "const items = [1, 2, 3];\n" +
+                    "for (const item of items) {\n" +
+                    "    console.log(item);\n" +
+                    "}\n" +
+                    "const dict = { a: 1 };\n" +
+                    "for (let key in dict) {\n" +
+                    "    console.log(key);\n" +
+                    "}\n";
+        setupEngine(js);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
+        for (com.cocode.vcode.ide.core.model.Problem p : problems) {
+            org.junit.Assert.assertFalse("for-of / for-in variables must be in scope: " + p.getMessage(),
+                    p.getMessage().contains("'item' is not defined") || p.getMessage().contains("'key' is not defined"));
+        }
+    }
+
+    @Test
+    public void testCatchClauseVariableInScope() {
+        String js = "try {\n" +
+                    "    throw new Error('boom');\n" +
+                    "} catch (err) {\n" +
+                    "    console.log(err);\n" +
+                    "}\n";
+        setupEngine(js);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> problems = JsLinter.analyze(mockFile, js, mockIndex);
+        for (com.cocode.vcode.ide.core.model.Problem p : problems) {
+            org.junit.Assert.assertFalse("catch clause parameter must be in scope: " + p.getMessage(),
+                    p.getMessage().contains("'err' is not defined"));
+        }
+    }
+
+    @Test
+    public void testTypeScriptDeclareGlobalScope() {
+        String ts = "declare global {\n" +
+                    "    var __DEV__: boolean;\n" +
+                    "}\n" +
+                    "const dev = __DEV__;\n";
+        setupEngine(ts);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> problems = JsLinter.analyze(mockFile, ts, mockIndex);
+        for (com.cocode.vcode.ide.core.model.Problem p : problems) {
+            org.junit.Assert.assertFalse("declare global variables must be available in global scope: " + p.getMessage(),
+                    p.getMessage().contains("'__DEV__' is not defined"));
+        }
+    }
 }

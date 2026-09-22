@@ -50,6 +50,9 @@ public class JsParserTest extends BaseJsAstTest {
 
         assertNotNull("'data' must resolve inside process()", resolved);
         assertEquals(JsSyntaxTree.N_PARAM, resolved[2]);
+        int paramOffset = SHADOWING_SOURCE.indexOf("data)");
+        assertEquals("Resolved decl should start at parameter offset",
+                paramOffset, tree.nodeStart[resolved[1]]);
     }
 
     @Test
@@ -65,5 +68,38 @@ public class JsParserTest extends BaseJsAstTest {
         int scopeB = scopeTree.findScopeAt(usageB, tree);
         int[] resolvedB = scopeTree.lookupSymbol("x", scopeB);
         assertNotNull("Usage B must resolve to global x", resolvedB);
+    }
+
+    @Test
+    public void tokensCoverAtLeastFirstNode() {
+        setupEngine(BLOCK_SHADOWING_SOURCE);
+
+        assertTrue(tree.nodeCount > 1);
+        int firstDecl = 1;
+        boolean found = false;
+        for (int t = 0; t < tokens.types.length; t++) {
+            if (tokens.tokenStart[t] < tree.nodeStart[firstDecl]) continue;
+            if (tokens.tokenStart[t] >= tree.nodeEnd[firstDecl]) break;
+            if (tokens.types[t] == TokenStream.TK_IDENTIFIER) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue("First node must contain at least one identifier token", found);
+    }
+
+    @Test
+    public void destructuredParamIsRegisteredAsParameter() {
+        String code = "function updateProfile({ name, age }) {\n" +
+                "    console.log(name);\n" +
+                "}";
+        setupEngine(code);
+
+        int logCall = code.indexOf("log(name)") + "log(".length();
+        int scope = scopeTree.findScopeAt(logCall, tree);
+        int[] resolved = scopeTree.lookupSymbol("name", scope);
+
+        assertNotNull("'name' from destructured param must be resolvable", resolved);
+        assertEquals("name should resolve as a parameter", JsSyntaxTree.N_PARAM, resolved[2]);
     }
 }

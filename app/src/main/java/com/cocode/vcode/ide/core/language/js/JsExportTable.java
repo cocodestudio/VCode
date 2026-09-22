@@ -176,7 +176,8 @@ public final class JsExportTable {
         for (int i = 1; i < tree.nodeCount; i++) {
             int type = tree.nodeType[i];
             if (type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL
-                    || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_INTERFACE) {
+                    || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_INTERFACE
+                    || type == JsSyntaxTree.N_ENUM || type == JsSyntaxTree.N_TYPE_ALIAS) {
                 if (name.equals(tree.nodeName[i])) {
                     return i;
                 }

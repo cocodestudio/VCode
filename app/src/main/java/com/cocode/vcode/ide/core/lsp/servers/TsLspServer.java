@@ -233,6 +233,6 @@ public final class TsLspServer implements LspServer {
 
     @Override
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
-        return java.util.Collections.emptyList();
+        return JsSymbolRenamer.rename(doc, pos);
     }
 }

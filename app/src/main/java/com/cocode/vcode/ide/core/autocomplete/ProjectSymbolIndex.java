@@ -353,7 +353,7 @@ public class ProjectSymbolIndex {
 
         for (int i = 1; i < tree.nodeCount; i++) {
             int nodeType = tree.nodeType[i];
-            if (nodeType == JsSyntaxTree.N_CLASS_DECL || nodeType == JsSyntaxTree.N_INTERFACE || nodeType == JsSyntaxTree.N_ENUM) {
+            if (nodeType == JsSyntaxTree.N_CLASS_DECL || nodeType == JsSyntaxTree.N_INTERFACE || nodeType == JsSyntaxTree.N_ENUM || nodeType == JsSyntaxTree.N_TYPE_ALIAS) {
                 String className = tree.nodeName[i];
                 if (className == null || className.isEmpty()) continue;
 
@@ -375,6 +375,21 @@ public class ProjectSymbolIndex {
                         }
                     }
                     child = tree.nodeSibling[child];
+                }
+
+                // Extract object type properties for type aliases
+                if (nodeType == JsSyntaxTree.N_TYPE_ALIAS && tree.nodeTypeAnn[i] != null) {
+                    Map<String, String> propMap = com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine.extractObjectTypePropertyMap(tree.nodeTypeAnn[i]);
+                    for (Map.Entry<String, String> entry : propMap.entrySet()) {
+                        String pName = entry.getKey();
+                        String pType = entry.getValue();
+                        if (pName != null && !pName.isEmpty() && seen.add(pName)) {
+                            boolean isMethod = pType.startsWith("(") || pType.contains("=>");
+                            String insert = isMethod ? pName + "(|)" : pName;
+                            CompletionItem.Type type = isMethod ? CompletionItem.Type.FUNCTION : CompletionItem.Type.VALUE;
+                            members.add(new CompletionItem(pName, insert, className + " property", type, 0));
+                        }
+                    }
                 }
 
                 // Add constructor assignments (e.g. this.x = 1) from shapeTable
@@ -461,6 +476,10 @@ public class ProjectSymbolIndex {
     public synchronized List<CompletionItem> getClassMembers(String className) {
         List<CompletionItem> members = classMembers.get(className);
         return members != null ? new ArrayList<>(members) : new ArrayList<>();
+    }
+
+    public synchronized Set<String> getAllClassNames() {
+        return new HashSet<>(classMembers.keySet());
     }
 
     public synchronized List<CompletionItem> getExportsForPath(File currentFile, String importPath) {

@@ -45,6 +45,7 @@ public final class JsSyntaxTree {
     public static final int N_ENUM = 30;
     public static final int N_OBJECT_LITERAL = 31;
     public static final int N_PROPERTY = 32;
+    public static final int N_TYPE_REF = 33;
 
     public static final int FLAG_NONE = 0;
     public static final int FLAG_VAR = 1;

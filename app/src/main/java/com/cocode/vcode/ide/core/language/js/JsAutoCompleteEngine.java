@@ -15,10 +15,12 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -276,15 +278,18 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        if (cachedTokens != null && cursorPos >= 0 && cursorPos < cachedTokens.length) {
-            byte type = cachedTokens.types[cursorPos];
-            if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_COMMENT ||
-                    type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
-                    type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
-                if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE && isInsideTemplateExpression(fullText, cursorPos)) {
-                    // Inside ${...} template interpolation: allow completions!
-                } else if (cursorPos != cachedTokens.tokenStart[cursorPos]) {
-                    return new ArrayList<>();
+        if (cachedTokens != null && cachedTokens.length > 0) {
+            int tokIdx = findTokenIndexAtOffset(cachedTokens, cursorPos);
+            if (tokIdx >= 0 && tokIdx < cachedTokens.length) {
+                byte type = cachedTokens.types[tokIdx];
+                if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_COMMENT ||
+                        type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
+                        type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
+                    if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE && isInsideTemplateExpression(fullText, cursorPos)) {
+                        // Allow completions inside template interpolation (${...})
+                    } else if (cursorPos != cachedTokens.tokenStart[tokIdx]) {
+                        return new ArrayList<>();
+                    }
                 }
             }
         }
@@ -422,22 +427,58 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         // Object key position indicators: after { or after ,
         if (preceding != '{' && preceding != ',') return null;
 
-        // Verify we're actually inside an object literal by checking brace balance
-        // and ensuring this isn't a code block (function body, if block, etc.)
-        // Code blocks are preceded by ) (if/for/while), else, or start a function body
+        // Exclude class bodies, switch statements, and block-level code scopes
+        if (cachedTree != null && cachedTree.nodesByOffset != null && cachedTree.nodeCount > 1) {
+            int deepest = 0;
+            int minLen = Integer.MAX_VALUE;
+            int n = cachedTree.nodeCount - 1;
+            int low = 1, high = n;
+            int searchIdx = n;
+            while (low <= high) {
+                int mid = (low + high) >>> 1;
+                int midNode = cachedTree.nodesByOffset[mid];
+                if (midNode > 0 && midNode < cachedTree.nodeCount && cachedTree.nodeStart[midNode] <= cursorPos) {
+                    searchIdx = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            for (int j = searchIdx; j >= 1; j--) {
+                int node = cachedTree.nodesByOffset[j];
+                if (node > 0 && node < cachedTree.nodeCount && cursorPos >= cachedTree.nodeStart[node] && cursorPos <= cachedTree.nodeEnd[node]) {
+                    int len = cachedTree.nodeEnd[node] - cachedTree.nodeStart[node];
+                    if (len < minLen) {
+                        minLen = len;
+                        deepest = node;
+                    }
+                }
+            }
+            if (deepest > 0) {
+                int dType = cachedTree.nodeType[deepest];
+                if (dType == JsSyntaxTree.N_CLASS_DECL || dType == JsSyntaxTree.N_INTERFACE ||
+                        dType == JsSyntaxTree.N_SWITCH_STMT || dType == JsSyntaxTree.N_ENUM ||
+                        dType == JsSyntaxTree.N_CASE_CLAUSE || dType == JsSyntaxTree.N_BLOCK) {
+                    return null;
+                }
+            }
+        }
+
         if (preceding == '{') {
-            // Walk back to see if this { is a code block or an object literal
             int j = i - 1;
             while (j >= 0 && Character.isWhitespace(fullText.charAt(j))) j--;
             if (j >= 0) {
                 char beforeBrace = fullText.charAt(j);
-                // Code block indicators or template expression indicators
-                if (beforeBrace == ')' || beforeBrace == '>' || beforeBrace == '$')
-                    return null; // arrow function body, if/for, or template expression ${
-                // Check for keywords that indicate code blocks
-                String context = fullText.substring(Math.max(0, j - 10), j + 1).trim();
-                if (context.endsWith("else") || context.endsWith("try") || context.endsWith("catch")
-                        || context.endsWith("finally") || context.endsWith("do")) {
+                if (beforeBrace == ')' || beforeBrace == '>' || beforeBrace == '$' || beforeBrace == ']')
+                    return null;
+                int wEnd = j + 1;
+                int wStart = j;
+                while (wStart >= 0 && Character.isLetterOrDigit(fullText.charAt(wStart))) wStart--;
+                String kwBefore = fullText.substring(wStart + 1, wEnd);
+                if ("else".equals(kwBefore) || "try".equals(kwBefore) || "catch".equals(kwBefore)
+                        || "finally".equals(kwBefore) || "do".equals(kwBefore) || "switch".equals(kwBefore)
+                        || "class".equals(kwBefore) || "interface".equals(kwBefore) || "enum".equals(kwBefore)
+                        || "function".equals(kwBefore) || "static".equals(kwBefore)) {
                     return null;
                 }
             }
@@ -518,7 +559,20 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
      */
     private int findMatchingBrace(String text, int cursorPos) {
         int depth = 0;
+        com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = cachedTokens;
         for (int i = cursorPos - 1; i >= 0; i--) {
+            if (tokens != null && i < tokens.length) {
+                byte t = tokens.types[i];
+                if (t == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
+                        t == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_COMMENT ||
+                        t == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
+                    int tokStart = tokens.tokenStart[i];
+                    if (tokStart >= 0 && tokStart <= i) {
+                        i = tokStart;
+                        continue;
+                    }
+                }
+            }
             char c = text.charAt(i);
             if (c == '}') depth++;
             else if (c == '{') {
@@ -864,6 +918,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     if (className == null || className.isEmpty()) className = objectToken;
                     List<CompletionItem> classMembers = buildClassMemberItems(cachedTree, declNodeId, className);
                     if (!classMembers.isEmpty()) return fuzzyFilter(classMembers, word);
+                } else if (cachedTree.nodeType[declNodeId] == JsSyntaxTree.N_ENUM) {
+                    List<CompletionItem> enumMembers = getEnumMembers(cachedTree, declNodeId, word);
+                    if (!enumMembers.isEmpty()) return fuzzyFilter(enumMembers, word);
+                } else if (cachedTree.nodeType[declNodeId] == JsSyntaxTree.N_INTERFACE) {
+                    List<CompletionItem> ifaceMembers = getInterfaceMembers(cachedTree, declNodeId, word);
+                    if (!ifaceMembers.isEmpty()) return fuzzyFilter(ifaceMembers, word);
                 }
                 String[] shape = cachedTree.shapeTable.get(declNodeId);
                 if (shape != null) {
@@ -918,7 +978,25 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             } else if (baseToken.startsWith("@OBJECT_LITERAL:")) {
                 inferredType = "@INLINE_SHAPE:" + baseToken.substring(16);
             } else {
-                inferredType = varTypeMap.get(baseToken);
+                if (cachedTree != null && cachedScopeTree != null) {
+                    int currentScope = cachedScopeTree.findScopeAt(dotPos, cachedTree);
+                    int[] resolved = cachedScopeTree.lookupSymbol(baseToken, currentScope, dotPos, cachedTree);
+                    if (resolved != null) {
+                        int declNodeId = resolved[1];
+                        activeNodeId = declNodeId;
+                        String typeAnn = cachedTree.nodeTypeAnn[declNodeId];
+                        if (typeAnn != null && !typeAnn.isEmpty()) {
+                            inferredType = typeAnn;
+                        }
+                    }
+                }
+
+                if (inferredType == null) {
+                    inferredType = varTypeMap.get(baseToken);
+                }
+                if (inferredType != null && (inferredType.startsWith("@ELEMENT_OF:") || inferredType.startsWith("@AWAIT_ELEMENT_OF:"))) {
+                    inferredType = resolveElementType(text, inferredType, dotPos);
+                }
                 if (inferredType == null) {
                     if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(baseToken)) {
                         inferredType = "@PROMISE";
@@ -946,6 +1024,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                 inferredType = "@INLINE_SHAPE_NODE:" + declNodeId;
                             } else if (inferredType == null) {
                                 inferredType = cachedTree.nodeTypeAnn[declNodeId];
+                            }
+                            if (inferredType != null && (inferredType.startsWith("@ELEMENT_OF:") || inferredType.startsWith("@AWAIT_ELEMENT_OF:"))) {
+                                inferredType = resolveElementType(text, inferredType, dotPos);
                             }
                             if (inferredType == null) {
                                 int parentId = cachedTree.nodeParent[declNodeId];
@@ -1023,17 +1104,30 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 }
 
                 if (baseIsMethod && activeTree != null && activeNodeId > 0) {
-                    int retObj = findReturnObjectLiteralNode(activeTree, activeNodeId);
-                    if (retObj > 0) {
-                        activeNodeId = retObj;
-                        inferredType = "@INLINE_SHAPE_NODE:" + retObj;
+                    if (activeTree.nodeTypeAnn[activeNodeId] != null && !activeTree.nodeTypeAnn[activeNodeId].isEmpty()) {
+                        inferredType = activeTree.nodeTypeAnn[activeNodeId];
                     } else {
-                        String[] retShape = findReturnShapeDFS(activeTree, activeNodeId);
-                        if (retShape != null) {
-                            inferredType = "@INLINE_SHAPE:" + String.join(",", retShape);
+                        int retObj = findReturnObjectLiteralNode(activeTree, activeNodeId);
+                        if (retObj > 0) {
+                            activeNodeId = retObj;
+                            inferredType = "@INLINE_SHAPE_NODE:" + retObj;
+                        } else {
+                            String[] retShape = findReturnShapeDFS(activeTree, activeNodeId);
+                            if (retShape != null) {
+                                inferredType = "@INLINE_SHAPE:" + String.join(",", retShape);
+                            }
                         }
                     }
                 }
+
+                if (cachedTree != null && !baseIsMethod) {
+                    String narrowed = findNarrowedTypeForSymbol(cachedTree, text, baseToken, dotPos);
+                    if (narrowed != null) {
+                        inferredType = narrowed;
+                    }
+                }
+
+                inferredType = normalizeTypeScriptType(inferredType);
             }
 
             // resolve the chain
@@ -1041,7 +1135,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 String member = chain.get(k);
 
                 if (member.equals("!AWAIT")) {
-                    if (inferredType != null && inferredType.startsWith("@PROMISE_INLINE_SHAPE:")) {
+                    if (inferredType != null && inferredType.startsWith("@PROMISE_OF_TS:")) {
+                        inferredType = normalizeTypeScriptType(inferredType.substring(15));
+                    } else if (inferredType != null && inferredType.startsWith("@PROMISE_INLINE_SHAPE:")) {
                         inferredType = "@INLINE_SHAPE:" + inferredType.substring(22);
                     } else if (inferredType != null && inferredType.equals("@PROMISE")) {
                         inferredType = "@ANY";
@@ -1063,6 +1159,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                 inferredType = "@PROMISE_INLINE_SHAPE:" + String.join(",", keys);
                             } else inferredType = "@PROMISE";
                         } else inferredType = "@PROMISE";
+                    } else if (inferredType != null && inferredType.startsWith("@PROMISE_OF_TS:")) {
+                        // Preserves promise wrapper type
                     } else inferredType = "@PROMISE";
                     continue;
                 }
@@ -1071,25 +1169,102 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 String memberName = isMethod ? member.substring(0, member.length() - 2) : member;
 
                 if (memberName.startsWith("[")) {
-                    if (activeTree != null && activeNodeId > 0) {
-                        int childObj = findChildObjectLiteral(activeTree, activeNodeId);
-                        if (childObj > 0) {
-                            activeNodeId = childObj;
-                            inferredType = "@INLINE_SHAPE_NODE:" + childObj;
-                            continue;
-                        }
+                    if (inferredType != null && inferredType.startsWith("@ARRAY_OF_TS:")) {
+                        inferredType = normalizeTypeScriptType(inferredType.substring(13));
+                        continue;
                     }
                     if (inferredType != null && inferredType.startsWith("@ARRAY_OF_INLINE_SHAPE:")) {
                         inferredType = "@INLINE_SHAPE:" + inferredType.substring(23);
-                    } else if (inferredType != null && inferredType.equals("@ARRAY_OF_NUMBER")) {
-                        inferredType = "@NUMBER";
-                    } else if (inferredType != null && inferredType.equals("@ARRAY_OF_STRING")) {
-                        inferredType = "@STRING";
-                    } else if (inferredType != null && inferredType.equals("@ARRAY")) {
-                        inferredType = "@ANY";
-                    } else {
-                        inferredType = "@ANY";
+                        continue;
                     }
+                    if (inferredType != null && inferredType.equals("@ARRAY_OF_NUMBER")) {
+                        inferredType = "@NUMBER";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY_OF_STRING")) {
+                        inferredType = "@STRING";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY_OF_BOOLEAN")) {
+                        inferredType = "@BOOLEAN";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY")) {
+                        inferredType = "@ANY";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.startsWith("@TUPLE_OF_TS:")) {
+                        String tupleData = inferredType.substring(13);
+                        String idxStr = memberName.substring(1, memberName.length() - (memberName.endsWith("]") ? 1 : 0)).trim();
+                        List<String> elems = splitTopLevelCommas(tupleData);
+                        try {
+                            int idx = Integer.parseInt(idxStr);
+                            if (idx >= 0 && idx < elems.size()) {
+                                inferredType = normalizeTypeScriptType(elems.get(idx).trim());
+                            } else {
+                                inferredType = "@ANY";
+                            }
+                        } catch (NumberFormatException e) {
+                            inferredType = !elems.isEmpty() ? normalizeTypeScriptType(elems.get(0).trim()) : "@ANY";
+                        }
+                        continue;
+                    }
+                    if (activeTree != null && activeNodeId > 0) {
+                        int childObj = findChildObjectLiteral(activeTree, activeNodeId);
+                        if (childObj > 0) {
+                            String rawKey = memberName.substring(1, memberName.length() - (memberName.endsWith("]") ? 1 : 0)).trim();
+                            String staticKey = null;
+                            if ((rawKey.startsWith("'") && rawKey.endsWith("'")) || (rawKey.startsWith("\"") && rawKey.endsWith("\""))) {
+                                staticKey = rawKey.substring(1, rawKey.length() - 1).trim();
+                            }
+                            if (staticKey != null) {
+                                int propNode = findPropertyNodeId(activeTree, childObj, staticKey);
+                                if (propNode > 0) {
+                                    int nestedObj = findChildObjectLiteral(activeTree, propNode);
+                                    if (nestedObj > 0) {
+                                        activeNodeId = nestedObj;
+                                        inferredType = "@INLINE_SHAPE_NODE:" + nestedObj;
+                                    } else if (activeTree.nodeTypeAnn[propNode] != null) {
+                                        inferredType = activeTree.nodeTypeAnn[propNode];
+                                    } else {
+                                        inferredType = "@ANY";
+                                    }
+                                    continue;
+                                }
+                            } else {
+                                int idxSig = findPropertyNodeId(activeTree, childObj, "{index_signature}");
+                                if (idxSig > 0 && activeTree.nodeTypeAnn[idxSig] != null) {
+                                    inferredType = normalizeTypeScriptType(activeTree.nodeTypeAnn[idxSig]);
+                                    continue;
+                                }
+                                Set<String> propTypes = new LinkedHashSet<>();
+                                int pChild = activeTree.nodeChild[childObj];
+                                int pLoop = 0;
+                                while (pChild > 0 && pChild < activeTree.nodeCount && ++pLoop <= activeTree.nodeCount) {
+                                    if (activeTree.nodeType[pChild] == JsSyntaxTree.N_PROPERTY || activeTree.nodeType[pChild] == JsSyntaxTree.N_METHOD) {
+                                        String pAnn = activeTree.nodeTypeAnn[pChild];
+                                        if (pAnn != null && !pAnn.isEmpty()) {
+                                            propTypes.add(pAnn);
+                                        } else {
+                                            int nestedObj = findChildObjectLiteral(activeTree, pChild);
+                                            if (nestedObj > 0) {
+                                                propTypes.add("@INLINE_SHAPE_NODE:" + nestedObj);
+                                            }
+                                        }
+                                    }
+                                    pChild = activeTree.nodeSibling[pChild];
+                                }
+                                if (propTypes.size() == 1) {
+                                    inferredType = propTypes.iterator().next();
+                                    continue;
+                                } else if (propTypes.size() > 1) {
+                                    inferredType = "@UNION_TYPES:" + String.join(",", propTypes);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    inferredType = "@ANY";
                     continue;
                 }
 
@@ -1171,6 +1346,38 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     continue;
                 }
 
+                if (inferredType != null && inferredType.startsWith("@INLINE_TS_OBJECT:")) {
+                    Map<String, String> propMap = extractObjectTypePropertyMap(inferredType.substring(18));
+                    String memberType = propMap.get(memberName);
+                    if (memberType != null) {
+                        inferredType = normalizeTypeScriptType(memberType);
+                    } else {
+                        inferredType = "@ANY";
+                    }
+                    continue;
+                }
+
+                if (inferredType != null && (inferredType.startsWith("@ARRAY_OF_TS:") || inferredType.startsWith("@TUPLE_OF_TS:"))) {
+                    String elemType = inferredType.startsWith("@ARRAY_OF_TS:") ? inferredType.substring(13) : inferredType.substring(13);
+                    if (memberName.equals("find") || memberName.equals("pop") || memberName.equals("shift") || memberName.equals("at")) {
+                        inferredType = normalizeTypeScriptType(elemType);
+                    } else if (memberName.equals("filter") || memberName.equals("slice") || memberName.equals("concat") || memberName.equals("toReversed") || memberName.equals("toSorted")) {
+                        // Preserves array wrapper type
+                    } else {
+                        String nextType = getBuiltinType("@ARRAY", memberName);
+                        inferredType = nextType != null ? nextType : "@ANY";
+                    }
+                    continue;
+                }
+
+                if (inferredType != null && !inferredType.startsWith("@") && activeTree != null) {
+                    String memberType = resolveMemberTypeFromAst(activeTree, inferredType, memberName);
+                    if (memberType != null) {
+                        inferredType = normalizeTypeScriptType(memberType);
+                        continue;
+                    }
+                }
+
                 if (inferredType != null && (inferredType.startsWith("@") || inferredType.equals("string") || inferredType.equals("array") || inferredType.equals("number") || inferredType.equals("boolean"))) {
                     String lookupType = inferredType.startsWith("@") ? inferredType : "@" + inferredType.toUpperCase();
                     String elementType = null;
@@ -1206,8 +1413,62 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (!items.isEmpty()) return fuzzyFilter(items, word);
             }
 
+            if (inferredType != null) {
+                List<CompletionItem> typeItems = getTypeMembers(activeTree, inferredType, word);
+                if (!typeItems.isEmpty()) return fuzzyFilter(typeItems, word);
+            }
+
             if (inferredType != null && (inferredType.startsWith("@") || inferredType.equals("string") || inferredType.equals("array") || inferredType.equals("number") || inferredType.equals("boolean") || inferredType.equals("promise"))) {
-                if (inferredType.startsWith("@PROMISE") || inferredType.equals("promise")) {
+                if (inferredType.startsWith("@UNION_TYPES:")) {
+                    String[] unionTypes = inferredType.substring(13).split(",");
+                    Map<String, CompletionItem> merged = new LinkedHashMap<>();
+                    for (String uType : unionTypes) {
+                        uType = uType.trim();
+                        if (uType.isEmpty()) continue;
+                        List<CompletionItem> subItems = null;
+                        if (uType.startsWith("@INLINE_SHAPE_NODE:") && activeTree != null) {
+                            try {
+                                int targetNode = Integer.parseInt(uType.substring(19));
+                                subItems = getMembersForNode(activeTree, targetNode, word);
+                            } catch (NumberFormatException ignored) {}
+                        } else if (uType.startsWith("@INLINE_SHAPE:")) {
+                            String[] keys = uType.substring(14).split(",");
+                            subItems = new ArrayList<>();
+                            for (String key : keys) {
+                                if (!key.isEmpty()) {
+                                    CompletionItem ci = new CompletionItem(key, key, "Property", CompletionItem.Type.VALUE, 0);
+                                    ci.setReplaceLength(word.length());
+                                    subItems.add(ci);
+                                }
+                            }
+                        } else if (uType.startsWith("@")) {
+                            String tName = (uType.startsWith("@ARRAY_OF_") || uType.startsWith("@TUPLE_OF_")) ? "array" : uType.substring(1).toLowerCase();
+                            String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(tName);
+                            if (methods != null) {
+                                subItems = buildMemberList(tName, methods, word, CompletionItem.Type.FUNCTION);
+                            }
+                        } else {
+                            String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(uType.toLowerCase());
+                            if (methods != null) {
+                                subItems = buildMemberList(uType, methods, word, CompletionItem.Type.FUNCTION);
+                            }
+                        }
+                        if (subItems != null) {
+                            for (CompletionItem ci : subItems) {
+                                String baseName = getBaseMemberName(ci.getLabel());
+                                if (!baseName.isEmpty() && !merged.containsKey(baseName)) {
+                                    merged.put(baseName, ci);
+                                }
+                            }
+                        }
+                    }
+                    if (!merged.isEmpty()) {
+                        if (word == null || word.isEmpty()) {
+                            return new ArrayList<>(merged.values());
+                        }
+                        return fuzzyFilter(new ArrayList<>(merged.values()), word);
+                    }
+                } else if (inferredType.startsWith("@PROMISE") || inferredType.equals("promise")) {
                     String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get("promise");
                     if (methods != null)
                         return buildMemberList("Promise", methods, word, CompletionItem.Type.FUNCTION);
@@ -1227,10 +1488,48 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     List<CompletionItem> shapeMembers = getMembersForNode(activeTree, targetNode, word);
                     if (!shapeMembers.isEmpty()) return fuzzyFilter(shapeMembers, word);
                 } else {
-                    String typeName = inferredType.startsWith("@ARRAY_OF_") ? "array" : (inferredType.startsWith("@") ? inferredType.substring(1).toLowerCase() : inferredType.toLowerCase());
+                    String typeName = (inferredType.startsWith("@ARRAY_OF_") || inferredType.startsWith("@TUPLE_OF_")) ? "array" : (inferredType.startsWith("@") ? inferredType.substring(1).toLowerCase() : inferredType.toLowerCase());
                     String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(typeName);
                     if (methods != null) {
                         return buildMemberList(typeName, methods, word, CompletionItem.Type.FUNCTION);
+                    }
+                    if (methods == null && ("any".equals(typeName) || "unknown".equals(typeName) || "undefined".equals(typeName)
+                            || "null".equals(typeName) || "never".equals(typeName) || "void".equals(typeName) || "object".equals(typeName))) {
+                        String initType = null;
+                        if (activeNodeId == 0 && cachedTree != null) {
+                            for (int i = 1; i < cachedTree.nodeCount; i++) {
+                                if (baseToken.equals(cachedTree.nodeName[i]) &&
+                                        (cachedTree.nodeType[i] == JsSyntaxTree.N_VAR_DECL || cachedTree.nodeType[i] == JsSyntaxTree.N_PARAM)) {
+                                    activeNodeId = i;
+                                    break;
+                                }
+                            }
+                        }
+                        if (activeNodeId > 0 && activeNodeId < cachedTree.nodeCount) {
+                            int declPos = cachedTree.nodeEnd[activeNodeId];
+                            if (declPos > 0 && declPos <= text.length()) {
+                                int eqIdx = text.indexOf('=', cachedTree.nodeStart[activeNodeId]);
+                                if (eqIdx > 0 && eqIdx < declPos) {
+                                    String rhs = text.substring(eqIdx + 1, declPos).trim();
+                                    if (rhs.startsWith("\"") || rhs.startsWith("'") || rhs.startsWith("`")) initType = "string";
+                                    else if (!rhs.isEmpty() && (Character.isDigit(rhs.charAt(0)) || rhs.startsWith("-"))) initType = "number";
+                                    else if (rhs.startsWith("[") || rhs.startsWith("Array.")) initType = "array";
+                                    else if (rhs.startsWith("true") || rhs.startsWith("false")) initType = "boolean";
+                                    else if (rhs.startsWith("{")) initType = "object";
+                                }
+                            }
+                        }
+                        if (initType != null) {
+                            String[] specificMethods = JsStandardLibrary.PROTOTYPE_METHODS.get(initType);
+                            if (specificMethods != null) {
+                                return buildMemberList(initType, specificMethods, word, CompletionItem.Type.FUNCTION);
+                            }
+                        }
+                        methods = new String[]{
+                                "toString", "valueOf", "hasOwnProperty", "isPrototypeOf",
+                                "propertyIsEnumerable", "toLocaleString", "constructor"
+                        };
+                        return buildMemberList("Object", methods, word, CompletionItem.Type.FUNCTION);
                     }
                 }
             } else if (inferredType != null) {
@@ -1295,6 +1594,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     || (key.equals("element") && (lower.startsWith("el") || lower.contains("elem") || lower.contains("node") || lower.contains("btn") || lower.contains("div")))) {
                 return buildMemberList(key, entry.getValue(), word, CompletionItem.Type.FUNCTION);
             }
+        }
+
+        if (!objectToken.isEmpty()) {
+            String[] objectMethods = new String[]{
+                    "toString", "valueOf", "hasOwnProperty", "isPrototypeOf",
+                    "propertyIsEnumerable", "toLocaleString", "constructor"
+            };
+            return buildMemberList("Object", objectMethods, word, CompletionItem.Type.FUNCTION);
         }
 
         return new ArrayList<>();
@@ -1454,8 +1761,16 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     isMethodCall = true;
                 } else {
                     String inner = text.substring(parenStart + 1, parenEnd).trim();
-                    List<String> innerChain = extractChainBeforeDot(inner + ".", inner.length() + 1);
+                    boolean hasAwait = false;
+                    if (inner.startsWith("await ")) {
+                        hasAwait = true;
+                        inner = inner.substring(6).trim();
+                    }
+                    List<String> innerChain = extractChainBeforeDot(inner + ".", inner.length());
                     if (!innerChain.isEmpty()) {
+                        if (hasAwait) {
+                            innerChain.add("!AWAIT");
+                        }
                         chain.addAll(0, innerChain);
                     } else {
                         chain.add(0, "@EXPR");
@@ -1479,6 +1794,10 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
             if (i >= 0 && text.charAt(i) == '.') {
                 i--;
+                while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+                if (i >= 0 && text.charAt(i) == '?') {
+                    i--;
+                }
             } else {
                 break;
             }
@@ -1923,8 +2242,10 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Document symbol indexing
-    private void ensureDocumentIndexed(String text) {
-        int hash = text.hashCode();
+    protected void ensureDocumentIndexed(String text) {
+        int len = text.length();
+        int sample = (len > 0) ? ((text.charAt(0) << 16) ^ (text.charAt(len / 2) << 8) ^ text.charAt(len - 1)) : 0;
+        int hash = len ^ (sample << 11) ^ text.hashCode();
         if (hash == lastTextHash) return;
         lastTextHash = hash;
         varTypeMap.clear();
@@ -1948,7 +2269,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
                 if (type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_PARAM) {
                     if (cachedTree.nodeTypeAnn[id] != null) {
-                        varTypeMap.put(name, cachedTree.nodeTypeAnn[id]);
+                        String ann = cachedTree.nodeTypeAnn[id];
+                        if (ann.startsWith("@ELEMENT_OF:") || ann.startsWith("@AWAIT_ELEMENT_OF:")) {
+                            ann = resolveElementType(text, ann, cachedTree.nodeStart[id]);
+                        }
+                        varTypeMap.put(name, ann);
                     } else {
                         String jsDocType = extractJsDocType(text, cachedTree.nodeStart[id]);
                         if (jsDocType != null) {
@@ -2028,14 +2353,109 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
+    private String resolveElementType(String text, String typeAnn, int dotPos) {
+        if (typeAnn == null) return null;
+        boolean isAwait = typeAnn.startsWith("@AWAIT_ELEMENT_OF:");
+        if (!isAwait && !typeAnn.startsWith("@ELEMENT_OF:")) {
+            return typeAnn;
+        }
+        String iterName = isAwait ? typeAnn.substring(18) : typeAnn.substring(12);
+        String iterType = null;
+        int iterDeclId = 0;
+        if (cachedTree != null && cachedScopeTree != null) {
+            int currentScope = cachedScopeTree.findScopeAt(dotPos, cachedTree);
+            int[] resolved = cachedScopeTree.lookupSymbol(iterName, currentScope, dotPos, cachedTree);
+            if (resolved != null) {
+                iterDeclId = resolved[1];
+                iterType = cachedTree.nodeTypeAnn[iterDeclId];
+                if (iterType == null && cachedTree.shapeTable != null && cachedTree.shapeTable.containsKey(iterDeclId)) {
+                    iterType = "@INLINE_SHAPE_NODE:" + iterDeclId;
+                }
+            }
+        }
+        if (iterType == null) {
+            iterType = varTypeMap.get(iterName);
+        }
+        if (iterType == null) {
+            return "@ANY";
+        }
+        iterType = normalizeTypeScriptType(iterType);
+
+        String elemType = "@ANY";
+        if (iterType.equals("@ARRAY_OF_STRING")) {
+            elemType = "@STRING";
+        } else if (iterType.equals("@ARRAY_OF_NUMBER")) {
+            elemType = "@NUMBER";
+        } else if (iterType.equals("@ARRAY_OF_BOOLEAN")) {
+            elemType = "@BOOLEAN";
+        } else if (iterType.startsWith("@ARRAY_OF_INLINE_SHAPE:")) {
+            elemType = "@INLINE_SHAPE:" + iterType.substring(23);
+        } else if (iterType.startsWith("@ARRAY_OF_TS:")) {
+            String innerTs = iterType.substring(13).trim();
+            elemType = normalizeTypeScriptType(innerTs);
+        } else if (iterType.startsWith("@ARRAY_OF_PROMISE_OF:")) {
+            String pVal = iterType.substring(21).trim();
+            elemType = isAwait ? pVal : "@PROMISE";
+        } else if (iterType.equals("@ARRAY_OF_PROMISE")) {
+            elemType = isAwait ? "@ANY" : "@PROMISE";
+        } else if (iterType.equals("@STRING") || iterType.equals("string")) {
+            elemType = "@STRING";
+        } else if (iterType.equals("@ARRAY") || iterType.equals("array")) {
+            if (iterDeclId > 0 && cachedTree != null && text != null) {
+                int start = cachedTree.nodeStart[iterDeclId];
+                int end = cachedTree.nodeEnd[iterDeclId];
+                if (start >= 0 && end <= text.length() && start < end) {
+                    String declText = text.substring(start, end);
+                    int bOpen = declText.indexOf('[');
+                    if (bOpen != -1) {
+                        String arrBody = declText.substring(bOpen + 1).trim();
+                        if (arrBody.startsWith("'") || arrBody.startsWith("\"") || arrBody.startsWith("`")) {
+                            elemType = "@STRING";
+                        } else if (!arrBody.isEmpty() && Character.isDigit(arrBody.charAt(0))) {
+                            elemType = "@NUMBER";
+                        } else if (arrBody.startsWith("Promise.resolve")) {
+                            if (isAwait) {
+                                int pStart = arrBody.indexOf('(');
+                                if (pStart != -1) {
+                                    String arg = arrBody.substring(pStart + 1).trim();
+                                    if (arg.startsWith("'") || arg.startsWith("\"") || arg.startsWith("`")) {
+                                        elemType = "@STRING";
+                                    } else if (!arg.isEmpty() && Character.isDigit(arg.charAt(0))) {
+                                        elemType = "@NUMBER";
+                                    }
+                                }
+                            } else {
+                                elemType = "@PROMISE";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (isAwait) {
+            if (elemType.startsWith("@PROMISE_OF_TS:")) {
+                elemType = normalizeTypeScriptType(elemType.substring(15));
+            } else if (elemType.startsWith("@PROMISE_INLINE_SHAPE:")) {
+                elemType = "@INLINE_SHAPE:" + elemType.substring(22);
+            } else if (elemType.equals("@PROMISE")) {
+                elemType = "@ANY";
+            }
+        }
+        return elemType;
+    }
+
     private String extractJsDocType(String text, int declStart) {
-        int limit = Math.max(0, declStart - 500);
-        int commentEnd = text.lastIndexOf("*/", declStart);
-        if (commentEnd > limit) {
+        int limit = Math.max(0, declStart - 2000);
+        String window = text.substring(limit, declStart);
+        int commentEndInWindow = window.lastIndexOf("*/");
+        if (commentEndInWindow != -1) {
+            int commentEnd = limit + commentEndInWindow;
             String between = text.substring(commentEnd + 2, declStart);
             if (between.trim().isEmpty()) {
-                int commentStart = text.lastIndexOf("/**", commentEnd);
-                if (commentStart >= limit) {
+                int commentStartInWindow = window.lastIndexOf("/**", commentEndInWindow);
+                if (commentStartInWindow != -1) {
+                    int commentStart = limit + commentStartInWindow;
                     String jsdoc = text.substring(commentStart, commentEnd);
                     Matcher m = PAT_JSDOC_TYPE.matcher(jsdoc);
                     if (m.find()) {
@@ -2116,6 +2536,502 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             else if (!snippet.isEmpty() && Character.isDigit(snippet.charAt(0)))
                 varTypeMap.put(varName, "number");
         }
+    }
+
+    public JsSyntaxTree getCachedTree() {
+        return cachedTree;
+    }
+
+    public ScopeTree getCachedScopeTree() {
+        return cachedScopeTree;
+    }
+
+    private int findTokenIndexAtOffset(com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens, int cursorPos) {
+        if (tokens == null || tokens.length == 0) return -1;
+        if (cursorPos < 0) return -1;
+        if (cursorPos < tokens.length) return cursorPos;
+        if (cursorPos - 1 >= 0 && cursorPos - 1 < tokens.length) return cursorPos - 1;
+        return tokens.length - 1;
+    }
+
+    public static Map<String, String> extractObjectTypePropertyMap(String text) {
+        Map<String, String> map = new LinkedHashMap<>();
+        if (text == null) return map;
+        String s = text.trim();
+        if (s.startsWith("{") && s.endsWith("}")) {
+            s = s.substring(1, s.length() - 1).trim();
+        }
+        if (s.isEmpty()) return map;
+
+        int n = s.length();
+        int depthBrace = 0;
+        int depthParen = 0;
+        int depthBracket = 0;
+        int depthAngle = 0;
+        boolean inQuote = false;
+        char quoteChar = 0;
+
+        int memberStart = 0;
+
+        for (int i = 0; i <= n; i++) {
+            char c = i < n ? s.charAt(i) : ';';
+
+            if (inQuote) {
+                if (c == quoteChar && s.charAt(i - 1) != '\\') {
+                    inQuote = false;
+                }
+                continue;
+            }
+
+            if (c == '\'' || c == '"' || c == '`') {
+                inQuote = true;
+                quoteChar = c;
+                continue;
+            }
+
+            if (c == '{') depthBrace++;
+            else if (c == '}' && depthBrace > 0) depthBrace--;
+            else if (c == '(') depthParen++;
+            else if (c == ')' && depthParen > 0) depthParen--;
+            else if (c == '[') depthBracket++;
+            else if (c == ']' && depthBracket > 0) depthBracket--;
+            else if (c == '<') depthAngle++;
+            else if (c == '>' && depthAngle > 0) depthAngle--;
+
+            if ((c == ';' || c == ',' || c == '\n' || i == n) && depthBrace == 0 && depthParen == 0 && depthBracket == 0 && depthAngle == 0) {
+                String member = s.substring(memberStart, i).trim();
+                memberStart = i + 1;
+                if (member.isEmpty()) continue;
+
+                if (member.startsWith("readonly ")) {
+                    member = member.substring(9).trim();
+                }
+
+                int parenIdx = member.indexOf('(');
+                int colonIdx = member.indexOf(':');
+
+                if (parenIdx >= 0 && (colonIdx < 0 || parenIdx < colonIdx)) {
+                    String propName = member.substring(0, parenIdx).trim();
+                    if (propName.endsWith("?")) propName = propName.substring(0, propName.length() - 1).trim();
+                    if (!propName.isEmpty()) {
+                        int closeParen = member.lastIndexOf(')');
+                        String retType = "@FUNCTION";
+                        if (closeParen >= 0 && closeParen < member.length()) {
+                            int retColon = member.indexOf(':', closeParen);
+                            if (retColon >= 0) {
+                                retType = member.substring(retColon + 1).trim();
+                            }
+                        }
+                        map.put(propName, retType);
+                    }
+                } else if (colonIdx >= 0) {
+                    String propName = member.substring(0, colonIdx).trim();
+                    if (propName.endsWith("?")) {
+                        propName = propName.substring(0, propName.length() - 1).trim();
+                    }
+                    if ((propName.startsWith("'") && propName.endsWith("'")) ||
+                            (propName.startsWith("\"") && propName.endsWith("\""))) {
+                        propName = propName.substring(1, propName.length() - 1);
+                    }
+                    String propType = member.substring(colonIdx + 1).trim();
+                    if (!propName.isEmpty()) {
+                        map.put(propName, propType);
+                    }
+                }
+            }
+        }
+        return map;
+    }
+
+    public static String normalizeTypeScriptType(String typeAnn) {
+        if (typeAnn == null) return null;
+        String t = typeAnn.trim();
+        if (t.isEmpty()) return null;
+        if (t.startsWith("@")) return t;
+
+        while (t.startsWith("(") && t.endsWith(")")) {
+            t = t.substring(1, t.length() - 1).trim();
+        }
+
+        if (t.contains("|")) {
+            String[] parts = t.split("\\|");
+            String nonNullPart = null;
+            for (String p : parts) {
+                String trimmed = p.trim();
+                if (!trimmed.isEmpty() && !trimmed.equals("null") && !trimmed.equals("undefined") && !trimmed.equals("void")) {
+                    nonNullPart = trimmed;
+                    break;
+                }
+            }
+            if (nonNullPart != null) {
+                t = nonNullPart;
+            }
+        }
+
+        while (t.startsWith("(") && t.endsWith(")")) {
+            t = t.substring(1, t.length() - 1).trim();
+        }
+
+        t = t.replaceAll("\\[\\s*\\]", "[]");
+
+        if (t.endsWith("[]")) {
+            String element = t.substring(0, t.length() - 2).trim();
+            return "@ARRAY_OF_TS:" + element;
+        }
+
+        if ((t.startsWith("Array<") || t.startsWith("ReadonlyArray<")) && t.endsWith(">")) {
+            int start = t.indexOf('<');
+            String element = t.substring(start + 1, t.length() - 1).trim();
+            return "@ARRAY_OF_TS:" + element;
+        }
+
+        // Tuple type: [ string, number ]
+        if (t.startsWith("[") && t.endsWith("]")) {
+            String inner = t.substring(1, t.length() - 1).trim();
+            if (inner.isEmpty()) {
+                return "@ARRAY";
+            }
+            List<String> elems = splitTopLevelCommas(inner);
+            if (elems.isEmpty()) {
+                return "@ARRAY";
+            }
+            return "@TUPLE_OF_TS:" + String.join(",", elems);
+        }
+
+        if (t.startsWith("Promise<") && t.endsWith(">")) {
+            String element = t.substring(8, t.length() - 1).trim();
+            return "@PROMISE_OF_TS:" + element;
+        }
+
+        if (t.startsWith("{") && t.endsWith("}")) {
+            return "@INLINE_TS_OBJECT:" + t;
+        }
+
+        if (t.equals("string")) return "@STRING";
+        if (t.equals("number")) return "@NUMBER";
+        if (t.equals("boolean")) return "@BOOLEAN";
+        if (t.equals("any")) return "@ANY";
+        if (t.equals("unknown")) return "@UNKNOWN";
+        if (t.equals("never") || t.equals("void")) return "@ANY";
+        if (t.equals("null")) return "@NULL";
+        if (t.equals("undefined")) return "@UNDEFINED";
+
+        if (t.endsWith("Element") || t.equals("Element") || t.equals("Node") || t.equals("Document")) {
+            return "@DOM_ELEMENT:" + t;
+        }
+
+        if (t.endsWith("Event") || t.equals("Event")) {
+            return "@DOM_EVENT:" + t;
+        }
+
+        if (t.equals("Response") || t.equals("Request") || t.equals("Headers") || t.equals("FormData") ||
+                t.equals("URL") || t.equals("URLSearchParams") || t.equals("Map") || t.equals("Set") ||
+                t.equals("Date") || t.equals("RegExp")) {
+            return "@" + t.toUpperCase();
+        }
+
+        return t;
+    }
+
+    public static List<String> splitTopLevelCommas(String text) {
+        List<String> list = new ArrayList<>();
+        if (text == null || text.trim().isEmpty()) return list;
+
+        int start = 0;
+        int angleDepth = 0;
+        int squareDepth = 0;
+        int curlyDepth = 0;
+        int parenDepth = 0;
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '<') angleDepth++;
+            else if (c == '>') { if (angleDepth > 0) angleDepth--; }
+            else if (c == '[') squareDepth++;
+            else if (c == ']') { if (squareDepth > 0) squareDepth--; }
+            else if (c == '{') curlyDepth++;
+            else if (c == '}') { if (curlyDepth > 0) curlyDepth--; }
+            else if (c == '(') parenDepth++;
+            else if (c == ')') { if (parenDepth > 0) parenDepth--; }
+            else if (c == ',' && angleDepth == 0 && squareDepth == 0 && curlyDepth == 0 && parenDepth == 0) {
+                String part = text.substring(start, i).trim();
+                if (!part.isEmpty()) list.add(part);
+                start = i + 1;
+            }
+        }
+        if (start < text.length()) {
+            String part = text.substring(start).trim();
+            if (!part.isEmpty()) list.add(part);
+        }
+        return list;
+    }
+
+    private String findNarrowedTypeForSymbol(JsSyntaxTree tree, String source, String symbol, int offset) {
+        if (tree == null || source == null || symbol == null || offset <= 0 || offset > source.length()) return null;
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int type = tree.nodeType[i];
+            if (type == JsSyntaxTree.N_IF_STMT || type == JsSyntaxTree.N_WHILE_STMT) {
+                int start = tree.nodeStart[i];
+                int end = tree.nodeEnd[i];
+                if (start < offset && (end <= 0 || offset <= end)) {
+                    String narrowed = inspectConditionForTypeGuard(tree, source, i, symbol, offset);
+                    if (narrowed != null) return narrowed;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String inspectConditionForTypeGuard(JsSyntaxTree tree, String source, int ifNode, String symbol, int offset) {
+        int ifStart = tree.nodeStart[ifNode];
+        int openParen = source.indexOf('(', ifStart);
+        if (openParen < 0 || openParen >= offset) return null;
+
+        int closeParen = -1;
+        int depth = 0;
+        int maxScan = Math.min(source.length(), ifStart + 2000);
+        for (int p = openParen; p < maxScan; p++) {
+            char c = source.charAt(p);
+            if (c == '(') depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0) {
+                    closeParen = p;
+                    break;
+                }
+            }
+        }
+        if (closeParen < 0 || offset <= closeParen) return null;
+
+        String cond = source.substring(openParen + 1, closeParen).trim();
+        if (!cond.contains(symbol)) return null;
+
+        boolean isElseBranch = false;
+        int elseIdx = source.indexOf("else", closeParen);
+        if (elseIdx > 0 && elseIdx < offset && (tree.nodeEnd[ifNode] <= 0 || elseIdx < tree.nodeEnd[ifNode])) {
+            isElseBranch = true;
+        }
+
+        return evaluateTypeGuardCondition(cond, symbol, isElseBranch);
+    }
+
+    private String evaluateTypeGuardCondition(String cond, String symbol, boolean isElseBranch) {
+        String typeofPattern = "typeof\\s+" + java.util.regex.Pattern.quote(symbol) + "\\s*(===?|!==?)\\s*['\"]([a-zA-Z]+)['\"]";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(typeofPattern).matcher(cond);
+        if (m.find()) {
+            String op = m.group(1);
+            String type = m.group(2);
+            boolean isEq = op.startsWith("==");
+            if ((isEq && !isElseBranch) || (!isEq && isElseBranch)) {
+                return mapTypeofResultToType(type);
+            }
+        }
+
+        String reverseTypeof = "['\"]([a-zA-Z]+)['\"]\\s*(===?|!==?)\\s*typeof\\s+" + java.util.regex.Pattern.quote(symbol);
+        java.util.regex.Matcher m2 = java.util.regex.Pattern.compile(reverseTypeof).matcher(cond);
+        if (m2.find()) {
+            String type = m2.group(1);
+            String op = m2.group(2);
+            boolean isEq = op.startsWith("==");
+            if ((isEq && !isElseBranch) || (!isEq && isElseBranch)) {
+                return mapTypeofResultToType(type);
+            }
+        }
+
+        String instPattern = java.util.regex.Pattern.quote(symbol) + "\\s+instanceof\\s+([A-Za-z0-9_$]+)";
+        java.util.regex.Matcher mInst = java.util.regex.Pattern.compile(instPattern).matcher(cond);
+        if (mInst.find() && !isElseBranch) {
+            return mInst.group(1);
+        }
+
+        String arrayPattern = "Array\\.isArray\\s*\\(\\s*" + java.util.regex.Pattern.quote(symbol) + "\\s*\\)";
+        if (java.util.regex.Pattern.compile(arrayPattern).matcher(cond).find() && !isElseBranch) {
+            return "@ARRAY";
+        }
+
+        return null;
+    }
+
+    private static String mapTypeofResultToType(String typeStr) {
+        if ("string".equals(typeStr)) return "@STRING";
+        if ("number".equals(typeStr)) return "@NUMBER";
+        if ("boolean".equals(typeStr)) return "@BOOLEAN";
+        if ("function".equals(typeStr)) return "@FUNCTION";
+        if ("object".equals(typeStr)) return "@OBJECT";
+        if ("undefined".equals(typeStr)) return "@UNDEFINED";
+        if ("symbol".equals(typeStr)) return "@SYMBOL";
+        if ("bigint".equals(typeStr)) return "@BIGINT";
+        return "@ANY";
+    }
+
+    public List<CompletionItem> getEnumMembers(JsSyntaxTree tree, int enumNodeId, String word) {
+        List<CompletionItem> members = new ArrayList<>();
+        if (tree == null || enumNodeId <= 0) return members;
+        int childId = tree.nodeChild[enumNodeId];
+        int childLoop = 0;
+        while (childId > 0 && childId < tree.nodeCount && ++childLoop <= tree.nodeCount) {
+            if (tree.nodeType[childId] == JsSyntaxTree.N_PROPERTY) {
+                String mem = tree.nodeName[childId];
+                if (mem != null && !mem.isEmpty()) {
+                    CompletionItem ci = new CompletionItem(mem, mem, "Enum Member", CompletionItem.Type.VALUE, 0);
+                    ci.setReplaceLength(word.length());
+                    members.add(ci);
+                }
+            }
+            childId = tree.nodeSibling[childId];
+        }
+        return members;
+    }
+
+    public List<CompletionItem> getInterfaceMembers(JsSyntaxTree tree, int ifaceNodeId, String word) {
+        Map<String, CompletionItem> outMap = new LinkedHashMap<>();
+        Set<Integer> visited = new HashSet<>();
+        collectInterfaceMembers(tree, ifaceNodeId, outMap, visited, word);
+        return new ArrayList<>(outMap.values());
+    }
+
+    private void collectInterfaceMembers(JsSyntaxTree tree, int ifaceNodeId, Map<String, CompletionItem> outMap, Set<Integer> visited, String word) {
+        if (tree == null || ifaceNodeId <= 0 || !visited.add(ifaceNodeId)) return;
+        int childId = tree.nodeChild[ifaceNodeId];
+        int childLoop = 0;
+        while (childId > 0 && childId < tree.nodeCount && ++childLoop <= tree.nodeCount) {
+            if (tree.nodeType[childId] == JsSyntaxTree.N_PROPERTY || tree.nodeType[childId] == JsSyntaxTree.N_METHOD) {
+                String mem = tree.nodeName[childId];
+                if (mem != null && !mem.isEmpty() && !outMap.containsKey(mem)) {
+                    CompletionItem.Type type = tree.nodeType[childId] == JsSyntaxTree.N_METHOD ? CompletionItem.Type.FUNCTION : CompletionItem.Type.VALUE;
+                    CompletionItem ci = new CompletionItem(mem, mem, "Interface Member", type, 0);
+                    ci.setReplaceLength(word.length());
+                    outMap.put(mem, ci);
+                }
+            }
+            childId = tree.nodeSibling[childId];
+        }
+        String extendsName = tree.nodeTypeAnn[ifaceNodeId];
+        if (extendsName != null && !extendsName.isEmpty()) {
+            for (int i = 1; i < tree.nodeCount; i++) {
+                int id = tree.nodesByOffset != null && i < tree.nodesByOffset.length ? tree.nodesByOffset[i] : i;
+                if ((tree.nodeType[id] == JsSyntaxTree.N_INTERFACE || tree.nodeType[id] == JsSyntaxTree.N_CLASS_DECL) &&
+                        extendsName.equals(tree.nodeName[id])) {
+                    collectInterfaceMembers(tree, id, outMap, visited, word);
+                    break;
+                }
+            }
+        }
+    }
+
+    public List<CompletionItem> getTypeMembers(JsSyntaxTree tree, String typeName, String word) {
+        if (typeName == null || typeName.isEmpty()) return Collections.emptyList();
+
+        if (typeName.startsWith("@INLINE_TS_OBJECT:")) {
+            Map<String, String> propMap = extractObjectTypePropertyMap(typeName.substring(18));
+            List<CompletionItem> items = new ArrayList<>();
+            for (Map.Entry<String, String> entry : propMap.entrySet()) {
+                String name = entry.getKey();
+                String propType = entry.getValue();
+                CompletionItem.Type type = propType.equals("@FUNCTION") ? CompletionItem.Type.FUNCTION : CompletionItem.Type.VALUE;
+                CompletionItem ci = new CompletionItem(name, name, propType, type, 0);
+                ci.setReplaceLength(word.length());
+                items.add(ci);
+            }
+            return items;
+        }
+
+        if (typeName.startsWith("@DOM_EVENT:")) {
+            String evName = typeName.substring(11);
+            List<CompletionItem> items = new ArrayList<>();
+            if ("MouseEvent".equals(evName) || "PointerEvent".equals(evName)) {
+                String[] mouseProps = {"clientX", "clientY", "pageX", "pageY", "screenX", "screenY", "button", "buttons", "altKey", "ctrlKey", "shiftKey", "metaKey"};
+                for (String p : mouseProps) {
+                    CompletionItem ci = new CompletionItem(p, p, "Property", CompletionItem.Type.VALUE, 0);
+                    ci.setReplaceLength(word.length());
+                    items.add(ci);
+                }
+            } else if ("KeyboardEvent".equals(evName)) {
+                String[] keyProps = {"key", "code", "keyCode", "altKey", "ctrlKey", "shiftKey", "metaKey", "repeat"};
+                for (String p : keyProps) {
+                    CompletionItem ci = new CompletionItem(p, p, "Property", CompletionItem.Type.VALUE, 0);
+                    ci.setReplaceLength(word.length());
+                    items.add(ci);
+                }
+            }
+            String[] baseEvents = JsStandardLibrary.PROTOTYPE_METHODS.get("event");
+            if (baseEvents != null) {
+                for (String m : baseEvents) {
+                    CompletionItem ci = new CompletionItem(m, m, "Event Method", CompletionItem.Type.FUNCTION, 0);
+                    ci.setReplaceLength(word.length());
+                    items.add(ci);
+                }
+            }
+            return items;
+        }
+
+        if (typeName.startsWith("@DOM_ELEMENT:")) {
+            String[] elemMethods = JsStandardLibrary.PROTOTYPE_METHODS.get("element");
+            if (elemMethods != null) {
+                return buildMemberList("Element", elemMethods, word, CompletionItem.Type.FUNCTION);
+            }
+        }
+
+        if (tree != null) {
+            for (int i = 1; i < tree.nodeCount; i++) {
+                int id = tree.nodesByOffset != null && i < tree.nodesByOffset.length ? tree.nodesByOffset[i] : i;
+                if (typeName.equals(tree.nodeName[id])) {
+                    if (tree.nodeType[id] == JsSyntaxTree.N_INTERFACE) {
+                        return getInterfaceMembers(tree, id, word);
+                    } else if (tree.nodeType[id] == JsSyntaxTree.N_ENUM) {
+                        return getEnumMembers(tree, id, word);
+                    } else if (tree.nodeType[id] == JsSyntaxTree.N_TYPE_ALIAS) {
+                        String aliasAnn = tree.nodeTypeAnn[id];
+                        if (aliasAnn != null) {
+                            return getTypeMembers(tree, normalizeTypeScriptType(aliasAnn), word);
+                        }
+                    } else if (tree.nodeType[id] == JsSyntaxTree.N_CLASS_DECL) {
+                        return buildClassMemberItems(tree, id, typeName);
+                    }
+                }
+            }
+        }
+
+        List<CompletionItem> classMembers = ProjectSymbolIndex.getInstance().getClassMembers(typeName);
+        if (!classMembers.isEmpty()) {
+            return classMembers;
+        }
+
+        return Collections.emptyList();
+    }
+
+    private String resolveMemberTypeFromAst(JsSyntaxTree tree, String typeName, String memberName) {
+        if (tree == null || typeName == null || memberName == null) return null;
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int id = tree.nodesByOffset != null && i < tree.nodesByOffset.length ? tree.nodesByOffset[i] : i;
+            if (typeName.equals(tree.nodeName[id])) {
+                if (tree.nodeType[id] == JsSyntaxTree.N_INTERFACE || tree.nodeType[id] == JsSyntaxTree.N_CLASS_DECL) {
+                    int childId = tree.nodeChild[id];
+                    int childLoop = 0;
+                    while (childId > 0 && childId < tree.nodeCount && ++childLoop <= tree.nodeCount) {
+                        if (memberName.equals(tree.nodeName[childId])) {
+                            return tree.nodeTypeAnn[childId];
+                        }
+                        childId = tree.nodeSibling[childId];
+                    }
+                    String extendsName = tree.nodeTypeAnn[id];
+                    if (extendsName != null && !extendsName.isEmpty()) {
+                        String parentResolved = resolveMemberTypeFromAst(tree, extendsName, memberName);
+                        if (parentResolved != null) return parentResolved;
+                    }
+                } else if (tree.nodeType[id] == JsSyntaxTree.N_TYPE_ALIAS) {
+                    String aliasAnn = tree.nodeTypeAnn[id];
+                    if (aliasAnn != null) {
+                        Map<String, String> propMap = extractObjectTypePropertyMap(aliasAnn);
+                        String propType = propMap.get(memberName);
+                        if (propType != null) return propType;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private static class ResolvedSymbol {

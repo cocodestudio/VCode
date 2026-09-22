@@ -19,10 +19,15 @@ import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.data.repository.ProjectStateRepository;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
 import com.cocode.vcode.ide.git.model.FileStatus;
+import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.autocomplete.VFSManager;
+import com.cocode.vcode.ide.core.lsp.ProjectIndex;
+import com.cocode.vcode.ide.core.refactor.FileReferenceUpdater;
 import com.cocode.vcode.ide.ui.editor.helper.EditorGitHelper;
 import com.cocode.vcode.ide.ui.editor.helper.ProjectMetaHelper;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
+import android.widget.Toast;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -52,6 +57,7 @@ public class EditorViewModel extends ViewModel {
     private final MutableLiveData<List<FileNode>> fileTreeLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<AppSettings> settingsLiveData = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isEditorLoadingLiveData = new MutableLiveData<>(false);
+    private final MutableLiveData<List<File>> refactoredFilesLiveData = new MutableLiveData<>();
 
     /**
      * Maps repository-relative file paths to their current Git status (e.g., Modified, Untracked).
@@ -101,6 +107,10 @@ public class EditorViewModel extends ViewModel {
 
     public LiveData<List<EditorFile>> getOpenFiles() {
         return openFilesLiveData;
+    }
+
+    public LiveData<List<File>> getRefactoredFiles() {
+        return refactoredFilesLiveData;
     }
 
     public LiveData<Integer> getActiveTabIndex() {
@@ -291,6 +301,7 @@ public class EditorViewModel extends ViewModel {
                     try {
                         EditorFile ef = new EditorFile(UUID.randomUUID().toString(), file, "", fileType);
                         ef.setScrollY(state.getScrollFor(relativePath));
+                        ef.setCursorPosition(state.getCursorFor(relativePath));
                         if (isVirtual) ef.setVirtual(true);
                         ef.setContentLoaded(false);
                         restoredFiles.add(ef);
@@ -575,30 +586,68 @@ public class EditorViewModel extends ViewModel {
 
                 File renamedFile = new File(file.getParentFile(), newName);
                 List<EditorFile> currentDocs = getOpenFilesList();
-                boolean changed = false;
 
-                for (EditorFile doc : currentDocs) {
-                    if (doc.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
-                        doc.setFile(renamedFile);
-                        // Also update fileType just in case the extension changed
-                        doc.setFileType(FileType.fromExtension(FileUtils.getExtension(renamedFile.getName())));
-                        changed = true;
-                    } else if (doc.getFile().getAbsolutePath().startsWith(file.getAbsolutePath() + "/")) {
-                        String relativePath = doc.getFile().getAbsolutePath().substring(file.getAbsolutePath().length());
-                        File updatedChildFile = new File(renamedFile.getAbsolutePath() + relativePath);
-                        doc.setFile(updatedChildFile);
-                        doc.setFileType(FileType.fromExtension(FileUtils.getExtension(updatedChildFile.getName())));
-                        changed = true;
-                    }
+                FileReferenceUpdater.RefactorResult result = FileReferenceUpdater.updateReferences(
+                        projectRoot, file, renamedFile, currentDocs
+                );
+
+                VFSManager.getInstance().invalidateDirectory(file.getParentFile());
+                if (renamedFile.isDirectory()) {
+                    VFSManager.getInstance().invalidateDirectory(renamedFile);
                 }
 
-                if (changed) {
-                    // Update tabs with a fresh list to trigger RecyclerView/DiffUtil correctly
-                    openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
-                }
+                ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
 
+                openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
                 refreshFileTree();
                 projectRepo.touchProjectById(projectId);
+
+                if (result.referencesUpdatedCount > 0) {
+                    refactoredFilesLiveData.postValue(result.modifiedFiles);
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        Toast.makeText(appContext, appContext.getString(
+                                R.string.vcode_references_updated, result.referencesUpdatedCount),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                }
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    /**
+     * Handles updating open tabs and refactoring cross-file references when a file or directory
+     * is moved (e.g. via Cut & Paste).
+     */
+    public void handleNodeMoved(File source, File destination) {
+        if (source == null || destination == null) return;
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                List<EditorFile> currentDocs = getOpenFilesList();
+                FileReferenceUpdater.RefactorResult result = FileReferenceUpdater.updateReferences(
+                        projectRoot, source, destination, currentDocs
+                );
+
+                VFSManager.getInstance().invalidateDirectory(source.getParentFile());
+                VFSManager.getInstance().invalidateDirectory(destination.getParentFile());
+                if (destination.isDirectory()) {
+                    VFSManager.getInstance().invalidateDirectory(destination);
+                }
+
+                ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
+
+                openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
+                refreshFileTree();
+                projectRepo.touchProjectById(projectId);
+
+                if (result.referencesUpdatedCount > 0) {
+                    refactoredFilesLiveData.postValue(result.modifiedFiles);
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        Toast.makeText(appContext, appContext.getString(
+                                R.string.vcode_references_updated, result.referencesUpdatedCount),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                }
             } catch (Exception ignored) {
             }
         });
@@ -686,10 +735,11 @@ public class EditorViewModel extends ViewModel {
                 newFile.markSaved();
                 newFile.setContentLoaded(true);
 
-                // Restore previous scroll if available in the state object
+                // Restore previous scroll and cursor if available in the state object
                 if (currentState != null) {
                     String relativePath = getRelativePath(file);
                     newFile.setScrollY(currentState.getScrollFor(relativePath));
+                    newFile.setCursorPosition(currentState.getCursorFor(relativePath));
                 }
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
@@ -736,6 +786,7 @@ public class EditorViewModel extends ViewModel {
             String content = currentState.getVirtualFile(relativePath);
             newFile.setContent(content != null ? content : "");
             newFile.setScrollY(currentState.getScrollFor(relativePath));
+            newFile.setCursorPosition(currentState.getCursorFor(relativePath));
         }
         newFile.markSaved();
         newFile.setContentLoaded(true);
@@ -1101,6 +1152,7 @@ public class EditorViewModel extends ViewModel {
             String rel = getRelativePath(doc.getFile());
             paths.add(rel);
             currentState.setScrollFor(rel, doc.getScrollY());
+            currentState.setCursorFor(rel, doc.getCursorPosition());
         }
         currentState.setOpenFilePaths(paths);
     }

@@ -121,25 +121,35 @@ public class HtmlFormatter extends BaseFormatter {
             // Decrease depth before printing close tag
             if (isClose) depth = Math.max(0, depth - 1);
 
-            // Removed logic that added a blank line before section-level elements
-
             String pad = getIndentString(depth);
 
             if (isDoctype) {
                 out.append(text).append("\n");
             } else if (isComment) {
-                out.append(pad).append(text).append("\n");
+                String[] lines = text.split("\r?\n");
+                for (String line : lines) {
+                    String trimmedLine = line.trim();
+                    if (!trimmedLine.isEmpty()) {
+                        out.append(pad).append(trimmedLine).append("\n");
+                    }
+                }
             } else if (isOpen) {
                 String formatted = formatTag(text, pad);
                 out.append(formatted).append("\n");
-                if (!isSelfClose && !KnownElements.isInlineElement(tagName)) {
+                if (!isSelfClose) {
                     depth++;
                 }
             } else if (isClose) {
                 out.append(pad).append(text).append("\n");
             } else {
                 // Text node
-                out.append(pad).append(text).append("\n");
+                String[] lines = text.split("\r?\n");
+                for (String line : lines) {
+                    String trimmedLine = line.trim();
+                    if (!trimmedLine.isEmpty()) {
+                        out.append(pad).append(trimmedLine).append("\n");
+                    }
+                }
             }
         }
         return out.toString();

@@ -49,7 +49,7 @@ public class EditorMenuHelper {
             boolean isVirtual = activeFile.isVirtual();
             if (!isVirtual) {
                 options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_magnifying_glass, activity.getString(R.string.vcode_find_hint).replace("...", "/Replace"), callbacks::onShowFindReplace));
-                options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_lock, "Read-only", true, callbacks.isReadOnly(), callbacks::onToggleReadOnly));
+                options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_lock, activity.getString(R.string.vcode_read_only), true, callbacks.isReadOnly(), callbacks::onToggleReadOnly));
             }
             if (CodeFormatter.isFormatSupported(files.get(activeIndex).getFileType())) {
                 options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_wand_magic, "Format Code", callbacks::onFormatCode));
@@ -58,8 +58,8 @@ public class EditorMenuHelper {
                 options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_arrow_right, activity.getString(R.string.vcode_go_to_line), callbacks::onGoToLine));
 
                 if (activeFile.getFileType() == FileType.HTML) {
-                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, "Extract CSS", () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE)));
-                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, "Extract JS", () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.SCRIPT)));
+                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, activity.getString(R.string.vcode_cmd_extract_css), () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.STYLE)));
+                    options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_scissors, activity.getString(R.string.vcode_cmd_extract_js), () -> callbacks.onExtractTags(com.cocode.vcode.ide.utils.TagExtractor.Type.SCRIPT)));
                 }
             }
         }

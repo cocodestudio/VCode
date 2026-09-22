@@ -48,4 +48,25 @@ public class MdParserTest {
         assertEquals(1, thematicBreaks);
         assertEquals(1, blockQuotes);
     }
+
+    @Test
+    public void testCodeBlockParsing() {
+        String md = "# Hello\n" +
+                "Some text\n" +
+                "```javascript\n" +
+                "console.log('hi');\n" +
+                "```\n";
+        MdLineStream lines = MdLexer.lex(md);
+        MdSyntaxTree tree = MdParser.parseBlocks(lines, md);
+
+        assertNotNull(tree);
+        boolean foundCodeBlock = false;
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == MdSyntaxTree.N_CODE_BLOCK) {
+                foundCodeBlock = true;
+                break;
+            }
+        }
+        assertTrue("Tree should contain N_CODE_BLOCK", foundCodeBlock);
+    }
 }

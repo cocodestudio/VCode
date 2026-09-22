@@ -282,6 +282,12 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
 
         if (isRoot) {
+            if (canPaste) {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_file_plus, getString(R.string.vcode_paste), () -> {
+                    performPaste(file);
+                });
+                addDivider(popupBinding.popupContainer);
+            }
             addFindInFilesPopupItem(popupBinding.popupContainer, popupWindow, file, node);
         } else {
             addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, getString(R.string.vcode_rename), () -> showRenameDialog(file));
@@ -469,11 +475,13 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     private void performPaste(File destinationDir) {
         File source = adapter.getClipboardFile();
         boolean isCut = adapter.isCutAction();
-        FileClipboardHelper.performPaste(requireContext(), source, isCut, destinationDir, success -> {
+        FileClipboardHelper.performPaste(requireContext(), source, isCut, destinationDir, (success, src, tgt) -> {
             if (success && isCut) {
                 adapter.setClipboardState(null, false);
+                viewModel.handleNodeMoved(src, tgt);
+            } else {
+                viewModel.refreshFileTree();
             }
-            viewModel.refreshFileTree();
         });
     }
 

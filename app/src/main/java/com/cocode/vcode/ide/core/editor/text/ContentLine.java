@@ -46,6 +46,7 @@ public final class ContentLine implements CharSequence {
     }
 
     private void moveGap(int target) {
+        target = Math.max(0, Math.min(target, length()));
         if (target == gapStart) return;
         if (target < gapStart) {
             int moveCount = gapStart - target;
@@ -77,7 +78,8 @@ public final class ContentLine implements CharSequence {
 
     public void insert(int column, char[] src, int srcOffset, int count) {
         if (count <= 0) return;
-        moveGap(column);
+        int col = Math.max(0, Math.min(column, length()));
+        moveGap(col);
         ensureGapSize(count);
         System.arraycopy(src, srcOffset, buffer, gapStart, count);
         gapStart += count;
@@ -87,7 +89,8 @@ public final class ContentLine implements CharSequence {
     public void insert(int column, CharSequence text) {
         int count = text.length();
         if (count == 0) return;
-        moveGap(column);
+        int col = Math.max(0, Math.min(column, length()));
+        moveGap(col);
         ensureGapSize(count);
         for (int i = 0; i < count; i++) {
             buffer[gapStart + i] = text.charAt(i);
@@ -97,8 +100,9 @@ public final class ContentLine implements CharSequence {
     }
 
     public void delete(int startColumn, int endColumn) {
-        int s = Math.max(0, startColumn);
-        int e = Math.min(length(), endColumn);
+        int len = length();
+        int s = Math.max(0, Math.min(len, startColumn));
+        int e = Math.max(0, Math.min(len, endColumn));
         if (s >= e) return;
         moveGap(s);
         gapEnd += (e - s);

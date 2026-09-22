@@ -171,19 +171,22 @@ public class CssLinter {
         return true;
     }
 
-    private static Set<String> collectDeclaredCustomProperties(CssSyntaxTree tree) {
-        Set<String> set = new HashSet<>();
-        if (tree == null) return set;
+    private static Map<String, int[]> collectDeclaredCustomProperties(CssSyntaxTree tree, String text) {
+        Map<String, int[]> map = new LinkedHashMap<>();
+        if (tree == null) return map;
         int count = tree.nodeCount;
         for (int i = 1; i < count; i++) {
             if (tree.nodeType[i] == CssSyntaxTree.N_PROPERTY) {
                 String name = tree.nodeName[i];
                 if (name != null && name.startsWith("--")) {
-                    set.add(name);
+                    int start = tree.nodeStart[i];
+                    int line = LinterUtils.getLine(text, start);
+                    int col = LinterUtils.getColumn(text, start);
+                    map.put(name, new int[]{line, col});
                 }
             }
         }
-        return set;
+        return map;
     }
 
 
@@ -208,7 +211,7 @@ public class CssLinter {
         }
 
         boolean pastFirstRule = false;
-        Set<String> declaredVars = collectDeclaredCustomProperties(tree);
+        Map<String, int[]> declaredVars = collectDeclaredCustomProperties(tree, text);
         Set<String> usedVars = new HashSet<>();
 
         int nodeCount = tree.nodeCount;
@@ -399,9 +402,11 @@ public class CssLinter {
         }
 
         // CSS variable unused check
-        for (String varName : declaredVars) {
+        for (Map.Entry<String, int[]> entry : declaredVars.entrySet()) {
+            String varName = entry.getKey();
             if (!usedVars.contains(varName)) {
-                problems.add(new Problem(file, 1, 1, varName.length(),
+                int[] loc = entry.getValue();
+                problems.add(new Problem(file, loc[0], loc[1], varName.length(),
                         "CSS variable '" + varName + "' is declared but never used in this file",
                         Problem.Severity.INFO));
             }
@@ -417,7 +422,7 @@ public class CssLinter {
                                            int propLine, int propCol, int propLen,
                                            Map<String, Integer> propsInBlock, Map<String, Integer> propLineInBlock,
                                            Set<String> vendorPropsInBlock,
-                                           Set<String> declaredVars, Set<String> usedVars,
+                                           Map<String, int[]> declaredVars, Set<String> usedVars,
                                            List<Problem> problems) {
         if (prop == null || prop.isEmpty()) return;
         String pLo = prop.toLowerCase();
@@ -460,7 +465,9 @@ public class CssLinter {
 
         // Track CSS variables
         if (prop.startsWith("--")) {
-            declaredVars.add(prop);
+            if (!declaredVars.containsKey(prop)) {
+                declaredVars.put(prop, new int[]{propLine, propCol});
+            }
         }
         if (valTrimmed.contains("var(")) {
             extractVarUsages(valTrimmed, usedVars);
@@ -488,7 +495,7 @@ public class CssLinter {
         }
 
         // var() without fallback warning (only for variables not declared in stylesheet)
-        if (hasVarWithoutFallback(valTrimmed, declaredVars)) {
+        if (hasVarWithoutFallback(valTrimmed, declaredVars.keySet())) {
             problems.add(new Problem(file, propLine, propCol, propLen,
                     "CSS variable in '" + prop + "' used without a fallback value",
                     Problem.Severity.INFO));

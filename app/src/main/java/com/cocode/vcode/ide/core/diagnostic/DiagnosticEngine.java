@@ -49,6 +49,12 @@ public class DiagnosticEngine {
                 } else {
                     problems.addAll(HtmlLinter.analyze(file, text));
                 }
+                if (parseResult == null) {
+                    try {
+                        parseResult = com.cocode.vcode.ide.core.language.html.HtmlParser.parse(text);
+                    } catch (Throwable ignored) {
+                    }
+                }
                 if (parseResult != null && parseResult.embeddedResults != null) {
                     for (com.cocode.vcode.ide.core.language.js.ParseResult.EmbeddedResult emb : parseResult.embeddedResults) {
                         String embeddedText = text.substring(emb.startOffset, Math.min(emb.endOffset, text.length()));
@@ -56,6 +62,8 @@ public class DiagnosticEngine {
 
                         if (emb.result.cssTree != null) {
                             sub = CssLinter.analyze(file, embeddedText);
+                        } else if (emb.result.tree != null) {
+                            sub = JsLinter.analyze(file, embeddedText, index);
                         }
 
                         for (Problem p : sub) {

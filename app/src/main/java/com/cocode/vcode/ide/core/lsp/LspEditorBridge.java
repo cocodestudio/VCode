@@ -470,6 +470,28 @@ public final class LspEditorBridge {
         // Reschedule debounced diagnostics
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
+
+        // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
+        updateProjectIndex();
+
+        // Suppress completion and signature popups during automated text updates
+        if (editor.isProgrammaticChange()) {
+            mainHandler.removeCallbacks(completionRunnable);
+            mainHandler.removeCallbacks(signatureHelpRunnable);
+            editor.dismissAutoCompletePopup();
+            editor.dismissSignatureHint();
+            return;
+        }
+
+        // On deletion, only trigger completions if the popup was already active
+        if (editor.isDeletingText()) {
+            if (!editor.wasAutoCompleteVisibleBeforeDelete()) {
+                mainHandler.removeCallbacks(completionRunnable);
+                editor.dismissAutoCompletePopup();
+                return;
+            }
+        }
+
         // Reschedule debounced completion
         mainHandler.removeCallbacks(completionRunnable);
         if (!editor.isInsertingCompletion()) {
@@ -480,9 +502,6 @@ public final class LspEditorBridge {
 
         mainHandler.removeCallbacks(signatureHelpRunnable);
         mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
-
-        // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
-        updateProjectIndex();
     };
 
     // -------------------------------------------------------------------------
@@ -833,6 +852,10 @@ public final class LspEditorBridge {
 
     private void performCompletion() {
         if (!attached || editor == null || !hasLspServer) return;
+        if (editor.isProgrammaticChange() || (editor.isDeletingText() && !editor.wasAutoCompleteVisibleBeforeDelete())) {
+            editor.dismissAutoCompletePopup();
+            return;
+        }
         LspDocument doc = buildSnapshot();
         if (doc == null || doc.text == null) return;
 

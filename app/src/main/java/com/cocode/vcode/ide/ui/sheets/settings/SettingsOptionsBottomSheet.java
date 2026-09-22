@@ -48,6 +48,8 @@ public class SettingsOptionsBottomSheet extends BaseBottomSheetDialogFragment {
         binding.tvImportDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvExportTitle.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvExportDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvEditTitle.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvEditDesc.setTypeface(fm.getUiFont(requireContext()));
 
         binding.opImportSettings.setOnClickListener(v -> {
             dismiss();
@@ -62,6 +64,13 @@ public class SettingsOptionsBottomSheet extends BaseBottomSheetDialogFragment {
                 listener.onExportSettings();
             }
         });
+
+        binding.opEditSettings.setOnClickListener(v -> {
+            dismiss();
+            if (listener != null) {
+                listener.onEditSettingsInEditor();
+            }
+        });
     }
 
     @Override
@@ -74,5 +83,7 @@ public class SettingsOptionsBottomSheet extends BaseBottomSheetDialogFragment {
         void onImportSettings();
 
         void onExportSettings();
+
+        void onEditSettingsInEditor();
     }
 }

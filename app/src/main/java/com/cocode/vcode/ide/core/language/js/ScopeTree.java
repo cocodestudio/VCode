@@ -110,9 +110,14 @@ public final class ScopeTree {
                 boolean isFunctionBody = false;
                 if (type == JsSyntaxTree.N_BLOCK) {
                     int parentNode = tree.nodeParent[nodeId];
-                    if (parentNode > 0 && parentNode < maxNodes) {
+                    if ("global".equals(tree.nodeName[nodeId])) {
+                        isFunctionBody = true;
+                    } else if (parentNode > 0 && parentNode < maxNodes) {
                         int pType = tree.nodeType[parentNode];
-                        if (pType == JsSyntaxTree.N_FUNC_DECL || pType == JsSyntaxTree.N_ARROW_FUNC || pType == JsSyntaxTree.N_METHOD || pType == JsSyntaxTree.N_GETTER || pType == JsSyntaxTree.N_SETTER) {
+                        if (pType == JsSyntaxTree.N_FUNC_DECL || pType == JsSyntaxTree.N_ARROW_FUNC ||
+                                pType == JsSyntaxTree.N_METHOD || pType == JsSyntaxTree.N_GETTER ||
+                                pType == JsSyntaxTree.N_SETTER || pType == JsSyntaxTree.N_FOR_STMT ||
+                                pType == JsSyntaxTree.N_CATCH_CLAUSE) {
                             isFunctionBody = true;
                         }
                     }
@@ -310,6 +315,7 @@ public final class ScopeTree {
                     if (currentScope == atScopeId && tree != null && declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeStart[declNodeId] > usageOffset) {
                         int kind = tuples[i + 2];
                         boolean isHoisted = kind == JsSyntaxTree.N_FUNC_DECL || kind == JsSyntaxTree.N_IMPORT ||
+                                kind == JsSyntaxTree.N_INTERFACE || kind == JsSyntaxTree.N_TYPE_ALIAS || kind == JsSyntaxTree.N_ENUM ||
                                 (kind == JsSyntaxTree.N_VAR_DECL && (tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR);
                         if (!isHoisted) continue;
                     }
@@ -329,8 +335,10 @@ public final class ScopeTree {
     public int findScopeAt(int offset, JsSyntaxTree tree) {
         if (nodeToScope == null || tree.nodesByOffset == null || tree.nodeCount <= 1) return 0;
 
-        int deepest = 0;
-        int minLen = Integer.MAX_VALUE;
+        int deepestAny = 0;
+        int minLenAny = Integer.MAX_VALUE;
+        int deepestWithScope = 0;
+        int minLenWithScope = Integer.MAX_VALUE;
 
         int n = tree.nodeCount - 1;
         if (n <= 0) return 0;
@@ -354,14 +362,21 @@ public final class ScopeTree {
             int i = tree.nodesByOffset[j];
             if (i > 0 && i < tree.nodeCount && offset >= tree.nodeStart[i] && offset < tree.nodeEnd[i]) {
                 int len = tree.nodeEnd[i] - tree.nodeStart[i];
-                if (len < minLen) {
-                    minLen = len;
-                    deepest = i;
+                if (len < minLenAny) {
+                    minLenAny = len;
+                    deepestAny = i;
+                }
+                if (i < nodeToScope.length && nodeToScope[i] > 0 && len < minLenWithScope) {
+                    minLenWithScope = len;
+                    deepestWithScope = i;
                 }
             }
         }
 
-        return (deepest > 0 && deepest < nodeToScope.length) ? nodeToScope[deepest] : 0;
+        if (deepestWithScope > 0) {
+            return nodeToScope[deepestWithScope];
+        }
+        return (deepestAny > 0 && deepestAny < nodeToScope.length) ? nodeToScope[deepestAny] : 0;
     }
 
     /**
@@ -384,9 +399,9 @@ public final class ScopeTree {
 
         for (int i = 1; i < tree.nodeCount && i < nodeToScope.length; i++) {
             boolean matches = false;
-            if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_IDENTIFIER || tree.nodeType[i] == JsSyntaxTree.N_TYPE_REF) {
                 matches = name.equals(tree.nodeName[i]);
-            } else if (tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
+            } else if (tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR || tree.nodeType[i] == JsSyntaxTree.N_MEMBER_EXPR) {
                 matches = name.equals(tree.nodeName[i]) || (tree.nodeName[i] != null && tree.nodeName[i].startsWith(name + "."));
             }
 
