@@ -315,6 +315,7 @@ public final class ScopeTree {
                     if (currentScope == atScopeId && tree != null && declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeStart[declNodeId] > usageOffset) {
                         int kind = tuples[i + 2];
                         boolean isHoisted = kind == JsSyntaxTree.N_FUNC_DECL || kind == JsSyntaxTree.N_IMPORT ||
+                                kind == JsSyntaxTree.N_INTERFACE || kind == JsSyntaxTree.N_TYPE_ALIAS || kind == JsSyntaxTree.N_ENUM ||
                                 (kind == JsSyntaxTree.N_VAR_DECL && (tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR);
                         if (!isHoisted) continue;
                     }
@@ -334,8 +335,10 @@ public final class ScopeTree {
     public int findScopeAt(int offset, JsSyntaxTree tree) {
         if (nodeToScope == null || tree.nodesByOffset == null || tree.nodeCount <= 1) return 0;
 
-        int deepest = 0;
-        int minLen = Integer.MAX_VALUE;
+        int deepestAny = 0;
+        int minLenAny = Integer.MAX_VALUE;
+        int deepestWithScope = 0;
+        int minLenWithScope = Integer.MAX_VALUE;
 
         int n = tree.nodeCount - 1;
         if (n <= 0) return 0;
@@ -359,14 +362,21 @@ public final class ScopeTree {
             int i = tree.nodesByOffset[j];
             if (i > 0 && i < tree.nodeCount && offset >= tree.nodeStart[i] && offset < tree.nodeEnd[i]) {
                 int len = tree.nodeEnd[i] - tree.nodeStart[i];
-                if (len < minLen) {
-                    minLen = len;
-                    deepest = i;
+                if (len < minLenAny) {
+                    minLenAny = len;
+                    deepestAny = i;
+                }
+                if (i < nodeToScope.length && nodeToScope[i] > 0 && len < minLenWithScope) {
+                    minLenWithScope = len;
+                    deepestWithScope = i;
                 }
             }
         }
 
-        return (deepest > 0 && deepest < nodeToScope.length) ? nodeToScope[deepest] : 0;
+        if (deepestWithScope > 0) {
+            return nodeToScope[deepestWithScope];
+        }
+        return (deepestAny > 0 && deepestAny < nodeToScope.length) ? nodeToScope[deepestAny] : 0;
     }
 
     /**

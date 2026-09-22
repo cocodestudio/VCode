@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.js;
 
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import org.junit.Test;
 
@@ -320,5 +321,154 @@ public class JsDotCompletionTest extends BaseJsAstTest {
             org.junit.Assert.assertNotEquals("Should not suggest 'Object key' inside namespace or block",
                     "Object key", item.getDetail());
         }
+    }
+
+    @Test
+    public void testForOfLoopArrayElementInference() {
+        String code = "const fruits = ['Apple', 'Banana', 'Cherry'];\n" +
+                      "for (const fruit of fruits) {\n" +
+                      "  fruit.\n" +
+                      "}\n";
+        int pos = code.indexOf("fruit.") + "fruit.".length();
+        List<CompletionItem> comps = getCompletions(code, pos);
+        boolean hasToUpperCase = false, hasTrim = false, hasCharAt = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+            if ("trim".equals(item.getLabel())) hasTrim = true;
+            if ("charAt".equals(item.getLabel())) hasCharAt = true;
+        }
+        assertTrue("Expected 'toUpperCase' for fruit.", hasToUpperCase);
+        assertTrue("Expected 'trim' for fruit.", hasTrim);
+        assertTrue("Expected 'charAt' for fruit.", hasCharAt);
+    }
+
+    @Test
+    public void testForInLoopKeyInference() {
+        String code = "const user = { name: 'Alice', age: 25, role: 'Developer' };\n" +
+                      "for (const key in user) {\n" +
+                      "  key.\n" +
+                      "}\n";
+        int pos = code.indexOf("key.") + "key.".length();
+        List<CompletionItem> comps = getCompletions(code, pos);
+        boolean hasToUpperCase = false, hasTrim = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+            if ("trim".equals(item.getLabel())) hasTrim = true;
+        }
+        assertTrue("Expected 'toUpperCase' for key.", hasToUpperCase);
+        assertTrue("Expected 'trim' for key.", hasTrim);
+    }
+
+    @Test
+    public void testBracketDynamicIndexing_UnionCompletions_NotObjectKeys() {
+        String code = "const user = { name: 'Alice', age: 25, role: 'Developer' };\n" +
+                      "for (const key in user) {\n" +
+                      "  user[key].\n" +
+                      "}\n";
+        int pos = code.indexOf("user[key].") + "user[key].".length();
+        List<CompletionItem> comps = getCompletions(code, pos);
+        boolean hasToUpperCase = false, hasToFixed = false, hasName = false, hasAge = false, hasRole = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+            if ("toFixed".equals(item.getLabel())) hasToFixed = true;
+            if ("name".equals(item.getLabel())) hasName = true;
+            if ("age".equals(item.getLabel())) hasAge = true;
+            if ("role".equals(item.getLabel())) hasRole = true;
+        }
+        assertTrue("Expected string methods like 'toUpperCase' for user[key].", hasToUpperCase);
+        assertTrue("Expected number methods like 'toFixed' for user[key].", hasToFixed);
+        org.junit.Assert.assertFalse("Should NOT suggest object property 'name' on user[key].", hasName);
+        org.junit.Assert.assertFalse("Should NOT suggest object property 'age' on user[key].", hasAge);
+        org.junit.Assert.assertFalse("Should NOT suggest object property 'role' on user[key].", hasRole);
+    }
+
+    @Test
+    public void testBracketLiteralIndexing_SpecificType() {
+        String code = "const user = { name: 'Alice', age: 25 };\n" +
+                      "user['name'].\n" +
+                      "user['age'].\n";
+        int posName = code.indexOf("user['name'].") + "user['name'].".length();
+        List<CompletionItem> nameComps = getCompletions(code, posName);
+        boolean nameHasToUpperCase = false, nameHasToFixed = false;
+        for (CompletionItem item : nameComps) {
+            if ("toUpperCase".equals(item.getLabel())) nameHasToUpperCase = true;
+            if ("toFixed".equals(item.getLabel())) nameHasToFixed = true;
+        }
+        assertTrue("Expected 'toUpperCase' for user['name'].", nameHasToUpperCase);
+        org.junit.Assert.assertFalse("Should NOT suggest 'toFixed' for user['name'].", nameHasToFixed);
+
+        int posAge = code.indexOf("user['age'].") + "user['age'].".length();
+        List<CompletionItem> ageComps = getCompletions(code, posAge);
+        boolean ageHasToFixed = false, ageHasToUpperCase = false;
+        for (CompletionItem item : ageComps) {
+            if ("toFixed".equals(item.getLabel())) ageHasToFixed = true;
+            if ("toUpperCase".equals(item.getLabel())) ageHasToUpperCase = true;
+        }
+        assertTrue("Expected 'toFixed' for user['age'].", ageHasToFixed);
+        org.junit.Assert.assertFalse("Should NOT suggest 'toUpperCase' for user['age'].", ageHasToUpperCase);
+    }
+
+    @Test
+    public void testForEachCallbackParamsInference() {
+        String code = "const numbers = [10, 20, 30];\n" +
+                      "numbers.forEach((num, index) => {\n" +
+                      "  num.\n" +
+                      "  index.\n" +
+                      "});\n";
+        int posNum = code.indexOf("num.") + "num.".length();
+        List<CompletionItem> numComps = getCompletions(code, posNum);
+        boolean numHasToFixed = false;
+        for (CompletionItem item : numComps) {
+            if ("toFixed".equals(item.getLabel())) numHasToFixed = true;
+        }
+        assertTrue("Expected 'toFixed' for num. in forEach callback", numHasToFixed);
+
+        int posIndex = code.indexOf("index.") + "index.".length();
+        List<CompletionItem> indexComps = getCompletions(code, posIndex);
+        boolean indexHasToFixed = false;
+        for (CompletionItem item : indexComps) {
+            if ("toFixed".equals(item.getLabel())) indexHasToFixed = true;
+        }
+        assertTrue("Expected 'toFixed' for index. in forEach callback", indexHasToFixed);
+    }
+
+    @Test
+    public void testForAwaitOfPromiseArray() {
+        String code = "async function demonstrateAsyncLoop() {\n" +
+                      "  const asyncTasks = [\n" +
+                      "    Promise.resolve('Task 1 complete'),\n" +
+                      "    Promise.resolve('Task 2 complete'),\n" +
+                      "    Promise.resolve('Task 3 complete')\n" +
+                      "  ];\n" +
+                      "  for await (const result of asyncTasks) {\n" +
+                      "    result.\n" +
+                      "  }\n" +
+                      "}\n";
+        int pos = code.indexOf("result.") + "result.".length();
+        List<CompletionItem> comps = getCompletions(code, pos);
+        boolean hasToUpperCase = false, hasTrim = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+            if ("trim".equals(item.getLabel())) hasTrim = true;
+        }
+        assertTrue("Expected 'toUpperCase' for result. in for await loop", hasToUpperCase);
+        assertTrue("Expected 'trim' for result. in for await loop", hasTrim);
+    }
+
+    @Test
+    public void testTypeScriptLoopAndCallbackInference() {
+        String code = "const fruits: string[] = ['Apple', 'Banana'];\n" +
+                      "for (const fruit of fruits) {\n" +
+                      "  fruit.\n" +
+                      "}\n";
+        int pos = code.indexOf("fruit.") + "fruit.".length();
+        com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine tsEngine =
+                new com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine(null);
+        List<CompletionItem> comps = tsEngine.getSuggestions(code, pos);
+        boolean hasToUpperCase = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+        }
+        assertTrue("Expected 'toUpperCase' for TypeScript fruit.", hasToUpperCase);
     }
 }

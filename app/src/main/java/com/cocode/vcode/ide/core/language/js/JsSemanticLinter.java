@@ -957,7 +957,16 @@ public class JsSemanticLinter {
         int[] ieStart = new int[16];
         int[] ieEnd = new int[16];
         for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == JsSyntaxTree.N_IMPORT || tree.nodeType[i] == JsSyntaxTree.N_EXPORT) {
+            boolean isClause = (tree.nodeType[i] == JsSyntaxTree.N_IMPORT);
+            if (tree.nodeType[i] == JsSyntaxTree.N_EXPORT) {
+                int child = tree.nodeChild[i];
+                if (child == 0 || tree.nodeType[child] == JsSyntaxTree.N_IDENTIFIER) {
+                    if (!"default".equals(tree.nodeName[i])) {
+                        isClause = true;
+                    }
+                }
+            }
+            if (isClause) {
                 if (ieCount == ieStart.length) {
                     ieStart = java.util.Arrays.copyOf(ieStart, ieCount * 2);
                     ieEnd = java.util.Arrays.copyOf(ieEnd, ieCount * 2);
@@ -991,10 +1000,45 @@ public class JsSemanticLinter {
             }
             if (isInsideImportExport) continue;
 
-            // Check preceding char to see if it's a property access
+            // Skip the rest of this identifier in the character stream
+            t = idEnd - 1;
+
+            // Contextual keywords are never undeclared variables
+            if ("of".equals(id) || "from".equals(id) || "as".equals(id) || "target".equals(id) || "meta".equals(id)) {
+                continue;
+            }
+
+            // Check preceding char to see if it's a property access or private identifier (#field)
             int preIndex = offset - 1;
             while (preIndex >= 0 && Character.isWhitespace(text.charAt(preIndex))) preIndex--;
-            if (preIndex >= 0 && text.charAt(preIndex) == '.') continue;
+            if (preIndex >= 0 && (text.charAt(preIndex) == '.' || text.charAt(preIndex) == '#')) continue;
+
+            // Check preceding tokens for break/continue labels and typeof operands
+            int prevTokenIdx = offset - 1;
+            while (prevTokenIdx >= 0 && (mask.types[prevTokenIdx] == TokenStream.TK_WHITESPACE || mask.types[prevTokenIdx] == TokenStream.TK_COMMENT)) {
+                prevTokenIdx--;
+            }
+            if (prevTokenIdx >= 0) {
+                int checkTok = prevTokenIdx;
+                if (mask.types[checkTok] == TokenStream.TK_PUNCT && text.charAt(mask.tokenStart[checkTok]) == '(') {
+                    checkTok--;
+                    while (checkTok >= 0 && (mask.types[checkTok] == TokenStream.TK_WHITESPACE || mask.types[checkTok] == TokenStream.TK_COMMENT)) {
+                        checkTok--;
+                    }
+                }
+                if (checkTok >= 0 && (mask.types[checkTok] == TokenStream.TK_KEYWORD || mask.types[checkTok] == TokenStream.TK_IDENTIFIER)) {
+                    int kwStart = mask.tokenStart[checkTok];
+                    int kwEnd = kwStart;
+                    while (kwEnd < text.length() && (Character.isLetterOrDigit(text.charAt(kwEnd)) || text.charAt(kwEnd) == '$' || text.charAt(kwEnd) == '_')) kwEnd++;
+                    String prevWord = text.substring(kwStart, kwEnd);
+                    if ("break".equals(prevWord) || "continue".equals(prevWord)) {
+                        continue;
+                    }
+                    if ("typeof".equals(prevWord)) {
+                        continue;
+                    }
+                }
+            }
 
             // Check preceding tokens to see if it's a declaration (only if AST is missing)
             if (tree.nodesByOffset == null && isDeclarationSite(text, offset)) continue;
@@ -1033,7 +1077,7 @@ public class JsSemanticLinter {
                         int temp = mid;
                         while (temp >= 1 && tree.nodeStart[tree.nodesByOffset[temp]] == astOffset) {
                             int type = tree.nodeType[tree.nodesByOffset[temp]];
-                            if (type == JsSyntaxTree.N_IDENTIFIER) {
+                            if (type == JsSyntaxTree.N_IDENTIFIER || type == JsSyntaxTree.N_CALL_EXPR || type == JsSyntaxTree.N_MEMBER_EXPR) {
                                 isAstIdentifier = true;
                             } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT || type == JsSyntaxTree.N_ENUM || type == JsSyntaxTree.N_INTERFACE || type == JsSyntaxTree.N_TYPE_ALIAS)) {
                                 isAstDeclaration = true;
@@ -1043,7 +1087,7 @@ public class JsSemanticLinter {
                         temp = mid + 1;
                         while (temp < tree.nodeCount && tree.nodeStart[tree.nodesByOffset[temp]] == astOffset) {
                             int type = tree.nodeType[tree.nodesByOffset[temp]];
-                            if (type == JsSyntaxTree.N_IDENTIFIER) {
+                            if (type == JsSyntaxTree.N_IDENTIFIER || type == JsSyntaxTree.N_CALL_EXPR || type == JsSyntaxTree.N_MEMBER_EXPR) {
                                 isAstIdentifier = true;
                             } else if (tree.nodeName[tree.nodesByOffset[temp]] != null && (type == JsSyntaxTree.N_PARAM || type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_CLASS_DECL || type == JsSyntaxTree.N_METHOD || type == JsSyntaxTree.N_PROPERTY || type == JsSyntaxTree.N_GETTER || type == JsSyntaxTree.N_SETTER || type == JsSyntaxTree.N_IMPORT || type == JsSyntaxTree.N_ENUM || type == JsSyntaxTree.N_INTERFACE || type == JsSyntaxTree.N_TYPE_ALIAS)) {
                                 isAstDeclaration = true;

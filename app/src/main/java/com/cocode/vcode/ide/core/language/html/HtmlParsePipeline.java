@@ -108,10 +108,7 @@ public class HtmlParsePipeline {
                                             if (oldEmb.result.tree != null && oldEmb.result.tokens != null) {
                                                 // JS
                                                 TokenStream newTokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(newEmbSource, null);
-                                                JsSyntaxTree newJsTree = JsParser.parseIncremental(newEmbSource, newTokens, oldEmbSource, oldEmb.result.tree, oldEmb.result.tokens, embEditStart, embEditEndOld, embEditEndNew);
-                                                if (newJsTree == null) {
-                                                    newJsTree = JsParser.parseFull(newEmbSource, newTokens);
-                                                }
+                                                JsSyntaxTree newJsTree = JsParser.parseFull(newEmbSource, newTokens);
                                                 newEmbParseResult = new ParseResult(null, newEmbSource, newTokens, newJsTree);
                                             } else if (oldEmb.result.cssTree != null && oldEmb.result.cssTokens != null) {
                                                 // CSS

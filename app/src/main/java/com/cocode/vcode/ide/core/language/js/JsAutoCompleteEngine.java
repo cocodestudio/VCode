@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -993,6 +994,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (inferredType == null) {
                     inferredType = varTypeMap.get(baseToken);
                 }
+                if (inferredType != null && (inferredType.startsWith("@ELEMENT_OF:") || inferredType.startsWith("@AWAIT_ELEMENT_OF:"))) {
+                    inferredType = resolveElementType(text, inferredType, dotPos);
+                }
                 if (inferredType == null) {
                     if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(baseToken)) {
                         inferredType = "@PROMISE";
@@ -1020,6 +1024,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                 inferredType = "@INLINE_SHAPE_NODE:" + declNodeId;
                             } else if (inferredType == null) {
                                 inferredType = cachedTree.nodeTypeAnn[declNodeId];
+                            }
+                            if (inferredType != null && (inferredType.startsWith("@ELEMENT_OF:") || inferredType.startsWith("@AWAIT_ELEMENT_OF:"))) {
+                                inferredType = resolveElementType(text, inferredType, dotPos);
                             }
                             if (inferredType == null) {
                                 int parentId = cachedTree.nodeParent[declNodeId];
@@ -1166,6 +1173,26 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                         inferredType = normalizeTypeScriptType(inferredType.substring(13));
                         continue;
                     }
+                    if (inferredType != null && inferredType.startsWith("@ARRAY_OF_INLINE_SHAPE:")) {
+                        inferredType = "@INLINE_SHAPE:" + inferredType.substring(23);
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY_OF_NUMBER")) {
+                        inferredType = "@NUMBER";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY_OF_STRING")) {
+                        inferredType = "@STRING";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY_OF_BOOLEAN")) {
+                        inferredType = "@BOOLEAN";
+                        continue;
+                    }
+                    if (inferredType != null && inferredType.equals("@ARRAY")) {
+                        inferredType = "@ANY";
+                        continue;
+                    }
                     if (inferredType != null && inferredType.startsWith("@TUPLE_OF_TS:")) {
                         String tupleData = inferredType.substring(13);
                         String idxStr = memberName.substring(1, memberName.length() - (memberName.endsWith("]") ? 1 : 0)).trim();
@@ -1185,22 +1212,59 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     if (activeTree != null && activeNodeId > 0) {
                         int childObj = findChildObjectLiteral(activeTree, activeNodeId);
                         if (childObj > 0) {
-                            activeNodeId = childObj;
-                            inferredType = "@INLINE_SHAPE_NODE:" + childObj;
-                            continue;
+                            String rawKey = memberName.substring(1, memberName.length() - (memberName.endsWith("]") ? 1 : 0)).trim();
+                            String staticKey = null;
+                            if ((rawKey.startsWith("'") && rawKey.endsWith("'")) || (rawKey.startsWith("\"") && rawKey.endsWith("\""))) {
+                                staticKey = rawKey.substring(1, rawKey.length() - 1).trim();
+                            }
+                            if (staticKey != null) {
+                                int propNode = findPropertyNodeId(activeTree, childObj, staticKey);
+                                if (propNode > 0) {
+                                    int nestedObj = findChildObjectLiteral(activeTree, propNode);
+                                    if (nestedObj > 0) {
+                                        activeNodeId = nestedObj;
+                                        inferredType = "@INLINE_SHAPE_NODE:" + nestedObj;
+                                    } else if (activeTree.nodeTypeAnn[propNode] != null) {
+                                        inferredType = activeTree.nodeTypeAnn[propNode];
+                                    } else {
+                                        inferredType = "@ANY";
+                                    }
+                                    continue;
+                                }
+                            } else {
+                                int idxSig = findPropertyNodeId(activeTree, childObj, "{index_signature}");
+                                if (idxSig > 0 && activeTree.nodeTypeAnn[idxSig] != null) {
+                                    inferredType = normalizeTypeScriptType(activeTree.nodeTypeAnn[idxSig]);
+                                    continue;
+                                }
+                                Set<String> propTypes = new LinkedHashSet<>();
+                                int pChild = activeTree.nodeChild[childObj];
+                                int pLoop = 0;
+                                while (pChild > 0 && pChild < activeTree.nodeCount && ++pLoop <= activeTree.nodeCount) {
+                                    if (activeTree.nodeType[pChild] == JsSyntaxTree.N_PROPERTY || activeTree.nodeType[pChild] == JsSyntaxTree.N_METHOD) {
+                                        String pAnn = activeTree.nodeTypeAnn[pChild];
+                                        if (pAnn != null && !pAnn.isEmpty()) {
+                                            propTypes.add(pAnn);
+                                        } else {
+                                            int nestedObj = findChildObjectLiteral(activeTree, pChild);
+                                            if (nestedObj > 0) {
+                                                propTypes.add("@INLINE_SHAPE_NODE:" + nestedObj);
+                                            }
+                                        }
+                                    }
+                                    pChild = activeTree.nodeSibling[pChild];
+                                }
+                                if (propTypes.size() == 1) {
+                                    inferredType = propTypes.iterator().next();
+                                    continue;
+                                } else if (propTypes.size() > 1) {
+                                    inferredType = "@UNION_TYPES:" + String.join(",", propTypes);
+                                    continue;
+                                }
+                            }
                         }
                     }
-                    if (inferredType != null && inferredType.startsWith("@ARRAY_OF_INLINE_SHAPE:")) {
-                        inferredType = "@INLINE_SHAPE:" + inferredType.substring(23);
-                    } else if (inferredType != null && inferredType.equals("@ARRAY_OF_NUMBER")) {
-                        inferredType = "@NUMBER";
-                    } else if (inferredType != null && inferredType.equals("@ARRAY_OF_STRING")) {
-                        inferredType = "@STRING";
-                    } else if (inferredType != null && inferredType.equals("@ARRAY")) {
-                        inferredType = "@ANY";
-                    } else {
-                        inferredType = "@ANY";
-                    }
+                    inferredType = "@ANY";
                     continue;
                 }
 
@@ -1355,7 +1419,56 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
 
             if (inferredType != null && (inferredType.startsWith("@") || inferredType.equals("string") || inferredType.equals("array") || inferredType.equals("number") || inferredType.equals("boolean") || inferredType.equals("promise"))) {
-                if (inferredType.startsWith("@PROMISE") || inferredType.equals("promise")) {
+                if (inferredType.startsWith("@UNION_TYPES:")) {
+                    String[] unionTypes = inferredType.substring(13).split(",");
+                    Map<String, CompletionItem> merged = new LinkedHashMap<>();
+                    for (String uType : unionTypes) {
+                        uType = uType.trim();
+                        if (uType.isEmpty()) continue;
+                        List<CompletionItem> subItems = null;
+                        if (uType.startsWith("@INLINE_SHAPE_NODE:") && activeTree != null) {
+                            try {
+                                int targetNode = Integer.parseInt(uType.substring(19));
+                                subItems = getMembersForNode(activeTree, targetNode, word);
+                            } catch (NumberFormatException ignored) {}
+                        } else if (uType.startsWith("@INLINE_SHAPE:")) {
+                            String[] keys = uType.substring(14).split(",");
+                            subItems = new ArrayList<>();
+                            for (String key : keys) {
+                                if (!key.isEmpty()) {
+                                    CompletionItem ci = new CompletionItem(key, key, "Property", CompletionItem.Type.VALUE, 0);
+                                    ci.setReplaceLength(word.length());
+                                    subItems.add(ci);
+                                }
+                            }
+                        } else if (uType.startsWith("@")) {
+                            String tName = (uType.startsWith("@ARRAY_OF_") || uType.startsWith("@TUPLE_OF_")) ? "array" : uType.substring(1).toLowerCase();
+                            String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(tName);
+                            if (methods != null) {
+                                subItems = buildMemberList(tName, methods, word, CompletionItem.Type.FUNCTION);
+                            }
+                        } else {
+                            String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get(uType.toLowerCase());
+                            if (methods != null) {
+                                subItems = buildMemberList(uType, methods, word, CompletionItem.Type.FUNCTION);
+                            }
+                        }
+                        if (subItems != null) {
+                            for (CompletionItem ci : subItems) {
+                                String baseName = getBaseMemberName(ci.getLabel());
+                                if (!baseName.isEmpty() && !merged.containsKey(baseName)) {
+                                    merged.put(baseName, ci);
+                                }
+                            }
+                        }
+                    }
+                    if (!merged.isEmpty()) {
+                        if (word == null || word.isEmpty()) {
+                            return new ArrayList<>(merged.values());
+                        }
+                        return fuzzyFilter(new ArrayList<>(merged.values()), word);
+                    }
+                } else if (inferredType.startsWith("@PROMISE") || inferredType.equals("promise")) {
                     String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get("promise");
                     if (methods != null)
                         return buildMemberList("Promise", methods, word, CompletionItem.Type.FUNCTION);
@@ -2156,7 +2269,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
                 if (type == JsSyntaxTree.N_VAR_DECL || type == JsSyntaxTree.N_PARAM) {
                     if (cachedTree.nodeTypeAnn[id] != null) {
-                        varTypeMap.put(name, cachedTree.nodeTypeAnn[id]);
+                        String ann = cachedTree.nodeTypeAnn[id];
+                        if (ann.startsWith("@ELEMENT_OF:") || ann.startsWith("@AWAIT_ELEMENT_OF:")) {
+                            ann = resolveElementType(text, ann, cachedTree.nodeStart[id]);
+                        }
+                        varTypeMap.put(name, ann);
                     } else {
                         String jsDocType = extractJsDocType(text, cachedTree.nodeStart[id]);
                         if (jsDocType != null) {
@@ -2234,6 +2351,98 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 }
             }
         }
+    }
+
+    private String resolveElementType(String text, String typeAnn, int dotPos) {
+        if (typeAnn == null) return null;
+        boolean isAwait = typeAnn.startsWith("@AWAIT_ELEMENT_OF:");
+        if (!isAwait && !typeAnn.startsWith("@ELEMENT_OF:")) {
+            return typeAnn;
+        }
+        String iterName = isAwait ? typeAnn.substring(18) : typeAnn.substring(12);
+        String iterType = null;
+        int iterDeclId = 0;
+        if (cachedTree != null && cachedScopeTree != null) {
+            int currentScope = cachedScopeTree.findScopeAt(dotPos, cachedTree);
+            int[] resolved = cachedScopeTree.lookupSymbol(iterName, currentScope, dotPos, cachedTree);
+            if (resolved != null) {
+                iterDeclId = resolved[1];
+                iterType = cachedTree.nodeTypeAnn[iterDeclId];
+                if (iterType == null && cachedTree.shapeTable != null && cachedTree.shapeTable.containsKey(iterDeclId)) {
+                    iterType = "@INLINE_SHAPE_NODE:" + iterDeclId;
+                }
+            }
+        }
+        if (iterType == null) {
+            iterType = varTypeMap.get(iterName);
+        }
+        if (iterType == null) {
+            return "@ANY";
+        }
+        iterType = normalizeTypeScriptType(iterType);
+
+        String elemType = "@ANY";
+        if (iterType.equals("@ARRAY_OF_STRING")) {
+            elemType = "@STRING";
+        } else if (iterType.equals("@ARRAY_OF_NUMBER")) {
+            elemType = "@NUMBER";
+        } else if (iterType.equals("@ARRAY_OF_BOOLEAN")) {
+            elemType = "@BOOLEAN";
+        } else if (iterType.startsWith("@ARRAY_OF_INLINE_SHAPE:")) {
+            elemType = "@INLINE_SHAPE:" + iterType.substring(23);
+        } else if (iterType.startsWith("@ARRAY_OF_TS:")) {
+            String innerTs = iterType.substring(13).trim();
+            elemType = normalizeTypeScriptType(innerTs);
+        } else if (iterType.startsWith("@ARRAY_OF_PROMISE_OF:")) {
+            String pVal = iterType.substring(21).trim();
+            elemType = isAwait ? pVal : "@PROMISE";
+        } else if (iterType.equals("@ARRAY_OF_PROMISE")) {
+            elemType = isAwait ? "@ANY" : "@PROMISE";
+        } else if (iterType.equals("@STRING") || iterType.equals("string")) {
+            elemType = "@STRING";
+        } else if (iterType.equals("@ARRAY") || iterType.equals("array")) {
+            if (iterDeclId > 0 && cachedTree != null && text != null) {
+                int start = cachedTree.nodeStart[iterDeclId];
+                int end = cachedTree.nodeEnd[iterDeclId];
+                if (start >= 0 && end <= text.length() && start < end) {
+                    String declText = text.substring(start, end);
+                    int bOpen = declText.indexOf('[');
+                    if (bOpen != -1) {
+                        String arrBody = declText.substring(bOpen + 1).trim();
+                        if (arrBody.startsWith("'") || arrBody.startsWith("\"") || arrBody.startsWith("`")) {
+                            elemType = "@STRING";
+                        } else if (!arrBody.isEmpty() && Character.isDigit(arrBody.charAt(0))) {
+                            elemType = "@NUMBER";
+                        } else if (arrBody.startsWith("Promise.resolve")) {
+                            if (isAwait) {
+                                int pStart = arrBody.indexOf('(');
+                                if (pStart != -1) {
+                                    String arg = arrBody.substring(pStart + 1).trim();
+                                    if (arg.startsWith("'") || arg.startsWith("\"") || arg.startsWith("`")) {
+                                        elemType = "@STRING";
+                                    } else if (!arg.isEmpty() && Character.isDigit(arg.charAt(0))) {
+                                        elemType = "@NUMBER";
+                                    }
+                                }
+                            } else {
+                                elemType = "@PROMISE";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (isAwait) {
+            if (elemType.startsWith("@PROMISE_OF_TS:")) {
+                elemType = normalizeTypeScriptType(elemType.substring(15));
+            } else if (elemType.startsWith("@PROMISE_INLINE_SHAPE:")) {
+                elemType = "@INLINE_SHAPE:" + elemType.substring(22);
+            } else if (elemType.equals("@PROMISE")) {
+                elemType = "@ANY";
+            }
+        }
+        return elemType;
     }
 
     private String extractJsDocType(String text, int declStart) {

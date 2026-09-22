@@ -13,6 +13,14 @@ import java.util.Arrays;
 public class HtmlParser {
 
     /**
+     * Parses an HTML source string by tokenizing and constructing a ParseResult.
+     */
+    public static ParseResult parse(String source) {
+        HtmlTokenStream stream = HtmlLexer.tokenize(source);
+        return parse(source, stream);
+    }
+
+    /**
      * Parses the given token stream into a flat-array syntax tree.
      *
      * @param source The original HTML source string

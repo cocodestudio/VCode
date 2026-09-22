@@ -322,12 +322,37 @@ public class TsLinter {
         while (t < stream.length) {
             if ((stream.types[t] == TokenStream.TK_KEYWORD || stream.types[t] == TokenStream.TK_IDENTIFIER)
                     && "namespace".equals(getWord(text, stream, t))) {
-                int start = stream.tokenStart[t];
-                int line = LinterUtils.getLine(text, start);
-                int col = LinterUtils.getColumn(text, start);
-                out.add(new Problem(file, line, col, 9,
-                        "'namespace' is discouraged in modern TypeScript: use ES modules (import/export) instead",
-                        Problem.Severity.WARNING));
+                int prev = stream.tokenStart[t] - 1;
+                while (prev >= 0 && (stream.types[prev] == TokenStream.TK_WHITESPACE || stream.types[prev] == TokenStream.TK_COMMENT)) {
+                    prev--;
+                }
+                boolean isKeywordUsage = true;
+                if (prev >= 0) {
+                    char pc = text.charAt(prev);
+                    if (pc == '.' || pc == ',' || pc == ':' || pc == '=' || pc == '(' || pc == '{') {
+                        isKeywordUsage = false;
+                    } else {
+                        int pStart = stream.tokenStart[prev];
+                        int pEnd = skipToken(stream, prev);
+                        String prevWord = text.substring(pStart, pEnd);
+                        if ("const".equals(prevWord) || "let".equals(prevWord) || "var".equals(prevWord)
+                                || "import".equals(prevWord) || "type".equals(prevWord) || "interface".equals(prevWord)
+                                || "function".equals(prevWord) || "class".equals(prevWord)) {
+                            isKeywordUsage = false;
+                        }
+                    }
+                }
+                if (isKeywordUsage) {
+                    int next = skipWsAndComments(stream, skipToken(stream, t));
+                    if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER || stream.types[next] == TokenStream.TK_KEYWORD)) {
+                        int start = stream.tokenStart[t];
+                        int line = LinterUtils.getLine(text, start);
+                        int col = LinterUtils.getColumn(text, start);
+                        out.add(new Problem(file, line, col, 9,
+                                "'namespace' is discouraged in modern TypeScript: use ES modules (import/export) instead",
+                                Problem.Severity.WARNING));
+                    }
+                }
             }
             t = skipToken(stream, t);
         }
@@ -366,6 +391,37 @@ public class TsLinter {
             if ((stream.types[t] == TokenStream.TK_KEYWORD || stream.types[t] == TokenStream.TK_IDENTIFIER)
                     && "as".equals(getWord(text, stream, t))) {
                 int prev = stream.tokenStart[t] - 1;
+                boolean insideImportExportBraces = false;
+                int scan = prev;
+                int braceDepth = 0;
+                while (scan >= 0) {
+                    char sc = text.charAt(scan);
+                    if (sc == ';') break;
+                    if (sc == '}') braceDepth++;
+                    else if (sc == '{') {
+                        if (braceDepth > 0) {
+                            braceDepth--;
+                        } else {
+                            int beforeBrace = scan - 1;
+                            while (beforeBrace >= 0 && Character.isWhitespace(text.charAt(beforeBrace))) beforeBrace--;
+                            if (beforeBrace >= 0) {
+                                int wStart = stream.tokenStart[beforeBrace];
+                                int wEnd = skipToken(stream, beforeBrace);
+                                String w = text.substring(wStart, wEnd);
+                                if ("import".equals(w) || "export".equals(w) || "type".equals(w)) {
+                                    insideImportExportBraces = true;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    scan--;
+                }
+                if (insideImportExportBraces) {
+                    t = skipToken(stream, t);
+                    continue;
+                }
+
                 while (prev >= 0 && (stream.types[prev] == TokenStream.TK_WHITESPACE || stream.types[prev] == TokenStream.TK_COMMENT)) {
                     prev = stream.tokenStart[prev] - 1;
                 }

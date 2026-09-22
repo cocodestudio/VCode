@@ -68,31 +68,8 @@ public class JsParsePipeline {
                     cached = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getParseResult(file.getAbsolutePath());
                 }
 
-                int editStart = -1, editEndOld = -1, editEndNew = -1;
-                if (cached != null && cached.source != null) {
-                    String oldText = cached.source;
-                    int minLen = Math.min(oldText.length(), source.length());
-                    int pre = 0;
-                    while (pre < minLen && oldText.charAt(pre) == source.charAt(pre)) pre++;
-                    int oldSuf = oldText.length() - 1;
-                    int newSuf = source.length() - 1;
-                    while (oldSuf >= pre && newSuf >= pre && oldText.charAt(oldSuf) == source.charAt(newSuf)) {
-                        oldSuf--;
-                        newSuf--;
-                    }
-                    editStart = pre;
-                    editEndOld = oldSuf + 1;
-                    editEndNew = newSuf + 1;
-                }
-
                 if (mode == ParseResult.MODE_FULL || mode == ParseResult.MODE_LAZY_SCOPE) {
-                    if (cached != null && cached.tree != null && editStart != -1 && editStart <= editEndOld) {
-                        // Keep incremental parse unaltered for now (doesn't use buffer yet)
-                        tree = JsParser.parseIncremental(source, tokens, cached.source, cached.tree, cached.tokens, editStart, editEndOld, editEndNew);
-                    }
-                    if (tree == null) {
-                        tree = JsParser.parseFull(source, tokens, buffers.tree);
-                    }
+                    tree = JsParser.parseFull(source, tokens, buffers.tree);
                 } else if (mode == ParseResult.MODE_TOP_LEVEL) {
                     tree = JsParser.parseTopLevel(source, tokens); // Might want to buffer this too later
                 } else {

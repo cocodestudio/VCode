@@ -32,203 +32,13 @@ public class JsParser {
 
     }
 
+    /**
+     * @deprecated Use {@link #parseFull(String, TokenStream)} instead. Incremental block replacement
+     * in flat parallel-array ASTs produces orphaned ghost nodes and scope resolution corruption.
+     */
+    @Deprecated
     public static JsSyntaxTree parseIncremental(String newSource, TokenStream newTokens, String oldSource, JsSyntaxTree oldTree, TokenStream oldTokens, int editStart, int editEndOld, int editEndNew) {
-
-        int r = findDeepestBlock(oldTree, 0, editStart, editEndOld, 0);
-
-        if (r == 0) return null;
-
-
-        int oldStartTok = binarySearchToken(oldTokens, oldTree.nodeStart[r]);
-
-        if (oldStartTok < 0 || oldTokens.types[oldStartTok] != TokenStream.TK_PUNCT || oldSource.charAt(oldTokens.tokenStart[oldStartTok]) != '{')
-            return null;
-
-
-        int oldEndTok = oldStartTok;
-
-        int depth = 0;
-
-        for (int i = oldStartTok; i < oldTokens.length; i++) {
-
-            if (oldTokens.types[i] == TokenStream.TK_PUNCT) {
-
-                char c = oldSource.charAt(oldTokens.tokenStart[i]);
-
-                if (c == '{') depth++;
-
-                else if (c == '}') {
-
-                    depth--;
-
-                    if (depth == 0) {
-                        oldEndTok = i;
-                        break;
-                    }
-
-                }
-
-            }
-
-        }
-
-        if (depth != 0) return null;
-
-
-        int newStartTok = binarySearchToken(newTokens, oldTree.nodeStart[r]);
-
-        if (newStartTok < 0 || newTokens.types[newStartTok] != TokenStream.TK_PUNCT || newSource.charAt(newTokens.tokenStart[newStartTok]) != '{')
-            return null;
-
-
-        int newEndTok = newStartTok;
-
-        depth = 0;
-
-        for (int i = newStartTok; i < newTokens.length; i++) {
-
-            if (newTokens.types[i] == TokenStream.TK_PUNCT) {
-
-                char c = newSource.charAt(newTokens.tokenStart[i]);
-
-                if (c == '{') depth++;
-
-                else if (c == '}') {
-
-                    depth--;
-
-                    if (depth == 0) {
-                        newEndTok = i;
-                        break;
-                    }
-
-                }
-
-            }
-
-        }
-
-        if (depth != 0) return null;
-
-
-        int oldAfter = oldTokens.length - oldEndTok;
-
-        int newAfter = newTokens.length - newEndTok;
-
-        if (oldAfter != newAfter) return null;
-
-
-        JsSyntaxTree newTree = new JsSyntaxTree(oldTree.nodeType.length + 1024);
-
-        System.arraycopy(oldTree.nodeType, 0, newTree.nodeType, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeStart, 0, newTree.nodeStart, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeEnd, 0, newTree.nodeEnd, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeParent, 0, newTree.nodeParent, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeChild, 0, newTree.nodeChild, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeSibling, 0, newTree.nodeSibling, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeLastChild, 0, newTree.nodeLastChild, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeName, 0, newTree.nodeName, 0, oldTree.nodeCount);
-
-        System.arraycopy(oldTree.nodeExtra, 0, newTree.nodeExtra, 0, oldTree.nodeCount);
-
-        newTree.nodeCount = oldTree.nodeCount;
-
-
-        int delta = (editEndNew - editStart) - (editEndOld - editStart);
-
-        for (int i = 1; i < newTree.nodeCount; i++) {
-
-            if (newTree.nodeStart[i] >= editEndOld) newTree.nodeStart[i] += delta;
-
-            if (newTree.nodeEnd[i] >= editEndOld) newTree.nodeEnd[i] += delta;
-
-        }
-
-
-        newTree.nodeChild[r] = 0;
-
-        newTree.nodeLastChild[r] = 0;
-
-        newTree.nodeEnd[r] = getOffset(newTokens, newSource, newEndTok + 1);
-
-
-        int nextTok = skipToken(newTokens, newStartTok);
-
-        while (nextTok < newEndTok) {
-
-            nextTok = skipWhitespaceAndComments(newTokens, nextTok);
-
-            if (nextTok >= newEndTok) break;
-
-            nextTok = parseNext(newSource, newTokens, newTree, nextTok, r);
-
-        }
-
-        newTree.buildNodesByOffset();
-        return newTree;
-
-    }
-
-    private static int findDeepestBlock(JsSyntaxTree tree, int nodeId, int editStart, int editEnd, int best) {
-        if (tree == null || tree.nodeCount <= 1) return 0;
-        if (nodeId < 0 || nodeId >= tree.nodeCount) return best;
-
-        if (nodeId == 0 && best != 0) nodeId = tree.nodeChild[0];
-
-        if (nodeId == 0 && best == 0) {
-            int child = tree.nodeChild[0];
-            int loop = 0;
-            while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
-                best = findDeepestBlock(tree, child, editStart, editEnd, best);
-                child = tree.nodeSibling[child];
-            }
-            return best;
-        }
-
-        if (tree.nodeStart[nodeId] <= editStart && tree.nodeEnd[nodeId] >= editEnd) {
-            if (tree.nodeType[nodeId] == JsSyntaxTree.N_BLOCK) {
-                best = nodeId;
-            }
-            int child = tree.nodeChild[nodeId];
-            int loop = 0;
-            while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
-                best = findDeepestBlock(tree, child, editStart, editEnd, best);
-                child = tree.nodeSibling[child];
-            }
-        }
-
-        return best;
-    }
-
-    private static int binarySearchToken(TokenStream stream, int offset) {
-
-        int low = 0;
-
-        int high = stream.length - 1;
-
-        while (low <= high) {
-
-            int mid = (low + high) >>> 1;
-
-            int midVal = stream.tokenStart[mid];
-
-            if (midVal < offset) low = mid + 1;
-
-            else if (midVal > offset) high = mid - 1;
-
-            else return mid;
-
-        }
-
-        return -1;
-
+        return parseFull(newSource, newTokens);
     }
 
     public static JsSyntaxTree parseTopLevel(String source, TokenStream stream) {
@@ -359,7 +169,15 @@ public class JsParser {
 
             if ("class".equals(kw)) return parseClass(source, stream, tree, i, parent);
 
-            if ("const".equals(kw) || "let".equals(kw) || "var".equals(kw))
+            if ("const".equals(kw)) {
+                int afterConst = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                if (afterConst < stream.length && "enum".equals(getWord(source, stream, afterConst))) {
+                    return parseClass(source, stream, tree, afterConst, parent);
+                }
+                return parseVarDecl(source, stream, tree, i, parent);
+            }
+
+            if ("let".equals(kw) || "var".equals(kw))
                 return parseVarDecl(source, stream, tree, i, parent);
 
             if ("for".equals(kw)) return parseFor(source, stream, tree, i, parent);
@@ -393,6 +211,32 @@ public class JsParser {
 
         }
 
+        if (type == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '@') {
+            int curr = skipToken(stream, i);
+            curr = skipWhitespaceAndComments(stream, curr);
+            if (curr < stream.length && (stream.types[curr] == TokenStream.TK_IDENTIFIER || stream.types[curr] == TokenStream.TK_KEYWORD)) {
+                curr = skipToken(stream, curr);
+                curr = skipWhitespaceAndComments(stream, curr);
+                while (curr < stream.length && stream.types[curr] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[curr]) == '.') {
+                    curr = skipToken(stream, curr);
+                    curr = skipWhitespaceAndComments(stream, curr);
+                    if (curr < stream.length && (stream.types[curr] == TokenStream.TK_IDENTIFIER || stream.types[curr] == TokenStream.TK_KEYWORD)) {
+                        curr = skipToken(stream, curr);
+                        curr = skipWhitespaceAndComments(stream, curr);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            if (curr < stream.length && stream.types[curr] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[curr]) == '(') {
+                curr = skipBlockFast(source, stream, curr, '(', ')');
+            }
+            curr = skipWhitespaceAndComments(stream, curr);
+            if (curr < stream.length) {
+                return parseNext(source, stream, tree, curr, parent);
+            }
+            return curr;
+        }
 
         if (type == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
 
@@ -480,9 +324,17 @@ public class JsParser {
 
 
         int i = skipToken(stream, startIdx); // skip 'for'
-
         i = skipWhitespaceAndComments(stream, i);
 
+        boolean isAwait = false;
+        if (i < stream.length && (stream.types[i] == TokenStream.TK_KEYWORD || stream.types[i] == TokenStream.TK_IDENTIFIER)) {
+            String kw = getWord(source, stream, i);
+            if ("await".equals(kw)) {
+                isAwait = true;
+                i = skipToken(stream, i);
+                i = skipWhitespaceAndComments(stream, i);
+            }
+        }
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
@@ -508,6 +360,43 @@ public class JsParser {
                     if ("let".equals(kw) || "const".equals(kw) || "var".equals(kw)) {
 
                         inner = parseVarDecl(source, stream, tree, inner, forNode);
+
+                        int loopVarNode = 0;
+                        for (int n = tree.nodeCount - 1; n > forNode; n--) {
+                            if (tree.nodeParent[n] == forNode && tree.nodeType[n] == JsSyntaxTree.N_VAR_DECL) {
+                                loopVarNode = n;
+                                break;
+                            }
+                        }
+                        int nextTok = skipWhitespaceAndComments(stream, inner);
+                        if (nextTok < headerEnd && (stream.types[nextTok] == TokenStream.TK_KEYWORD || stream.types[nextTok] == TokenStream.TK_IDENTIFIER)) {
+                            String loopOp = getWord(source, stream, nextTok);
+                            if ("in".equals(loopOp)) {
+                                if (loopVarNode > 0 && tree.nodeTypeAnn[loopVarNode] == null) {
+                                    tree.nodeTypeAnn[loopVarNode] = "@STRING";
+                                }
+                                inner = skipToken(stream, nextTok);
+                            } else if ("of".equals(loopOp)) {
+                                int iterTok = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
+                                if (iterTok < headerEnd && loopVarNode > 0 && tree.nodeTypeAnn[loopVarNode] == null) {
+                                    if (stream.types[iterTok] == TokenStream.TK_IDENTIFIER) {
+                                        String iterName = getWord(source, stream, iterTok);
+                                        tree.nodeTypeAnn[loopVarNode] = isAwait ? "@AWAIT_ELEMENT_OF:" + iterName : "@ELEMENT_OF:" + iterName;
+                                    } else if (stream.types[iterTok] == TokenStream.TK_STRING) {
+                                        tree.nodeTypeAnn[loopVarNode] = "@STRING";
+                                    } else if (stream.types[iterTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[iterTok]) == '[') {
+                                        String arrType = inferBaseType(source, stream, iterTok - 1);
+                                        if (arrType != null) {
+                                            if ("@ARRAY_OF_STRING".equals(arrType)) tree.nodeTypeAnn[loopVarNode] = "@STRING";
+                                            else if ("@ARRAY_OF_NUMBER".equals(arrType)) tree.nodeTypeAnn[loopVarNode] = "@NUMBER";
+                                            else if (arrType.startsWith("@ARRAY_OF_INLINE_SHAPE:")) tree.nodeTypeAnn[loopVarNode] = "@INLINE_SHAPE:" + arrType.substring(23);
+                                            else if (isAwait && arrType.startsWith("@ARRAY_OF_PROMISE_OF:")) tree.nodeTypeAnn[loopVarNode] = arrType.substring(21);
+                                        }
+                                    }
+                                }
+                                inner = skipToken(stream, nextTok);
+                            }
+                        }
 
                         continue;
 
@@ -572,17 +461,16 @@ public class JsParser {
 
 
             if (i < stream.length && stream.types[i] == TokenStream.TK_IDENTIFIER) {
-
                 String paramName = getWord(source, stream, i);
-
                 int paramStart = stream.tokenStart[i];
-
                 i = skipToken(stream, i);
-
                 int endOffset = getOffset(stream, source, i);
-
                 tree.addNode(JsSyntaxTree.N_PARAM, paramStart, endOffset, catchNode, paramName);
-
+            } else if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT &&
+                    (source.charAt(stream.tokenStart[i]) == '{' || source.charAt(stream.tokenStart[i]) == '[')) {
+                char open = source.charAt(stream.tokenStart[i]);
+                char close = open == '{' ? '}' : ']';
+                i = parseDestructuredVars(source, stream, tree, i, catchNode, JsSyntaxTree.FLAG_NONE, open, close, JsSyntaxTree.N_PARAM);
             }
 
 
@@ -1168,23 +1056,24 @@ public class JsParser {
                     continue;
 
                 } else {
-
                     if (name != null) {
-
-                        tree.addNode(JsSyntaxTree.N_STATEMENT, nodeStart, getOffset(stream, source, i), parent, name);
-
+                        tree.addNode(JsSyntaxTree.N_IDENTIFIER, nodeStart, getOffset(stream, source, i), parent, name);
                         return i;
-
                     }
-
                     return skipToken(stream, i);
-
                 }
-
-            } else {
-
+            } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '=') {
+                if (name != null) {
+                    int pNode = tree.addNode(JsSyntaxTree.N_STATEMENT, nodeStart, getOffset(stream, source, i), parent, name);
+                    tree.nodeExtra[pNode] |= JsSyntaxTree.FLAG_DEFAULT;
+                    i = skipToken(stream, i);
+                    i = parseExpressionTokens(source, stream, tree, i, pNode, STOP_OBJ_PROP);
+                    tree.nodeEnd[pNode] = getOffset(stream, source, i);
+                    return i;
+                }
                 return skipToken(stream, i);
-
+            } else {
+                return skipToken(stream, i);
             }
 
         }
@@ -1273,6 +1162,13 @@ public class JsParser {
                     if (!insideBraces && (nc == '{' || nc == '*')) {
                         i = skipToken(stream, i);
                         continue;
+                    }
+                    if (!insideBraces && (nt == TokenStream.TK_IDENTIFIER || nt == TokenStream.TK_KEYWORD)) {
+                        String nextWord = getWord(source, stream, nextTok);
+                        if (!"from".equals(nextWord)) {
+                            i = skipToken(stream, i); // skip 'type' modifier in `import type Foo from ...`
+                            continue;
+                        }
                     }
                     if (insideBraces && (nt == TokenStream.TK_IDENTIFIER || nt == TokenStream.TK_KEYWORD) && !"as".equals(getWord(source, stream, nextTok)) && !"from".equals(getWord(source, stream, nextTok))) {
                         i = skipToken(stream, i);
@@ -1385,12 +1281,19 @@ public class JsParser {
 
                 return i;
 
-            } else if ("const".equals(kw) || "let".equals(kw) || "var".equals(kw)) {
-
+            } else if ("const".equals(kw)) {
+                int afterConst = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                if (afterConst < stream.length && "enum".equals(getWord(source, stream, afterConst))) {
+                    i = parseClass(source, stream, tree, afterConst, exportNode);
+                    tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+                    return i;
+                }
                 i = parseVarDecl(source, stream, tree, i, exportNode);
-
                 tree.nodeEnd[exportNode] = getOffset(stream, source, i);
-
+                return i;
+            } else if ("let".equals(kw) || "var".equals(kw)) {
+                i = parseVarDecl(source, stream, tree, i, exportNode);
+                tree.nodeEnd[exportNode] = getOffset(stream, source, i);
                 return i;
 
             } else if ("default".equals(kw)) {
@@ -1604,6 +1507,7 @@ public class JsParser {
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
 
             i = parseParams(source, stream, tree, i, funcNode);
+            inferCallbackParameters(source, stream, tree, funcNode, nodeStart);
 
         }
 
@@ -2081,6 +1985,7 @@ public class JsParser {
         String name = null;
 
         int nodeStart = stream.tokenStart[i];
+        boolean isPrivate = false;
 
 
         while (i < stream.length) {
@@ -2092,6 +1997,35 @@ public class JsParser {
 
             byte t = stream.types[i];
 
+            if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '@') {
+                i = skipToken(stream, i); // skip '@'
+                i = skipWhitespaceAndComments(stream, i);
+                if (i < stream.length && (stream.types[i] == TokenStream.TK_IDENTIFIER || stream.types[i] == TokenStream.TK_KEYWORD)) {
+                    i = skipToken(stream, i);
+                    i = skipWhitespaceAndComments(stream, i);
+                    while (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '.') {
+                        i = skipToken(stream, i);
+                        i = skipWhitespaceAndComments(stream, i);
+                        if (i < stream.length && (stream.types[i] == TokenStream.TK_IDENTIFIER || stream.types[i] == TokenStream.TK_KEYWORD)) {
+                            i = skipToken(stream, i);
+                            i = skipWhitespaceAndComments(stream, i);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
+                    i = skipBlockFast(source, stream, i, '(', ')');
+                }
+                continue;
+            }
+
+            if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '#') {
+                isPrivate = true;
+                i = skipToken(stream, i);
+                continue;
+            }
+
             if (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) {
                 if (name != null) {
                     if (!isClassMemberModifierOrDecl(name)) {
@@ -2102,6 +2036,10 @@ public class JsParser {
                 }
 
                 String word = getWord(source, stream, i);
+                if (isPrivate) {
+                    word = "#" + word;
+                    isPrivate = false;
+                }
 
                 if ("get".equals(word) && name == null) {
                     int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
@@ -2148,6 +2086,28 @@ public class JsParser {
                     }
                     return i;
                 }
+                if (c == '[') {
+                    if (name == null) {
+                        int close = skipBlockFast(source, stream, i, '[', ']');
+                        int next = skipWhitespaceAndComments(stream, close);
+                        if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == ':') {
+                            int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, "{index_signature}");
+                            int typeStart = skipWhitespaceAndComments(stream, skipToken(stream, next));
+                            i = parseTypeAnnotation(source, stream, tree, typeStart, propNode);
+                            if (i > typeStart) {
+                                tree.nodeTypeAnn[propNode] = cleanTypeAnnotation(source.substring(getOffset(stream, source, typeStart), getOffset(stream, source, i)));
+                            }
+                            if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ';') {
+                                i = skipToken(stream, i);
+                            }
+                            tree.nodeEnd[propNode] = getOffset(stream, source, i);
+                            return i;
+                        }
+                        i = close;
+                        name = "{computed}";
+                        continue;
+                    }
+                }
                 if (c == '(') {
                     int methodNode = tree.addNode(nodeType, nodeStart, 0, parent, name);
                     i = parseParams(source, stream, tree, i, methodNode);
@@ -2162,8 +2122,20 @@ public class JsParser {
                             }
                             continue;
                         }
-                        if (stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '{') {
-                            i = parseBlock(source, stream, tree, i, methodNode);
+                        if (stream.types[i] == TokenStream.TK_PUNCT) {
+                            char pc = source.charAt(stream.tokenStart[i]);
+                            if (pc == '{') {
+                                i = parseBlock(source, stream, tree, i, methodNode);
+                                break;
+                            } else if (pc == ';') {
+                                i = skipToken(stream, i);
+                                break;
+                            } else if (pc == '}') {
+                                break;
+                            }
+                        }
+                        if (stream.types[i] == TokenStream.TK_IDENTIFIER || stream.types[i] == TokenStream.TK_KEYWORD ||
+                                (stream.types[i] == TokenStream.TK_OPERATOR && (source.charAt(stream.tokenStart[i]) == '#' || source.charAt(stream.tokenStart[i]) == '@'))) {
                             break;
                         }
                         i = skipToken(stream, i);
@@ -2272,7 +2244,8 @@ public class JsParser {
 
                 tree.nodeEnd[declNode] = getOffset(stream, source, i);
 
-            } else if (stream.types[i] == TokenStream.TK_IDENTIFIER) {
+            } else if (stream.types[i] == TokenStream.TK_IDENTIFIER ||
+                    (stream.types[i] == TokenStream.TK_KEYWORD && !"var".equals(getWord(source, stream, i)) && !"let".equals(getWord(source, stream, i)) && !"const".equals(getWord(source, stream, i)))) {
 
                 String name = getWord(source, stream, i);
 
@@ -2574,6 +2547,30 @@ public class JsParser {
                     return "@ARRAY_OF_NUMBER";
                 } else if (next < stream.length && stream.types[next] == TokenStream.TK_STRING) {
                     return "@ARRAY_OF_STRING";
+                } else if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER || stream.types[next] == TokenStream.TK_KEYWORD)) {
+                    String firstWord = getWord(source, stream, next);
+                    if ("Promise".equals(firstWord)) {
+                        int dotTok = skipWhitespaceAndComments(stream, skipToken(stream, next));
+                        if (dotTok < stream.length && stream.types[dotTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[dotTok]) == '.') {
+                            int methodTok = skipWhitespaceAndComments(stream, skipToken(stream, dotTok));
+                            if (methodTok < stream.length && "resolve".equals(getWord(source, stream, methodTok))) {
+                                int parenTok = skipWhitespaceAndComments(stream, skipToken(stream, methodTok));
+                                if (parenTok < stream.length && stream.types[parenTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[parenTok]) == '(') {
+                                    int argTok = skipWhitespaceAndComments(stream, skipToken(stream, parenTok));
+                                    if (argTok < stream.length) {
+                                        if (stream.types[argTok] == TokenStream.TK_STRING) {
+                                            return "@ARRAY_OF_PROMISE_OF:@STRING";
+                                        } else if (stream.types[argTok] == TokenStream.TK_NUMBER) {
+                                            return "@ARRAY_OF_PROMISE_OF:@NUMBER";
+                                        } else if (stream.types[argTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[argTok]) == '{') {
+                                            return "@ARRAY_OF_PROMISE_OF:@OBJECT";
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return "@ARRAY_OF_PROMISE";
+                    }
                 }
                 return "@ARRAY";
             }
@@ -2617,33 +2614,148 @@ public class JsParser {
     }
 
     private static void convertObjectLiteralToParams(JsSyntaxTree tree, int nodeId) {
-
-        if (tree.nodeType[nodeId] == JsSyntaxTree.N_STATEMENT && tree.nodeName[nodeId] != null) {
-
+        if ((tree.nodeType[nodeId] == JsSyntaxTree.N_STATEMENT || tree.nodeType[nodeId] == JsSyntaxTree.N_IDENTIFIER) && tree.nodeName[nodeId] != null) {
+            tree.nodeType[nodeId] = JsSyntaxTree.N_PARAM;
+            return;
+        } else if (tree.nodeType[nodeId] == JsSyntaxTree.N_PROPERTY && tree.nodeName[nodeId] != null) {
             int child = tree.nodeChild[nodeId];
-
             if (child != 0 && tree.nodeType[child] == JsSyntaxTree.N_IDENTIFIER) {
-
                 tree.nodeType[child] = JsSyntaxTree.N_PARAM;
-
-            } else {
-
+                return;
+            } else if (child == 0) {
                 tree.nodeType[nodeId] = JsSyntaxTree.N_PARAM;
-
+                return;
             }
-
         }
 
         int child = tree.nodeChild[nodeId];
-
         while (child != 0) {
-
             convertObjectLiteralToParams(tree, child);
-
             child = tree.nodeSibling[child];
+        }
+    }
 
+    private static boolean isArrayIterationMethod(String method) {
+        return "forEach".equals(method) || "map".equals(method) || "filter".equals(method)
+                || "find".equals(method) || "findIndex".equals(method) || "findLast".equals(method)
+                || "findLastIndex".equals(method) || "some".equals(method) || "every".equals(method)
+                || "flatMap".equals(method);
+    }
+
+    private static int skipWsAndCommentsBack(TokenStream stream, int idx) {
+        while (idx >= 0 && (stream.types[idx] == TokenStream.TK_WHITESPACE || stream.types[idx] == TokenStream.TK_COMMENT)) {
+            idx--;
+        }
+        return idx;
+    }
+
+    private static void inferCallbackParameters(String source, TokenStream stream, JsSyntaxTree tree, int funcOrArrowNode, int firstParamStartOffset) {
+        String elemType = null;
+
+        // Strategy 1: Check AST ancestor nodes for enclosing N_CALL_EXPR
+        int callNode = 0;
+        int anc = tree.nodeParent[funcOrArrowNode];
+        while (anc > 0 && anc < tree.nodeCount) {
+            if (tree.nodeType[anc] == JsSyntaxTree.N_CALL_EXPR) {
+                callNode = anc;
+                break;
+            }
+            anc = tree.nodeParent[anc];
+        }
+        if (callNode > 0 && tree.nodeName[callNode] != null) {
+            String fullName = tree.nodeName[callNode];
+            int lastDot = fullName.lastIndexOf('.');
+            if (lastDot > 0) {
+                String recName = fullName.substring(0, lastDot);
+                String methodName = fullName.substring(lastDot + 1);
+                if (isArrayIterationMethod(methodName)) {
+                    elemType = "@ELEMENT_OF:" + recName;
+                }
+            }
         }
 
+        // Strategy 2: Backward token scan
+        if (elemType == null && stream != null && stream.length > 0) {
+            int startOffset = firstParamStartOffset > 0 ? firstParamStartOffset : tree.nodeStart[funcOrArrowNode];
+            if (startOffset > 0) {
+                int tok = 0;
+                int low = 0, high = stream.length - 1;
+                while (low <= high) {
+                    int mid = (low + high) >>> 1;
+                    if (stream.tokenStart[mid] < startOffset) {
+                        tok = mid;
+                        low = mid + 1;
+                    } else {
+                        high = mid - 1;
+                    }
+                }
+                int cur = skipWsAndCommentsBack(stream, tok);
+                while (cur >= 0 && stream.types[cur] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[cur]) == ')') {
+                    int pDepth = 0;
+                    while (cur >= 0) {
+                        if (stream.types[cur] == TokenStream.TK_PUNCT) {
+                            char c = source.charAt(stream.tokenStart[cur]);
+                            if (c == ')') pDepth++;
+                            else if (c == '(') {
+                                pDepth--;
+                                if (pDepth <= 0) {
+                                    cur--;
+                                    break;
+                                }
+                            }
+                        }
+                        cur--;
+                    }
+                    cur = skipWsAndCommentsBack(stream, cur);
+                }
+                while (cur >= 0 && stream.types[cur] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[cur]) == '(') {
+                    cur = skipWsAndCommentsBack(stream, cur - 1);
+                }
+                if (cur >= 0 && (stream.types[cur] == TokenStream.TK_IDENTIFIER || stream.types[cur] == TokenStream.TK_KEYWORD)) {
+                    String methodName = getWord(source, stream, cur);
+                    if (isArrayIterationMethod(methodName)) {
+                        int dotTok = skipWsAndCommentsBack(stream, cur - 1);
+                        if (dotTok >= 0 && stream.types[dotTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[dotTok]) == '.') {
+                            int recTok = skipWsAndCommentsBack(stream, dotTok - 1);
+                            if (recTok >= 0 && stream.types[recTok] == TokenStream.TK_IDENTIFIER) {
+                                String recName = getWord(source, stream, recTok);
+                                elemType = "@ELEMENT_OF:" + recName;
+                            } else if (recTok >= 0 && stream.types[recTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[recTok]) == ']') {
+                                elemType = "@ANY";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (elemType != null) {
+            int p1 = tree.nodeChild[funcOrArrowNode];
+            while (p1 > 0 && p1 < tree.nodeCount && tree.nodeType[p1] != JsSyntaxTree.N_PARAM) {
+                p1 = tree.nodeSibling[p1];
+            }
+            if (p1 > 0 && p1 < tree.nodeCount) {
+                if (tree.nodeTypeAnn[p1] == null) {
+                    tree.nodeTypeAnn[p1] = elemType;
+                }
+                int p2 = tree.nodeSibling[p1];
+                while (p2 > 0 && p2 < tree.nodeCount && tree.nodeType[p2] != JsSyntaxTree.N_PARAM) {
+                    p2 = tree.nodeSibling[p2];
+                }
+                if (p2 > 0 && p2 < tree.nodeCount) {
+                    if (tree.nodeTypeAnn[p2] == null) {
+                        tree.nodeTypeAnn[p2] = "@NUMBER";
+                    }
+                    int p3 = tree.nodeSibling[p2];
+                    while (p3 > 0 && p3 < tree.nodeCount && tree.nodeType[p3] != JsSyntaxTree.N_PARAM) {
+                        p3 = tree.nodeSibling[p3];
+                    }
+                    if (p3 > 0 && p3 < tree.nodeCount && tree.nodeTypeAnn[p3] == null) {
+                        tree.nodeTypeAnn[p3] = "@ARRAY";
+                    }
+                }
+            }
+        }
     }
 
 
@@ -2662,6 +2774,46 @@ public class JsParser {
 
                 int arrowNode = tree.addNode(JsSyntaxTree.N_ARROW_FUNC, stream.tokenStart[i], 0, parent, null);
 
+                // Detect return type annotation between closing ')' and '=>'
+                int colonOffset = Integer.MAX_VALUE;
+                int scan = i - 1;
+                int bDepth = 0, kDepth = 0, pDepth = 0;
+                int parenCloseTok = -1;
+                while (scan >= 0) {
+                    byte st = stream.types[scan];
+                    if (st != TokenStream.TK_WHITESPACE && st != TokenStream.TK_COMMENT) {
+                        if (st == TokenStream.TK_PUNCT || st == TokenStream.TK_OPERATOR) {
+                            char sc = source.charAt(stream.tokenStart[scan]);
+                            if (sc == '}') bDepth++;
+                            else if (sc == '{') bDepth--;
+                            else if (sc == ']') kDepth++;
+                            else if (sc == '[') kDepth--;
+                            else if (sc == ')') {
+                                if (bDepth == 0 && kDepth == 0) {
+                                    parenCloseTok = scan;
+                                    break;
+                                }
+                                pDepth++;
+                            } else if (sc == '(') {
+                                pDepth--;
+                            }
+                        }
+                    }
+                    scan--;
+                }
+
+                if (parenCloseTok != -1) {
+                    int afterParen = skipWhitespaceAndComments(stream, skipToken(stream, parenCloseTok));
+                    if (afterParen < i && stream.types[afterParen] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[afterParen]) == ':') {
+                        colonOffset = stream.tokenStart[afterParen];
+                        int retStart = skipWhitespaceAndComments(stream, skipToken(stream, afterParen));
+                        if (retStart < i) {
+                            int rStartOffset = stream.tokenStart[retStart];
+                            int rEndOffset = stream.tokenStart[i];
+                            tree.nodeTypeAnn[arrowNode] = cleanTypeAnnotation(source.substring(rStartOffset, rEndOffset));
+                        }
+                    }
+                }
 
                 int firstExprChild = (initialLastChild == 0) ? tree.nodeChild[parent] : tree.nodeSibling[initialLastChild];
 
@@ -2694,6 +2846,14 @@ public class JsParser {
 
                         tree.nodeParent[curr] = arrowNode;
 
+                        if (tree.nodeStart[curr] >= colonOffset) {
+                            // Part of return type annotation, convert to type reference instead of param
+                            if (tree.nodeType[curr] == JsSyntaxTree.N_IDENTIFIER) {
+                                tree.nodeType[curr] = JsSyntaxTree.N_TYPE_REF;
+                            }
+                            curr = next;
+                            continue;
+                        }
 
                         boolean isDefaultValue = false;
 
@@ -2730,12 +2890,12 @@ public class JsParser {
                         } else {
                             if (tree.nodeType[curr] == JsSyntaxTree.N_IDENTIFIER) {
                                 tree.nodeType[curr] = JsSyntaxTree.N_PARAM;
-                            } else if (tree.nodeType[curr] == JsSyntaxTree.N_STATEMENT) {
+                            } else if (tree.nodeType[curr] == JsSyntaxTree.N_STATEMENT || tree.nodeType[curr] == JsSyntaxTree.N_OBJECT_LITERAL) {
                                 convertObjectLiteralToParams(tree, curr);
                             }
 
                             int arrowStart = stream.tokenStart[i];
-                            int scanEnd = (next > 0 && next < tree.nodeCount) ? tree.nodeStart[next] : arrowStart;
+                            int scanEnd = (next > 0 && next < tree.nodeCount) ? tree.nodeStart[next] : Math.min(arrowStart, colonOffset);
                             scanEnd = Math.min(scanEnd, source.length());
                             for (int p = tree.nodeEnd[curr]; p < scanEnd; p++) {
                                 char c = source.charAt(p);
@@ -2754,6 +2914,8 @@ public class JsParser {
                         curr = next;
 
                     }
+
+                    inferCallbackParameters(source, stream, tree, arrowNode, tree.nodeStart[arrowNode]);
 
                 }
 
@@ -2801,7 +2963,7 @@ public class JsParser {
 
                         int afterDot = skipWhitespaceAndComments(stream, skipToken(stream, next));
 
-                        if (afterDot < stream.length && stream.types[afterDot] == TokenStream.TK_IDENTIFIER) {
+                        if (afterDot < stream.length && (stream.types[afterDot] == TokenStream.TK_IDENTIFIER || stream.types[afterDot] == TokenStream.TK_KEYWORD)) {
 
                             isMember = true;
 
@@ -2845,12 +3007,24 @@ public class JsParser {
                         tree.addNode(JsSyntaxTree.N_MEMBER_EXPR, stream.tokenStart[startId], getOffset(stream, source, curr), parent, name);
 
                     } else if ("as".equals(name)) {
-
                         int nextAs = skipWhitespaceAndComments(stream, curr);
-                        if (nextAs < stream.length && stream.types[nextAs] == TokenStream.TK_IDENTIFIER) {
-                            String asType = getWord(source, stream, nextAs);
-                            tree.addNode(JsSyntaxTree.N_TYPE_REF, stream.tokenStart[nextAs], getOffset(stream, source, skipToken(stream, nextAs)), parent, asType);
-                            curr = skipToken(stream, nextAs);
+                        if (nextAs < stream.length && (stream.types[nextAs] == TokenStream.TK_IDENTIFIER || stream.types[nextAs] == TokenStream.TK_KEYWORD)) {
+                            String firstWord = getWord(source, stream, nextAs);
+                            int typeEnd = skipToken(stream, nextAs);
+                            int afterFirst = skipWhitespaceAndComments(stream, typeEnd);
+                            if (afterFirst < stream.length) {
+                                char ac = source.charAt(stream.tokenStart[afterFirst]);
+                                if (ac == '[' || ac == '<' || ac == '|' || ac == '&') {
+                                    typeEnd = parseTypeAnnotation(source, stream, tree, nextAs, parent);
+                                    String fullType = cleanTypeAnnotation(source.substring(stream.tokenStart[nextAs], getOffset(stream, source, typeEnd)));
+                                    tree.addNode(JsSyntaxTree.N_TYPE_REF, stream.tokenStart[nextAs], getOffset(stream, source, typeEnd), parent, fullType);
+                                    curr = typeEnd;
+                                    i = curr;
+                                    continue;
+                                }
+                            }
+                            tree.addNode(JsSyntaxTree.N_TYPE_REF, stream.tokenStart[nextAs], getOffset(stream, source, typeEnd), parent, firstWord);
+                            curr = typeEnd;
                         } else {
                             tree.addNode(JsSyntaxTree.N_IDENTIFIER, stream.tokenStart[startId], getOffset(stream, source, curr), parent, name);
                         }
@@ -3061,36 +3235,26 @@ public class JsParser {
 
 
     private static boolean isTopLevelKeyword(String source, TokenStream stream, int idx) {
-
-        if (stream.types[idx] != TokenStream.TK_KEYWORD) return false;
+        if (stream.types[idx] != TokenStream.TK_KEYWORD && stream.types[idx] != TokenStream.TK_IDENTIFIER) return false;
 
         String kw = getWord(source, stream, idx);
 
         return "import".equals(kw) || "export".equals(kw) || "class".equals(kw) ||
-
                 "function".equals(kw) || "const".equals(kw) || "let".equals(kw) || "var".equals(kw) ||
-
                 "return".equals(kw) || "if".equals(kw) || "for".equals(kw) || "while".equals(kw) ||
-
                 "interface".equals(kw) || "type".equals(kw) || "enum".equals(kw) || "namespace".equals(kw) || "module".equals(kw) ||
-
                 "do".equals(kw) || "with".equals(kw) || "switch".equals(kw) || "case".equals(kw) || "default".equals(kw) ||
-
-                "try".equals(kw) || "finally".equals(kw);
-
+                "try".equals(kw) || "finally".equals(kw) || "async".equals(kw);
     }
 
 
     private static boolean hasNewlineBetween(String source, TokenStream stream, int from, int to) {
-
-        for (int k = from; k < to && k < source.length(); k++) {
-
+        int startOffset = (from >= 0 && from < stream.length) ? stream.tokenStart[from] : from;
+        int endOffset = (to >= 0 && to < stream.length) ? stream.tokenStart[to] : to;
+        for (int k = startOffset; k < endOffset && k < source.length(); k++) {
             if (source.charAt(k) == '\n') return true;
-
         }
-
         return false;
-
     }
 
 
@@ -3154,10 +3318,15 @@ public class JsParser {
                 i = skipToken(stream, i);
                 continue;
             }
+            if (depth == 0 && prevNonWsTok != -1 && hasNewlineBetween(source, stream, prevNonWsTok, i) && isTopLevelKeyword(source, stream, i)) {
+                return i;
+            }
             if (t == TokenStream.TK_PUNCT || t == TokenStream.TK_OPERATOR) {
                 char c = source.charAt(stream.tokenStart[i]);
                 if (depth == 0) {
-                    if (c == '=' || c == ',' || c == ';' || c == ')' || c == '}') {
+                    if (c == '=' && stream.tokenStart[i] + 1 < source.length() && source.charAt(stream.tokenStart[i] + 1) == '>') {
+                        // Function type return arrow `() => void`, do not terminate type annotation
+                    } else if (c == '=' || c == ',' || c == ';' || c == ')' || c == '}') {
                         return i;
                     }
                     if (c == '{') {
