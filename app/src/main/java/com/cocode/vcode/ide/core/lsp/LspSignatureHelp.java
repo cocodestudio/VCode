@@ -24,10 +24,20 @@ public final class LspSignatureHelp {
      */
     public final int activeParameter;
 
+    /**
+     * Document offset of the opening parenthesis '(' of the active call, or -1 if unknown.
+     */
+    public final int openParenOffset;
+
     public LspSignatureHelp(List<LspSignatureInformation> signatures, int activeSignature, int activeParameter) {
+        this(signatures, activeSignature, activeParameter, -1);
+    }
+
+    public LspSignatureHelp(List<LspSignatureInformation> signatures, int activeSignature, int activeParameter, int openParenOffset) {
         this.signatures = signatures;
         this.activeSignature = activeSignature;
         this.activeParameter = activeParameter;
+        this.openParenOffset = openParenOffset;
     }
 
     // -------------------------------------------------------------------------

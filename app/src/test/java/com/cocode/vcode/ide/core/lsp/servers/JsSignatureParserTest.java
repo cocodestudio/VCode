@@ -425,5 +425,144 @@ public class JsSignatureParserTest {
         assertTrue("Signature should contain 'prefix': " + sig.label, sig.label.contains("prefix"));
         assertEquals("Method", sig.documentation);
     }
+
+    @Test
+    public void testNestedCall_innerTakesPrecedenceOverConsoleLog() {
+        String code = "function getUser(id) {}\nconsole.log(getUser(id))";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        // Position inside getUser(id|) -> line 1, column 22
+        LspPosition pos = new LspPosition(1, 22);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help must resolve the innermost call getUser", help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Expected getUser signature, got: " + sig.label, sig.label.startsWith("getUser("));
+        assertTrue("Signature should contain 'id' param", sig.label.contains("id"));
+        assertEquals("openParenOffset must point to getUser's open paren", code.lastIndexOf("getUser(") + "getUser".length(), help.openParenOffset);
+    }
+
+    @Test
+    public void testNestedUnclosedCall_innerTakesPrecedenceOverOuter() {
+        String code = "function getUser(id) {}\nconsole.log(getUser(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        // Position right after getUser( -> line 1, column 20
+        LspPosition pos = new LspPosition(1, 20);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help must resolve unclosed inner call getUser", help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Expected getUser signature, got: " + sig.label, sig.label.startsWith("getUser("));
+    }
+
+    @Test
+    public void testNestedCallInsideTemplateLiteralInterpolation() {
+        String code = "function format(val) {}\nconsole.log(`${key}: ${format(x)}`)";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        // Position at format(x|) -> line 1, column 31
+        LspPosition pos = new LspPosition(1, 31);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help must resolve format inside template string interpolation", help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Expected format signature, got: " + sig.label, sig.label.startsWith("format("));
+        assertEquals("openParenOffset must point to format's open paren", code.lastIndexOf("format(") + "format".length(), help.openParenOffset);
+    }
+
+    @Test
+    public void testUnclosedCallInsideTemplateLiteralInterpolation() {
+        String code = "function format(val) {}\nconsole.log(`${key}: ${format(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        // Position right after format( -> line 1, column 30
+        LspPosition pos = new LspPosition(1, 30);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help must resolve unclosed format inside template string", help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Expected format signature, got: " + sig.label, sig.label.startsWith("format("));
+    }
+
+    @Test
+    public void testChainedMethodCallInsideConsoleLog() {
+        String code = "console.log(items.filter(x => x).map(item => item.id))";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        // Position inside map(...) -> column 45
+        LspPosition pos = new LspPosition(0, 45);
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help should resolve innermost method map", help);
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue("Expected map signature, got: " + sig.label, sig.label.startsWith("map("));
+    }
+
+    @Test
+    public void testShouldTriggerSignatureHelp_emptyArgument() {
+        String code1 = "foo()";
+        int openParen1 = code1.indexOf('(');
+        // foo(|) -> cursor at 4
+        assertTrue("Empty parens should trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code1, openParen1, 4, false));
+
+        String code2 = "foo(a, )";
+        int openParen2 = code2.indexOf('(');
+        // foo(a, |) -> cursor at 7
+        assertTrue("Empty argument slot after comma should trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code2, openParen2, 7, false));
+
+        String code3 = "foo(  )";
+        int openParen3 = code3.indexOf('(');
+        // foo( | ) -> cursor at 5
+        assertTrue("Whitespace-only argument slot should trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code3, openParen3, 5, false));
+
+        String code4 = "foo(\"\")";
+        int openParen4 = code4.indexOf('(');
+        // foo("|") -> cursor at 5
+        assertTrue("Empty quotes should trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code4, openParen4, 5, false));
+    }
+
+    @Test
+    public void testShouldTriggerSignatureHelp_typingStart() {
+        String code = "foo(bar)";
+        int openParen = code.indexOf('(');
+        // When typing foo(bar|) -> cursor at 7
+        assertTrue("Typing a newly started argument token should trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, 7, true));
+
+        // When simply moving cursor to foo(bar|) without typing
+        assertFalse("Moving cursor to existing argument should NOT trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, 7, false));
+
+        // Moving cursor to middle: foo(b|ar)
+        assertFalse("Cursor in middle of existing argument should NOT trigger signature help",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, 5, true));
+    }
+
+    @Test
+    public void testShouldTriggerSignatureHelp_suppressInsideSubscriptsAndExistingArgs() {
+        // User example: console.log(`${key}: ${user[ke|y]}`)
+        String code = "console.log(`${key}: ${user[key]}`)";
+        int logParen = code.indexOf('(');
+        int cursorInsideBracket = code.indexOf("user[ke") + "user[ke".length();
+
+        assertFalse("Signature help for console.log MUST be suppressed inside user[key]",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, logParen, cursorInsideBracket, true));
+        assertFalse("Signature help for console.log MUST be suppressed on cursor move inside user[key]",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, logParen, cursorInsideBracket, false));
+
+        // Normal array bracket subscript: console.log(user[ke|y])
+        String code2 = "console.log(user[key])";
+        int logParen2 = code2.indexOf('(');
+        int cursor2 = code2.indexOf("user[ke") + "user[ke".length();
+        assertFalse("Signature help MUST be suppressed inside array subscript user[key]",
+                JsSignatureParser.shouldTriggerSignatureHelp(code2, logParen2, cursor2, true));
+
+        // Inside template string interpolation without function call: console.log(`${k|ey}`)
+        String code3 = "console.log(`${key}`)";
+        int logParen3 = code3.indexOf('(');
+        int cursor3 = code3.indexOf("k") + 1;
+        assertFalse("Signature help for console.log MUST be suppressed inside template interpolation ${key}",
+                JsSignatureParser.shouldTriggerSignatureHelp(code3, logParen3, cursor3, true));
+    }
 }
 

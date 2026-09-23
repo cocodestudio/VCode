@@ -31,34 +31,51 @@ public class JsSignatureParser {
         JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(text, tokens);
         com.cocode.vcode.ide.core.language.js.ScopeTree scopeTree = com.cocode.vcode.ide.core.language.js.ScopeTree.build(tree);
 
+        CallFrame innerCall = findInnermostCall(text, offset);
         int callNode = 0;
         int activeOpenParen = -1;
+        String funcName = null;
 
-        // Find innermost N_CALL_EXPR whose open parenthesis precedes offset and whose argument list contains offset
-        for (int j = 1; j < tree.nodeCount; j++) {
-            if (tree.nodeType[j] == JsSyntaxTree.N_CALL_EXPR) {
-                int openParen = findOpenParenForCall(text, tree, j);
-                if (openParen >= 0 && isCursorInsideCall(text, openParen, offset)) {
-                    if (openParen > activeOpenParen) {
-                        activeOpenParen = openParen;
+        if (innerCall != null && isCursorInsideCall(text, innerCall.openParen, offset)) {
+            activeOpenParen = innerCall.openParen;
+            funcName = innerCall.funcName;
+            for (int j = 1; j < tree.nodeCount; j++) {
+                if (tree.nodeType[j] == JsSyntaxTree.N_CALL_EXPR) {
+                    int p = findOpenParenForCall(text, tree, j);
+                    if (p == activeOpenParen) {
                         callNode = j;
+                        break;
                     }
                 }
             }
         }
 
-        String funcName = (callNode > 0) ? tree.nodeName[callNode] : null;
-
-        // Fallback: if AST did not produce N_CALL_EXPR (e.g. unclosed / transient syntax or constructor call), find innermost unclosed '('
-        if (callNode == 0 || funcName == null || funcName.isEmpty()) {
-            int unclosedParen = findInnermostUnclosedParen(text, offset);
-            if (unclosedParen >= 0 && isCursorInsideCall(text, unclosedParen, offset)) {
-                String extracted = extractFunctionNameBeforeParen(text, unclosedParen);
-                if (extracted != null && !extracted.isEmpty()) {
-                    activeOpenParen = unclosedParen;
-                    funcName = extracted;
-                    callNode = 0;
+        // Fallback: search AST nodes if findInnermostCall found no enclosing call
+        if (activeOpenParen < 0) {
+            for (int j = 1; j < tree.nodeCount; j++) {
+                if (tree.nodeType[j] == JsSyntaxTree.N_CALL_EXPR) {
+                    int openParen = findOpenParenForCall(text, tree, j);
+                    if (openParen >= 0 && isCursorInsideCall(text, openParen, offset)) {
+                        if (openParen > activeOpenParen) {
+                            activeOpenParen = openParen;
+                            callNode = j;
+                        }
+                    }
                 }
+            }
+            if (callNode > 0) {
+                funcName = tree.nodeName[callNode];
+            }
+        }
+
+        // Secondary fallback: innermost unclosed '(' closest to cursor
+        int unclosedParen = findInnermostUnclosedParen(text, offset);
+        if (unclosedParen > activeOpenParen && isCursorInsideCall(text, unclosedParen, offset)) {
+            String extracted = extractFunctionNameBeforeParen(text, unclosedParen);
+            if (extracted != null && !extracted.isEmpty()) {
+                activeOpenParen = unclosedParen;
+                funcName = extracted;
+                callNode = 0;
             }
         }
 
@@ -317,7 +334,7 @@ public class JsSignatureParser {
                         builtin.doc != null && !builtin.doc.isEmpty() ? builtin.doc : "Built-in method",
                         paramInfoList
                 );
-                return new LspSignatureHelp(Collections.singletonList(sig), 0, argIndex);
+                return new LspSignatureHelp(Collections.singletonList(sig), 0, argIndex, activeOpenParen);
             }
         }
 
@@ -390,7 +407,7 @@ public class JsSignatureParser {
             }
         }
 
-        return new LspSignatureHelp(Collections.singletonList(sig), 0, argIndex);
+        return new LspSignatureHelp(Collections.singletonList(sig), 0, argIndex, activeOpenParen);
     }
 
     private static List<String> extractParamNames(JsSyntaxTree tree, int funcNode) {
@@ -476,7 +493,7 @@ public class JsSignatureParser {
         return -1;
     }
 
-    private static boolean isCursorInsideCall(String text, int openParen, int offset) {
+    public static boolean isCursorInsideCall(String text, int openParen, int offset) {
         if (offset <= openParen || openParen < 0 || openParen >= text.length()) return false;
         int closeParen = findMatchingParen(text, openParen);
         if (closeParen >= 0) {
@@ -484,52 +501,72 @@ public class JsSignatureParser {
         }
         // Unclosed call: ensure no statement boundary ';' or block '}' at depth 0 between openParen and offset
         int depth = 0;
-        boolean inSingle = false, inDouble = false, inTpl = false;
+        int tplDepth = 0;
+        int[] tplBraceStack = new int[32];
+        boolean inSingle = false, inDouble = false;
         for (int i = openParen + 1; i < offset && i < text.length(); i++) {
             char c = text.charAt(i);
             char prev = (i > openParen + 1) ? text.charAt(i - 1) : 0;
-            if (c == '\'' && !inDouble && !inTpl && prev != '\\') inSingle = !inSingle;
-            else if (c == '"' && !inSingle && !inTpl && prev != '\\') inDouble = !inDouble;
-            else if (c == '`' && !inSingle && !inDouble && prev != '\\') inTpl = !inTpl;
-            else if (!inSingle && !inDouble && !inTpl) {
-                if (c == '(' || c == '[' || c == '{') depth++;
-                else if (c == ')' || c == ']' || c == '}') {
-                    if (depth > 0) depth--;
-                    else return false;
-                } else if (c == ';' && depth == 0) {
-                    return false;
+            if (inSingle) {
+                if (c == '\'' && prev != '\\') inSingle = false;
+                continue;
+            }
+            if (inDouble) {
+                if (c == '"' && prev != '\\') inDouble = false;
+                continue;
+            }
+
+            boolean inTplText = (tplDepth > 0 && tplBraceStack[tplDepth - 1] == -1);
+            if (inTplText) {
+                if (c == '`' && prev != '\\') {
+                    tplDepth--;
+                    continue;
                 }
+                if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '{') {
+                    tplBraceStack[tplDepth - 1] = 1;
+                    i++;
+                    continue;
+                }
+                continue;
+            }
+
+            if (c == '\'') { inSingle = true; continue; }
+            if (c == '"') { inDouble = true; continue; }
+            if (c == '`') {
+                if (tplDepth < tplBraceStack.length) {
+                    tplBraceStack[tplDepth++] = -1;
+                }
+                continue;
+            }
+            if (tplDepth > 0 && tplBraceStack[tplDepth - 1] > 0) {
+                if (c == '{') {
+                    tplBraceStack[tplDepth - 1]++;
+                } else if (c == '}') {
+                    tplBraceStack[tplDepth - 1]--;
+                    if (tplBraceStack[tplDepth - 1] == 0) {
+                        tplBraceStack[tplDepth - 1] = -1;
+                        continue;
+                    }
+                }
+            }
+
+            if (c == '(' || c == '[' || c == '{') depth++;
+            else if (c == ')' || c == ']' || c == '}') {
+                if (depth > 0) depth--;
+                else return false;
+            } else if (c == ';' && depth == 0 && tplDepth == 0) {
+                return false;
             }
         }
         return true;
     }
 
-    private static int findInnermostUnclosedParen(String text, int offset) {
-        int depth = 0;
-        boolean inSingle = false, inDouble = false, inTpl = false;
-        for (int i = Math.min(offset - 1, text.length() - 1); i >= 0; i--) {
-            char c = text.charAt(i);
-            char prev = (i > 0) ? text.charAt(i - 1) : 0;
-            if (c == '\'' && prev != '\\') inSingle = !inSingle;
-            else if (c == '"' && prev != '\\') inDouble = !inDouble;
-            else if (c == '`' && prev != '\\') inTpl = !inTpl;
-            else if (!inSingle && !inDouble && !inTpl) {
-                if (c == ')') depth++;
-                else if (c == '(') {
-                    if (depth > 0) {
-                        depth--;
-                    } else {
-                        return i;
-                    }
-                } else if ((c == ';' || c == '{' || c == '}') && depth == 0) {
-                    return -1;
-                }
-            }
-        }
-        return -1;
+    public static int findInnermostUnclosedParen(String text, int offset) {
+        CallFrame frame = findInnermostCall(text, offset);
+        return frame != null ? frame.openParen : -1;
     }
 
-    private static String extractFunctionNameBeforeParen(String text, int openParen) {
+    public static String extractFunctionNameBeforeParen(String text, int openParen) {
         int end = openParen - 1;
         while (end >= 0 && Character.isWhitespace(text.charAt(end))) end--;
         if (end < 0) return null;
@@ -566,19 +603,32 @@ public class JsSignatureParser {
             }
         }
         String candidate = text.substring(start + 1, end + 1).trim();
+        while (candidate.startsWith(".")) {
+            candidate = candidate.substring(1).trim();
+        }
         if (candidate.startsWith("new ")) {
             candidate = candidate.substring(4).trim();
         }
+
+        // Non-callable language statements that take parens
+        if ("if".equals(candidate) || "for".equals(candidate) || "while".equals(candidate)
+                || "switch".equals(candidate) || "catch".equals(candidate) || "with".equals(candidate)) {
+            return null;
+        }
+
         return candidate.isEmpty() ? null : candidate;
     }
 
     public static int computeArgIndex(String text, int openParenOffset, int cursorOffset) {
         if (text == null || openParenOffset < 0 || cursorOffset <= openParenOffset) return 0;
         int depth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        int tplDepth = 0;
+        int[] tplBraceStack = new int[32];
         int argIndex = 0;
         boolean inSingle = false;
         boolean inDouble = false;
-        boolean inTemplate = false;
         boolean inLineComment = false;
         boolean inBlockComment = false;
         int limit = Math.min(cursorOffset, text.length());
@@ -603,8 +653,18 @@ public class JsSignatureParser {
                 if (c == '"' && prev != '\\') inDouble = false;
                 continue;
             }
-            if (inTemplate) {
-                if (c == '`' && prev != '\\') inTemplate = false;
+
+            boolean inTplText = (tplDepth > 0 && tplBraceStack[tplDepth - 1] == -1);
+            if (inTplText) {
+                if (c == '`' && prev != '\\') {
+                    tplDepth--;
+                    continue;
+                }
+                if (c == '$' && i + 1 < limit && text.charAt(i + 1) == '{') {
+                    tplBraceStack[tplDepth - 1] = 1;
+                    i++;
+                    continue;
+                }
                 continue;
             }
 
@@ -630,15 +690,36 @@ public class JsSignatureParser {
                 continue;
             }
             if (c == '`') {
-                inTemplate = true;
+                if (tplDepth < tplBraceStack.length) {
+                    tplBraceStack[tplDepth++] = -1;
+                }
                 continue;
             }
+            if (tplDepth > 0 && tplBraceStack[tplDepth - 1] > 0) {
+                if (c == '{') {
+                    tplBraceStack[tplDepth - 1]++;
+                } else if (c == '}') {
+                    tplBraceStack[tplDepth - 1]--;
+                    if (tplBraceStack[tplDepth - 1] == 0) {
+                        tplBraceStack[tplDepth - 1] = -1;
+                        continue;
+                    }
+                }
+            }
 
-            if (c == '(' || c == '[' || c == '{') {
+            if (c == '(') {
                 depth++;
-            } else if (c == ')' || c == ']' || c == '}') {
+            } else if (c == ')') {
                 if (depth > 0) depth--;
-            } else if (c == ',' && depth == 0) {
+            } else if (c == '[') {
+                bracketDepth++;
+            } else if (c == ']') {
+                if (bracketDepth > 0) bracketDepth--;
+            } else if (c == '{') {
+                braceDepth++;
+            } else if (c == '}') {
+                if (braceDepth > 0) braceDepth--;
+            } else if (c == ',' && depth == 0 && bracketDepth == 0 && braceDepth == 0 && tplDepth == 0) {
                 argIndex++;
             }
         }
@@ -648,9 +729,10 @@ public class JsSignatureParser {
     public static int findMatchingParen(String text, int openParenOffset) {
         if (text == null || openParenOffset < 0 || openParenOffset >= text.length()) return -1;
         int depth = 0;
+        int tplDepth = 0;
+        int[] tplBraceStack = new int[32];
         boolean inSingle = false;
         boolean inDouble = false;
-        boolean inTemplate = false;
         boolean inLineComment = false;
         boolean inBlockComment = false;
 
@@ -674,8 +756,18 @@ public class JsSignatureParser {
                 if (c == '"' && prev != '\\') inDouble = false;
                 continue;
             }
-            if (inTemplate) {
-                if (c == '`' && prev != '\\') inTemplate = false;
+
+            boolean inTplText = (tplDepth > 0 && tplBraceStack[tplDepth - 1] == -1);
+            if (inTplText) {
+                if (c == '`' && prev != '\\') {
+                    tplDepth--;
+                    continue;
+                }
+                if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '{') {
+                    tplBraceStack[tplDepth - 1] = 1;
+                    i++;
+                    continue;
+                }
                 continue;
             }
 
@@ -701,8 +793,21 @@ public class JsSignatureParser {
                 continue;
             }
             if (c == '`') {
-                inTemplate = true;
+                if (tplDepth < tplBraceStack.length) {
+                    tplBraceStack[tplDepth++] = -1;
+                }
                 continue;
+            }
+            if (tplDepth > 0 && tplBraceStack[tplDepth - 1] > 0) {
+                if (c == '{') {
+                    tplBraceStack[tplDepth - 1]++;
+                } else if (c == '}') {
+                    tplBraceStack[tplDepth - 1]--;
+                    if (tplBraceStack[tplDepth - 1] == 0) {
+                        tplBraceStack[tplDepth - 1] = -1;
+                        continue;
+                    }
+                }
             }
 
             if (c == '(') {
@@ -715,6 +820,332 @@ public class JsSignatureParser {
             }
         }
         return -1;
+    }
+
+    public static final class CallFrame {
+        public final int openParen;
+        public final String funcName;
+
+        public CallFrame(int openParen, String funcName) {
+            this.openParen = openParen;
+            this.funcName = funcName;
+        }
+    }
+
+    public static CallFrame findInnermostCall(String text, int cursorOffset) {
+        if (text == null || cursorOffset <= 0 || cursorOffset > text.length()) return null;
+
+        List<CallFrame> stack = new ArrayList<>();
+        int tplDepth = 0;
+        int[] tplBraceStack = new int[32];
+        boolean inSingle = false;
+        boolean inDouble = false;
+        boolean inLineComment = false;
+        boolean inBlockComment = false;
+
+        for (int i = 0; i < cursorOffset && i < text.length(); i++) {
+            char c = text.charAt(i);
+            char prev = (i > 0) ? text.charAt(i - 1) : 0;
+
+            if (inLineComment) {
+                if (c == '\n') inLineComment = false;
+                continue;
+            }
+            if (inBlockComment) {
+                if (prev == '*' && c == '/') inBlockComment = false;
+                continue;
+            }
+            if (inSingle) {
+                if (c == '\'' && prev != '\\') inSingle = false;
+                continue;
+            }
+            if (inDouble) {
+                if (c == '"' && prev != '\\') inDouble = false;
+                continue;
+            }
+
+            boolean inTplText = (tplDepth > 0 && tplBraceStack[tplDepth - 1] == -1);
+            if (inTplText) {
+                if (c == '`' && prev != '\\') {
+                    tplDepth--;
+                    continue;
+                }
+                if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '{') {
+                    tplBraceStack[tplDepth - 1] = 1;
+                    i++;
+                    continue;
+                }
+                continue;
+            }
+
+            if (c == '/' && i + 1 < text.length()) {
+                char next = text.charAt(i + 1);
+                if (next == '/') {
+                    inLineComment = true;
+                    i++;
+                    continue;
+                } else if (next == '*') {
+                    inBlockComment = true;
+                    i++;
+                    continue;
+                }
+            }
+
+            if (c == '\'') { inSingle = true; continue; }
+            if (c == '"') { inDouble = true; continue; }
+            if (c == '`') {
+                if (tplDepth < tplBraceStack.length) {
+                    tplBraceStack[tplDepth++] = -1;
+                }
+                continue;
+            }
+            if (tplDepth > 0 && tplBraceStack[tplDepth - 1] > 0) {
+                if (c == '{') {
+                    tplBraceStack[tplDepth - 1]++;
+                } else if (c == '}') {
+                    tplBraceStack[tplDepth - 1]--;
+                    if (tplBraceStack[tplDepth - 1] == 0) {
+                        tplBraceStack[tplDepth - 1] = -1;
+                        continue;
+                    }
+                }
+            }
+
+            if (c == '(') {
+                String func = extractFunctionNameBeforeParen(text, i);
+                if (func != null && !func.isEmpty()) {
+                    stack.add(new CallFrame(i, func));
+                } else {
+                    stack.add(new CallFrame(i, null));
+                }
+            } else if (c == ')') {
+                if (!stack.isEmpty()) {
+                    stack.remove(stack.size() - 1);
+                }
+            } else if (c == ';' && tplDepth == 0) {
+                boolean hasCall = false;
+                for (CallFrame f : stack) {
+                    if (f.funcName != null) { hasCall = true; break; }
+                }
+                if (!hasCall) {
+                    stack.clear();
+                }
+            }
+        }
+
+        for (int j = stack.size() - 1; j >= 0; j--) {
+            CallFrame f = stack.get(j);
+            if (f.funcName != null) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    public static int findActiveCallOpenParen(String text, int cursorOffset) {
+        CallFrame frame = findInnermostCall(text, cursorOffset);
+        return frame != null ? frame.openParen : -1;
+    }
+
+    /**
+     * Determines whether SignatureHelp popup should be shown at the current cursor offset.
+     * <p>
+     * SignatureHelp only auto-triggers when:
+     * 1. The current argument is empty (e.g. immediately after '(' or ',' with no entered argument).
+     * 2. The user starts typing a fresh argument (typing the leading identifier/literal at the start of the argument).
+     * 3. The popup is already visible and updating parameters within the active call.
+     *
+     * It is suppressed when:
+     * - The cursor is inside a bracket subscript [...] (e.g. user[key]) of an outer argument.
+     * - The cursor is in the middle of an already entered argument expression (e.g. user moves caret into existing text).
+     * - The cursor is in a template string outside of a callable expression.
+     */
+    public static boolean shouldTriggerSignatureHelp(String text, int openParen, int cursorOffset, boolean isTextChange) {
+        if (openParen < 0) {
+            openParen = findActiveCallOpenParen(text, cursorOffset);
+        }
+        if (text == null || openParen < 0 || openParen >= text.length()) return false;
+        if (cursorOffset <= openParen || cursorOffset > text.length()) return false;
+
+        // Find the start of the current argument (after openParen or after previous comma at call depth 0)
+        int depth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        int tplDepth = 0;
+        int[] tplBraceStack = new int[32];
+        boolean inSingle = false, inDouble = false;
+        int lastComma = -1;
+
+        for (int i = openParen + 1; i < cursorOffset; i++) {
+            char c = text.charAt(i);
+            char prev = (i > openParen + 1) ? text.charAt(i - 1) : 0;
+            if (inSingle) {
+                if (c == '\'' && prev != '\\') inSingle = false;
+                continue;
+            }
+            if (inDouble) {
+                if (c == '"' && prev != '\\') inDouble = false;
+                continue;
+            }
+
+            boolean inTplText = (tplDepth > 0 && tplBraceStack[tplDepth - 1] == -1);
+            if (inTplText) {
+                if (c == '`' && prev != '\\') {
+                    tplDepth--;
+                    continue;
+                }
+                if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '{') {
+                    tplBraceStack[tplDepth - 1] = 1;
+                    i++;
+                    continue;
+                }
+                continue;
+            }
+
+            if (c == '\'') { inSingle = true; continue; }
+            if (c == '"') { inDouble = true; continue; }
+            if (c == '`') {
+                if (tplDepth < tplBraceStack.length) {
+                    tplBraceStack[tplDepth++] = -1;
+                }
+                continue;
+            }
+            if (tplDepth > 0 && tplBraceStack[tplDepth - 1] > 0) {
+                if (c == '{') {
+                    tplBraceStack[tplDepth - 1]++;
+                } else if (c == '}') {
+                    tplBraceStack[tplDepth - 1]--;
+                    if (tplBraceStack[tplDepth - 1] == 0) {
+                        tplBraceStack[tplDepth - 1] = -1;
+                        continue;
+                    }
+                }
+            }
+
+            if (c == '(') depth++;
+            else if (c == ')') { if (depth > 0) depth--; }
+            else if (c == '[') bracketDepth++;
+            else if (c == ']') { if (bracketDepth > 0) bracketDepth--; }
+            else if (c == '{') braceDepth++;
+            else if (c == '}') { if (braceDepth > 0) braceDepth--; }
+            else if (c == ',' && depth == 0 && bracketDepth == 0 && braceDepth == 0 && tplDepth == 0) {
+                lastComma = i;
+            }
+        }
+
+        // Suppress if inside bracket subscript [...], object literal/block {...}, inner parens (...),
+        // or inside a template string `...` opened for this function call's argument.
+        if (bracketDepth > 0 || braceDepth > 0 || depth > 0 || tplDepth > 0) {
+            return false;
+        }
+
+        int argStart = (lastComma >= 0) ? lastComma + 1 : openParen + 1;
+
+        // Find end of current argument (next comma or closing paren at depth 0)
+        int argEnd = text.length();
+        int fDepth = 0;
+        int fBracket = 0;
+        int fBrace = 0;
+        int fTplDepth = 0;
+        int[] fTplBrace = new int[32];
+        boolean fSingle = inSingle, fDouble = inDouble;
+
+        for (int i = cursorOffset; i < text.length(); i++) {
+            char c = text.charAt(i);
+            char prev = (i > cursorOffset) ? text.charAt(i - 1) : 0;
+            if (fSingle) {
+                if (c == '\'' && prev != '\\') fSingle = false;
+                continue;
+            }
+            if (fDouble) {
+                if (c == '"' && prev != '\\') fDouble = false;
+                continue;
+            }
+
+            boolean fInTplText = (fTplDepth > 0 && fTplBrace[fTplDepth - 1] == -1);
+            if (fInTplText) {
+                if (c == '`' && prev != '\\') {
+                    fTplDepth--;
+                    continue;
+                }
+                if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '{') {
+                    fTplBrace[fTplDepth - 1] = 1;
+                    i++;
+                    continue;
+                }
+                continue;
+            }
+
+            if (c == '\'') { fSingle = true; continue; }
+            if (c == '"') { fDouble = true; continue; }
+            if (c == '`') {
+                if (fTplDepth < fTplBrace.length) {
+                    fTplBrace[fTplDepth++] = -1;
+                }
+                continue;
+            }
+            if (fTplDepth > 0 && fTplBrace[fTplDepth - 1] > 0) {
+                if (c == '{') {
+                    fTplBrace[fTplDepth - 1]++;
+                } else if (c == '}') {
+                    fTplBrace[fTplDepth - 1]--;
+                    if (fTplBrace[fTplDepth - 1] == 0) {
+                        fTplBrace[fTplDepth - 1] = -1;
+                        continue;
+                    }
+                }
+            }
+
+            if (c == '(') fDepth++;
+            else if (c == ')') {
+                if (fDepth > 0) fDepth--;
+                else { argEnd = i; break; }
+            } else if (c == '[') fBracket++;
+            else if (c == ']') { if (fBracket > 0) fBracket--; }
+            else if (c == '{') fBrace++;
+            else if (c == '}') { if (fBrace > 0) fBrace--; }
+            else if (c == ',' && fDepth == 0 && fBracket == 0 && fBrace == 0 && fTplDepth == 0) {
+                argEnd = i;
+                break;
+            } else if (c == ';' && fDepth == 0 && fTplDepth == 0) {
+                argEnd = i;
+                break;
+            }
+        }
+
+        String prefix = text.substring(argStart, cursorOffset).trim();
+        String suffix = text.substring(cursorOffset, Math.min(argEnd, text.length())).trim();
+
+        // Special case: cursor inside empty quotes starting the argument: foo("|") or foo('|')
+        boolean isEmptyQuotes = (inDouble && prefix.equals("\"") && suffix.equals("\""))
+                || (inSingle && prefix.equals("'") && suffix.equals("'"));
+
+        if (!isEmptyQuotes && (inSingle || inDouble)) {
+            return false;
+        }
+
+        // Condition 1: No entered argument (empty argument slot, e.g. foo(|) or foo(a, |) or foo("|"))
+        if ((prefix.isEmpty() && suffix.isEmpty()) || isEmptyQuotes) {
+            return true;
+        }
+
+        // Condition 2: User starts typing an argument (only valid if this was a text change / typing action)
+        if (isTextChange && suffix.isEmpty() && !prefix.isEmpty()) {
+            return isSimpleToken(prefix);
+        }
+
+        return false;
+    }
+
+    private static boolean isSimpleToken(String s) {
+        if (s == null || s.isEmpty()) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!Character.isLetterOrDigit(c) && c != '_' && c != '$' && c != '.' && c != '"' && c != '\'') {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static int findMethodInClassNode(JsSyntaxTree tree, int classNodeId, String methodName) {

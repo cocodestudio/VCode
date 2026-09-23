@@ -83,6 +83,7 @@ public final class LspEditorBridge {
      * and all completions flow exclusively through the LSP pipeline.
      */
     private boolean hasLspServer = false;
+    private boolean lastActionWasTextChange = false;
     private final Runnable completionRunnable = this::performCompletion;    /**
      * Fires when {@link CodeEditText#setText} finishes loading new content into the editor.
      * Used to detect the moment a file switch's real content has landed (see
@@ -103,6 +104,7 @@ public final class LspEditorBridge {
     private final Runnable signatureHelpRunnable = this::performSignatureHelp;
     private final Runnable cursorChangeListener = () -> {
         if (!attached || editor == null) return;
+        lastActionWasTextChange = false;
         mainHandler.removeCallbacks(signatureHelpRunnable);
         mainHandler.postDelayed(signatureHelpRunnable, COMPLETION_DEBOUNCE_MS);
     };
@@ -466,6 +468,7 @@ public final class LspEditorBridge {
         return filtered;
     }    private final CodeEditText.OnContentChangeListener contentListener = () -> {
         if (!attached || editor == null) return;
+        lastActionWasTextChange = true;
         docVersion.incrementAndGet();
         // Reschedule debounced diagnostics
         mainHandler.removeCallbacks(diagnosticRunnable);
@@ -928,16 +931,21 @@ public final class LspEditorBridge {
 
         LspPosition pos = cursorPosition();
         final int capturedVersion = docVersion.get();
+        final boolean isTextChange = lastActionWasTextChange;
 
         LspClientManager.getInstance().requestSignatureHelp(doc, pos, new LspCallback<LspSignatureHelp>() {
             @Override
             public void onResult(LspSignatureHelp result) {
                 if (capturedVersion != docVersion.get() || !attached || editor == null) return;
                 if (result != null) {
-                    editor.showSignatureHint(result);
-                } else {
-                    editor.dismissSignatureHint();
+                    int flatOffset = getCursorFlatOffset();
+                    if (com.cocode.vcode.ide.core.lsp.servers.JsSignatureParser.shouldTriggerSignatureHelp(
+                            doc.text, result.openParenOffset, flatOffset, isTextChange)) {
+                        editor.showSignatureHint(result);
+                        return;
+                    }
                 }
+                editor.dismissSignatureHint();
             }
 
             @Override
