@@ -228,7 +228,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:importantForAccessibility="no"
-            android:src="@drawable/ic_file_code"
+            android:src="@drawable/ic_code"
             app:tint="?attr/colorPrimary" />
 
         <LinearLayout

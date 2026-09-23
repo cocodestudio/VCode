@@ -99,12 +99,17 @@ public class EditTemplateDialog extends Dialog {
         binding.etTemplateExtension.setTypeface(fm.getUiMedium(ctx));
         binding.tvPlaceholdersHint.setTypeface(fm.getUiFont(ctx));
         binding.btnOpenInEditor.setTypeface(fm.getUiMedium(ctx));
-        binding.btnDelete.setTypeface(fm.getUiMedium(ctx));
         binding.btnCancel.setTypeface(fm.getUiMedium(ctx));
         binding.btnSave.setTypeface(fm.getUiSemiBold(ctx));
 
-        UiUtils.setViewRounded(binding.etTemplateName, UiUtils.dpToPx(ctx, 10), ContextCompat.getColor(ctx, R.color.vcode_bg_elevated));
-        UiUtils.setViewRounded(binding.etTemplateExtension, UiUtils.dpToPx(ctx, 10), ContextCompat.getColor(ctx, R.color.vcode_bg_elevated));
+        int radius = UiUtils.dpToPx(ctx, 10);
+        int strokeWidth = UiUtils.dpToPx(ctx, 1);
+        int bgColor = ContextCompat.getColor(ctx, R.color.vcode_bg_deep);
+        int normalStrokeColor = ContextCompat.getColor(ctx, R.color.vcode_outline_variant);
+        int focusedStrokeColor = ContextCompat.getColor(ctx, R.color.vcode_accent_primary);
+
+        UiUtils.setInputRounded(binding.etTemplateName, radius, bgColor, strokeWidth, normalStrokeColor, focusedStrokeColor);
+        UiUtils.setInputRounded(binding.etTemplateExtension, radius, bgColor, strokeWidth, normalStrokeColor, focusedStrokeColor);
         UiUtils.applyAccentToEditText(binding.etTemplateName);
         UiUtils.applyAccentToEditText(binding.etTemplateExtension);
     }

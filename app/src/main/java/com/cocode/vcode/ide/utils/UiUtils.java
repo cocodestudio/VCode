@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.Build;
 import android.util.TypedValue;
 import android.view.View;
@@ -139,12 +140,80 @@ public class UiUtils {
      * @param color  fill color
      */
     public static void setViewRounded(View view, float radius, int color) {
+        setViewRounded(view, radius, color, 0, 0);
+    }
+
+    /**
+     * Applies a rounded rectangle background shape with the specified corner radius, fill color,
+     * and optional outline stroke to a view, preserving existing padding.
+     *
+     * @param view        the target view
+     * @param radius      corner radius in pixels
+     * @param color       fill color
+     * @param strokeWidth stroke width in pixels (0 for no stroke)
+     * @param strokeColor stroke color
+     */
+    public static void setViewRounded(View view, float radius, int color, int strokeWidth, int strokeColor) {
+        if (view == null) return;
+        int pl = view.getPaddingLeft();
+        int pt = view.getPaddingTop();
+        int pr = view.getPaddingRight();
+        int pb = view.getPaddingBottom();
+
         GradientDrawable shape = new GradientDrawable();
         shape.setShape(GradientDrawable.RECTANGLE);
         shape.setCornerRadius(radius);
         shape.setColor(color);
+        if (strokeWidth > 0) {
+            shape.setStroke(strokeWidth, strokeColor);
+        }
         view.setBackground(shape);
         view.setClipToOutline(true);
+        view.setPadding(pl, pt, pr, pb);
+    }
+
+    /**
+     * Applies a rounded input field background with distinct resting and focused states,
+     * highlighting the outline stroke with the active accent color upon focus.
+     *
+     * @param view               the target view (EditText)
+     * @param radius             corner radius in pixels
+     * @param bgColor            fill color
+     * @param strokeWidth        stroke width in pixels
+     * @param normalStrokeColor  resting stroke color
+     * @param focusedStrokeColor focused stroke color
+     */
+    public static void setInputRounded(View view, float radius, int bgColor, int strokeWidth, int normalStrokeColor, int focusedStrokeColor) {
+        if (view == null) return;
+        int pl = view.getPaddingLeft();
+        int pt = view.getPaddingTop();
+        int pr = view.getPaddingRight();
+        int pb = view.getPaddingBottom();
+
+        GradientDrawable normalShape = new GradientDrawable();
+        normalShape.setShape(GradientDrawable.RECTANGLE);
+        normalShape.setCornerRadius(radius);
+        normalShape.setColor(bgColor);
+        if (strokeWidth > 0) {
+            normalShape.setStroke(strokeWidth, normalStrokeColor);
+        }
+
+        GradientDrawable focusedShape = new GradientDrawable();
+        focusedShape.setShape(GradientDrawable.RECTANGLE);
+        focusedShape.setCornerRadius(radius);
+        focusedShape.setColor(bgColor);
+        if (strokeWidth > 0) {
+            int focusedWidth = Math.max(strokeWidth, Math.round(strokeWidth * 1.5f));
+            focusedShape.setStroke(focusedWidth, focusedStrokeColor);
+        }
+
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_focused}, focusedShape);
+        states.addState(new int[]{}, normalShape);
+
+        view.setBackground(states);
+        view.setClipToOutline(true);
+        view.setPadding(pl, pt, pr, pb);
     }
 
     /**
