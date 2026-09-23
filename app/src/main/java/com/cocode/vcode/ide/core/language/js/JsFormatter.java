@@ -430,6 +430,7 @@ public class JsFormatter extends BaseFormatter {
         boolean inBlockComment = false;
         boolean inString = false;
         char stringChar = 0;
+        int parenDepth = 0;
 
         for (int i = 0; i < len; i++) {
             char c = code.charAt(i);
@@ -493,25 +494,94 @@ public class JsFormatter extends BaseFormatter {
 
             // Collapse whitespace
             if (c == '\t' || c == '\r') {
-                out.append(' ');
+                if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
+                        && out.charAt(out.length() - 1) != '('
+                        && out.charAt(out.length() - 1) != '['
+                        && out.charAt(out.length() - 1) != '\n') {
+                    out.append(' ');
+                }
                 continue;
             }
             if (c == '\n') {
+                if (parenDepth > 0) {
+                    if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
+                            && out.charAt(out.length() - 1) != '('
+                            && out.charAt(out.length() - 1) != '['
+                            && out.charAt(out.length() - 1) != '\n') {
+                        out.append(' ');
+                    }
+                    continue;
+                }
                 // Keep at most one newline
                 if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') out.append('\n');
                 continue;
             }
-            if (c == ' ' && out.length() > 0 && out.charAt(out.length() - 1) == ' ') continue;
+            if (c == ' ') {
+                if (out.length() > 0 && (out.charAt(out.length() - 1) == ' '
+                        || out.charAt(out.length() - 1) == '('
+                        || out.charAt(out.length() - 1) == '['
+                        || out.charAt(out.length() - 1) == '\n')) {
+                    continue;
+                }
+            }
+
+            // Parentheses tracking
+            if (c == '(') {
+                parenDepth++;
+                out.append('(');
+                while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t'
+                        || code.charAt(i + 1) == '\n' || code.charAt(i + 1) == '\r')) {
+                    i++;
+                }
+                continue;
+            }
+            if (c == ')') {
+                parenDepth = Math.max(0, parenDepth - 1);
+                trimTrailingSpace(out);
+                out.append(')');
+                continue;
+            }
+
+            // Bracket tracking: index access (arr[i]) vs array literal
+            if (c == '[') {
+                int k = out.length() - 1;
+                while (k >= 0 && out.charAt(k) == ' ') k--;
+                char prevChar = k >= 0 ? out.charAt(k) : 0;
+                boolean isIndexAccess = Character.isLetterOrDigit(prevChar)
+                        || prevChar == '_' || prevChar == '$'
+                        || prevChar == ')' || prevChar == ']';
+
+                if (isIndexAccess) {
+                    trimTrailingSpace(out);
+                    out.append('[');
+                } else {
+                    ensureSpace(out);
+                    out.append('[');
+                }
+                while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t'
+                        || code.charAt(i + 1) == '\n' || code.charAt(i + 1) == '\r')) {
+                    i++;
+                }
+                continue;
+            }
+            if (c == ']') {
+                trimTrailingSpace(out);
+                out.append(']');
+                continue;
+            }
 
             // Structural characters
-            if (c == '{' || c == '[') {
+            if (c == '{') {
                 ensureSpace(out);
                 out.append(c).append('\n');
                 continue;
             }
-            if (c == '}' || c == ']') {
+            if (c == '}') {
                 trimTrailingSpace(out);
-                out.append('\n').append(c);
+                if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
+                    out.append('\n');
+                }
+                out.append(c);
                 // peek: if followed by ; or , or ) keep on same line, else newline
                 int j = i + 1;
                 while (j < len && (code.charAt(j) == ' ' || code.charAt(j) == '\t')) j++;
@@ -532,12 +602,33 @@ public class JsFormatter extends BaseFormatter {
                 continue;
             }
             if (c == ';') {
-                out.append(';').append('\n');
+                trimTrailingSpace(out);
+                out.append(';');
+                if (parenDepth > 0) {
+                    int nextIdx = i + 1;
+                    while (nextIdx < len && (code.charAt(nextIdx) == ' ' || code.charAt(nextIdx) == '\t'
+                            || code.charAt(nextIdx) == '\n' || code.charAt(nextIdx) == '\r')) nextIdx++;
+                    char nextChar = nextIdx < len ? code.charAt(nextIdx) : 0;
+                    if (nextChar != ')') {
+                        out.append(' ');
+                    }
+                    while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t'
+                            || code.charAt(i + 1) == '\n' || code.charAt(i + 1) == '\r')) {
+                        i++;
+                    }
+                } else {
+                    out.append('\n');
+                }
                 continue;
             }
             // Comma: space after, newline if at statement level handled in re-indent
             if (c == ',') {
+                trimTrailingSpace(out);
                 out.append(',').append(' ');
+                while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t'
+                        || code.charAt(i + 1) == '\n' || code.charAt(i + 1) == '\r')) {
+                    i++;
+                }
                 continue;
             }
             // Arrow
@@ -548,12 +639,64 @@ public class JsFormatter extends BaseFormatter {
                 ensureSpace(out);
                 continue;
             }
+
+            // Triple equals (===) and strict not equals (!==)
+            if ((c == '=' || c == '!') && i + 2 < len && code.charAt(i + 1) == '=' && code.charAt(i + 2) == '=') {
+                ensureSpace(out);
+                out.append(c).append("==");
+                i += 2;
+                ensureSpace(out);
+                continue;
+            }
+
+            // Increment / Decrement operators: ++ and --
+            if ((c == '+' || c == '-') && i + 1 < len && code.charAt(i + 1) == c) {
+                int k = out.length() - 1;
+                while (k >= 0 && out.charAt(k) == ' ') k--;
+                char prevChar = k >= 0 ? out.charAt(k) : 0;
+                boolean isPostfix = Character.isLetterOrDigit(prevChar)
+                        || prevChar == '_' || prevChar == '$'
+                        || prevChar == ')' || prevChar == ']';
+
+                if (isPostfix) {
+                    trimTrailingSpace(out);
+                    out.append(c).append(c);
+                    int nextIdx = i + 2;
+                    while (nextIdx < len && (code.charAt(nextIdx) == ' ' || code.charAt(nextIdx) == '\t'
+                            || code.charAt(nextIdx) == '\n' || code.charAt(nextIdx) == '\r')) nextIdx++;
+                    char nextChar = nextIdx < len ? code.charAt(nextIdx) : 0;
+                    if (nextChar != ';' && nextChar != ')' && nextChar != ']' && nextChar != ',' && nextChar != ':' && nextChar != 0) {
+                        out.append(' ');
+                    }
+                    if (nextChar == ';' || nextChar == ')' || nextChar == ']' || nextChar == ',' || nextChar == ':') {
+                        while (i + 2 < len && (code.charAt(i + 2) == ' ' || code.charAt(i + 2) == '\t'
+                                || code.charAt(i + 2) == '\n' || code.charAt(i + 2) == '\r')) {
+                            i++;
+                        }
+                    }
+                } else {
+                    if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
+                            && out.charAt(out.length() - 1) != '\n'
+                            && out.charAt(out.length() - 1) != '('
+                            && out.charAt(out.length() - 1) != '[') {
+                        out.append(' ');
+                    }
+                    out.append(c).append(c);
+                    while (i + 2 < len && (code.charAt(i + 2) == ' ' || code.charAt(i + 2) == '\t'
+                            || code.charAt(i + 2) == '\n' || code.charAt(i + 2) == '\r')) {
+                        i++;
+                    }
+                }
+                i++;
+                continue;
+            }
+
             // Operators: surround with spaces (simple heuristic)
             if ((c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
                     || c == '&' || c == '|' || c == '<' || c == '>' || c == '!')
                     && i + 1 < len) {
                 char next = code.charAt(i + 1);
-                boolean compound = (next == '=' || next == '>' || next == '+' || next == '-'
+                boolean compound = (next == '=' || next == '>'
                         || next == '&' || next == '|' || next == '?');
                 // Always surround; let post-processing keep clean spacing
                 if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
@@ -624,7 +767,7 @@ public class JsFormatter extends BaseFormatter {
     private void ensureSpace(StringBuilder sb) {
         if (sb.length() > 0) {
             char last = sb.charAt(sb.length() - 1);
-            if (last != ' ' && last != '\n' && last != '(') sb.append(' ');
+            if (last != ' ' && last != '\n' && last != '(' && last != '[') sb.append(' ');
         }
     }
 
