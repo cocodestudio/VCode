@@ -199,6 +199,56 @@ public class JsStandardLibrary {
     }
 
     /**
+     * Determines whether a parameter name or descriptor represents an optional parameter.
+     * Recognizes TypeScript/JSDoc conventions ('?', '=', '[]') as well as standard JavaScript
+     * APIs where trailing context/options/indices are universally optional.
+     */
+    public static boolean isOptionalParameter(String param) {
+        if (param == null) return false;
+        String p = param.trim();
+        if (p.isEmpty()) return true;
+        if (p.contains("?") || p.contains("=") || p.contains("[") || p.contains("]")) {
+            return true;
+        }
+        int colonIdx = p.indexOf(':');
+        String name = colonIdx >= 0 ? p.substring(0, colonIdx).trim() : p;
+        if (name.endsWith("?")) {
+            return true;
+        }
+        String lower = name.toLowerCase(java.util.Locale.US);
+        return lower.equals("thisarg")
+                || lower.equals("thisargument")
+                || lower.equals("initialvalue")
+                || lower.equals("fromindex")
+                || lower.equals("position")
+                || lower.equals("comparefn")
+                || lower.equals("separator")
+                || lower.equals("depth")
+                || lower.equals("options")
+                || lower.equals("start")
+                || lower.equals("end")
+                || lower.equals("deletecount")
+                || lower.equals("init")
+                || lower.equals("timeout")
+                || lower.equals("locales")
+                || lower.equals("digits")
+                || lower.equals("pseudoelt")
+                || lower.equals("aligntotop")
+                || lower.equals("force")
+                || lower.equals("deep")
+                || lower.equals("replacer")
+                || lower.equals("space")
+                || lower.equals("reviver")
+                || lower.equals("radix")
+                || lower.equals("fractiondigits")
+                || lower.equals("length")
+                || lower.equals("limit")
+                || lower.equals("padstring")
+                || lower.equals("onrejected")
+                || lower.startsWith("opt_");
+    }
+
+    /**
      * Resolves built-in signature info for a function or method invocation.
      *
      * @param funcName     full function or member expression string (e.g. "console.log", "fetch", "arr.push")

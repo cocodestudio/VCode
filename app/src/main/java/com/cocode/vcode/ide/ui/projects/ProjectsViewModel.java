@@ -10,6 +10,7 @@ import com.cocode.vcode.ide.data.model.Result;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,7 +29,24 @@ public class ProjectsViewModel extends ViewModel {
     private final MutableLiveData<Result<List<Project>>> projectsLiveData = new MutableLiveData<>();
     private final MutableLiveData<Result<Project>> actionResultLiveData = new MutableLiveData<>();
     private final MutableLiveData<AppSettings> settingsLiveData = new MutableLiveData<>();
-    private final androidx.lifecycle.Observer<com.cocode.vcode.ide.data.model.Result<java.util.List<com.cocode.vcode.ide.data.model.Project>>> projectsObserver = projectsLiveData::setValue;
+    private final androidx.lifecycle.Observer<com.cocode.vcode.ide.data.model.Result<java.util.List<com.cocode.vcode.ide.data.model.Project>>> projectsObserver = result -> {
+        if (result != null && result.isSuccess() && result.getData() != null) {
+            List<Project> filtered = new ArrayList<>();
+            for (Project p : result.getData()) {
+                if (p == null) continue;
+                String id = p.getId();
+                String name = p.getName();
+                if ((id != null && (id.equalsIgnoreCase(com.cocode.vcode.ide.core.template.FileTemplateManager.TEMPLATES_DIR_NAME) || id.equalsIgnoreCase("templates")))
+                        || (name != null && (name.equalsIgnoreCase(com.cocode.vcode.ide.core.template.FileTemplateManager.TEMPLATES_DIR_NAME) || name.equalsIgnoreCase("templates")))) {
+                    continue;
+                }
+                filtered.add(p);
+            }
+            projectsLiveData.setValue(Result.success(filtered));
+        } else {
+            projectsLiveData.setValue(result);
+        }
+    };
     private androidx.lifecycle.LiveData<com.cocode.vcode.ide.data.model.Result<java.util.List<com.cocode.vcode.ide.data.model.Project>>> currentProjectsLiveData;
 
     public ProjectsViewModel(ProjectRepository projectRepo, SettingsRepository settingsRepo) {

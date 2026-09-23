@@ -46,6 +46,21 @@ public class ProjectStateRepository {
     private static File getSessionStorageDir(File projectDir) {
         android.content.Context ctx = VCodeApplication.getInstance();
         String absPath = projectDir.getAbsolutePath().replace('\\', '/');
+        String lowerAbsPath = absPath.toLowerCase(java.util.Locale.US);
+        String templatesLower = com.cocode.vcode.ide.core.template.FileTemplateManager.TEMPLATES_DIR_NAME.toLowerCase(java.util.Locale.US);
+
+        if (projectDir.getName().equalsIgnoreCase(com.cocode.vcode.ide.core.template.FileTemplateManager.TEMPLATES_DIR_NAME)
+                || projectDir.getName().equalsIgnoreCase("templates")
+                || lowerAbsPath.contains("/" + templatesLower + "/")
+                || lowerAbsPath.endsWith("/" + templatesLower)) {
+            if (ctx != null) {
+                File bucket = new File(ctx.getFilesDir(), "templates_session");
+                if (!bucket.exists()) {
+                    bucket.mkdirs();
+                }
+                return bucket;
+            }
+        }
 
         if (absPath.contains("/VCodeProjects/") || absPath.contains("/VCodeProjects")) {
             File stateDir = new File(new File(projectDir, ".vcode"), "state");

@@ -8,6 +8,7 @@ import android.widget.Toast;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.FileType;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FileUtils;
 
@@ -74,7 +75,7 @@ public class FileOpenActivity extends Activity {
             }
 
             File projectRoot = FileUtils.resolveProjectRoot(file);
-            String projectName = projectRoot.getName();
+            String projectName = ProjectRepository.getProjectName(projectRoot);
             // Build a stable project ID from the path
             String projectId = projectRoot.getAbsolutePath()
                     .replace(File.separator, "_")

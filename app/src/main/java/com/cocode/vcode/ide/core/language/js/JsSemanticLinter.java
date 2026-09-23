@@ -593,7 +593,7 @@ public class JsSemanticLinter {
                                 if (p.contains("...")) isVariadic = true;
                                 else {
                                     totalParams++;
-                                    if (!p.contains("?") && !p.contains("=")) {
+                                    if (!JsStandardLibrary.isOptionalParameter(p)) {
                                         minParams++;
                                     }
                                 }
@@ -772,7 +772,7 @@ public class JsSemanticLinter {
                                 totalParams = declaredParams.length;
                                 minParams = 0;
                                 for (String p : declaredParams) {
-                                    if (!p.contains("?") && !p.contains("=") && !p.contains("...")) {
+                                    if (!p.contains("...") && !JsStandardLibrary.isOptionalParameter(p)) {
                                         minParams++;
                                     }
                                 }
@@ -786,7 +786,7 @@ public class JsSemanticLinter {
                                     if (p.contains("...")) isVariadic = true;
                                     else {
                                         totalParams++;
-                                        if (!p.contains("?") && !p.contains("=")) {
+                                        if (!JsStandardLibrary.isOptionalParameter(p)) {
                                             minParams++;
                                         }
                                     }
@@ -796,6 +796,14 @@ public class JsSemanticLinter {
                             }
                         }
                     }
+                }
+
+                if ("forEach".equals(baseIdentifier) || "map".equals(baseIdentifier) || "filter".equals(baseIdentifier)
+                        || "some".equals(baseIdentifier) || "every".equals(baseIdentifier) || "find".equals(baseIdentifier)
+                        || "findIndex".equals(baseIdentifier) || "findLast".equals(baseIdentifier) || "findLastIndex".equals(baseIdentifier)
+                        || "flatMap".equals(baseIdentifier) || "reduce".equals(baseIdentifier) || "reduceRight".equals(baseIdentifier)) {
+                    minParams = Math.min(minParams, 1);
+                    totalParams = Math.max(totalParams, 2);
                 }
 
                 if (isVariadic) continue;
@@ -895,7 +903,7 @@ public class JsSemanticLinter {
                     if (p.contains("...")) variadic = true;
                     else {
                         total++;
-                        if (!p.contains("?") && !p.contains("=")) {
+                        if (!JsStandardLibrary.isOptionalParameter(p)) {
                             min++;
                         }
                     }
@@ -928,7 +936,7 @@ public class JsSemanticLinter {
                                                 variadic = true;
                                             } else {
                                                 total++;
-                                                if (!pt.contains("?") && !pt.contains("=")) {
+                                                if (!JsStandardLibrary.isOptionalParameter(pt)) {
                                                     min++;
                                                 }
                                             }

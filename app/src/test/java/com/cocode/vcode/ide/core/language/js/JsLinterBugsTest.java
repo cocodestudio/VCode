@@ -179,4 +179,51 @@ public class JsLinterBugsTest extends BaseJsAstTest {
                     p.getMessage().contains("'__DEV__' is not defined"));
         }
     }
+
+    @Test
+    public void testForEachAndArrayMethodsArity() {
+        String jsValid = "const items = [1, 2, 3];\n" +
+                         "items.forEach(item => console.log(item));\n" +
+                         "items.forEach(function(item) { console.log(item); });\n" +
+                         "items.forEach((item, idx) => console.log(item), this);\n" +
+                         "items.map(x => x * 2);\n" +
+                         "items.filter(x => x > 1);\n" +
+                         "items.reduce((acc, x) => acc + x);\n" +
+                         "items.reduce((acc, x) => acc + x, 0);\n" +
+                         "items.slice(1);\n" +
+                         "items.slice();\n" +
+                         "items.join();\n" +
+                         "items.sort();\n";
+        setupEngine(jsValid);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> validProblems = JsLinter.analyze(mockFile, jsValid, mockIndex);
+        for (com.cocode.vcode.ide.core.model.Problem p : validProblems) {
+            org.junit.Assert.assertFalse("Valid forEach/array invocation must not trigger arity warnings: " + p.getMessage(),
+                    p.getMessage().contains("Too few arguments") || p.getMessage().contains("Too many arguments"));
+        }
+
+        String jsTooFew = "const items = [1, 2, 3];\nitems.forEach();";
+        setupEngine(jsTooFew);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> tooFewProblems = JsLinter.analyze(mockFile, jsTooFew, mockIndex);
+        boolean hasTooFew = false;
+        for (com.cocode.vcode.ide.core.model.Problem p : tooFewProblems) {
+            if (p.getMessage().contains("Too few arguments") && p.getMessage().contains("forEach")) {
+                hasTooFew = true;
+                break;
+            }
+        }
+        assertTrue("forEach() with 0 arguments must trigger 'Too few arguments' warning", hasTooFew);
+
+        String jsTooMany = "const items = [1, 2, 3];\nitems.forEach(a => a, this, 123);";
+        setupEngine(jsTooMany);
+        java.util.List<com.cocode.vcode.ide.core.model.Problem> tooManyProblems = JsLinter.analyze(mockFile, jsTooMany, mockIndex);
+        boolean hasTooMany = false;
+        for (com.cocode.vcode.ide.core.model.Problem p : tooManyProblems) {
+            if (p.getMessage().contains("Too many arguments") && p.getMessage().contains("forEach")) {
+                hasTooMany = true;
+                break;
+            }
+        }
+        assertTrue("forEach() with 3 arguments must trigger 'Too many arguments' warning", hasTooMany);
+    }
 }
+
