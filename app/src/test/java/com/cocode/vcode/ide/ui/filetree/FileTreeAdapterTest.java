@@ -95,4 +95,62 @@ public class FileTreeAdapterTest {
         assertTrue("Folder with trailing slash should be marked as cut", adapter.isNodeCut(new FileNode(new File("/project/src/components"), 1)));
         assertTrue("Child of folder with trailing slash should be marked as cut", adapter.isNodeCut(new FileNode(childFile, 2)));
     }
+
+    @Test
+    public void testFileTreeListenerDefaultOnNodeContextMenuDelegatesToLongClick() {
+        final boolean[] longClicked = {false};
+        File testFile = new File("/project/test.js");
+        FileNode testNode = new FileNode(testFile, 0);
+
+        FileTreeAdapter.FileTreeListener listener = new FileTreeAdapter.FileTreeListener() {
+            @Override
+            public void onFileClick(File file) {}
+
+            @Override
+            public void onAddFileClick(File parentDir) {}
+
+            @Override
+            public void onAddFolderClick(File parentDir) {}
+
+            @Override
+            public void onNodeLongClick(android.view.View anchor, FileNode node) {
+                longClicked[0] = true;
+                assertEquals(testNode, node);
+            }
+        };
+
+        listener.onNodeContextMenu(null, testNode, 150f, 200f);
+        assertTrue("Default onNodeContextMenu must delegate to onNodeLongClick", longClicked[0]);
+    }
+
+    @Test
+    public void testFileTreeListenerCustomOnNodeContextMenuReceivesCoordinates() {
+        final float[] receivedCoords = {-1f, -1f};
+        File testFile = new File("/project/test.js");
+        FileNode testNode = new FileNode(testFile, 0);
+
+        FileTreeAdapter.FileTreeListener listener = new FileTreeAdapter.FileTreeListener() {
+            @Override
+            public void onFileClick(File file) {}
+
+            @Override
+            public void onAddFileClick(File parentDir) {}
+
+            @Override
+            public void onAddFolderClick(File parentDir) {}
+
+            @Override
+            public void onNodeLongClick(android.view.View anchor, FileNode node) {}
+
+            @Override
+            public void onNodeContextMenu(android.view.View anchor, FileNode node, float x, float y) {
+                receivedCoords[0] = x;
+                receivedCoords[1] = y;
+            }
+        };
+
+        listener.onNodeContextMenu(null, testNode, 120.5f, 340.5f);
+        assertEquals(120.5f, receivedCoords[0], 0.001f);
+        assertEquals(340.5f, receivedCoords[1], 0.001f);
+    }
 }

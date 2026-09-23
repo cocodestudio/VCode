@@ -1,7 +1,11 @@
 package com.cocode.vcode.ide.ui.filetree;
 
 import android.graphics.PorterDuff;
+import android.os.SystemClock;
+import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -291,6 +295,10 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
         void onAddFolderClick(File parentDir);
 
         void onNodeLongClick(View anchor, FileNode node);
+
+        default void onNodeContextMenu(View anchor, FileNode node, float x, float y) {
+            onNodeLongClick(anchor, node);
+        }
     }
 
     /**
@@ -346,15 +354,95 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
             });
 
             // Long click to reveal rename, delete, copy, cut, paste actions
-            binding.getRoot().setOnLongClickListener(v -> {
-                int pos = getBindingAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && adapter.listener != null) {
-                    FileNode node = adapter.flatNodes.get(pos);
-                    adapter.listener.onNodeLongClick(binding.getRoot(), node);
-                    return true;
+            binding.getRoot().setOnLongClickListener(v ->
+                    triggerContextMenu(v.getWidth() / 2f, v.getHeight() / 2f));
+
+            // Native Android context click (mouse right-click, trackpad context click, stylus button)
+            binding.getRoot().setOnContextClickListener(v ->
+                    triggerContextMenu(v.getWidth() / 2f, v.getHeight() / 2f));
+
+            // Forward context click from chevron and action buttons to row context menu
+            binding.ivChevron.setOnContextClickListener(v ->
+                    triggerContextMenu(binding.getRoot().getWidth() / 2f, binding.getRoot().getHeight() / 2f));
+
+            // Generic motion listener for ACTION_BUTTON_PRESS with secondary mouse button
+            binding.getRoot().setOnGenericMotionListener((v, event) -> {
+                if (event.isFromSource(InputDevice.SOURCE_CLASS_POINTER)) {
+                    int action = event.getActionMasked();
+                    if (action == MotionEvent.ACTION_BUTTON_PRESS && event.getActionButton() == MotionEvent.BUTTON_SECONDARY) {
+                        return triggerContextMenu(event.getX(), event.getY());
+                    }
                 }
                 return false;
             });
+
+            // Touch listener to handle external mouse/trackpad secondary button presses without triggering left-click actions
+            binding.getRoot().setOnTouchListener(new View.OnTouchListener() {
+                private boolean isSecondaryDown = false;
+                private float downX = 0f;
+                private float downY = 0f;
+
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    boolean isPointer = event.isFromSource(InputDevice.SOURCE_MOUSE)
+                            || event.isFromSource(InputDevice.SOURCE_STYLUS)
+                            || (event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0;
+
+                    int action = event.getActionMasked();
+                    boolean hasSecondary = (event.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0
+                            || event.getActionButton() == MotionEvent.BUTTON_SECONDARY;
+
+                    if (isPointer && hasSecondary) {
+                        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_BUTTON_PRESS) {
+                            isSecondaryDown = true;
+                            downX = event.getX();
+                            downY = event.getY();
+                            return true; // Consume so primary click doesn't trigger
+                        }
+                    }
+
+                    if (isSecondaryDown) {
+                        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_BUTTON_RELEASE) {
+                            isSecondaryDown = false;
+                            return triggerContextMenu(downX, downY);
+                        } else if (action == MotionEvent.ACTION_CANCEL) {
+                            isSecondaryDown = false;
+                            return true;
+                        } else if (action == MotionEvent.ACTION_MOVE) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+            });
+
+            // Keyboard shortcut listener for external keyboards (Menu key or Shift+F10)
+            binding.getRoot().setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (keyCode == KeyEvent.KEYCODE_MENU || (keyCode == KeyEvent.KEYCODE_F10 && event.isShiftPressed())) {
+                        return triggerContextMenu(v.getWidth() / 2f, v.getHeight() / 2f);
+                    }
+                }
+                return false;
+            });
+        }
+
+        private long lastContextMenuTime = 0;
+
+        private boolean triggerContextMenu(float x, float y) {
+            long now = SystemClock.uptimeMillis();
+            if (now - lastContextMenuTime < 250) {
+                return true;
+            }
+            lastContextMenuTime = now;
+            int pos = getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION && adapter.listener != null) {
+                FileNode node = adapter.flatNodes.get(pos);
+                adapter.listener.onNodeContextMenu(binding.getRoot(), node, x, y);
+                return true;
+            }
+            return false;
         }
 
         /**

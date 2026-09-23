@@ -8,7 +8,9 @@ import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.InputDevice;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -118,6 +120,28 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         binding.tvFileExplorer.setTypeface(FontManager.getInstance().getUiSemiBold(requireContext()));
         binding.btnImportFiles.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
         binding.btnImportFolder.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
+
+        // Support right-clicking on empty space in file tree to reveal root actions (Paste, Find in Files)
+        binding.rvFileTree.setOnGenericMotionListener((v, event) -> {
+            if (event.isFromSource(InputDevice.SOURCE_CLASS_POINTER)) {
+                if (event.getAction() == MotionEvent.ACTION_BUTTON_PRESS && event.getActionButton() == MotionEvent.BUTTON_SECONDARY) {
+                    View child = binding.rvFileTree.findChildViewUnder(event.getX(), event.getY());
+                    if (child == null && viewModel != null && viewModel.getProjectRoot() != null) {
+                        onNodeContextMenu(binding.rvFileTree, new FileNode(viewModel.getProjectRoot(), 0), event.getX(), event.getY());
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+
+        binding.rvFileTree.setOnContextClickListener(v -> {
+            if (viewModel != null && viewModel.getProjectRoot() != null) {
+                onNodeContextMenu(binding.rvFileTree, new FileNode(viewModel.getProjectRoot(), 0), v.getWidth() / 2f, v.getHeight() / 2f);
+                return true;
+            }
+            return false;
+        });
 
         // Bind to the Activity-scoped EditorViewModel
         viewModel = new ViewModelProvider(requireActivity()).get(EditorViewModel.class);
@@ -260,6 +284,12 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
     @Override
     public void onNodeLongClick(View anchor, FileNode node) {
+        onNodeContextMenu(anchor, node, anchor.getWidth() / 2f, anchor.getHeight() / 2f);
+    }
+
+    @Override
+    public void onNodeContextMenu(View anchor, FileNode node, float x, float y) {
+        if (!isAdded() || getContext() == null) return;
         File file = node.getFile();
         boolean isRoot = viewModel.getProjectRoot() != null && file.getAbsolutePath().equals(viewModel.getProjectRoot().getAbsolutePath());
 
@@ -268,6 +298,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
         LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(getLayoutInflater());
         int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = requireContext().getResources().getDisplayMetrics().heightPixels;
         int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
         int preferredWidth = UiUtils.dpToPx(requireContext(), 220);
         int width = Math.min(preferredWidth, Math.min((int) (screenWidth * 0.92f), maxWidth));
@@ -353,14 +384,23 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
 
         int[] anchorLocation = new int[2];
         anchor.getLocationOnScreen(anchorLocation);
-        int screenHeight = requireActivity().getWindow().getDecorView().getHeight();
-        int spaceBelow = screenHeight - anchorLocation[1] - anchor.getHeight();
 
-        if (spaceBelow >= popupHeight) {
-            popupWindow.showAsDropDown(anchor, anchor.getWidth() / 2, -anchor.getHeight() / 2);
-        } else {
-            popupWindow.showAsDropDown(anchor, anchor.getWidth() / 2, -(popupHeight + anchor.getHeight() / 2));
+        int clickYOnScreen = anchorLocation[1] + (int) y;
+        int spaceBelow = screenHeight - clickYOnScreen;
+
+        int xOffset = (int) x;
+        if (anchorLocation[0] + xOffset + width > screenWidth) {
+            xOffset = Math.max(0, screenWidth - anchorLocation[0] - width - UiUtils.dpToPx(requireContext(), 8));
         }
+
+        int yOffset;
+        if (spaceBelow >= popupHeight) {
+            yOffset = (int) y - anchor.getHeight();
+        } else {
+            yOffset = (int) y - anchor.getHeight() - popupHeight;
+        }
+
+        popupWindow.showAsDropDown(anchor, xOffset, yOffset);
     }
 
     private void addFindInFilesPopupItem(ViewGroup container, PopupWindow popupWindow, File file, FileNode node) {
