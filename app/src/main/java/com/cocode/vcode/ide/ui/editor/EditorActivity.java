@@ -1410,15 +1410,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         ProjectSearchBottomSheet sheet = new ProjectSearchBottomSheet();
         sheet.setUsages(getString(R.string.vcode_find_usages), query, result);
-        sheet.setListener((file, line) -> {
-            viewModel.openFile(file);
-            binding.viewerContainer.postDelayed(() -> {
-                CodeEditText targetEditor = getActiveCodeEditor();
-                if (targetEditor != null && line > 0) {
-                    targetEditor.goToLine(line);
-                }
-            }, 300);
-        });
+        sheet.setListener(this::jumpToPosition);
         sheet.show(getSupportFragmentManager(), "FindUsages");
     }
 }

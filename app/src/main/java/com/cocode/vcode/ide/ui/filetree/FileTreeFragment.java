@@ -352,17 +352,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
                     }
                     ProjectSearchBottomSheet searchSheet = new ProjectSearchBottomSheet();
                     searchSheet.setUsages(getString(R.string.vcode_find_usages), file.getName(), usages);
-                    searchSheet.setListener((searchedFile, lineNumber) -> {
-                        if (selectionListener != null) {
-                            selectionListener.onFileSelected(new FileNode(searchedFile, 0));
-                            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
-                                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
-                                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                                    editorActivity.jumpToLine(lineNumber);
-                                }, 500);
-                            }
-                        }
-                    });
+                    searchSheet.setListener(this::navigateToSearchResult);
                     searchSheet.show(getChildFragmentManager(), "FindUsages");
                 });
             }
@@ -408,22 +398,24 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
             if (file.isDirectory()) {
                 ProjectSearchBottomSheet searchSheet = new ProjectSearchBottomSheet();
                 searchSheet.setProjectRoot(file);
-                searchSheet.setListener((searchedFile, lineNumber) -> {
-                    if (selectionListener != null) {
-                        selectionListener.onFileSelected(new FileNode(searchedFile, 0));
-                        if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
-                            com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
-                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                                editorActivity.jumpToLine(lineNumber);
-                            }, 500);
-                        }
-                    }
-                });
+                searchSheet.setListener(this::navigateToSearchResult);
                 searchSheet.show(getChildFragmentManager(), "ProjectSearch");
             } else if (selectionListener != null) {
                 selectionListener.onFindInFile(node);
             }
         });
+    }
+
+    private void navigateToSearchResult(File searchedFile, int lineNumber, int column) {
+        if (selectionListener != null) {
+            selectionListener.onFileSelected(new FileNode(searchedFile, 0));
+            if (getActivity() instanceof com.cocode.vcode.ide.ui.editor.EditorActivity) {
+                com.cocode.vcode.ide.ui.editor.EditorActivity editorActivity = (com.cocode.vcode.ide.ui.editor.EditorActivity) getActivity();
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    editorActivity.jumpToPosition(lineNumber, column);
+                }, 500);
+            }
+        }
     }
 
     private void showCopyPathPopup(View anchor, File file) {

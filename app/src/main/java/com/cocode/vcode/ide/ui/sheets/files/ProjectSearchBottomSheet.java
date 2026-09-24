@@ -102,7 +102,8 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
             matchEnd = Math.min(snippet.length(), matchEnd);
         }
 
-        return new ProjectSearchResult(file, lineNum, snippet, matchStart, matchEnd);
+        int column = colStart >= 0 ? colStart + 1 : 1;
+        return new ProjectSearchResult(file, lineNum, column, snippet, matchStart, matchEnd);
     }
 
     public void setProjectRoot(File root) {
@@ -480,7 +481,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
                             String snippet = rawSnippet.replace('\n', ' ');
                             int matchStart = r.absoluteStart - start;
                             int matchEnd = r.absoluteEnd - start;
-                            group.matches.add(new ProjectSearchResult(f, r.lineNumber, snippet, matchStart, matchEnd));
+                            group.matches.add(new ProjectSearchResult(f, r.lineNumber, r.columnStart, snippet, matchStart, matchEnd));
                         }
                         outResults.add(group);
                         if (outResults.size() > 100) return; // limit files
@@ -497,22 +498,28 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
     }
 
     public interface ProjectSearchListener {
-        void onSearchResultSelected(File file, int lineNumber);
+        void onSearchResultSelected(File file, int lineNumber, int column);
     }
 
     static class ProjectSearchResult {
         File file;
         int line;
+        int column;
         String snippet;
         int matchStart;
         int matchEnd;
 
-        ProjectSearchResult(File file, int line, String snippet, int matchStart, int matchEnd) {
+        ProjectSearchResult(File file, int line, int column, String snippet, int matchStart, int matchEnd) {
             this.file = file;
             this.line = line;
+            this.column = column;
             this.snippet = snippet;
             this.matchStart = matchStart;
             this.matchEnd = matchEnd;
+        }
+
+        ProjectSearchResult(File file, int line, String snippet, int matchStart, int matchEnd) {
+            this(file, line, 1, snippet, matchStart, matchEnd);
         }
     }
 
@@ -597,7 +604,8 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
                 ProjectSearchResult match = (ProjectSearchResult) item;
                 MatchViewHolder mh = (MatchViewHolder) holder;
 
-                mh.binding.tvLineNumber.setText(match.line + ":");
+                String lineCol = match.line + (match.column > 0 ? ":" + match.column : "") + ":";
+                mh.binding.tvLineNumber.setText(lineCol);
                 mh.binding.tvLineNumber.setTypeface(FontManager.getInstance().getCodeFont(holder.itemView.getContext()));
 
                 android.text.SpannableString ss = new android.text.SpannableString(match.snippet);
@@ -612,7 +620,7 @@ public class ProjectSearchBottomSheet extends BaseBottomSheetDialogFragment {
 
                 mh.itemView.setOnClickListener(v -> {
                     if (listener != null) {
-                        listener.onSearchResultSelected(match.file, match.line);
+                        listener.onSearchResultSelected(match.file, match.line, match.column);
                     }
                     dismiss();
                 });

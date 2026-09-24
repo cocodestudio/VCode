@@ -20,6 +20,7 @@ public class ProjectSearchBottomSheetTest {
 
         assertNotNull(result);
         assertEquals(15, result.line);
+        assertEquals(21, result.column);
         // Indent has 8 spaces, so snippet begins at "int count = ..."
         assertEquals("int count = calculateTotal();", result.snippet);
         // "calculateTotal" should start at 20 - 8 = 12
@@ -38,6 +39,7 @@ public class ProjectSearchBottomSheetTest {
 
         assertNotNull(result);
         assertEquals(42, result.line);
+        assertEquals(11, result.column);
         assertEquals("const targetNode = findNode();", result.snippet);
         assertEquals("targetNode", result.snippet.substring(result.matchStart, result.matchEnd));
     }
@@ -58,6 +60,7 @@ public class ProjectSearchBottomSheetTest {
                 ProjectSearchBottomSheet.createMatchSnippet(dummy, 1, longLine, keywordStart, keywordEnd, "MY_SPECIAL_KEYWORD");
 
         assertNotNull(result);
+        assertEquals(201, result.column);
         assertTrue(result.snippet.startsWith("..."));
         assertTrue(result.snippet.endsWith("..."));
         assertEquals("MY_SPECIAL_KEYWORD", result.snippet.substring(result.matchStart, result.matchEnd));
@@ -73,6 +76,7 @@ public class ProjectSearchBottomSheetTest {
                 ProjectSearchBottomSheet.createMatchSnippet(dummy, 10, line, start, end, "hello");
 
         assertNotNull(result);
+        assertEquals(start + 1, result.column);
         assertEquals("String s = \"hello\";", result.snippet);
         assertEquals("hello", result.snippet.substring(result.matchStart, result.matchEnd));
     }
