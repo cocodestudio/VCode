@@ -87,6 +87,7 @@ public class FileOpenActivity extends Activity {
                 editorIntent.putExtra(EditorActivity.EXTRA_PROJECT_ID, projectId);
                 editorIntent.putExtra(EditorActivity.EXTRA_PROJECT_NAME, projectName);
                 editorIntent.putExtra(EditorActivity.EXTRA_OPEN_FILE_PATH, file.getAbsolutePath());
+                editorIntent.putExtra(EditorActivity.EXTRA_FROM_INTENT, true);
                 if (sourceUriString != null) {
                     editorIntent.putExtra(EditorActivity.EXTRA_SOURCE_URI, sourceUriString);
                 }

@@ -61,6 +61,41 @@ public class ProjectFileRecovery {
     }
 
     /**
+     * Purges an auto-generated .vcode directory created accidentally during intent file openings.
+     * To protect genuine user projects:
+     * - Only runs if .vcode exists.
+     * - Only purges if meta/project.json contains the default auto-generated projectName "VCode Project"
+     *   or if .vcode is completely empty / contains no user content.
+     */
+    public static void purgeAccidentalIntentVCodeDir(File projectRoot) {
+        if (projectRoot == null || !projectRoot.exists() || !projectRoot.isDirectory()) {
+            return;
+        }
+        File vcodeDir = new File(projectRoot, ".vcode");
+        if (!vcodeDir.exists() || !vcodeDir.isDirectory()) {
+            return;
+        }
+
+        try {
+            File metaFile = com.cocode.vcode.ide.data.repository.ProjectRepository.getProjectMetaFile(projectRoot);
+            if (metaFile.exists()) {
+                String content = com.cocode.vcode.ide.utils.FileUtils.readFile(metaFile);
+                JSONObject obj = new JSONObject(content);
+                String name = obj.optString("projectName", "");
+                if ("VCode Project".equals(name)) {
+                    com.cocode.vcode.ide.utils.FileUtils.deleteRecursive(vcodeDir);
+                }
+            } else {
+                File[] children = vcodeDir.listFiles();
+                if (children == null || children.length == 0) {
+                    com.cocode.vcode.ide.utils.FileUtils.deleteRecursive(vcodeDir);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
      * Creates a default project metadata JSON file.
      */
     private static void createDefaultProjectMeta(File metaFile) {

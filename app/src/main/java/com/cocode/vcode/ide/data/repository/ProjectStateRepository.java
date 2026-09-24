@@ -40,10 +40,10 @@ public class ProjectStateRepository {
      * <p>
      * For VCode-owned projects (inside VCodeProjects/) the session file is stored in .vcode/state/.
      * <p>
-     * For external directories (Downloads, Documents, etc.) the session is stored in app-private
-     * internal storage keyed by a hash of the directory path.
+     * For external directories (Downloads, Documents, etc.) or files opened via intent, the session
+     * is stored in app-private internal storage keyed by a hash of the directory path.
      */
-    private static File getSessionStorageDir(File projectDir) {
+    public static File getSessionStorageDir(File projectDir, boolean isFromIntent) {
         android.content.Context ctx = VCodeApplication.getInstance();
         String absPath = projectDir.getAbsolutePath().replace('\\', '/');
         String lowerAbsPath = absPath.toLowerCase(java.util.Locale.US);
@@ -60,6 +60,22 @@ public class ProjectStateRepository {
                 }
                 return bucket;
             }
+        }
+
+        if (isFromIntent) {
+            String safeKey = Integer.toHexString(absPath.hashCode());
+            if (ctx != null) {
+                File bucket = new File(ctx.getFilesDir(), "intent_sessions/" + safeKey);
+                if (!bucket.exists()) {
+                    bucket.mkdirs();
+                }
+                return bucket;
+            }
+            File fallback = new File(System.getProperty("java.io.tmpdir"), "vcode_intent_sessions/" + safeKey);
+            if (!fallback.exists()) {
+                fallback.mkdirs();
+            }
+            return fallback;
         }
 
         if (absPath.contains("/VCodeProjects/") || absPath.contains("/VCodeProjects")) {
@@ -86,10 +102,14 @@ public class ProjectStateRepository {
         return stateDir;
     }
 
+    public static File getSessionStorageDir(File projectDir) {
+        return getSessionStorageDir(projectDir, false);
+    }
+
     /**
      * Asynchronously saves the project session state to disk.
      */
-    public void saveState(File projectDir, ProjectState state) {
+    public void saveState(File projectDir, ProjectState state, boolean isFromIntent) {
         MutableLiveData<Result<Boolean>> liveData = new MutableLiveData<>();
         if (projectDir == null || state == null) {
             liveData.setValue(Result.error("Invalid project directory or state"));
@@ -97,7 +117,7 @@ public class ProjectStateRepository {
         }
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
-                writeStateToDisk(projectDir, state);
+                writeStateToDisk(projectDir, state, isFromIntent);
                 ExecutorProvider.getInstance().runOnMain(() -> liveData.setValue(Result.success(true)));
             } catch (Exception e) {
                 ExecutorProvider.getInstance()
@@ -106,40 +126,52 @@ public class ProjectStateRepository {
         });
     }
 
+    public void saveState(File projectDir, ProjectState state) {
+        saveState(projectDir, state, false);
+    }
+
     /**
      * Synchronously saves the project session state (intended for background threads or activity lifecycle hooks).
      */
-    public void saveStateSync(File projectDir, ProjectState state) {
+    public void saveStateSync(File projectDir, ProjectState state, boolean isFromIntent) {
         if (projectDir == null || state == null)
             return;
         try {
-            writeStateToDisk(projectDir, state);
+            writeStateToDisk(projectDir, state, isFromIntent);
         } catch (Exception ignored) {
         }
+    }
+
+    public void saveStateSync(File projectDir, ProjectState state) {
+        saveStateSync(projectDir, state, false);
     }
 
     /**
      * Synchronously loads the project session state from disk. Returns a new empty state on failure.
      */
-    public ProjectState loadStateSync(File projectDir, String projectId) {
+    public ProjectState loadStateSync(File projectDir, String projectId, boolean isFromIntent) {
         if (projectDir == null)
             return new ProjectState(projectId);
         try {
-            return readStateFromDisk(projectDir, projectId);
+            return readStateFromDisk(projectDir, projectId, isFromIntent);
         } catch (Exception e) {
             return new ProjectState(projectId);
         }
     }
 
-    private File getSessionFile(File projectDir) {
-        return new File(getSessionStorageDir(projectDir), SESSION_FILE);
+    public ProjectState loadStateSync(File projectDir, String projectId) {
+        return loadStateSync(projectDir, projectId, false);
+    }
+
+    private File getSessionFile(File projectDir, boolean isFromIntent) {
+        return new File(getSessionStorageDir(projectDir, isFromIntent), SESSION_FILE);
     }
 
     /**
      * Packages structural configuration properties into a streamlined string payload for disk updates.
      */
-    private void writeStateToDisk(File projectDir, ProjectState state) throws Exception {
-        if (!projectDir.exists())
+    private void writeStateToDisk(File projectDir, ProjectState state, boolean isFromIntent) throws Exception {
+        if (!isFromIntent && !projectDir.exists())
             projectDir.mkdirs();
 
         JSONObject root = new JSONObject();
@@ -206,15 +238,19 @@ public class ProjectStateRepository {
         }
         root.put("virtualFiles", virtuals);
 
-        File sessionFile = getSessionFile(projectDir);
+        File sessionFile = getSessionFile(projectDir, isFromIntent);
+        File parentDir = sessionFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            parentDir.mkdirs();
+        }
         try (BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(new FileOutputStream(sessionFile), StandardCharsets.UTF_8))) {
             writer.write(root.toString(2));
         }
     }
 
-    private ProjectState readStateFromDisk(File projectDir, String projectId) throws Exception {
-        File sessionFile = getSessionFile(projectDir);
+    private ProjectState readStateFromDisk(File projectDir, String projectId, boolean isFromIntent) throws Exception {
+        File sessionFile = getSessionFile(projectDir, isFromIntent);
         if (!sessionFile.exists()) {
             return new ProjectState(projectId);
         }

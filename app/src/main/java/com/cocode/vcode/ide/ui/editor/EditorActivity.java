@@ -80,6 +80,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     public static final String EXTRA_PROJECT_NAME = "extra_project_name";
     public static final String EXTRA_OPEN_FILE_PATH = "extra_open_file_path";
     public static final String EXTRA_SOURCE_URI = "extra_source_uri";
+    public static final String EXTRA_FROM_INTENT = "extra_from_intent";
 
     private ActivityEditorBinding binding;
     private LocalWebServer localWebServer;
@@ -107,6 +108,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         String projectPath = getIntent().getStringExtra(EXTRA_PROJECT_PATH);
         String projectId = getIntent().getStringExtra(EXTRA_PROJECT_ID);
         String projectName = getIntent().getStringExtra(EXTRA_PROJECT_NAME);
+        boolean isFromIntent = getIntent().getBooleanExtra(EXTRA_FROM_INTENT, false);
 
         if (projectPath == null) {
             Toast.makeText(this, R.string.vcode_no_project_path_provided, Toast.LENGTH_SHORT).show();
@@ -116,7 +118,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         File projectDirectory = new File(projectPath);
         if (projectId == null) projectId = projectDirectory.getName();
-        ProjectFileRecovery.ensureProjectFilesExist(projectDirectory);
+        if (!isFromIntent) {
+            ProjectFileRecovery.ensureProjectFilesExist(projectDirectory);
+        } else {
+            ProjectFileRecovery.purgeAccidentalIntentVCodeDir(projectDirectory);
+        }
 
         if (projectName == null || projectName.equals("Project") || projectName.equals(projectDirectory.getName())) {
             String resolved = ProjectRepository.getProjectName(projectDirectory);
@@ -134,7 +140,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         binding.tvProjectName.setTypeface(FontManager.getInstance().getUiSemiBold(this));
         binding.tvOpenFileFromTree.setTypeface(FontManager.getInstance().getUiMedium(this));
 
-        viewModel.initProject(projectDirectory, projectId, projectName);
+        viewModel.initProject(projectDirectory, projectId, projectName, isFromIntent);
 
         setupFragments();
         setupFloatingPreviewStyles();

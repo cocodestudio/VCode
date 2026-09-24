@@ -102,4 +102,50 @@ public class ProjectStateRepositoryTest {
         assertEquals(320, loaded.getScrollFor("index.html"));
         assertEquals(0, loaded.getCursorFor("index.html"));
     }
+
+    @Test
+    public void testIntentSessionDoesNotCreateVCodeDir() {
+        File downloadsDir = new File(tempFolder.getRoot(), "Downloads");
+        downloadsDir.mkdirs();
+        File externalProjectDir = new File(downloadsDir, "subfolder");
+        externalProjectDir.mkdirs();
+
+        String projectId = "intent-project-456";
+        ProjectState state = new ProjectState(projectId);
+        state.setActiveTabIndex(0);
+        state.setOpenFilePaths(Arrays.asList("script.js"));
+        state.setCursorFor("script.js", 50);
+        state.setScrollFor("script.js", 120);
+
+        // Save as intent file
+        repository.saveStateSync(externalProjectDir, state, true);
+
+        // Verify .vcode was NOT created in externalProjectDir
+        File vcodeDir = new File(externalProjectDir, ".vcode");
+        org.junit.Assert.assertFalse(".vcode should NOT exist in external directory for intent files", vcodeDir.exists());
+
+        // Verify state is loaded back properly
+        ProjectState loaded = repository.loadStateSync(externalProjectDir, projectId, true);
+        assertNotNull(loaded);
+        assertEquals(projectId, loaded.getProjectId());
+        assertEquals(1, loaded.getOpenFilePaths().size());
+        assertEquals("script.js", loaded.getOpenFilePaths().get(0));
+        assertEquals(50, loaded.getCursorFor("script.js"));
+        assertEquals(120, loaded.getScrollFor("script.js"));
+    }
+
+    @Test
+    public void testPurgeAccidentalIntentVCodeDir() throws Exception {
+        File folder = new File(tempFolder.getRoot(), "ExternalFolder");
+        folder.mkdirs();
+        File vcodeDir = new File(folder, ".vcode");
+        File metaDir = new File(vcodeDir, "meta");
+        metaDir.mkdirs();
+        File metaFile = new File(metaDir, "project.json");
+        FileUtils.writeFile(metaFile, "{\"projectName\": \"VCode Project\", \"createdAt\": 12345}");
+
+        assertTrue(vcodeDir.exists());
+        com.cocode.vcode.ide.utils.ProjectFileRecovery.purgeAccidentalIntentVCodeDir(folder);
+        org.junit.Assert.assertFalse(".vcode should be purged", vcodeDir.exists());
+    }
 }

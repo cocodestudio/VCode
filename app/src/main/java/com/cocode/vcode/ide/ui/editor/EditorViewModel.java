@@ -82,6 +82,7 @@ public class EditorViewModel extends ViewModel {
      * externally-requested file (opened after session restore) stays as the active tab.
      */
     private boolean skipDefaultFileOpen = false;
+    private boolean isFromIntent = false;
 
     public EditorViewModel(Context appContext, FileRepository fileRepo, ProjectStateRepository stateRepo, SettingsRepository settingsRepo, ProjectRepository projectRepo) {
         this.appContext = appContext != null ? appContext.getApplicationContext() : null;
@@ -94,6 +95,10 @@ public class EditorViewModel extends ViewModel {
 
     public void setSkipDefaultFileOpen(boolean skip) {
         this.skipDefaultFileOpen = skip;
+    }
+
+    public boolean isFromIntent() {
+        return isFromIntent;
     }
 
     // --- Getters for reactive data streams ---
@@ -237,11 +242,24 @@ public class EditorViewModel extends ViewModel {
      * @param pName Human-friendly name of the project.
      */
     public void initProject(File root, String pId, String pName) {
+        initProject(root, pId, pName, false);
+    }
+
+    /**
+     * Initializes the ViewModel with project metadata and restores the previous session's state.
+     *
+     * @param root        The root directory of the project.
+     * @param pId         Unique identifier for the project.
+     * @param pName       Human-friendly name of the project.
+     * @param fromIntent  True if the editor was launched from an external file intent.
+     */
+    public void initProject(File root, String pId, String pName, boolean fromIntent) {
         if (this.projectRoot != null) return; // Guard against multiple initializations
 
         this.projectRoot = root;
         this.projectId = pId;
         this.projectName = pName;
+        this.isFromIntent = fromIntent;
 
         // Cleanup legacy virtual files that may have been written to disk previously
         File legacyApiFile = new File(projectRoot, "vcode_api_tester.api");
@@ -254,7 +272,7 @@ public class EditorViewModel extends ViewModel {
 
         // Load project-specific state (open tabs, scroll positions) from the metadata repository
         ExecutorProvider.getInstance().runOnIo(() -> {
-            ProjectState state = stateRepo.loadStateSync(projectRoot, projectId);
+            ProjectState state = stateRepo.loadStateSync(projectRoot, projectId, isFromIntent);
             ExecutorProvider.getInstance().runOnMain(() -> {
                 currentState = state;
                 projectStateLiveData.setValue(currentState);
@@ -270,7 +288,7 @@ public class EditorViewModel extends ViewModel {
         List<String> paths = state.getOpenFilePaths();
         if (paths == null || paths.isEmpty()) {
             isEditorLoadingLiveData.setValue(false);
-            if (!skipDefaultFileOpen) {
+            if (!skipDefaultFileOpen && !isFromIntent) {
                 ExecutorProvider.getInstance().runOnIo(() -> {
                     try {
                         File metaFile = new File(new File(new File(projectRoot, ProjectRepository.VCODE_DIR), ProjectRepository.META_DIR), ProjectRepository.PROJECT_FILE);
@@ -526,7 +544,7 @@ public class EditorViewModel extends ViewModel {
                 }
 
                 refreshFileTree();
-                projectRepo.touchProjectById(projectId);
+                touchCurrentProject();
             } catch (Exception ignored) {
             }
         });
@@ -540,7 +558,7 @@ public class EditorViewModel extends ViewModel {
             try {
                 FileUtils.createFolder(parentDir, name);
                 refreshFileTree();
-                projectRepo.touchProjectById(projectId);
+                touchCurrentProject();
             } catch (Exception ignored) {
             }
         });
@@ -572,7 +590,7 @@ public class EditorViewModel extends ViewModel {
             }
 
             refreshFileTree();
-            projectRepo.touchProjectById(projectId);
+            touchCurrentProject();
         });
     }
 
@@ -600,7 +618,7 @@ public class EditorViewModel extends ViewModel {
 
                 openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
                 refreshFileTree();
-                projectRepo.touchProjectById(projectId);
+                touchCurrentProject();
 
                 if (result.referencesUpdatedCount > 0) {
                     refactoredFilesLiveData.postValue(result.modifiedFiles);
@@ -638,7 +656,7 @@ public class EditorViewModel extends ViewModel {
 
                 openFilesLiveData.postValue(new java.util.ArrayList<>(currentDocs));
                 refreshFileTree();
-                projectRepo.touchProjectById(projectId);
+                touchCurrentProject();
 
                 if (result.referencesUpdatedCount > 0) {
                     refactoredFilesLiveData.postValue(result.modifiedFiles);
@@ -961,7 +979,7 @@ public class EditorViewModel extends ViewModel {
                 if (result != null && result.isSuccess()) {
                     ef.markSaved();
                     openFilesLiveData.setValue(new ArrayList<>(docs));
-                    projectRepo.touchProjectById(projectId);
+                    touchCurrentProject();
 
                     // Write back to the original content:// source if applicable
                     if (ef.getSourceUriString() != null) {
@@ -1046,7 +1064,7 @@ public class EditorViewModel extends ViewModel {
             ExecutorProvider.getInstance().runOnMain(() -> {
                 if (finalAnySaved) {
                     openFilesLiveData.setValue(new ArrayList<>(docs));
-                    projectRepo.touchProjectById(projectId);
+                    touchCurrentProject();
                     refreshGitStatuses();
                 }
                 if (finalAllSuccess) {
@@ -1079,7 +1097,7 @@ public class EditorViewModel extends ViewModel {
     public void persistStateAsync() {
         if (currentState == null || projectRoot == null) return;
         updateCurrentStateObject();
-        stateRepo.saveState(projectRoot, currentState);
+        stateRepo.saveState(projectRoot, currentState, isFromIntent);
     }
 
     /**
@@ -1096,7 +1114,7 @@ public class EditorViewModel extends ViewModel {
         }
 
         updateCurrentStateObject();
-        stateRepo.saveStateSync(projectRoot, currentState);
+        stateRepo.saveStateSync(projectRoot, currentState, isFromIntent);
     }
 
     /**
@@ -1133,6 +1151,12 @@ public class EditorViewModel extends ViewModel {
         }
 
         if (anySaved) {
+            touchCurrentProject();
+        }
+    }
+
+    private void touchCurrentProject() {
+        if (!isFromIntent && projectId != null) {
             projectRepo.touchProjectById(projectId);
         }
     }
