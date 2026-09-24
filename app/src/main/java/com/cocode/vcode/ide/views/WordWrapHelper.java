@@ -158,6 +158,18 @@ public final class WordWrapHelper {
     }
 
     /**
+     * Resolves the visual column offset of {@code col} within a specific sub-row {@code sr}.
+     * Unlike {@link #colInSubRow(int[], int)}, this allows querying the exclusive end offset
+     * of a sub-row (where {@code col == breaks[sr + 1]}) without erroneously mapping it
+     * to column 0 of the next sub-row.
+     */
+    public static int colInSpecificSubRow(int[] breaks, int sr, int col) {
+        if (breaks == null || breaks.length <= 1) return col;
+        int srStart = getSubRowStart(breaks, sr);
+        return Math.max(0, col - srStart);
+    }
+
+    /**
      * Returns the starting column of the specified sub-row.
      */
     public static int getSubRowStart(int[] breaks, int sr) {

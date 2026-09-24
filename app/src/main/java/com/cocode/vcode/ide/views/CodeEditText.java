@@ -756,8 +756,8 @@ public class CodeEditText extends View {
                     if (colEnd <= srStart || colStart >= srEndRow) continue;
                     int s = Math.max(colStart, srStart);
                     int e = Math.min(colEnd, srEndRow);
-                    float x0 = paddingLeft + getCursorX(line, s);
-                    float x1 = paddingLeft + getCursorX(line, e);
+                    float x0 = paddingLeft + getSubRowCursorX(line, sr, s);
+                    float x1 = paddingLeft + getSubRowCursorX(line, sr, e);
                     float y0 = paddingTop + (visualRowOf(line) + sr) * lineHeightPx;
                     canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, selectionPaint);
                 }
@@ -821,8 +821,8 @@ public class CodeEditText extends View {
                         if (colEnd <= srStart || colStart >= srEndRow) continue;
                         int s = Math.max(colStart, srStart);
                         int e = Math.min(colEnd, srEndRow);
-                        float x0 = paddingLeft + getCursorX(line, s);
-                        float x1 = paddingLeft + getCursorX(line, e);
+                        float x0 = paddingLeft + getSubRowCursorX(line, sr, s);
+                        float x1 = paddingLeft + getSubRowCursorX(line, sr, e);
                         float y0 = paddingTop + (visualRowOf(line) + sr) * lineHeightPx;
                         canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, paint);
                     }
@@ -3373,6 +3373,11 @@ public class CodeEditText extends View {
         return WordWrapHelper.colInSubRow(lineWrapBreaks[line], col);
     }
 
+    private int colInSpecificSubRow(int line, int sr, int col) {
+        if (!wordWrap || lineWrapBreaks == null || line >= lineWrapBreaks.length) return col;
+        return WordWrapHelper.colInSpecificSubRow(lineWrapBreaks[line], sr, col);
+    }
+
     private int absoluteVisualRow(int logicalLine, int col) {
         return visualRowOf(logicalLine) + visualSubRow(logicalLine, col);
     }
@@ -4140,11 +4145,15 @@ public class CodeEditText extends View {
     // Internal — helpers
 
     private float getCursorX(int line, int col) {
-        int effectiveCol = wordWrap ? colInSubRow(line, col) : col;
+        return getSubRowCursorX(line, wordWrap ? visualSubRow(line, col) : 0, col);
+    }
+
+    private float getSubRowCursorX(int line, int sr, int col) {
+        int effectiveCol = wordWrap ? colInSpecificSubRow(line, sr, col) : col;
         float cx = effectiveCol * charWidth;
         java.util.List<com.cocode.vcode.ide.core.editor.highlight.HighlightToken> tokens = content.getLine(line).tokens;
         if (tokens != null) {
-            int subRowStart = wordWrap ? getSubRowStart(line, visualSubRow(line, col)) : 0;
+            int subRowStart = wordWrap ? getSubRowStart(line, sr) : 0;
             for (com.cocode.vcode.ide.core.editor.highlight.HighlightToken t : tokens) {
                 if (t.hasPreviewColor && t.startCol >= subRowStart && t.startCol < col) {
                     cx += charWidth * 1.2f;

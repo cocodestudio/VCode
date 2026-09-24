@@ -126,4 +126,24 @@ public class WordWrapHelperTest {
             assertEquals("Column mapping round-trip must match for col " + col, col, reconstructedCol);
         }
     }
+
+    @Test
+    public void testColInSpecificSubRowBoundary() {
+        // breaks: [0, 15] for line length 33
+        int[] breaks = new int[]{0, 15};
+
+        // Sub-row 0 spans [0, 15)
+        assertEquals(0, WordWrapHelper.colInSpecificSubRow(breaks, 0, 0));
+        assertEquals(5, WordWrapHelper.colInSpecificSubRow(breaks, 0, 5));
+        // Boundary case: column 15 is the exclusive end of sub-row 0.
+        // colInSubRow(breaks, 15) returns 0 (mapped to sub-row 1),
+        // but colInSpecificSubRow(breaks, 0, 15) must return 15!
+        assertEquals(15, WordWrapHelper.colInSpecificSubRow(breaks, 0, 15));
+        assertEquals(0, WordWrapHelper.colInSubRow(breaks, 15));
+
+        // Sub-row 1 spans [15, 33)
+        assertEquals(0, WordWrapHelper.colInSpecificSubRow(breaks, 1, 15));
+        assertEquals(10, WordWrapHelper.colInSpecificSubRow(breaks, 1, 25));
+        assertEquals(18, WordWrapHelper.colInSpecificSubRow(breaks, 1, 33));
+    }
 }
