@@ -289,18 +289,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         });
 
 
-        binding.diagnosticBar.setOnClickListener(v -> {
-            ProblemsBottomSheet sheet = new ProblemsBottomSheet();
-            sheet.setListener(this::jumpToLine);
-            Integer activeIndex = viewModel.getActiveTabIndex().getValue();
-            if (activeIndex != null && activeIndex >= 0) {
-                List<EditorFile> openFiles = viewModel.getOpenFiles().getValue();
-                if (openFiles != null && activeIndex < openFiles.size()) {
-                    sheet.setFilterFile(openFiles.get(activeIndex).getFile());
-                }
-            }
-            sheet.show(getSupportFragmentManager(), "ProblemsSheet");
-        });
+        binding.diagnosticBar.setOnClickListener(v -> showProblemsSheet());
 
 
         binding.btnOverflow.setOnClickListener(v -> showOverflowMenu());
@@ -459,16 +448,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 return true;
             }
             case SHOW_PROBLEMS: {
-                ProblemsBottomSheet sheet = new ProblemsBottomSheet();
-                sheet.setListener(this::jumpToLine);
-                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
-                if (activeIndex != null && activeIndex >= 0) {
-                    List<EditorFile> openFiles = viewModel.getOpenFiles().getValue();
-                    if (openFiles != null && activeIndex < openFiles.size()) {
-                        sheet.setFilterFile(openFiles.get(activeIndex).getFile());
-                    }
-                }
-                sheet.show(getSupportFragmentManager(), "ProblemsSheet");
+                showProblemsSheet();
                 return true;
             }
             case SHOW_SNIPPETS: {
@@ -1155,11 +1135,49 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         sheet.show(getSupportFragmentManager(), "GoToLineSheet");
     }
 
-    public void jumpToLine(int line) {
+    private void showProblemsSheet() {
+        ProblemsBottomSheet sheet = new ProblemsBottomSheet();
+        sheet.setListener(problem -> {
+            if (problem != null) {
+                jumpToPosition(problem.getFile(), problem.getLine(), problem.getColumn());
+            }
+        });
+        Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+        if (activeIndex != null && activeIndex >= 0) {
+            List<EditorFile> openFiles = viewModel.getOpenFiles().getValue();
+            if (openFiles != null && activeIndex < openFiles.size()) {
+                sheet.setFilterFile(openFiles.get(activeIndex).getFile());
+            }
+        }
+        sheet.show(getSupportFragmentManager(), "ProblemsSheet");
+    }
+
+    public void jumpToPosition(int line, int column) {
         CodeEditText codeEditText = getActiveCodeEditor();
         if (codeEditText == null) return;
-        // goToLine() handles clamping, cursor update, and scroll — O(log n) via Content.positionAt()
-        codeEditText.goToLine(line);
+        codeEditText.goToPosition(line, column);
+    }
+
+    public void jumpToPosition(File file, int line, int column) {
+        Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+        List<EditorFile> openFiles = viewModel.getOpenFiles().getValue();
+        boolean isAlreadyActive = false;
+        if (file != null && activeIndex != null && activeIndex >= 0 && openFiles != null && activeIndex < openFiles.size()) {
+            File activeFile = openFiles.get(activeIndex).getFile();
+            if (activeFile != null && activeFile.equals(file)) {
+                isAlreadyActive = true;
+            }
+        }
+        if (isAlreadyActive) {
+            jumpToPosition(line, column);
+        } else if (file != null) {
+            viewModel.openFile(file);
+            binding.viewerContainer.postDelayed(() -> jumpToPosition(line, column), 300);
+        }
+    }
+
+    public void jumpToLine(int line) {
+        jumpToPosition(line, 1);
     }
 
     private void formatCurrentFile() {

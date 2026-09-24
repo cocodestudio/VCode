@@ -91,7 +91,7 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
     }
 
     public interface ProblemListener {
-        void onProblemSelected(int lineNumber);
+        void onProblemSelected(Problem problem);
     }
 
     private class ProblemsAdapter extends RecyclerView.Adapter<ProblemsAdapter.ViewHolder> {
@@ -120,7 +120,12 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
             holder.binding.tvMessage.setText(item.getMessage());
             holder.binding.tvMessage.setTypeface(FontManager.getInstance().getUiMedium(holder.itemView.getContext()));
 
-            holder.binding.tvFilePath.setText(item.getFile().getName() + ":" + item.getLine());
+            String fileName = item.getFile() != null ? item.getFile().getName() : "";
+            String loc = fileName + ":" + item.getLine();
+            if (item.getColumn() > 0) {
+                loc += ":" + item.getColumn();
+            }
+            holder.binding.tvFilePath.setText(loc);
             holder.binding.tvFilePath.setTypeface(FontManager.getInstance().getUiMedium(holder.itemView.getContext()));
 
             // Severity icon and color
@@ -147,7 +152,7 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
 
             holder.itemView.setOnClickListener(v -> {
                 if (listener != null) {
-                    listener.onProblemSelected(item.getLine());
+                    listener.onProblemSelected(item);
                 }
                 dismiss();
             });

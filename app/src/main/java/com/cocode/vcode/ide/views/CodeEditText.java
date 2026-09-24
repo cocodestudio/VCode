@@ -3051,13 +3051,42 @@ public class CodeEditText extends View {
         scrollTo(0, Math.max(0, targetY - getHeight() / 3));
     }
 
-    public void goToLine(int line) {
+    public void goToPosition(int line, int column) {
+        if (content == null || content.lineCount() == 0) return;
         int targetLine = Math.max(0, Math.min(line - 1, content.lineCount() - 1));
-        cursor = new ContentPosition(targetLine, 0);
+        int lineLen = content.lineLength(targetLine);
+        int targetCol = Math.max(0, Math.min(column > 0 ? column - 1 : 0, lineLen));
+        cursor = new ContentPosition(targetLine, targetCol);
         selectionAnchor = null;
-        int targetScrollY = targetLine * lineHeightPx;
-        scrollTo(0, Math.max(0, targetScrollY - getHeight() / 3));
+
+        int visualRow = absoluteVisualRow(targetLine, targetCol);
+        int targetScrollY = visualRow * lineHeightPx;
+        int newScrollY = Math.max(0, targetScrollY - getHeight() / 3);
+
+        int newScrollX = 0;
+        if (!wordWrap) {
+            int cursorXLeft = getPaddingLeft() + (int) getCursorX(targetLine, targetCol);
+            int viewWidth = getWidth() - getPaddingLeft() - getPaddingRight();
+            if (viewWidth > 0) {
+                int bufferX = (int) (charWidth * 6);
+                if (cursorXLeft - bufferX < 0) {
+                    newScrollX = 0;
+                } else if (cursorXLeft + bufferX > viewWidth) {
+                    newScrollX = Math.max(0, cursorXLeft - viewWidth / 3);
+                }
+            }
+        }
+
+        scrollTo(newScrollX, newScrollY);
+        cursorVisible = true;
+        scheduleBlink();
         invalidate();
+        notifySelectionChanged();
+        post(this::ensureCursorVisible);
+    }
+
+    public void goToLine(int line) {
+        goToPosition(line, 1);
     }
 
     public int getLineCount() {
@@ -3065,7 +3094,11 @@ public class CodeEditText extends View {
     }
 
     public int getCurrentLine() {
-        return cursor.line + 1;
+        return cursor != null ? cursor.line + 1 : 1;
+    }
+
+    public int getCurrentColumn() {
+        return cursor != null ? cursor.column + 1 : 1;
     }
 
     public void setOnScrollChangeListener(OnScrollChangeListener listener) {
