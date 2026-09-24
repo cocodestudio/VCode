@@ -297,6 +297,13 @@ public class SelectionToolbar {
         }
 
         LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(LayoutInflater.from(context));
+        android.content.res.ColorStateList toolbarBg = binding.cardToolbar.getCardBackgroundColor();
+        if (toolbarBg != null) {
+            popupBinding.getRoot().setCardBackgroundColor(toolbarBg);
+        } else {
+            popupBinding.getRoot().setCardBackgroundColor(
+                    androidx.core.content.ContextCompat.getColor(context, R.color.vcode_bg_surface));
+        }
         int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
         int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
         int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);

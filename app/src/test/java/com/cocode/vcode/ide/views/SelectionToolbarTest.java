@@ -234,4 +234,30 @@ public class SelectionToolbarTest {
         assertFalse(toolbar.isMoreMenuShowing());
         assertFalse(toolbar.isVisible());
     }
+
+    @Test
+    public void testMoreMenuHasSameBackgroundColorAsToolbar() {
+        editor.setText("line 1\nline 2");
+        editor.setSelection(0);
+
+        toolbar.show();
+        View btnMore = toolbar.findViewById(com.cocode.vcode.ide.R.id.btnMore);
+        btnMore.performClick();
+        assertTrue(toolbar.isMoreMenuShowing());
+
+        android.widget.PopupWindow popup = toolbar.getMoreMenuPopup();
+        assertNotNull(popup);
+        View popupView = popup.getContentView();
+        assertTrue(popupView instanceof com.google.android.material.card.MaterialCardView);
+        com.google.android.material.card.MaterialCardView popupCard = (com.google.android.material.card.MaterialCardView) popupView;
+
+        View toolbarCardView = toolbar.findViewById(com.cocode.vcode.ide.R.id.cardToolbar);
+        assertTrue(toolbarCardView instanceof com.google.android.material.card.MaterialCardView);
+        com.google.android.material.card.MaterialCardView toolbarCard = (com.google.android.material.card.MaterialCardView) toolbarCardView;
+
+        assertNotNull(toolbarCard.getCardBackgroundColor());
+        assertNotNull(popupCard.getCardBackgroundColor());
+        assertEquals(toolbarCard.getCardBackgroundColor().getDefaultColor(),
+                popupCard.getCardBackgroundColor().getDefaultColor());
+    }
 }
