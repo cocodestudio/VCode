@@ -83,6 +83,21 @@
                     android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                     android:textColor="@color/vcode_text_primary" />
 
+                <!-- More Actions (Context Menu) -->
+                <ImageView
+                    android:id="@+id/btnMore"
+                    android:layout_width="44dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center_vertical"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:contentDescription="@string/vcode_action_more_options"
+                    android:focusable="true"
+                    android:padding="13dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_ellipsis_vertical"
+                    app:tint="@color/vcode_text_primary" />
+
             </LinearLayout>
         </HorizontalScrollView>
     </com.google.android.material.card.MaterialCardView>

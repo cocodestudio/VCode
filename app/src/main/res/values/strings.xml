@@ -367,6 +367,8 @@
     <string name="vcode_action_copy">Copy</string>
     <string name="vcode_action_paste">Paste</string>
     <string name="vcode_action_select_all">Select All</string>
+    <string name="vcode_action_more_options">More options</string>
+    <string name="vcode_action_comment_uncomment">Comment/Uncomment</string>
 
 <!--    Custom View: Find and Replace-->
     <string name="vcode_find_hint">Find...</string>

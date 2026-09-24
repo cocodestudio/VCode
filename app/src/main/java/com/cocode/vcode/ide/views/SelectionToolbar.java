@@ -2,16 +2,22 @@ package com.cocode.vcode.ide.views;
 
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.databinding.ItemCustomPopupBinding;
+import com.cocode.vcode.ide.databinding.LayoutCustomPopupBinding;
 import com.cocode.vcode.ide.databinding.ViewSelectionToolbarBinding;
 import com.cocode.vcode.ide.utils.FontManager;
+import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
  * Floating selection and cursor action bar shown for text selections or on empty-line long-presses.
@@ -27,6 +33,7 @@ public class SelectionToolbar {
     private final PopupWindow popupWindow;
     private final ClipboardManager clipboardManager;
     private CodeEditText editor;
+    private PopupWindow moreMenuPopup;
 
     public SelectionToolbar(Context context) {
         this.context = context;
@@ -109,10 +116,14 @@ public class SelectionToolbar {
             binding.btnSelectAll.setVisibility(docLength > 0 ? View.VISIBLE : View.GONE);
         }
 
+        boolean canPerformLineActions = hasSelection || docLength > 0;
+        binding.btnMore.setVisibility(canPerformLineActions ? View.VISIBLE : View.GONE);
+
         boolean anyActionVisible = (binding.btnCut.getVisibility() == View.VISIBLE)
                 || (binding.btnCopy.getVisibility() == View.VISIBLE)
                 || (binding.btnPaste.getVisibility() == View.VISIBLE)
-                || (binding.btnSelectAll.getVisibility() == View.VISIBLE);
+                || (binding.btnSelectAll.getVisibility() == View.VISIBLE)
+                || (binding.btnMore.getVisibility() == View.VISIBLE);
 
         if (!anyActionVisible) {
             hide();
@@ -130,9 +141,27 @@ public class SelectionToolbar {
      * Hides the toolbar.
      */
     public void hide() {
+        dismissMoreMenu();
         if (popupWindow.isShowing()) {
             popupWindow.dismiss();
         }
+    }
+
+    public void dismissMoreMenu() {
+        if (moreMenuPopup != null) {
+            if (moreMenuPopup.isShowing()) {
+                moreMenuPopup.dismiss();
+            }
+            moreMenuPopup = null;
+        }
+    }
+
+    boolean isMoreMenuShowing() {
+        return moreMenuPopup != null && moreMenuPopup.isShowing();
+    }
+
+    PopupWindow getMoreMenuPopup() {
+        return moreMenuPopup;
     }
 
     /**
@@ -155,6 +184,8 @@ public class SelectionToolbar {
             hide();
             return;
         }
+
+        dismissMoreMenu();
 
         // Measure the popup content (includes the shadow-padding wrapper).
         binding.getRoot().measure(
@@ -256,5 +287,145 @@ public class SelectionToolbar {
                 show();
             }
         });
+        binding.btnMore.setOnClickListener(this::showMoreMenu);
+    }
+
+    private void showMoreMenu(View anchor) {
+        if (moreMenuPopup != null && moreMenuPopup.isShowing()) {
+            dismissMoreMenu();
+            return;
+        }
+
+        LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(LayoutInflater.from(context));
+        int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
+        int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
+        int preferredWidth = UiUtils.dpToPx(context, 200);
+        int width = Math.min(preferredWidth, Math.min((int) (screenWidth * 0.92f), maxWidth));
+
+        moreMenuPopup = new PopupWindow(
+                popupBinding.getRoot(),
+                width,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true /* focusable so outside touch dismisses */
+        );
+        moreMenuPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        moreMenuPopup.setElevation(8f);
+        moreMenuPopup.setAnimationStyle(R.style.VCodePopupMenuAnimation);
+        moreMenuPopup.setOnDismissListener(() -> moreMenuPopup = null);
+
+        // Group 1: Copy Line Up / Down
+        addPopupItem(popupBinding.popupContainer, moreMenuPopup, R.drawable.ic_copy,
+                context.getString(R.string.vcode_cmd_copy_line_up), () -> {
+            if (editor != null) {
+                editor.copyLine(true);
+                hide();
+            }
+        });
+        addPopupItem(popupBinding.popupContainer, moreMenuPopup, R.drawable.ic_copy,
+                context.getString(R.string.vcode_cmd_copy_line_down), () -> {
+            if (editor != null) {
+                editor.copyLine(false);
+                hide();
+            }
+        });
+
+        addDivider(popupBinding.popupContainer);
+
+        // Group 2: Move Line Up / Down
+        addPopupItem(popupBinding.popupContainer, moreMenuPopup, R.drawable.ic_chevron_down, 180f,
+                context.getString(R.string.vcode_cmd_move_line_up), () -> {
+            if (editor != null) {
+                editor.moveLine(true);
+                hide();
+            }
+        });
+        addPopupItem(popupBinding.popupContainer, moreMenuPopup, R.drawable.ic_chevron_down,
+                context.getString(R.string.vcode_cmd_move_line_down), () -> {
+            if (editor != null) {
+                editor.moveLine(false);
+                hide();
+            }
+        });
+
+        addDivider(popupBinding.popupContainer);
+
+        // Group 3: Comment / Uncomment
+        addPopupItem(popupBinding.popupContainer, moreMenuPopup, R.drawable.ic_code,
+                context.getString(R.string.vcode_action_comment_uncomment), () -> {
+            if (editor != null) {
+                editor.toggleComment();
+                hide();
+            }
+        });
+
+        popupBinding.getRoot().measure(
+                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int popupHeight = popupBinding.getRoot().getMeasuredHeight();
+
+        int[] anchorLocation = new int[2];
+        anchor.getLocationOnScreen(anchorLocation);
+        int anchorX = anchorLocation[0];
+        int anchorY = anchorLocation[1];
+
+        int xOffset = anchor.getWidth() - width;
+        int screenEdgeMargin = UiUtils.dpToPx(context, 8);
+        if (anchorX + xOffset < screenEdgeMargin) {
+            xOffset = screenEdgeMargin - anchorX;
+        } else if (anchorX + xOffset + width > screenWidth - screenEdgeMargin) {
+            xOffset = screenWidth - screenEdgeMargin - anchorX - width;
+        }
+
+        int spaceBelow = screenHeight - (anchorY + anchor.getHeight());
+        int spaceAbove = anchorY;
+        int margin = UiUtils.dpToPx(context, 4);
+
+        int yOffset;
+        if (spaceBelow >= popupHeight || spaceBelow >= spaceAbove) {
+            yOffset = margin;
+        } else {
+            yOffset = -anchor.getHeight() - popupHeight - margin;
+        }
+
+        moreMenuPopup.showAsDropDown(anchor, xOffset, yOffset);
+    }
+
+    private View addPopupItem(ViewGroup container, PopupWindow popup, int iconRes, String title, Runnable action) {
+        return addPopupItem(container, popup, iconRes, 0f, title, action);
+    }
+
+    private View addPopupItem(ViewGroup container, PopupWindow popup, int iconRes, float rotationDegrees, String title, Runnable action) {
+        ItemCustomPopupBinding itemBinding = ItemCustomPopupBinding.inflate(LayoutInflater.from(context), container, false);
+        itemBinding.ivIcon.setImageResource(iconRes);
+        if (rotationDegrees != 0f) {
+            itemBinding.ivIcon.setRotation(rotationDegrees);
+        }
+        itemBinding.tvTitle.setText(title);
+        itemBinding.tvTitle.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
+        itemBinding.tvTitle.setTypeface(FontManager.getInstance().getUiMedium(context));
+        itemBinding.getRoot().setOnClickListener(v -> {
+            popup.dismiss();
+            action.run();
+        });
+        container.addView(itemBinding.getRoot());
+        return itemBinding.getRoot();
+    }
+
+    private void addDivider(ViewGroup container) {
+        View divider = new View(context);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                UiUtils.dpToPx(context, 1)
+        );
+        params.setMargins(0, UiUtils.dpToPx(context, 4), 0, UiUtils.dpToPx(context, 4));
+        divider.setLayoutParams(params);
+        TypedValue typedValue = new TypedValue();
+        if (context.getTheme().resolveAttribute(com.google.android.material.R.attr.colorOutlineVariant, typedValue, true)) {
+            divider.setBackgroundColor(typedValue.data);
+        } else {
+            divider.setBackgroundColor(androidx.core.content.ContextCompat.getColor(context, R.color.vcode_divider));
+        }
+        container.addView(divider);
     }
 }
