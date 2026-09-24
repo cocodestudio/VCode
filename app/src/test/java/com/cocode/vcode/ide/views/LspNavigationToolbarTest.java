@@ -124,4 +124,44 @@ public class LspNavigationToolbarTest {
         // Toolbar should NOT become visible from stale callback
         assertFalse(toolbar.isVisible());
     }
+
+    @Test
+    public void testOnCursorIdle_TypingActive_SuppressesToolbar() {
+        when(mockBridge.isLspActive()).thenReturn(true);
+        when(mockEditor.isTypingText()).thenReturn(true);
+
+        toolbar.onCursorIdle(50);
+        assertFalse(toolbar.isVisible());
+        verify(mockBridge, never()).requestDefinition(any());
+    }
+
+    @Test
+    public void testOnCursorIdle_AutoCompleteActive_SuppressesToolbar() {
+        when(mockBridge.isLspActive()).thenReturn(true);
+        when(mockEditor.isAutoCompleteVisible()).thenReturn(true);
+
+        toolbar.onCursorIdle(50);
+        assertFalse(toolbar.isVisible());
+        verify(mockBridge, never()).requestDefinition(any());
+    }
+
+    @Test
+    public void testOnCursorIdle_SignatureHintActive_SuppressesToolbar() {
+        when(mockBridge.isLspActive()).thenReturn(true);
+        when(mockEditor.isSignatureHintVisible()).thenReturn(true);
+
+        toolbar.onCursorIdle(50);
+        assertFalse(toolbar.isVisible());
+        verify(mockBridge, never()).requestDefinition(any());
+    }
+
+    @Test
+    public void testOnCursorIdle_TextSelected_SuppressesToolbar() {
+        when(mockBridge.isLspActive()).thenReturn(true);
+        when(mockEditor.hasSelection()).thenReturn(true);
+
+        toolbar.onCursorIdle(50);
+        assertFalse(toolbar.isVisible());
+        verify(mockBridge, never()).requestDefinition(any());
+    }
 }

@@ -110,6 +110,9 @@ public class CodeEditText extends View {
     private final List<Runnable> cursorChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AutoCompletePopup autoCompletePopup;
     private final SignatureHintPopup signatureHintPopup;
+    private LspNavigationToolbar lspNavigationToolbar;
+    private com.cocode.vcode.ide.core.lsp.LspSignatureHelp pendingSignatureHelp = null;
+    private static final int CURSOR_IDLE_DELAY_MS = 800;
     // Reusable objects and cached metrics for 60fps rendering
     private final Path reusableDiagnosticPath = new Path();
     boolean autoCloseHtmlTags = true;
@@ -2422,6 +2425,32 @@ public class CodeEditText extends View {
         }
     }
 
+    public void setLspNavigationToolbar(LspNavigationToolbar toolbar) {
+        this.lspNavigationToolbar = toolbar;
+    }
+
+    public boolean isTypingText() {
+        return isTypingText;
+    }
+
+    public com.cocode.vcode.ide.core.lsp.LspSignatureHelp getPendingSignatureHelp() {
+        return pendingSignatureHelp;
+    }
+
+    private void showAutoComplete(java.util.List<CompletionItem> items, int offset) {
+        if (autoCompletePopup == null || items == null || items.isEmpty()) {
+            dismissAutoCompletePopup();
+            return;
+        }
+        if (signatureHintPopup != null && signatureHintPopup.isShowing()) {
+            signatureHintPopup.dismiss();
+        }
+        if (lspNavigationToolbar != null && lspNavigationToolbar.isVisible()) {
+            lspNavigationToolbar.hide();
+        }
+        autoCompletePopup.show(items, this, offset);
+    }
+
     /**
      * Displays LSP-generated completion items in the autocomplete popup.
      * Called on the main thread by {@link com.cocode.vcode.ide.core.lsp.LspEditorBridge}
@@ -2430,8 +2459,7 @@ public class CodeEditText extends View {
      * @param items the completion items to show; must not be null or empty
      */
     public void showLspCompletions(java.util.List<CompletionItem> items) {
-        if (autoCompletePopup == null || items == null || items.isEmpty()) return;
-        autoCompletePopup.show(items, this, getSelectionStart());
+        showAutoComplete(items, getSelectionStart());
     }
 
     /**
@@ -2443,18 +2471,34 @@ public class CodeEditText extends View {
         if (autoCompletePopup != null) {
             autoCompletePopup.dismiss();
         }
+        if (pendingSignatureHelp != null) {
+            com.cocode.vcode.ide.core.lsp.LspSignatureHelp help = pendingSignatureHelp;
+            pendingSignatureHelp = null;
+            showSignatureHint(help);
+        }
     }
 
     public void showSignatureHint(LspSignatureHelp help) {
         if (help == null) {
-            signatureHintPopup.dismiss();
+            dismissSignatureHint();
             return;
+        }
+        if (isAutoCompleteVisible()) {
+            pendingSignatureHelp = help;
+            if (signatureHintPopup != null) {
+                signatureHintPopup.dismiss();
+            }
+            return;
+        }
+        if (lspNavigationToolbar != null && lspNavigationToolbar.isVisible()) {
+            lspNavigationToolbar.hide();
         }
         int flatCursor = content.flatOffset(cursor);
         signatureHintPopup.show(help, this, flatCursor);
     }
 
     public void dismissSignatureHint() {
+        pendingSignatureHelp = null;
         if (signatureHintPopup != null) {
             signatureHintPopup.dismiss();
         }
@@ -2710,9 +2754,13 @@ public class CodeEditText extends View {
             listener.run();
         }
 
+        if (lspNavigationToolbar != null && lspNavigationToolbar.isVisible()) {
+            lspNavigationToolbar.hide();
+        }
+
         mainHandler.removeCallbacks(cursorIdleRunnable);
         if (selectionAnchor == null) {
-            mainHandler.postDelayed(cursorIdleRunnable, 400);
+            mainHandler.postDelayed(cursorIdleRunnable, CURSOR_IDLE_DELAY_MS);
         }
         mainHandler.removeCallbacks(bracketMatchRunnable);
         mainHandler.postDelayed(bracketMatchRunnable, 80);
@@ -3672,9 +3720,9 @@ public class CodeEditText extends View {
                     mainHandler.post(() -> {
                         if (content.flatOffset(cursor) != capturedCursor) return;
                         if (items != null && !items.isEmpty()) {
-                            autoCompletePopup.show(items, CodeEditText.this, capturedCursor);
+                            showAutoComplete(items, capturedCursor);
                         } else {
-                            autoCompletePopup.dismiss();
+                            dismissAutoCompletePopup();
                         }
                     });
                 } catch (Exception ignored) {
@@ -3695,7 +3743,7 @@ public class CodeEditText extends View {
         int flatCursor = content.flatOffset(cursor);
 
         if (flatCursor <= 0 || flatCursor > totalLen) {
-            autoCompletePopup.dismiss();
+            dismissAutoCompletePopup();
             return;
         }
 
@@ -3705,7 +3753,7 @@ public class CodeEditText extends View {
                 : '\n';
 
         if (Character.isWhitespace(lastChar)) {
-            autoCompletePopup.dismiss();
+            dismissAutoCompletePopup();
             return;
         }
 
@@ -3720,14 +3768,14 @@ public class CodeEditText extends View {
                 || (lastChar == '-' && (fileType == FileType.CSS || fileType == FileType.HTML));
 
         if (!isIdentifier && !isTriggerChar) {
-            autoCompletePopup.dismiss();
+            dismissAutoCompletePopup();
             return;
         }
 
         String fullText = getCachedFullText();
 
         if (isCursorInComment(fullText, flatCursor)) {
-            autoCompletePopup.dismiss();
+            dismissAutoCompletePopup();
             return;
         }
 
@@ -3739,9 +3787,9 @@ public class CodeEditText extends View {
             mainHandler.post(() -> {
                 if (content.flatOffset(cursor) != capturedCursor) return;
                 if (items != null && !items.isEmpty()) {
-                    autoCompletePopup.show(items, CodeEditText.this, capturedCursor);
+                    showAutoComplete(items, capturedCursor);
                 } else {
-                    autoCompletePopup.dismiss();
+                    dismissAutoCompletePopup();
                 }
             });
         });
@@ -3901,7 +3949,7 @@ public class CodeEditText extends View {
             undoStack.commitPending();
             selectionAnchor = null;
 
-            autoCompletePopup.dismiss();
+            dismissAutoCompletePopup();
             scheduleHighlight();
             invalidate();
         } finally {

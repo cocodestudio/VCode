@@ -63,7 +63,13 @@ public class LspNavigationToolbar {
     }
 
     public void bindEditor(CodeEditText editor) {
+        if (this.editor != null) {
+            this.editor.setLspNavigationToolbar(null);
+        }
         this.editor = editor;
+        if (editor != null) {
+            editor.setLspNavigationToolbar(this);
+        }
     }
 
     public void bindBridge(LspEditorBridge bridge) {
@@ -83,7 +89,11 @@ public class LspNavigationToolbar {
             hide();
             return;
         }
-        if (flatOffset < 0 || flatOffset > editor.length() || !editor.hasFocus() || editor.isSignatureHintVisible() || editor.isAutoCompleteVisible()) {
+        if (flatOffset < 0 || flatOffset > editor.length() || !editor.hasFocus()
+                || editor.hasSelection()
+                || editor.isSignatureHintVisible()
+                || editor.isAutoCompleteVisible()
+                || editor.isTypingText()) {
             hide();
             return;
         }
@@ -178,6 +188,16 @@ public class LspNavigationToolbar {
             return;
         }
 
+        if (editor == null || !editor.hasFocus()
+                || editor.getSelectionStart() != flatOffset
+                || editor.hasSelection()
+                || editor.isSignatureHintVisible()
+                || editor.isAutoCompleteVisible()
+                || editor.isTypingText()) {
+            dismissAndClear();
+            return;
+        }
+
         binding.btnDefinition.setVisibility(hasDef ? View.VISIBLE : View.GONE);
         binding.btnReferences.setVisibility(hasRef ? View.VISIBLE : View.GONE);
         binding.btnRename.setVisibility(hasRename ? View.VISIBLE : View.GONE);
@@ -218,9 +238,10 @@ public class LspNavigationToolbar {
     private void updatePosition() {
         if (editor == null || !popupWindow.isShowing() || currentOffset == -1) return;
 
-        // Check if cursor actually moved away from what we're displaying.
+        // Check if cursor actually moved away from what we're displaying, or if another popup became active.
         // In that case, hide it.
-        if (editor.getSelectionStart() != currentOffset || editor.getSelectionStart() != editor.getSelectionEnd()) {
+        if (editor.getSelectionStart() != currentOffset || editor.getSelectionStart() != editor.getSelectionEnd()
+                || editor.hasSelection() || editor.isSignatureHintVisible() || editor.isAutoCompleteVisible() || editor.isTypingText()) {
             hide();
             return;
         }

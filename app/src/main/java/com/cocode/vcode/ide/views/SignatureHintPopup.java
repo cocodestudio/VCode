@@ -112,6 +112,14 @@ public class SignatureHintPopup {
             return;
         }
 
+        if (editorView instanceof CodeEditText) {
+            CodeEditText codeEditor = (CodeEditText) editorView;
+            if (codeEditor.isAutoCompleteVisible()) {
+                dismiss();
+                return;
+            }
+        }
+
         LspSignatureHelp.LspSignatureInformation activeSig = help.signatures.get(
                 Math.max(0, Math.min(help.activeSignature, help.signatures.size() - 1))
         );

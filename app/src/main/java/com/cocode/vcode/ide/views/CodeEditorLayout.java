@@ -65,10 +65,25 @@ public class CodeEditorLayout extends LinearLayout {
         lspNavigationToolbar = new LspNavigationToolbar(context);
         lspNavigationToolbar.bindEditor(codeEditText);
         lspNavigationToolbar.hide();
+        codeEditText.setLspNavigationToolbar(lspNavigationToolbar);
 
         codeEditText.setOnCursorIdleListener(offset -> {
             if (lspNavigationToolbar != null && (selectionToolbar == null || !selectionToolbar.isVisible())) {
-                lspNavigationToolbar.onCursorIdle(offset);
+                if (!codeEditText.isAutoCompleteVisible() && !codeEditText.isSignatureHintVisible() && !codeEditText.isTypingText()) {
+                    lspNavigationToolbar.onCursorIdle(offset);
+                }
+            }
+        });
+
+        codeEditText.addCursorChangeListener(() -> {
+            if (lspNavigationToolbar != null && lspNavigationToolbar.isVisible()) {
+                lspNavigationToolbar.hide();
+            }
+        });
+
+        codeEditText.addContentChangeListener(() -> {
+            if (lspNavigationToolbar != null && lspNavigationToolbar.isVisible()) {
+                lspNavigationToolbar.hide();
             }
         });
 
@@ -106,7 +121,7 @@ public class CodeEditorLayout extends LinearLayout {
                 selectionToolbar.show();
             }
             if (lspNavigationToolbar.isVisible()) {
-                lspNavigationToolbar.updatePositionIfVisible();
+                lspNavigationToolbar.hide();
             }
         });
 
