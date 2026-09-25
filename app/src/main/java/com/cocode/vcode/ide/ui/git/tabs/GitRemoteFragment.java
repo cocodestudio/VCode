@@ -22,6 +22,8 @@ import com.cocode.vcode.ide.git.core.GitCredentialStore;
 import com.cocode.vcode.ide.git.core.GitRepository;
 import com.cocode.vcode.ide.git.github.GitHubApiClient;
 import com.cocode.vcode.ide.git.model.BranchItem;
+import com.cocode.vcode.ide.ui.dialogs.GitErrorDialog;
+import com.cocode.vcode.ide.ui.git.GitActivity;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.git.CreateGitHubRepoBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
@@ -487,6 +489,13 @@ public class GitRemoteFragment extends Fragment {
                         binding.progressIndicator.setVisibility(View.GONE);
                         setHUDStatus("Operational Error: " + errorMessage, R.color.vcode_accent_error);
                         toggleFormInputState(true);
+                    }
+                    if (isAdded() && getContext() != null) {
+                        GitErrorDialog.showOperationalError(requireContext(), operation, e, () -> {
+                            if (getActivity() instanceof GitActivity) {
+                                ((GitActivity) getActivity()).selectTab(0);
+                            }
+                        });
                     }
                 });
             }

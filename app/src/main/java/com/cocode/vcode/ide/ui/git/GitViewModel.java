@@ -380,12 +380,18 @@ public class GitViewModel extends AndroidViewModel {
             try {
                 action.execute();
                 refreshAll();
+            } catch (GitRepository.GitConflictException e) {
+                conflictEvent.postValue(e);
             } catch (Exception e) {
                 postError(e.getMessage());
             } finally {
                 isLoading.postValue(false);
             }
         });
+    }
+
+    public void clearErrorMessage() {
+        errorMessage.setValue(null);
     }
 
     /**

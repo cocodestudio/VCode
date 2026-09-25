@@ -330,6 +330,20 @@
     <string name="vcode_failed_to_compare_branch">Failed to compare branches: %1$s</string>
     <string name="vcode_pull_successful_integrated">Changes integrated successfully.</string>
 
+    <!-- Git Error & Conflict Dialogs -->
+    <string name="vcode_git_checkout_conflict_title">Checkout Conflict</string>
+    <string name="vcode_git_checkout_conflict_desc">Pulling or checking out would overwrite your uncommitted local changes in the following file(s):\n\n%1$s\n\nPlease commit, stash, or discard your local changes in the Changes tab before continuing.</string>
+    <string name="vcode_git_auth_failed_title">Authentication Failed</string>
+    <string name="vcode_git_auth_failed_desc">Could not authenticate with the remote repository. Please check your Personal Access Token (PAT) or SSH key in Git settings.</string>
+    <string name="vcode_git_connection_failed_title">Connection Failed</string>
+    <string name="vcode_git_connection_failed_desc">Unable to connect to the remote Git server. Please verify your internet connection and remote repository URL.</string>
+    <string name="vcode_git_operation_error_title">Git Operation Error</string>
+    <string name="vcode_git_operation_error_generic">The Git operation could not be completed. Please try again.</string>
+    <string name="vcode_git_pull_failed_title">Pull Failed</string>
+    <string name="vcode_git_push_failed_title">Push Failed</string>
+    <string name="vcode_git_fetch_failed_title">Fetch Failed</string>
+    <string name="vcode_view_changes">View Changes</string>
+
 
     <!--    Bottom Sheet: Git Stash Message-->
     <string name="vcode_stash_changes">Stash Changes</string>

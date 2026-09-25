@@ -165,4 +165,46 @@ public class GitRepositoryTest {
         assertTrue("Diff text should not be null or empty", diffText != null && !diffText.isEmpty());
         assertTrue("Diff should contain additions for file2", diffText.contains("+hello feature"));
     }
+
+    @Test
+    public void testCheckoutConflictDetection() throws Exception {
+        File repoDir = tempFolder.newFolder("test-repo-checkout-conflict");
+        gitRepository.setConfiguredDefaultBranch("master");
+        gitRepository.openRepository(repoDir);
+
+        File f1 = new File(repoDir, "conflict.txt");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("original version\n");
+        }
+        gitRepository.stageFile("conflict.txt");
+        org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir);
+        git.commit().setMessage("Initial commit").call();
+
+        // Create feature branch and modify conflict.txt
+        gitRepository.createBranch("feature", "master");
+        gitRepository.checkoutBranch("feature");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("feature version\n");
+        }
+        gitRepository.stageFile("conflict.txt");
+        git.commit().setMessage("Feature commit").call();
+
+        // Checkout master
+        gitRepository.checkoutBranch("master");
+
+        // Now make an UNCOMMITTED local change to conflict.txt in master
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("local uncommitted change\n");
+        }
+
+        // Attempt to checkout feature -> should throw GitCheckoutConflictException!
+        boolean caughtCheckoutConflict = false;
+        try {
+            gitRepository.checkoutBranch("feature");
+        } catch (GitRepository.GitCheckoutConflictException e) {
+            caughtCheckoutConflict = true;
+            assertTrue("Conflicting files list should contain conflict.txt", e.getConflictingFiles().contains("conflict.txt"));
+        }
+        assertTrue("Should have caught GitCheckoutConflictException on checkout conflict", caughtCheckoutConflict);
+    }
 }

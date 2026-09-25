@@ -22,6 +22,7 @@ import com.cocode.vcode.ide.ui.dialogs.MergeConfirmDialog;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitFetchReviewBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitOptionsBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.NewBranchBottomSheet;
@@ -135,6 +136,16 @@ public class GitBranchFragment extends Fragment implements BranchAdapter.BranchL
                     binding.rvRemoteBranches.setVisibility(View.GONE);
                     binding.tvNoRemoteBranches.setVisibility(View.GONE);
                 }
+            }
+        });
+
+        viewModel.getConflictEvent().observe(getViewLifecycleOwner(), conflict -> {
+            if (conflict != null) {
+                GitConflictBottomSheet.show(getChildFragmentManager(),
+                        viewModel.getRepository(),
+                        conflict.getConflictingFiles(),
+                        () -> viewModel.refreshAll());
+                viewModel.clearConflictEvent();
             }
         });
     }

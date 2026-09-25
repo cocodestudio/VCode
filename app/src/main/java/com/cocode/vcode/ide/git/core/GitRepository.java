@@ -502,7 +502,12 @@ public class GitRepository {
      * Shifts active branch context scopes maps to match chosen local destination names markers.
      */
     public void checkoutBranch(String name) throws Exception {
-        git.checkout().setName(name).call();
+        try {
+            git.checkout().setName(name).call();
+        } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
+            List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
+            throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
+        }
     }
 
     /**
@@ -514,16 +519,21 @@ public class GitRepository {
                 ? remoteName.substring(remoteName.indexOf('/') + 1)
                 : remoteName;
 
-        Ref existingLocal = git.getRepository().findRef("refs/heads/" + localName);
-        if (existingLocal != null) {
-            git.checkout().setName(localName).call();
-        } else {
-            git.checkout()
-                    .setCreateBranch(true)
-                    .setName(localName)
-                    .setStartPoint(remoteName)
-                    .setUpstreamMode(org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode.TRACK)
-                    .call();
+        try {
+            Ref existingLocal = git.getRepository().findRef("refs/heads/" + localName);
+            if (existingLocal != null) {
+                git.checkout().setName(localName).call();
+            } else {
+                git.checkout()
+                        .setCreateBranch(true)
+                        .setName(localName)
+                        .setStartPoint(remoteName)
+                        .setUpstreamMode(org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode.TRACK)
+                        .call();
+            }
+        } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
+            List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
+            throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
         }
     }
 
@@ -570,7 +580,24 @@ public class GitRepository {
     public void mergeBranch(String branchName) throws Exception {
         ObjectId branchId = git.getRepository().resolve(branchName);
         if (branchId == null) throw new IllegalArgumentException("Branch reference not found");
-        git.merge().include(branchId).call();
+        org.eclipse.jgit.api.MergeResult result;
+        try {
+            result = git.merge().include(branchId).call();
+        } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
+            List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
+            throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
+        }
+        if (result != null) {
+            if (result.getMergeStatus() == org.eclipse.jgit.api.MergeResult.MergeStatus.CONFLICTING) {
+                java.util.Set<String> conflicts = result.getConflicts() != null
+                        ? result.getConflicts().keySet() : new java.util.HashSet<>();
+                throw new GitConflictException("Merge conflicts detected", new java.util.ArrayList<>(conflicts));
+            }
+            if (result.getMergeStatus() == org.eclipse.jgit.api.MergeResult.MergeStatus.CHECKOUT_CONFLICT) {
+                List<String> conflicts = result.getCheckoutConflicts() != null ? result.getCheckoutConflicts() : new ArrayList<>();
+                throw new GitCheckoutConflictException("Checkout conflict with files: " + String.join(", ", conflicts), conflicts);
+            }
+        }
     }
 
     /**
@@ -656,7 +683,13 @@ public class GitRepository {
             pullCommand.setTransportConfigCallback(SshKeyManager.getTransportConfigCallback(VCodeApplication.getInstance()));
         }
 
-        org.eclipse.jgit.api.PullResult result = pullCommand.call();
+        org.eclipse.jgit.api.PullResult result;
+        try {
+            result = pullCommand.call();
+        } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
+            List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
+            throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
+        }
 
         if (!result.isSuccessful()) {
             // Check merge conflicts
@@ -666,6 +699,10 @@ public class GitRepository {
                     java.util.Set<String> conflicts = merge.getConflicts() != null
                             ? merge.getConflicts().keySet() : new java.util.HashSet<>();
                     throw new GitConflictException("Merge conflicts detected", new java.util.ArrayList<>(conflicts));
+                }
+                if (merge.getMergeStatus() == org.eclipse.jgit.api.MergeResult.MergeStatus.CHECKOUT_CONFLICT) {
+                    List<String> conflicts = merge.getCheckoutConflicts() != null ? merge.getCheckoutConflicts() : new ArrayList<>();
+                    throw new GitCheckoutConflictException("Checkout conflict with files: " + String.join(", ", conflicts), conflicts);
                 }
                 throw new Exception("Pull failed: " + merge.getMergeStatus().toString());
             }
@@ -1225,6 +1262,22 @@ public class GitRepository {
         public GitConflictException(String message, List<String> conflictingFiles) {
             super(message);
             this.conflictingFiles = conflictingFiles;
+        }
+
+        public List<String> getConflictingFiles() {
+            return conflictingFiles;
+        }
+    }
+
+    /**
+     * Thrown when a pull or merge cannot proceed because local uncommitted changes would be overwritten.
+     */
+    public static class GitCheckoutConflictException extends Exception {
+        private final List<String> conflictingFiles;
+
+        public GitCheckoutConflictException(String message, List<String> conflictingFiles) {
+            super(message);
+            this.conflictingFiles = conflictingFiles != null ? conflictingFiles : new ArrayList<>();
         }
 
         public List<String> getConflictingFiles() {
