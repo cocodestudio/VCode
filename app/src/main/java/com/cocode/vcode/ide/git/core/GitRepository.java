@@ -483,9 +483,13 @@ public class GitRepository {
         String currentBranch = git.getRepository().getFullBranch();
 
         for (Ref ref : refs) {
+            String shortName = Repository.shortenRefName(ref.getName());
+            if (remote && (shortName.endsWith("/HEAD") || ref.getName().endsWith("/HEAD"))) {
+                continue;
+            }
             boolean active = ref.getName().equals(currentBranch);
             items.add(new BranchItem(
-                    Repository.shortenRefName(ref.getName()),
+                    shortName,
                     active,
                     ref.getName().startsWith("refs/remotes/"),
                     ref.getObjectId() != null ? ref.getObjectId().abbreviate(7).name() : ""
@@ -502,19 +506,25 @@ public class GitRepository {
     }
 
     /**
-     * Creates a local tracking branch from a remote tracking ref.
-     * e.g. remoteName = "origin/feature-x" creates local "feature-x" tracking origin/feature-x
+     * Creates a local tracking branch from a remote tracking ref, or checks it out if it already exists.
+     * e.g. remoteName = "origin/feature-x" creates or switches to local "feature-x" tracking origin/feature-x
      */
     public void checkoutRemoteBranchAsLocal(String remoteName) throws Exception {
         String localName = remoteName.contains("/")
                 ? remoteName.substring(remoteName.indexOf('/') + 1)
                 : remoteName;
-        git.checkout()
-                .setCreateBranch(true)
-                .setName(localName)
-                .setStartPoint(remoteName)
-                .setUpstreamMode(org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode.TRACK)
-                .call();
+
+        Ref existingLocal = git.getRepository().findRef("refs/heads/" + localName);
+        if (existingLocal != null) {
+            git.checkout().setName(localName).call();
+        } else {
+            git.checkout()
+                    .setCreateBranch(true)
+                    .setName(localName)
+                    .setStartPoint(remoteName)
+                    .setUpstreamMode(org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode.TRACK)
+                    .call();
+        }
     }
 
     /**
@@ -694,13 +704,15 @@ public class GitRepository {
     }
 
     /**
-     * Returns a human-readable summary of what was fetched.
+     * Returns a human-readable summary of what was fetched, with prune enabled.
      */
     public String fetch(String remoteUrl, String pat) throws Exception {
         ensureOriginConfigured(remoteUrl);
 
         org.eclipse.jgit.api.FetchCommand fetchCommand = git.fetch()
-                .setRemote("origin");
+                .setRemote("origin")
+                .setRemoveDeletedRefs(true)
+                .setRefSpecs(new org.eclipse.jgit.transport.RefSpec("+refs/heads/*:refs/remotes/origin/*"));
 
         if (remoteUrl != null && remoteUrl.startsWith("http")) {
             fetchCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(pat != null ? pat : "token", pat != null ? pat : ""));
@@ -732,22 +744,269 @@ public class GitRepository {
         if (r == org.eclipse.jgit.lib.RefUpdate.Result.NEW) type = "new branch";
         else if (r == org.eclipse.jgit.lib.RefUpdate.Result.FAST_FORWARD) type = "updated";
         else if (r == org.eclipse.jgit.lib.RefUpdate.Result.FORCED) type = "forced";
+        else if (r != null && r.name().contains("DELETE")) type = "pruned";
         else if (r == org.eclipse.jgit.lib.RefUpdate.Result.NO_CHANGE) type = "up to date";
         else type = r != null ? r.name().toLowerCase().replace('_', ' ') : "updated";
         return type;
     }
 
     /**
-     * Ensures the 'origin' remote in .git/config points to the given URL.
+     * Ensures the 'origin' remote in .git/config points to the given URL and has standard fetch refspec.
      */
     private void ensureOriginConfigured(String remoteUrl) throws Exception {
-        if (remoteUrl == null || remoteUrl.trim().isEmpty()) return;
+        if (remoteUrl == null || remoteUrl.trim().isEmpty() || git == null || git.getRepository() == null) return;
         StoredConfig config = git.getRepository().getConfig();
         String current = config.getString("remote", "origin", "url");
+        boolean modified = false;
         if (!remoteUrl.trim().equals(current)) {
             config.setString("remote", "origin", "url", remoteUrl.trim());
+            modified = true;
+        }
+        String fetchSpec = config.getString("remote", "origin", "fetch");
+        if (fetchSpec == null || !fetchSpec.contains("refs/remotes/origin/*")) {
             config.setString("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*");
+            modified = true;
+        }
+        if (modified) {
             config.save();
+        }
+    }
+
+    /**
+     * Model capturing ahead/behind comparison between a local branch and its remote tracking branch.
+     */
+    public static class BranchComparison {
+        private final int aheadCount;
+        private final int behindCount;
+        private final String localBranch;
+        private final String remoteRef;
+        private final boolean hasRemoteRef;
+
+        public BranchComparison(int aheadCount, int behindCount, String localBranch, String remoteRef, boolean hasRemoteRef) {
+            this.aheadCount = aheadCount;
+            this.behindCount = behindCount;
+            this.localBranch = localBranch;
+            this.remoteRef = remoteRef;
+            this.hasRemoteRef = hasRemoteRef;
+        }
+
+        public int getAheadCount() {
+            return aheadCount;
+        }
+
+        public int getBehindCount() {
+            return behindCount;
+        }
+
+        public String getLocalBranch() {
+            return localBranch;
+        }
+
+        public String getRemoteRef() {
+            return remoteRef;
+        }
+
+        public boolean hasRemoteRef() {
+            return hasRemoteRef;
+        }
+
+        public boolean isUpToDate() {
+            return aheadCount == 0 && behindCount == 0;
+        }
+    }
+
+    /**
+     * Compares local branch against remote tracking branch to determine ahead/behind commit counts.
+     */
+    public BranchComparison getBranchComparison(String localBranch, String remoteBranch) {
+        if (git == null || git.getRepository() == null) {
+            return new BranchComparison(0, 0, localBranch, remoteBranch, false);
+        }
+        Repository repo = git.getRepository();
+        try {
+            String resolvedLocal = localBranch != null && !localBranch.isEmpty() ? localBranch : getCurrentBranchName();
+            String resolvedRemote = remoteBranch != null && !remoteBranch.isEmpty() ? remoteBranch : "origin/" + resolvedLocal;
+
+            // Check upstream tracking status first
+            org.eclipse.jgit.lib.BranchTrackingStatus status = org.eclipse.jgit.lib.BranchTrackingStatus.of(repo, resolvedLocal);
+            if (status != null) {
+                return new BranchComparison(
+                        status.getAheadCount(),
+                        status.getBehindCount(),
+                        resolvedLocal,
+                        status.getRemoteTrackingBranch(),
+                        true
+                );
+            }
+
+            // Fallback to RevWalk comparison
+            ObjectId localId = repo.resolve("refs/heads/" + resolvedLocal);
+            ObjectId remoteId = repo.resolve(resolvedRemote.startsWith("refs/") ? resolvedRemote : "refs/remotes/" + resolvedRemote);
+            if (remoteId == null) {
+                remoteId = repo.resolve(resolvedRemote);
+            }
+
+            if (remoteId == null) {
+                return new BranchComparison(0, 0, resolvedLocal, resolvedRemote, false);
+            }
+            if (localId == null) {
+                int behind = countCommits(repo, remoteId, null);
+                return new BranchComparison(0, behind, resolvedLocal, resolvedRemote, true);
+            }
+
+            int behind = countCommits(repo, remoteId, localId);
+            int ahead = countCommits(repo, localId, remoteId);
+            return new BranchComparison(ahead, behind, resolvedLocal, resolvedRemote, true);
+        } catch (Exception e) {
+            android.util.Log.e("VCode", "Error comparing branches: " + localBranch + " vs " + remoteBranch, e);
+            return new BranchComparison(0, 0, localBranch, remoteBranch, false);
+        }
+    }
+
+    private int countCommits(Repository repo, ObjectId start, ObjectId uninteresting) {
+        int count = 0;
+        try (org.eclipse.jgit.revwalk.RevWalk walk = new org.eclipse.jgit.revwalk.RevWalk(repo)) {
+            walk.markStart(walk.parseCommit(start));
+            if (uninteresting != null) {
+                walk.markUninteresting(walk.parseCommit(uninteresting));
+            }
+            for (RevCommit ignored : walk) {
+                count++;
+            }
+        } catch (Exception ignored) {
+        }
+        return count;
+    }
+
+    /**
+     * Returns the list of incoming commits on remoteBranch that are not present in localBranch.
+     */
+    public List<CommitItem> getIncomingCommits(String localBranch, String remoteBranch) throws Exception {
+        List<CommitItem> items = new ArrayList<>();
+        if (git == null || git.getRepository() == null) return items;
+        Repository repo = git.getRepository();
+
+        String resolvedLocal = localBranch != null && !localBranch.isEmpty() ? localBranch : getCurrentBranchName();
+        String resolvedRemote = remoteBranch != null && !remoteBranch.isEmpty() ? remoteBranch : "origin/" + resolvedLocal;
+
+        ObjectId localId = repo.resolve("refs/heads/" + resolvedLocal);
+        ObjectId remoteId = repo.resolve(resolvedRemote.startsWith("refs/") ? resolvedRemote : "refs/remotes/" + resolvedRemote);
+        if (remoteId == null) {
+            remoteId = repo.resolve(resolvedRemote);
+        }
+        if (remoteId == null) return items;
+
+        try (org.eclipse.jgit.revwalk.RevWalk walk = new org.eclipse.jgit.revwalk.RevWalk(repo)) {
+            walk.markStart(walk.parseCommit(remoteId));
+            if (localId != null) {
+                walk.markUninteresting(walk.parseCommit(localId));
+            }
+            for (RevCommit commit : walk) {
+                items.add(new CommitItem(
+                        commit.getName(),
+                        commit.abbreviate(7).name(),
+                        commit.getFullMessage(),
+                        commit.getAuthorIdent().getName(),
+                        DateUtils.formatDate(commit.getAuthorIdent().getWhen())
+                ));
+            }
+        }
+        return items;
+    }
+
+    /**
+     * Retrieves commit history for an arbitrary branch or ref (e.g. remote-tracking branch).
+     */
+    public List<CommitItem> getBranchCommits(String refName, int limit) throws Exception {
+        List<CommitItem> items = new ArrayList<>();
+        if (git == null || git.getRepository() == null) return items;
+        Repository repo = git.getRepository();
+
+        ObjectId refId = repo.resolve(refName.startsWith("refs/") ? refName : "refs/remotes/" + refName);
+        if (refId == null) {
+            refId = repo.resolve(refName);
+        }
+        if (refId == null) return items;
+
+        try (org.eclipse.jgit.revwalk.RevWalk walk = new org.eclipse.jgit.revwalk.RevWalk(repo)) {
+            walk.markStart(walk.parseCommit(refId));
+            int count = 0;
+            for (RevCommit commit : walk) {
+                items.add(new CommitItem(
+                        commit.getName(),
+                        commit.abbreviate(7).name(),
+                        commit.getFullMessage(),
+                        commit.getAuthorIdent().getName(),
+                        DateUtils.formatDate(commit.getAuthorIdent().getWhen())
+                ));
+                count++;
+                if (limit > 0 && count >= limit) break;
+            }
+        }
+        return items;
+    }
+
+    /**
+     * Resolves the list of changed files between two references (e.g. HEAD vs refs/remotes/origin/main).
+     */
+    public List<GitFileItem> getChangedFilesBetweenRefs(String oldRef, String newRef) throws Exception {
+        List<GitFileItem> items = new ArrayList<>();
+        if (git == null || git.getRepository() == null) return items;
+        Repository repo = git.getRepository();
+
+        ObjectId oldId = repo.resolve(oldRef + "^{tree}");
+        ObjectId newId = repo.resolve(newRef + "^{tree}");
+        if (oldId == null || newId == null) return items;
+
+        try (ObjectReader reader = repo.newObjectReader();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             DiffFormatter df = new DiffFormatter(baos)) {
+            df.setRepository(repo);
+            CanonicalTreeParser oldTree = new CanonicalTreeParser();
+            oldTree.reset(reader, oldId);
+            CanonicalTreeParser newTree = new CanonicalTreeParser();
+            newTree.reset(reader, newId);
+
+            List<DiffEntry> diffs = df.scan(oldTree, newTree);
+            for (DiffEntry diff : diffs) {
+                String path = diff.getChangeType() == DiffEntry.ChangeType.DELETE ? diff.getOldPath() : diff.getNewPath();
+                String name = new File(path).getName();
+                String status = "M";
+                if (diff.getChangeType() == DiffEntry.ChangeType.ADD) status = "A";
+                else if (diff.getChangeType() == DiffEntry.ChangeType.DELETE) status = "D";
+                items.add(new GitFileItem(path, name, status, false));
+            }
+        }
+        return items;
+    }
+
+    /**
+     * Formats unified diff syntax between two references for a single file.
+     */
+    public String getDiffBetweenRefsForFile(String oldRef, String newRef, String path) throws Exception {
+        if (git == null || git.getRepository() == null) return "";
+        Repository repo = git.getRepository();
+
+        ObjectId oldId = repo.resolve(oldRef + "^{tree}");
+        ObjectId newId = repo.resolve(newRef + "^{tree}");
+        if (oldId == null || newId == null) return "";
+
+        try (ObjectReader reader = repo.newObjectReader();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             DiffFormatter df = new DiffFormatter(baos)) {
+            df.setRepository(repo);
+            CanonicalTreeParser oldTree = new CanonicalTreeParser();
+            oldTree.reset(reader, oldId);
+            CanonicalTreeParser newTree = new CanonicalTreeParser();
+            newTree.reset(reader, newId);
+
+            List<DiffEntry> diffs = df.scan(oldTree, newTree);
+            for (DiffEntry diff : diffs) {
+                if (diff.getNewPath().equals(path) || diff.getOldPath().equals(path)) {
+                    df.format(diff);
+                }
+            }
+            return baos.toString();
         }
     }
 

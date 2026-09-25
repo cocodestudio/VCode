@@ -116,4 +116,53 @@ public class GitRepositoryTest {
         }
         assertTrue("stage.txt should be unstaged after unstage", stageUnstaged);
     }
+
+    @Test
+    public void testBranchComparisonAndDiff() throws Exception {
+        File repoDir = tempFolder.newFolder("test-repo-diff");
+        gitRepository.setConfiguredDefaultBranch("master");
+        gitRepository.openRepository(repoDir);
+
+        File f1 = new File(repoDir, "file1.txt");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("hello master\n");
+        }
+        gitRepository.stageFile("file1.txt");
+        org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir);
+        git.commit().setMessage("Initial master commit").call();
+
+        // Create feature branch
+        gitRepository.createBranch("feature", "master");
+        gitRepository.checkoutBranch("feature");
+
+        File f2 = new File(repoDir, "file2.txt");
+        try (FileWriter fw = new FileWriter(f2)) {
+            fw.write("hello feature\nline 2\n");
+        }
+        gitRepository.stageFile("file2.txt");
+        git.commit().setMessage("Feature commit 1").call();
+
+        // Switch back to master
+        gitRepository.checkoutBranch("master");
+
+        // Test Branch Comparison
+        GitRepository.BranchComparison comparison = gitRepository.getBranchComparison("master", "feature");
+        assertEquals("Master should be 1 commit behind feature", 1, comparison.getBehindCount());
+        assertEquals("Master should be 0 commits ahead of feature", 0, comparison.getAheadCount());
+
+        // Test Incoming Commits
+        List<com.cocode.vcode.ide.git.model.CommitItem> incoming = gitRepository.getIncomingCommits("master", "feature");
+        assertEquals("Should have 1 incoming commit", 1, incoming.size());
+        assertEquals("Feature commit 1", incoming.get(0).getMessage());
+
+        // Test Changed Files between refs
+        List<GitFileItem> changedFiles = gitRepository.getChangedFilesBetweenRefs("master", "feature");
+        assertEquals("Should have 1 changed file", 1, changedFiles.size());
+        assertEquals("file2.txt", changedFiles.get(0).getFileName());
+
+        // Test Diff between refs for file
+        String diffText = gitRepository.getDiffBetweenRefsForFile("master", "feature", "file2.txt");
+        assertTrue("Diff text should not be null or empty", diffText != null && !diffText.isEmpty());
+        assertTrue("Diff should contain additions for file2", diffText.contains("+hello feature"));
+    }
 }

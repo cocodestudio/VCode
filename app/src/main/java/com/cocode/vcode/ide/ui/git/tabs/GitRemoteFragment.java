@@ -25,6 +25,7 @@ import com.cocode.vcode.ide.git.model.BranchItem;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.git.CreateGitHubRepoBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitFetchReviewBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitHubLoginBottomSheet;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -89,6 +90,8 @@ public class GitRemoteFragment extends Fragment {
         binding.btnPull.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.btnFetch.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.btnPush.setTypeface(FontManager.getInstance().getUiSemiBold(context));
+        binding.btnReviewRemote.setTypeface(FontManager.getInstance().getUiSemiBold(context));
+        binding.btnStatusReviewAction.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.tvStatusMessage.setTypeface(FontManager.getInstance().getUiMedium(context));
 
         binding.tvEmptyRemoteTitle.setTypeface(FontManager.getInstance().getUiSemiBold(context));
@@ -243,6 +246,14 @@ public class GitRemoteFragment extends Fragment {
         binding.btnPush.setOnClickListener(v -> executeRemoteOperation("push"));
         binding.btnPull.setOnClickListener(v -> executeRemoteOperation("pull"));
         binding.btnFetch.setOnClickListener(v -> executeRemoteOperation("fetch"));
+        binding.btnReviewRemote.setOnClickListener(v -> {
+            String branch = binding.tvTargetBranchSelector.getText().toString().trim();
+            if (branch.isEmpty()) {
+                branch = viewModel.getCurrentBranch().getValue();
+                if (branch == null || branch.isEmpty()) branch = "main";
+            }
+            showFetchReviewSheet(branch, "origin/" + branch);
+        });
 
         if (binding.btnOpenOnGithub != null) {
             binding.btnOpenOnGithub.setOnClickListener(v -> {
@@ -419,13 +430,17 @@ public class GitRemoteFragment extends Fragment {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 final String resultSummary;
+                final GitRepository.BranchComparison comparison;
                 if (operation.equals("push")) {
                     viewModel.getRepository().push(url, finalToken, branch);
                     resultSummary = "Push completed successfully.";
+                    comparison = null;
                 } else if (operation.equals("pull")) {
                     resultSummary = viewModel.getRepository().pull(url, finalToken, branch);
+                    comparison = null;
                 } else {
                     resultSummary = viewModel.getRepository().fetch(url, finalToken);
+                    comparison = viewModel.getRepository().getBranchComparison(branch, "origin/" + branch);
                 }
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
@@ -434,6 +449,19 @@ public class GitRemoteFragment extends Fragment {
                         setHUDStatus(resultSummary, R.color.vcode_accent_primary);
                         toggleFormInputState(true);
                         viewModel.refreshAll();
+
+                        if (operation.equals("fetch")) {
+                            if (comparison != null && comparison.getBehindCount() > 0) {
+                                binding.btnStatusReviewAction.setVisibility(View.VISIBLE);
+                                binding.btnStatusReviewAction.setText(getString(R.string.vcode_review_incoming_changes, comparison.getBehindCount()));
+                                binding.btnStatusReviewAction.setOnClickListener(v -> showFetchReviewSheet(branch, "origin/" + branch));
+                                showFetchReviewSheet(branch, "origin/" + branch);
+                            } else {
+                                binding.btnStatusReviewAction.setVisibility(View.GONE);
+                            }
+                        } else {
+                            binding.btnStatusReviewAction.setVisibility(View.GONE);
+                        }
                     }
                 });
 
@@ -465,6 +493,14 @@ public class GitRemoteFragment extends Fragment {
         });
     }
 
+    private void showFetchReviewSheet(String localBranch, String remoteBranch) {
+        if (!isAdded()) return;
+        GitFetchReviewBottomSheet.show(getChildFragmentManager(),
+                viewModel.getRepository(),
+                localBranch,
+                remoteBranch,
+                () -> executeRemoteOperation("pull"));
+    }
 
     /**
      * Sets the HUD status message and text color.
@@ -484,6 +520,7 @@ public class GitRemoteFragment extends Fragment {
         binding.btnPush.setEnabled(enabled);
         binding.btnPull.setEnabled(enabled);
         binding.btnFetch.setEnabled(enabled);
+        binding.btnReviewRemote.setEnabled(enabled);
     }
 
     @Override

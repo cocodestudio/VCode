@@ -12,6 +12,8 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import android.widget.Toast;
+
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.FragmentGitBranchBinding;
 import com.cocode.vcode.ide.git.adapters.BranchAdapter;
@@ -20,6 +22,7 @@ import com.cocode.vcode.ide.ui.dialogs.MergeConfirmDialog;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitFetchReviewBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitOptionsBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.NewBranchBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
@@ -138,46 +141,88 @@ public class GitBranchFragment extends Fragment implements BranchAdapter.BranchL
 
     @Override
     public void onBranchClick(BranchItem item) {
-        // Trigger a checkout if the user clicks a non-active branch
-        if (!item.isActive()) viewModel.checkoutBranch(item.getName());
+        if (item.isRemote()) {
+            viewModel.checkoutRemoteAsBranch(item.getName());
+            Toast.makeText(requireContext(), getString(R.string.vcode_branch_switched_to, item.getName()), Toast.LENGTH_SHORT).show();
+        } else if (!item.isActive()) {
+            viewModel.checkoutBranch(item.getName());
+        }
     }
 
     @Override
     public void onOverflowClick(BranchItem item, View anchor) {
-        // Build and display a context menu for branch-specific actions
-        GitOptionsBottomSheet optionsSheet = GitOptionsBottomSheet.newInstance("Branch " + item.getName());
+        GitOptionsBottomSheet optionsSheet = GitOptionsBottomSheet.newInstance(
+                getString(R.string.vcode_branch_options_title, item.getName()));
 
         if (item.isRemote()) {
-            optionsSheet.addOption("Checkout as local", R.drawable.ic_code_branch, () -> viewModel.checkoutRemoteAsBranch(item.getName()));
+            optionsSheet.addOption(getString(R.string.vcode_checkout_as_local), R.drawable.ic_code_branch, () -> {
+                viewModel.checkoutRemoteAsBranch(item.getName());
+                Toast.makeText(requireContext(), getString(R.string.vcode_branch_switched_to, item.getName()), Toast.LENGTH_SHORT).show();
+            });
+            optionsSheet.addOption(getString(R.string.vcode_inspect_commits), R.drawable.ic_rotate_left, () -> {
+                showRemoteBranchReview(item.getName());
+            });
+            optionsSheet.addOption(getString(R.string.vcode_diff_with_current), R.drawable.ic_file_lines, () -> {
+                showRemoteBranchReview(item.getName());
+            });
+            optionsSheet.addOption(getString(R.string.vcode_merge_into_current), R.drawable.ic_code_merge, () -> {
+                String currentActiveHead = viewModel.getCurrentBranch().getValue();
+                if (currentActiveHead == null || currentActiveHead.trim().isEmpty()) {
+                    currentActiveHead = "active branch";
+                }
+                MergeConfirmDialog.show(
+                        requireContext(),
+                        item.getName(),
+                        currentActiveHead,
+                        () -> viewModel.mergeBranch(item.getName())
+                );
+            });
             optionsSheet.show(getChildFragmentManager(), "BranchOptionsSheet");
             return;
         }
 
         if (!item.isActive()) {
-            optionsSheet.addOption("Checkout Branch", R.drawable.ic_right_from_bracket, () -> viewModel.checkoutBranch(item.getName()));
+            optionsSheet.addOption(getString(R.string.vcode_checkout_branch), R.drawable.ic_right_from_bracket, () -> viewModel.checkoutBranch(item.getName()));
         }
 
-        optionsSheet.addOption("Merge into current", R.drawable.ic_code_merge, () -> {
-            String currentActiveHeadBranch = viewModel.getCurrentBranch().getValue();
-            if (currentActiveHeadBranch == null || currentActiveHeadBranch.trim().isEmpty()) {
-                currentActiveHeadBranch = "active head pointer";
-            }
+        // Only allow merging if the item is NOT active AND there are at least 2 local branches
+        if (!item.isActive() && adapter.getItemCount() > 1) {
+            optionsSheet.addOption(getString(R.string.vcode_merge_into_current), R.drawable.ic_code_merge, () -> {
+                String currentActiveHeadBranch = viewModel.getCurrentBranch().getValue();
+                if (currentActiveHeadBranch == null || currentActiveHeadBranch.trim().isEmpty()) {
+                    currentActiveHeadBranch = "active head pointer";
+                }
 
-            // Confirm merge operation before execution
-            MergeConfirmDialog.show(
-                    requireContext(),
-                    item.getName(),
-                    currentActiveHeadBranch,
-                    () -> viewModel.mergeBranch(item.getName())
-            );
-        });
-        optionsSheet.addOption("Rename Branch", R.drawable.ic_pen, () -> showRenameDialog(item));
+                // Confirm merge operation before execution
+                MergeConfirmDialog.show(
+                        requireContext(),
+                        item.getName(),
+                        currentActiveHeadBranch,
+                        () -> viewModel.mergeBranch(item.getName())
+                );
+            });
+        }
+        optionsSheet.addOption(getString(R.string.vcode_rename_branch), R.drawable.ic_pen, () -> showRenameDialog(item));
 
         if (!item.isActive()) {
-            optionsSheet.addOption("Delete Branch", R.drawable.ic_trash, () -> showDeleteConfirm(item));
+            optionsSheet.addOption(getString(R.string.vcode_action_delete_branch), R.drawable.ic_trash, () -> showDeleteConfirm(item));
         }
 
         optionsSheet.show(getChildFragmentManager(), "BranchOptionsSheet");
+    }
+
+    private void showRemoteBranchReview(String remoteBranchName) {
+        String activeLocal = viewModel.getCurrentBranch().getValue();
+        if (activeLocal == null || activeLocal.isEmpty()) {
+            activeLocal = "main";
+        }
+        GitFetchReviewBottomSheet.show(
+                getChildFragmentManager(),
+                viewModel.getRepository(),
+                activeLocal,
+                remoteBranchName,
+                () -> viewModel.mergeBranch(remoteBranchName)
+        );
     }
 
     /**

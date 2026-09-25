@@ -292,6 +292,9 @@
     <string name="vcode_action_push">Push</string>
     <string name="vcode_action_fetch">Fetch</string>
     <string name="vcode_action_pull">Pull</string>
+    <string name="vcode_review_remote_changes">Review Remote Changes</string>
+    <string name="vcode_review_incoming_changes">Review Incoming Changes (%1$d)</string>
+    <string name="vcode_fetched_summary">%1$d ref(s) updated, %2$d pruned</string>
 
     <!--    Fragment: Git Branch-->
     <string name="vcode_current_branch_label">CURRENT BRANCH</string>
@@ -299,6 +302,34 @@
     <string name="vcode_action_new_branch">New Branch</string>
     <string name="vcode_remote_branches">Remote Branches</string>
     <string name="vcode_fetch_to_see_remote_branches">Fetch to see remote branches</string>
+    <string name="vcode_branch_options_title">Branch %1$s</string>
+    <string name="vcode_checkout_as_local">Checkout as local</string>
+    <string name="vcode_checkout_branch">Checkout Branch</string>
+    <string name="vcode_merge_into_current">Merge into current</string>
+    <string name="vcode_action_delete_branch">Delete Branch</string>
+    <string name="vcode_inspect_commits">Inspect Commits</string>
+    <string name="vcode_diff_with_current">Diff with Current Branch</string>
+    <string name="vcode_branch_switched_to">Switched to branch %1$s</string>
+    <string name="vcode_branch_created_tracking">Created local branch %1$s tracking %2$s</string>
+
+    <!--    Bottom Sheet: Git Fetch Review-->
+    <string name="vcode_fetch_review_title">Review Remote Changes</string>
+    <string name="vcode_incoming_commits_badge">%1$d incoming</string>
+    <string name="vcode_incoming_commits_full">%1$d incoming commit(s)</string>
+    <string name="vcode_outgoing_commits_full">%1$d outgoing commit(s)</string>
+    <string name="vcode_sync_status_diverged">%1$d incoming • %2$d outgoing</string>
+    <string name="vcode_sync_up_to_date">Branch is up to date</string>
+    <string name="vcode_tab_commits_count">Commits (%1$d)</string>
+    <string name="vcode_tab_diff_count">Files Changed (%1$d)</string>
+    <string name="vcode_no_incoming_commits">No Incoming Commits</string>
+    <string name="vcode_no_incoming_commits_desc">Your local branch has all commits from %1$s.</string>
+    <string name="vcode_no_diff_files">No File Differences</string>
+    <string name="vcode_no_diff_files_desc">Local branch and remote branch trees are identical.</string>
+    <string name="vcode_btn_pull_and_merge">Pull &amp; Merge</string>
+    <string name="vcode_btn_close">Close</string>
+    <string name="vcode_failed_to_compare_branch">Failed to compare branches: %1$s</string>
+    <string name="vcode_pull_successful_integrated">Changes integrated successfully.</string>
+
 
     <!--    Bottom Sheet: Git Stash Message-->
     <string name="vcode_stash_changes">Stash Changes</string>
