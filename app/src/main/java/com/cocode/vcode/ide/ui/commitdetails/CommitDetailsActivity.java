@@ -13,7 +13,7 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.ActivityCommitDetailsBinding;
 import com.cocode.vcode.ide.git.model.CommitItem;
 import com.cocode.vcode.ide.ui.base.BaseActivity;
-import com.cocode.vcode.ide.ui.sheets.git.DiffViewerBottomSheet;
+import com.cocode.vcode.ide.ui.diff.DiffViewerActivity;
 import com.cocode.vcode.ide.ui.sheets.git.ResetConfirmBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
@@ -123,10 +123,18 @@ public class CommitDetailsActivity extends BaseActivity {
      * Tapping a file launches the visual Diff viewer.
      */
     private void setupRecyclerView() {
-        adapter = new CommitFilesAdapter(item ->
-                DiffViewerBottomSheet.newInstance(viewModel.getCommitSha().getValue(), item)
-                        .show(getSupportFragmentManager(), "DiffViewerBottomSheet")
-        );
+        adapter = new CommitFilesAdapter(item -> {
+            String projectPath = getIntent().getStringExtra("project_path");
+            if (projectPath == null && viewModel.getRepository() != null && viewModel.getRepository().getRepoDir() != null) {
+                projectPath = viewModel.getRepository().getRepoDir().getAbsolutePath();
+            }
+            startActivity(DiffViewerActivity.newIntent(
+                    this,
+                    projectPath,
+                    viewModel.getCommitSha().getValue(),
+                    item
+            ));
+        });
         binding.rvCommitFiles.setLayoutManager(new LinearLayoutManager(this));
         binding.rvCommitFiles.setAdapter(adapter);
     }

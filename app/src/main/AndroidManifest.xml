@@ -34,6 +34,9 @@
             android:name=".ui.commitdetails.CommitDetailsActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.diff.DiffViewerActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.git.GitActivity"
             android:exported="false"
             android:screenOrientation="portrait"

@@ -111,7 +111,8 @@
 <!--    Activity: Git-->
     <string name="vcode_git_workspace">Git Workspace</string>
 
-<!--    Bottom Sheet: Diff Viewer-->
+<!--    Activity: Diff Viewer-->
+    <string name="vcode_diff_viewer">Diff Viewer</string>
     <string name="vcode_go_to_file">Go to file</string>
 
     <!--    Bottom Sheet: Git Action Confirmed-->

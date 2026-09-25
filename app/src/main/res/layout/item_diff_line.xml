@@ -12,10 +12,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
-        android:gravity="end|center_vertical"
-        android:paddingStart="0dp"
-        android:paddingEnd="8dp"
-        android:textColor="@color/vcode_text_hint"
-        android:textSize="11sp"
-        tools:text="10" />
+        android:gravity="start|center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="16dp"
+        android:textColor="@color/vcode_text_secondary"
+        android:textSize="12sp"
+        tools:text="+ import java.util.List;" />
 </LinearLayout>

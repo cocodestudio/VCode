@@ -22,7 +22,7 @@ import com.cocode.vcode.ide.git.adapters.GitFilesAdapter;
 import com.cocode.vcode.ide.git.model.GitFileItem;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
-import com.cocode.vcode.ide.ui.sheets.git.DiffViewerBottomSheet;
+import com.cocode.vcode.ide.ui.diff.DiffViewerActivity;
 import com.cocode.vcode.ide.ui.sheets.git.GitAuthorInfoBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
@@ -219,8 +219,13 @@ public class GitChangesFragment extends Fragment implements GitFilesAdapter.GitF
     @Override
     public void onFileClick(GitFileItem item) {
         // Launch a visual diff viewer for the selected modified file
-        DiffViewerBottomSheet sheet = DiffViewerBottomSheet.newInstance(item);
-        sheet.show(getChildFragmentManager(), "DiffViewer");
+        String projectPath = null;
+        if (viewModel.getRepository() != null && viewModel.getRepository().getRepoDir() != null) {
+            projectPath = viewModel.getRepository().getRepoDir().getAbsolutePath();
+        } else if (getActivity() != null && getActivity().getIntent() != null) {
+            projectPath = getActivity().getIntent().getStringExtra("project_path");
+        }
+        startActivity(DiffViewerActivity.newIntent(requireContext(), projectPath, item));
     }
 
     @Override
