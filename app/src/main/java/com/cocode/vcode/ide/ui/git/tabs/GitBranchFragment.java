@@ -22,6 +22,7 @@ import com.cocode.vcode.ide.ui.dialogs.MergeConfirmDialog;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.files.DeleteBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.RenameBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitAuthorInfoBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitFetchReviewBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitOptionsBottomSheet;
@@ -185,7 +186,7 @@ public class GitBranchFragment extends Fragment implements BranchAdapter.BranchL
                         requireContext(),
                         item.getName(),
                         currentActiveHead,
-                        () -> viewModel.mergeBranch(item.getName())
+                        () -> performMerge(item.getName())
                 );
             });
             optionsSheet.show(getChildFragmentManager(), "BranchOptionsSheet");
@@ -209,7 +210,7 @@ public class GitBranchFragment extends Fragment implements BranchAdapter.BranchL
                         requireContext(),
                         item.getName(),
                         currentActiveHeadBranch,
-                        () -> viewModel.mergeBranch(item.getName())
+                        () -> performMerge(item.getName())
                 );
             });
         }
@@ -232,8 +233,26 @@ public class GitBranchFragment extends Fragment implements BranchAdapter.BranchL
                 viewModel.getRepository(),
                 activeLocal,
                 remoteBranchName,
-                () -> viewModel.mergeBranch(remoteBranchName)
+                () -> performMerge(remoteBranchName)
         );
+    }
+
+    /**
+     * Checks if author details are configured before performing a merge.
+     * If neither GitHub credentials nor local author metadata exists, prompts with GitAuthorInfoBottomSheet.
+     */
+    private void performMerge(String branchName) {
+        if (viewModel.shouldPromptForAuthor()) {
+            GitAuthorInfoBottomSheet sheet = GitAuthorInfoBottomSheet.newInstance(
+                    "", "", getString(R.string.vcode_btn_save_and_continue));
+            sheet.setListener((name, email) -> {
+                viewModel.saveLocalAuthor(name, email);
+                viewModel.mergeBranch(branchName);
+            });
+            sheet.show(getChildFragmentManager(), "GitAuthorInfoBottomSheet");
+        } else {
+            viewModel.mergeBranch(branchName);
+        }
     }
 
     /**

@@ -26,6 +26,7 @@ import com.cocode.vcode.ide.ui.dialogs.GitErrorDialog;
 import com.cocode.vcode.ide.ui.git.GitActivity;
 import com.cocode.vcode.ide.ui.git.GitViewModel;
 import com.cocode.vcode.ide.ui.sheets.git.CreateGitHubRepoBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.git.GitAuthorInfoBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitConflictBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitFetchReviewBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.git.GitHubLoginBottomSheet;
@@ -365,6 +366,7 @@ public class GitRemoteFragment extends Fragment {
                     credentialStore.saveUsername(context, username);
                     credentialStore.saveToken(context, token);
                 }
+                viewModel.syncAuthorConfig();
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     try {
@@ -398,6 +400,17 @@ public class GitRemoteFragment extends Fragment {
         if (!credentialStore.hasCredentials(context)) {
             Toast.makeText(context, getString(R.string.vcode_connect_github_to_action, operation), Toast.LENGTH_SHORT).show();
             openGitHubLoginSheet();
+            return;
+        }
+
+        if ("pull".equals(operation) && viewModel.shouldPromptForAuthor()) {
+            GitAuthorInfoBottomSheet sheet = GitAuthorInfoBottomSheet.newInstance(
+                    "", "", getString(R.string.vcode_btn_save_and_continue));
+            sheet.setListener((name, email) -> {
+                viewModel.saveLocalAuthor(name, email);
+                executeRemoteOperation(operation);
+            });
+            sheet.show(getChildFragmentManager(), "GitAuthorInfoBottomSheet");
             return;
         }
 
@@ -438,7 +451,10 @@ public class GitRemoteFragment extends Fragment {
                     resultSummary = "Push completed successfully.";
                     comparison = null;
                 } else if (operation.equals("pull")) {
-                    resultSummary = viewModel.getRepository().pull(url, finalToken, branch);
+                    GitViewModel.AuthorInfo author = viewModel.resolveAuthor();
+                    String authorName = author != null ? author.getName() : null;
+                    String authorEmail = author != null ? author.getEmail() : null;
+                    resultSummary = viewModel.getRepository().pull(url, finalToken, branch, authorName, authorEmail);
                     comparison = null;
                 } else {
                     resultSummary = viewModel.getRepository().fetch(url, finalToken);

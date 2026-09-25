@@ -207,4 +207,53 @@ public class GitRepositoryTest {
         }
         assertTrue("Should have caught GitCheckoutConflictException on checkout conflict", caughtCheckoutConflict);
     }
+
+    @Test
+    public void testMergeBranchUsesConfiguredAuthorInsteadOfRoot() throws Exception {
+        File repoDir = tempFolder.newFolder("test-repo-merge-author");
+        gitRepository.setConfiguredDefaultBranch("master");
+        gitRepository.openRepository(repoDir);
+
+        File f1 = new File(repoDir, "file1.txt");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("line 1\n");
+        }
+        gitRepository.stageFile("file1.txt");
+        org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir);
+        git.commit().setMessage("Initial commit").call();
+
+        // Create feature branch and add a commit
+        gitRepository.createBranch("feature", "master");
+        gitRepository.checkoutBranch("feature");
+        File f2 = new File(repoDir, "file2.txt");
+        try (FileWriter fw = new FileWriter(f2)) {
+            fw.write("feature work\n");
+        }
+        gitRepository.stageFile("file2.txt");
+        git.commit().setMessage("Feature work commit").call();
+
+        // Checkout master and add another commit to cause a 3-way merge commit (not fast-forward)
+        gitRepository.checkoutBranch("master");
+        File f3 = new File(repoDir, "file3.txt");
+        try (FileWriter fw = new FileWriter(f3)) {
+            fw.write("master independent work\n");
+        }
+        gitRepository.stageFile("file3.txt");
+        git.commit().setMessage("Master independent work commit").call();
+
+        // Now merge feature branch with explicit author
+        String testAuthorName = "Dev User";
+        String testAuthorEmail = "dev@example.com";
+        gitRepository.mergeBranch("feature", testAuthorName, testAuthorEmail);
+
+        // Verify the latest commit on master is the merge commit, and author/committer is Dev User, not root!
+        Iterable<org.eclipse.jgit.revwalk.RevCommit> logs = git.log().setMaxCount(1).call();
+        org.eclipse.jgit.revwalk.RevCommit latestCommit = logs.iterator().next();
+
+        assertEquals(2, latestCommit.getParentCount()); // It is a merge commit
+        assertEquals("Dev User", latestCommit.getAuthorIdent().getName());
+        assertEquals("dev@example.com", latestCommit.getAuthorIdent().getEmailAddress());
+        assertEquals("Dev User", latestCommit.getCommitterIdent().getName());
+        assertEquals("dev@example.com", latestCommit.getCommitterIdent().getEmailAddress());
+    }
 }

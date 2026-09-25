@@ -468,6 +468,30 @@ public class GitRepository {
     }
 
     /**
+     * Ensures that git user name and email are configured in the repository's configuration.
+     * This prevents JGit from defaulting to system 'root' and 'root@localhost' during merges, commits, or pulls.
+     */
+    public void ensureUserConfig(String name, String email) throws Exception {
+        if (git != null && git.getRepository() != null && name != null && !name.trim().isEmpty() && email != null && !email.trim().isEmpty()) {
+            StoredConfig config = git.getRepository().getConfig();
+            boolean changed = false;
+            String currentName = config.getString("user", null, "name");
+            if (!name.trim().equals(currentName)) {
+                config.setString("user", null, "name", name.trim());
+                changed = true;
+            }
+            String currentEmail = config.getString("user", null, "email");
+            if (!email.trim().equals(currentEmail)) {
+                config.setString("user", null, "email", email.trim());
+                changed = true;
+            }
+            if (changed) {
+                config.save();
+            }
+        }
+    }
+
+    /**
      * Evaluates references maps definitions parameters to fetch lists cataloging working branches nodes.
      *
      * @param remote True if the command layout loop should scan external remote tracking streams exclusively.
@@ -558,10 +582,7 @@ public class GitRepository {
         ObjectId commitId = git.getRepository().resolve(commitSha);
         if (commitId == null) throw new IllegalArgumentException("Commit SHA not found");
 
-        StoredConfig config = git.getRepository().getConfig();
-        config.setString("user", null, "name", authorName);
-        config.setString("user", null, "email", authorEmail);
-        config.save();
+        ensureUserConfig(authorName, authorEmail);
 
         org.eclipse.jgit.api.RevertCommand revert = git.revert().include(commitId);
         RevCommit result = revert.call();
@@ -578,6 +599,17 @@ public class GitRepository {
      * Merges structural modifications streams running out from separate branches sources into the active workspace focus track.
      */
     public void mergeBranch(String branchName) throws Exception {
+        mergeBranch(branchName, null, null);
+    }
+
+    /**
+     * Merges structural modifications streams running out from separate branches sources into the active workspace focus track.
+     * Synchronizes author details to ensure the merge commit uses proper attribution instead of 'root'.
+     */
+    public void mergeBranch(String branchName, String authorName, String authorEmail) throws Exception {
+        if (authorName != null && !authorName.isEmpty() && authorEmail != null && !authorEmail.isEmpty()) {
+            ensureUserConfig(authorName, authorEmail);
+        }
         ObjectId branchId = git.getRepository().resolve(branchName);
         if (branchId == null) throw new IllegalArgumentException("Branch reference not found");
         org.eclipse.jgit.api.MergeResult result;
@@ -671,6 +703,16 @@ public class GitRepository {
      * Pulls and returns a human-readable summary. Throws GitConflictException on conflicts.
      */
     public String pull(String remoteUrl, String pat, String branch) throws Exception {
+        return pull(remoteUrl, pat, branch, null, null);
+    }
+
+    /**
+     * Pulls and returns a human-readable summary with author attribution configured.
+     */
+    public String pull(String remoteUrl, String pat, String branch, String authorName, String authorEmail) throws Exception {
+        if (authorName != null && !authorName.isEmpty() && authorEmail != null && !authorEmail.isEmpty()) {
+            ensureUserConfig(authorName, authorEmail);
+        }
         ensureOriginConfigured(remoteUrl);
 
         org.eclipse.jgit.api.PullCommand pullCommand = git.pull()
