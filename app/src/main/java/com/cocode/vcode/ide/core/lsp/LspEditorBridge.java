@@ -487,20 +487,17 @@ public final class LspEditorBridge {
         }
 
         // On deletion, only trigger completions if the popup was already active
-        if (editor.isDeletingText()) {
-            if (!editor.wasAutoCompleteVisibleBeforeDelete()) {
-                mainHandler.removeCallbacks(completionRunnable);
-                editor.dismissAutoCompletePopup();
-                return;
-            }
-        }
-
-        // Reschedule debounced completion
-        mainHandler.removeCallbacks(completionRunnable);
-        if (!editor.isInsertingCompletion()) {
-            mainHandler.postDelayed(completionRunnable, COMPLETION_DEBOUNCE_MS);
-        } else {
+        if (editor.isDeletingText() && !editor.wasAutoCompleteVisibleBeforeDelete()) {
+            mainHandler.removeCallbacks(completionRunnable);
             editor.dismissAutoCompletePopup();
+        } else {
+            // Reschedule debounced completion
+            mainHandler.removeCallbacks(completionRunnable);
+            if (!editor.isInsertingCompletion()) {
+                mainHandler.postDelayed(completionRunnable, COMPLETION_DEBOUNCE_MS);
+            } else {
+                editor.dismissAutoCompletePopup();
+            }
         }
 
         mainHandler.removeCallbacks(signatureHelpRunnable);
@@ -932,6 +929,7 @@ public final class LspEditorBridge {
         LspPosition pos = cursorPosition();
         final int capturedVersion = docVersion.get();
         final boolean isTextChange = lastActionWasTextChange;
+        final boolean isAlreadyVisible = editor.isSignatureHintVisible();
 
         LspClientManager.getInstance().requestSignatureHelp(doc, pos, new LspCallback<LspSignatureHelp>() {
             @Override
@@ -940,7 +938,7 @@ public final class LspEditorBridge {
                 if (result != null) {
                     int flatOffset = getCursorFlatOffset();
                     if (com.cocode.vcode.ide.core.lsp.servers.JsSignatureParser.shouldTriggerSignatureHelp(
-                            doc.text, result.openParenOffset, flatOffset, isTextChange)) {
+                            doc.text, result.openParenOffset, flatOffset, isTextChange, isAlreadyVisible)) {
                         editor.showSignatureHint(result);
                         return;
                     }

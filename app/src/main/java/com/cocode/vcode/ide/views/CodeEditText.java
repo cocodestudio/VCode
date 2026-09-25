@@ -2505,7 +2505,7 @@ public class CodeEditText extends View {
     }
 
     public boolean isSignatureHintVisible() {
-        return signatureHintPopup != null && signatureHintPopup.isShowing();
+        return (signatureHintPopup != null && signatureHintPopup.isShowing()) || pendingSignatureHelp != null;
     }
 
     public boolean isAutoCompleteVisible() {

@@ -564,5 +564,31 @@ public class JsSignatureParserTest {
         assertFalse("Signature help for console.log MUST be suppressed inside template interpolation ${key}",
                 JsSignatureParser.shouldTriggerSignatureHelp(code3, logParen3, cursor3, true));
     }
+
+    @Test
+    public void testShouldTriggerSignatureHelp_alreadyVisibleMaintainsActiveOnDeletionAndEditing() {
+        // Suppose user had foo(param1, param2, param3) and deletes param3 -> foo(param1, param2)
+        String code = "function foo(param1, param2) {\n return param1 + param2;\n}";
+        int openParen = code.indexOf('(');
+        int cursorAtParam2 = code.indexOf("param2") + "param2".length();
+
+        // When popup is already visible, deleting or editing parameters should KEEP signature help active
+        assertTrue("Popup already visible should stay active when editing/deleting parameters",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, cursorAtParam2, true, true));
+
+        // When moving cursor between parameters while popup is visible (e.g. cursor at param1)
+        int cursorAtParam1 = code.indexOf("param1") + "param1".length();
+        assertTrue("Popup already visible should stay active when navigating between parameters",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, cursorAtParam1, false, true));
+
+        // When popup is NOT visible, moving cursor to param1 should NOT trigger popup (non-intrusive)
+        assertFalse("Popup NOT visible should not trigger on cursor navigation into existing argument",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, cursorAtParam1, false, false));
+
+        // When cursor moves outside the call (e.g. into the function body after '{'), it must dismiss
+        int cursorInsideBody = code.indexOf("return");
+        assertFalse("Popup MUST dismiss when cursor moves outside the parameter list",
+                JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, cursorInsideBody, true, true));
+    }
 }
 

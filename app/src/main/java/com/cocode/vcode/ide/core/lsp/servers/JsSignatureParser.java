@@ -961,6 +961,10 @@ public class JsSignatureParser {
      * - The cursor is in a template string outside of a callable expression.
      */
     public static boolean shouldTriggerSignatureHelp(String text, int openParen, int cursorOffset, boolean isTextChange) {
+        return shouldTriggerSignatureHelp(text, openParen, cursorOffset, isTextChange, false);
+    }
+
+    public static boolean shouldTriggerSignatureHelp(String text, int openParen, int cursorOffset, boolean isTextChange, boolean isAlreadyVisible) {
         if (openParen < 0) {
             openParen = findActiveCallOpenParen(text, cursorOffset);
         }
@@ -1122,6 +1126,12 @@ public class JsSignatureParser {
 
         if (!isEmptyQuotes && (inSingle || inDouble)) {
             return false;
+        }
+
+        // Condition 3: If popup is already visible and cursor remains inside the active call,
+        // keep it visible and update parameter highlight/signature in real time across parameter edits/deletions.
+        if (isAlreadyVisible && isCursorInsideCall(text, openParen, cursorOffset)) {
+            return true;
         }
 
         // Condition 1: No entered argument (empty argument slot, e.g. foo(|) or foo(a, |) or foo("|"))
