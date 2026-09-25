@@ -77,36 +77,51 @@
         app:indicatorColor="?attr/colorPrimary"
         app:trackColor="@android:color/transparent" />
 
-    <!-- Tab / Filter Controls -->
+    <!-- Pill-Shaped Tab Controls -->
     <LinearLayout
+        android:id="@+id/layout_tab_pill_track"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="@dimen/vcode_app_gap_horizontal"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="8dp"
-        android:orientation="horizontal">
+        android:background="@drawable/vcode_bg_pill_tab_track"
+        android:orientation="horizontal"
+        android:padding="3dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_tab_commits"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Material3.Button"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="2dp"
             android:layout_weight="1"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            app:cornerRadius="999dp"
+            app:elevation="0dp"
+            app:icon="@drawable/ic_rotate_left"
+            app:iconGravity="textStart"
+            app:iconPadding="6dp"
+            app:iconSize="14dp"
             android:text="@string/vcode_tab_commits_count"
             android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_tab_files"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="2dp"
             android:layout_weight="1"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            app:cornerRadius="999dp"
+            app:elevation="0dp"
+            app:icon="@drawable/ic_file_lines"
+            app:iconGravity="textStart"
+            app:iconPadding="6dp"
+            app:iconSize="14dp"
             android:text="@string/vcode_tab_diff_count"
             android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
     </LinearLayout>

@@ -4,7 +4,10 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -91,6 +94,7 @@ public class GitFetchReviewBottomSheet extends BaseBottomSheetDialogFragment
         setupTypefaces();
         setupRecyclerViews();
         setupListeners();
+        updateTabState(isFilesTabActive);
         loadComparisonData();
     }
 
@@ -136,17 +140,49 @@ public class GitFetchReviewBottomSheet extends BaseBottomSheetDialogFragment
 
     private void switchTab(boolean filesTab) {
         isFilesTabActive = filesTab;
+        updateTabState(filesTab);
+    }
+
+    private void updateTabState(boolean filesTab) {
+        Context context = getContext();
+        if (context == null || binding == null) return;
+
+        int activeBg = getThemeColor(com.google.android.material.R.attr.colorPrimaryContainer);
+        int activeText = getThemeColor(com.google.android.material.R.attr.colorOnPrimaryContainer);
+        int inactiveBg = Color.TRANSPARENT;
+        int inactiveText = getThemeColor(com.google.android.material.R.attr.colorOnSurfaceVariant);
+
         if (filesTab) {
             binding.containerCommits.setVisibility(View.GONE);
             binding.containerFiles.setVisibility(View.VISIBLE);
-            binding.btnTabCommits.setStrokeWidth(1);
-            binding.btnTabFiles.setStrokeWidth(0);
+
+            binding.btnTabFiles.setBackgroundTintList(ColorStateList.valueOf(activeBg));
+            binding.btnTabFiles.setTextColor(activeText);
+            binding.btnTabFiles.setIconTint(ColorStateList.valueOf(activeText));
+
+            binding.btnTabCommits.setBackgroundTintList(ColorStateList.valueOf(inactiveBg));
+            binding.btnTabCommits.setTextColor(inactiveText);
+            binding.btnTabCommits.setIconTint(ColorStateList.valueOf(inactiveText));
         } else {
             binding.containerCommits.setVisibility(View.VISIBLE);
             binding.containerFiles.setVisibility(View.GONE);
-            binding.btnTabCommits.setStrokeWidth(0);
-            binding.btnTabFiles.setStrokeWidth(1);
+
+            binding.btnTabCommits.setBackgroundTintList(ColorStateList.valueOf(activeBg));
+            binding.btnTabCommits.setTextColor(activeText);
+            binding.btnTabCommits.setIconTint(ColorStateList.valueOf(activeText));
+
+            binding.btnTabFiles.setBackgroundTintList(ColorStateList.valueOf(inactiveBg));
+            binding.btnTabFiles.setTextColor(inactiveText);
+            binding.btnTabFiles.setIconTint(ColorStateList.valueOf(inactiveText));
         }
+    }
+
+    private int getThemeColor(int attrRes) {
+        Context context = getContext();
+        if (context == null) return 0;
+        TypedValue typedValue = new TypedValue();
+        context.getTheme().resolveAttribute(attrRes, typedValue, true);
+        return typedValue.data;
     }
 
     private void loadComparisonData() {
