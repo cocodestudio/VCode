@@ -463,6 +463,7 @@ public class GitRemoteFragment extends Fragment {
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (binding != null) {
+                        binding.progressIndicator.setVisibility(View.GONE);
                         String displayStatus = resultSummary;
                         if (operation.equals("fetch")) {
                             if (comparison != null) {
