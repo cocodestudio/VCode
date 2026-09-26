@@ -260,6 +260,7 @@ public class GitFetchReviewBottomSheet extends BaseBottomSheetDialogFragment
         inspectIntent.putExtra("commit_msg", item.getMessage());
         inspectIntent.putExtra("commit_author", item.getAuthor());
         inspectIntent.putExtra("commit_time", item.getTimestamp());
+        inspectIntent.putExtra(CommitDetailsActivity.EXTRA_READ_ONLY, true);
         startActivity(inspectIntent);
     }
 

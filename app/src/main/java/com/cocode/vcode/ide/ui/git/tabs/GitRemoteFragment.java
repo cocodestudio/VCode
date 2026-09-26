@@ -463,12 +463,22 @@ public class GitRemoteFragment extends Fragment {
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (binding != null) {
-                        binding.progressIndicator.setVisibility(View.GONE);
-                        setHUDStatus(resultSummary, R.color.vcode_accent_primary);
-                        toggleFormInputState(true);
-                        viewModel.refreshAll();
-
+                        String displayStatus = resultSummary;
                         if (operation.equals("fetch")) {
+                            if (comparison != null) {
+                                String syncSummary;
+                                if (comparison.getBehindCount() > 0 && comparison.getAheadCount() > 0) {
+                                    syncSummary = getString(R.string.vcode_sync_status_diverged, comparison.getBehindCount(), comparison.getAheadCount());
+                                } else if (comparison.getBehindCount() > 0) {
+                                    syncSummary = getString(R.string.vcode_sync_behind_pull_needed, comparison.getBehindCount());
+                                } else if (comparison.getAheadCount() > 0) {
+                                    syncSummary = getString(R.string.vcode_sync_ahead_push_needed, comparison.getAheadCount());
+                                } else {
+                                    syncSummary = getString(R.string.vcode_sync_up_to_date);
+                                }
+                                displayStatus = resultSummary + "\n" + syncSummary;
+                            }
+
                             if (comparison != null && comparison.getBehindCount() > 0) {
                                 binding.btnStatusReviewAction.setVisibility(View.VISIBLE);
                                 binding.btnStatusReviewAction.setText(getString(R.string.vcode_review_incoming_changes, comparison.getBehindCount()));
@@ -480,6 +490,10 @@ public class GitRemoteFragment extends Fragment {
                         } else {
                             binding.btnStatusReviewAction.setVisibility(View.GONE);
                         }
+
+                        setHUDStatus(displayStatus, R.color.vcode_accent_primary);
+                        toggleFormInputState(true);
+                        viewModel.refreshAll();
                     }
                 });
 

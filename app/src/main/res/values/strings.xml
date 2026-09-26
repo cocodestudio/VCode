@@ -319,9 +319,11 @@
     <string name="vcode_incoming_commits_full">%1$d incoming commit(s)</string>
     <string name="vcode_outgoing_commits_full">%1$d outgoing commit(s)</string>
     <string name="vcode_sync_status_diverged">%1$d incoming • %2$d outgoing</string>
+    <string name="vcode_sync_behind_pull_needed">Behind: %1$d commit(s) (Pull needed)</string>
+    <string name="vcode_sync_ahead_push_needed">Ahead: %1$d commit(s) (Push needed)</string>
     <string name="vcode_sync_up_to_date">Branch is up to date</string>
     <string name="vcode_tab_commits_count">Commits (%1$d)</string>
-    <string name="vcode_tab_diff_count">Files Changed (%1$d)</string>
+    <string name="vcode_tab_diff_count">Files (%1$d)</string>
     <string name="vcode_no_incoming_commits">No Incoming Commits</string>
     <string name="vcode_no_incoming_commits_desc">Your local branch has all commits from %1$s.</string>
     <string name="vcode_no_diff_files">No File Differences</string>
