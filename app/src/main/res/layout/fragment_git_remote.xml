@@ -257,6 +257,17 @@
                     app:elevation="2dp" />
             </LinearLayout>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_review_remote"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="@string/vcode_review_remote_changes"
+                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                app:icon="@drawable/ic_code_branch"
+                app:iconGravity="textStart" />
+
         </LinearLayout>
     </ScrollView>
 
@@ -344,6 +355,19 @@
             android:text="@string/vcode_ready_for_report"
             android:textAppearance="@style/TextAppearance.Material3.BodySmall"
             android:textColor="?attr/colorPrimary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_status_review_action"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone"
+            app:icon="@drawable/ic_code_branch"
+            android:text="@string/vcode_review_remote_changes"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

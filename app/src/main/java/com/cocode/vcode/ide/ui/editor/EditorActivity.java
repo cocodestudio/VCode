@@ -208,6 +208,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     } else {
                         viewModel.openFile(file);
                     }
+                    viewModel.validateOpenFilesWithDisk();
                 }
             }
         }
@@ -471,6 +472,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             }
             case OPEN_GIT: {
                 if (viewModel.getProjectRoot() != null) {
+                    saveCurrentEditorState();
                     Intent navToGit = new Intent(this, GitActivity.class);
                     navToGit.putExtra("project_path", viewModel.getProjectRoot().getAbsolutePath());
                     navToGit.putExtra("project_name", getIntent().getStringExtra(EXTRA_PROJECT_NAME));
@@ -773,6 +775,38 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 break;
                             }
                         }
+                    }
+                }
+            }
+        });
+
+        viewModel.getExternallyChangedFiles().observe(this, modifiedFiles -> {
+            if (modifiedFiles == null || modifiedFiles.isEmpty()) return;
+            List<EditorFile> files = viewModel.getOpenFiles().getValue();
+            if (files == null || files.isEmpty()) return;
+
+            for (File f : modifiedFiles) {
+                if (f == null) continue;
+                for (EditorFile ef : files) {
+                    if (ef.getFile() != null && isSameFile(f, ef.getFile())) {
+                        boolean isActive = false;
+                        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+                            if (cfv.getCodeEditor() != null && isSameFile(f, cfv.getCodeEditor().getCurrentFile())) {
+                                isActive = true;
+                                if (ef.getContent() != null) {
+                                    cfv.reloadExternalContent(ef.getContent());
+                                }
+                            }
+                        }
+                        if (!isActive) {
+                            // Inactive tab: invalidate cached viewer in ViewerManager so it never
+                            // retains or flushes stale text buffers back to disk.
+                            if (viewerManager != null) {
+                                viewerManager.destroyViewer(ef.getId());
+                            }
+                        }
+                        break;
                     }
                 }
             }
@@ -1088,15 +1122,19 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     private void saveCurrentEditorState() {
         if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+            cfv.flushContentToViewModel();
+            if (cfv.isPositionRestoring()) {
+                return;
+            }
         }
         CodeEditText codeEditText = getActiveCodeEditor();
-        if (codeEditText != null && codeEditText.getTag() != null) {
+        if (codeEditText != null && !codeEditText.isSettingText()) {
             List<EditorFile> files = viewModel.getOpenFiles().getValue();
             Integer activeIndex = viewModel.getActiveTabIndex().getValue();
             if (files != null && activeIndex != null && activeIndex >= 0 && activeIndex < files.size()) {
                 EditorFile activeFile = files.get(activeIndex);
-                if (!activeFile.isBinaryAsset()) {
+                if (!activeFile.isBinaryAsset() && codeEditText.getTag() != null && codeEditText.getTag().equals(activeFile.getId())) {
                     viewModel.updateActiveFileState(codeEditText.getSelectionStart(), codeEditText.getScrollY());
                 }
             }

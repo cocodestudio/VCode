@@ -586,14 +586,9 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
          * Converts an absolute path to a project-relative path with normalized separators.
          */
         private String getRelativePath(String absPath) {
-            if (absPath.startsWith(adapter.rootPath)) {
-                String rel = absPath.substring(adapter.rootPath.length());
-                if (rel.startsWith(File.separator)) {
-                    rel = rel.substring(1);
-                }
-                return rel.replace('\\', '/'); // Standardize for Git and internal maps
-            }
-            return absPath;
+            if (absPath == null) return "";
+            if (adapter.rootPath == null) return absPath;
+            return FileUtils.getRelativePath(new File(adapter.rootPath), new File(absPath));
         }
     }
 }

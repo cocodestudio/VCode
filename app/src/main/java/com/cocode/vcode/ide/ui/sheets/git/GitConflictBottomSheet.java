@@ -106,6 +106,9 @@ public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
                     repository.checkoutConflictFile(path, ours);
                     repository.stageFile(path);
                 }
+                if (repository.getRepoDir() != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(repository.getRepoDir());
+                }
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     String version = getString(ours ? R.string.vcode_version_local : R.string.vcode_version_remote);
                     if (isAdded()) Toast.makeText(requireContext(),
@@ -131,6 +134,9 @@ public class GitConflictBottomSheet extends BaseBottomSheetDialogFragment {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.hardReset("ORIG_HEAD");
+                if (repository.getRepoDir() != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(repository.getRepoDir());
+                }
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isAdded())
                         Toast.makeText(requireContext(), R.string.vcode_merge_aborted_repository_restored_to, Toast.LENGTH_SHORT).show();

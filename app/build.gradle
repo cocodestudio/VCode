@@ -10,8 +10,8 @@ android {
         applicationId "com.cocode.vcode.ide"
         minSdk 23
         targetSdk 36
-        versionCode 11
-        versionName "4.4.6"
+        versionCode 12
+        versionName "5.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

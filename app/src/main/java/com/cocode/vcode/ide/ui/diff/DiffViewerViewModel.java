@@ -43,13 +43,22 @@ public class DiffViewerViewModel extends AndroidViewModel {
 
     /**
      * Loads the unified diff for either a workspace modification or a specific historical commit.
+     */
+    public void loadDiff(String projectPath, String filePath, boolean isStaged, String commitSha) {
+        loadDiff(projectPath, filePath, isStaged, commitSha, null, null);
+    }
+
+    /**
+     * Loads the unified diff for a workspace modification, commit delta, or ref-to-ref branch comparison.
      *
      * @param projectPath The root directory of the Git project.
      * @param filePath    The relative path of the file to diff.
      * @param isStaged    True if checking staged workspace changes.
-     * @param commitSha   Commit SHA if inspecting a historical commit; null/empty for workspace diffs.
+     * @param commitSha   Commit SHA if inspecting a historical commit; null/empty otherwise.
+     * @param oldRef      Baseline reference (e.g. HEAD, refs/heads/main) for ref-to-ref comparison.
+     * @param newRef      Target reference (e.g. refs/remotes/origin/main) for ref-to-ref comparison.
      */
-    public void loadDiff(String projectPath, String filePath, boolean isStaged, String commitSha) {
+    public void loadDiff(String projectPath, String filePath, boolean isStaged, String commitSha, String oldRef, String newRef) {
         if (projectPath == null || filePath == null) {
             errorMessage.setValue(getApplication().getString(R.string.vcode_failed_to_load_diff));
             return;
@@ -62,7 +71,9 @@ public class DiffViewerViewModel extends AndroidViewModel {
             try {
                 repository.openRepository(new File(projectPath));
                 String diff;
-                if (commitSha != null && !commitSha.trim().isEmpty()) {
+                if (oldRef != null && !oldRef.trim().isEmpty() && newRef != null && !newRef.trim().isEmpty()) {
+                    diff = repository.getDiffBetweenRefsForFile(oldRef.trim(), newRef.trim(), filePath);
+                } else if (commitSha != null && !commitSha.trim().isEmpty()) {
                     diff = repository.getCommitFileDiff(commitSha.trim(), filePath);
                 } else {
                     diff = repository.getFileDiff(filePath, isStaged);

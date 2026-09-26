@@ -2897,7 +2897,7 @@ public class CodeEditText extends View {
     }
 
     private void dispatchContentChanged() {
-        if (isApplyingHighlight || isUndoRedoActive || isSettingText) return;
+        if (isApplyingHighlight || isUndoRedoActive || isSettingText || isProgrammaticChange) return;
         for (OnContentChangeListener listener : contentChangeListeners) {
             listener.onContentChanged();
         }
@@ -3076,6 +3076,58 @@ public class CodeEditText extends View {
             scrollTo(oldScrollX, oldScrollY);
             post(() -> scrollTo(oldScrollX, oldScrollY));
             dispatchContentChanged();
+        } finally {
+            isProgrammaticChange = false;
+        }
+    }
+
+    /**
+     * Reloads external disk content cleanly into the editor in-place (e.g. from Git revert,
+     * pull, checkout, or external disk sync), preserving cursor and viewport scroll position,
+     * resetting the undo baseline, and strictly suppressing dirty listener events.
+     */
+    public void reloadExternalContent(String newContent) {
+        if (newContent == null) return;
+        String currentText = content.getText();
+        if (currentText.equals(newContent)) return;
+
+        ContentPosition oldCursor = cursor;
+        int oldFlatOffset = getSelectionStart();
+        int oldScrollX = getScrollX();
+        int oldScrollY = getScrollY();
+
+        dismissAutoCompletePopup();
+        mainHandler.removeCallbacks(autoCompleteRunnable);
+        isProgrammaticChange = true;
+        try {
+            int lineCount = content.lineCount();
+            int lastLine = lineCount > 0 ? lineCount - 1 : 0;
+            int lastCol = lineCount > 0 ? content.lineLength(lastLine) : 0;
+
+            content.replace(0, 0, lastLine, lastCol, newContent);
+
+            if (oldCursor != null && oldCursor.line < content.lineCount()) {
+                int lineLen = content.lineLength(oldCursor.line);
+                cursor = new ContentPosition(oldCursor.line, Math.min(oldCursor.column, lineLen));
+            } else {
+                cursor = content.positionAt(Math.min(oldFlatOffset, content.totalLength()));
+            }
+            selectionAnchor = null;
+            longestLineLength = content.longestLineLength();
+            longestLineDirty = false;
+            dirtyTracker.reset();
+            dirtyTracker.addEdit(0, 0, content.totalLength());
+            undoStack.reset();
+
+            rebuildVisualLayout();
+            cursorVisible = true;
+            scheduleBlink();
+            requestLayout();
+            invalidate();
+            scheduleHighlight();
+            notifySelectionChanged();
+            scrollTo(oldScrollX, oldScrollY);
+            post(() -> scrollTo(oldScrollX, oldScrollY));
         } finally {
             isProgrammaticChange = false;
         }

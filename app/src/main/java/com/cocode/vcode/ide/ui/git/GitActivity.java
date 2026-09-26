@@ -124,6 +124,15 @@ public class GitActivity extends BaseActivity {
     }
 
     /**
+     * Programmatically selects a tab in the ViewPager (e.g. 0 for Changes, 3 for Remote).
+     */
+    public void selectTab(int position) {
+        if (binding != null && binding.viewPager != null) {
+            binding.viewPager.setCurrentItem(position, true);
+        }
+    }
+
+    /**
      * Connects reactive data streams from the ViewModel to update the Activity's UI.
      */
     private void setupReactiveObservers() {
@@ -147,12 +156,16 @@ public class GitActivity extends BaseActivity {
             }
         });
 
-        // Surface errors via custom VCodeSnackbar with an integrated retry mechanism
+        // Surface errors via custom GitErrorDialog
         viewModel.getErrorMessage().observe(this, errorText -> {
             if (errorText != null && !errorText.trim().isEmpty()) {
-                VCodeSnackbar.error(binding.getRoot(), errorText)
-                        .setAction(R.string.vcode_retry, v -> viewModel.refreshAll())
-                        .show();
+                viewModel.clearErrorMessage();
+                com.cocode.vcode.ide.ui.dialogs.GitErrorDialog.showOperationalError(
+                        this,
+                        "git",
+                        new Exception(errorText),
+                        () -> selectTab(0)
+                );
             }
         });
     }

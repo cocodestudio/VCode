@@ -58,6 +58,7 @@ public class EditorViewModel extends ViewModel {
     private final MutableLiveData<AppSettings> settingsLiveData = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isEditorLoadingLiveData = new MutableLiveData<>(false);
     private final MutableLiveData<List<File>> refactoredFilesLiveData = new MutableLiveData<>();
+    private final MutableLiveData<List<File>> externallyChangedFilesLiveData = new MutableLiveData<>();
 
     /**
      * Maps repository-relative file paths to their current Git status (e.g., Modified, Untracked).
@@ -84,6 +85,14 @@ public class EditorViewModel extends ViewModel {
     private boolean skipDefaultFileOpen = false;
     private boolean isFromIntent = false;
 
+    private final com.cocode.vcode.ide.core.event.WorkspaceEventManager.WorkspaceChangeListener workspaceChangeListener =
+            changedRoot -> {
+                if (changedRoot == null || (projectRoot != null && changedRoot.getAbsolutePath().equals(projectRoot.getAbsolutePath()))) {
+                    validateOpenFilesWithDisk();
+                    refreshGitStatuses();
+                }
+            };
+
     public EditorViewModel(Context appContext, FileRepository fileRepo, ProjectStateRepository stateRepo, SettingsRepository settingsRepo, ProjectRepository projectRepo) {
         this.appContext = appContext != null ? appContext.getApplicationContext() : null;
         this.fileRepo = fileRepo;
@@ -91,6 +100,7 @@ public class EditorViewModel extends ViewModel {
         this.settingsRepo = settingsRepo;
         this.projectRepo = projectRepo;
         reloadSettings();
+        com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().addListener(workspaceChangeListener);
     }
 
     public void setSkipDefaultFileOpen(boolean skip) {
@@ -116,6 +126,10 @@ public class EditorViewModel extends ViewModel {
 
     public LiveData<List<File>> getRefactoredFiles() {
         return refactoredFilesLiveData;
+    }
+
+    public LiveData<List<File>> getExternallyChangedFiles() {
+        return externallyChangedFilesLiveData;
     }
 
     public LiveData<Integer> getActiveTabIndex() {
@@ -462,6 +476,9 @@ public class EditorViewModel extends ViewModel {
                 if (!fileOnDisk.exists()) {
                     missingPaths.add(fileOnDisk.getAbsolutePath());
                 } else if (!doc.isBinaryAsset()) {
+                    if (doc.isDirty()) {
+                        continue;
+                    }
                     long diskMod = fileOnDisk.lastModified();
                     long diskSize = fileOnDisk.length();
 
@@ -487,6 +504,7 @@ public class EditorViewModel extends ViewModel {
                     List<EditorFile> latestDocs = new java.util.ArrayList<>(getOpenFilesList());
                     boolean actuallyAltered = false;
                     int activeIndex = getActiveTabIndexValue();
+                    List<File> externallyModifiedFiles = new ArrayList<>();
 
                     java.util.Iterator<EditorFile> iterator = latestDocs.iterator();
                     int i = 0;
@@ -502,6 +520,9 @@ public class EditorViewModel extends ViewModel {
                                 doc.setContent(updatedContent.get(path));
                                 doc.markSaved();
                                 actuallyAltered = true;
+                                if (doc.getFile() != null) {
+                                    externallyModifiedFiles.add(doc.getFile());
+                                }
                             }
                             i++;
                         }
@@ -512,6 +533,9 @@ public class EditorViewModel extends ViewModel {
                         activeTabIndexLiveData.setValue(latestDocs.isEmpty() ? -1 : Math.min(activeIndex, latestDocs.size() - 1));
                         updateCurrentStateObject();
                         persistStateAsync();
+                        if (!externallyModifiedFiles.isEmpty()) {
+                            externallyChangedFilesLiveData.setValue(externallyModifiedFiles);
+                        }
                     }
                 });
             }
@@ -678,8 +702,16 @@ public class EditorViewModel extends ViewModel {
     public void openFile(File file, String sourceUriString) {
         List<EditorFile> currentDocs = getOpenFilesList();
         for (int i = 0; i < currentDocs.size(); i++) {
-            if (currentDocs.get(i).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+            EditorFile ef = currentDocs.get(i);
+            if (ef.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
                 activeTabIndexLiveData.setValue(i);
+                if (!ef.isDirty() && !ef.isVirtual() && !ef.isBinaryAsset() && file.exists()) {
+                    long diskMod = file.lastModified();
+                    long diskSize = file.length();
+                    if (ef.getLastDiskModified() == -1 || diskMod != ef.getLastDiskModified() || diskSize != ef.getLastDiskSize()) {
+                        validateOpenFilesWithDisk();
+                    }
+                }
                 return;
             }
         }
@@ -700,6 +732,13 @@ public class EditorViewModel extends ViewModel {
                 newFile.setContentLoaded(true);
                 if (sourceUriString != null) {
                     newFile.setSourceUriString(sourceUriString);
+                }
+
+                // Restore previous scroll and cursor if available in the state object
+                if (currentState != null) {
+                    String relativePath = getRelativePath(file);
+                    newFile.setScrollY(currentState.getScrollFor(relativePath));
+                    newFile.setCursorPosition(currentState.getCursorFor(relativePath));
                 }
 
                 ExecutorProvider.getInstance().runOnMain(() -> {
@@ -730,8 +769,16 @@ public class EditorViewModel extends ViewModel {
         List<EditorFile> currentDocs = getOpenFilesList();
         // Check if the file is already loaded in a tab
         for (int i = 0; i < currentDocs.size(); i++) {
-            if (currentDocs.get(i).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+            EditorFile ef = currentDocs.get(i);
+            if (ef.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
                 activeTabIndexLiveData.setValue(i);
+                if (!ef.isDirty() && !ef.isVirtual() && !ef.isBinaryAsset() && file.exists()) {
+                    long diskMod = file.lastModified();
+                    long diskSize = file.length();
+                    if (ef.getLastDiskModified() == -1 || diskMod != ef.getLastDiskModified() || diskSize != ef.getLastDiskSize()) {
+                        validateOpenFilesWithDisk();
+                    }
+                }
                 return;
             }
         }
@@ -1195,15 +1242,8 @@ public class EditorViewModel extends ViewModel {
      * Computes the relative path of a file with respect to the project root.
      */
     public String getRelativePath(File file) {
-        if (projectRoot == null) return file.getName();
-        String rootPath = projectRoot.getAbsolutePath();
-        String filePath = file.getAbsolutePath();
-        if (filePath.startsWith(rootPath)) {
-            String rel = filePath.substring(rootPath.length());
-            if (rel.startsWith(File.separator)) rel = rel.substring(1);
-            return rel;
-        }
-        return file.getName();
+        if (projectRoot == null) return file != null ? file.getName() : "";
+        return FileUtils.getRelativePath(projectRoot, file);
     }
 
     public void setPreviewState(String relativePath, boolean isPreview) {
@@ -1230,6 +1270,7 @@ public class EditorViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().removeListener(workspaceChangeListener);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(refreshFileTreeRunnable);

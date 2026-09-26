@@ -39,6 +39,8 @@ public class DiffViewerActivity extends BaseActivity {
     public static final String EXTRA_FILE_NAME = "extra_file_name";
     public static final String EXTRA_IS_STAGED = "extra_is_staged";
     public static final String EXTRA_COMMIT_SHA = "extra_commit_sha";
+    public static final String EXTRA_OLD_REF = "extra_old_ref";
+    public static final String EXTRA_NEW_REF = "extra_new_ref";
 
     private ActivityDiffViewerBinding binding;
     private DiffViewerViewModel viewModel;
@@ -48,6 +50,8 @@ public class DiffViewerActivity extends BaseActivity {
     private String fileName;
     private boolean isStaged;
     private String commitSha;
+    private String oldRef;
+    private String newRef;
 
     /**
      * Factory method for creating an intent to inspect working-tree changes.
@@ -74,6 +78,20 @@ public class DiffViewerActivity extends BaseActivity {
         return intent;
     }
 
+    /**
+     * Factory method for creating an intent to compare a file between two branch/tree references.
+     */
+    public static Intent newIntent(Context context, String projectPath, String oldRef, String newRef, GitFileItem item) {
+        Intent intent = new Intent(context, DiffViewerActivity.class);
+        intent.putExtra(EXTRA_PROJECT_PATH, projectPath);
+        intent.putExtra(EXTRA_OLD_REF, oldRef);
+        intent.putExtra(EXTRA_NEW_REF, newRef);
+        intent.putExtra(EXTRA_FILE_PATH, item.getPath());
+        intent.putExtra(EXTRA_FILE_NAME, item.getFileName());
+        intent.putExtra(EXTRA_IS_STAGED, item.isStaged());
+        return intent;
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -88,6 +106,8 @@ public class DiffViewerActivity extends BaseActivity {
         fileName = getIntent().getStringExtra(EXTRA_FILE_NAME);
         isStaged = getIntent().getBooleanExtra(EXTRA_IS_STAGED, false);
         commitSha = getIntent().getStringExtra(EXTRA_COMMIT_SHA);
+        oldRef = getIntent().getStringExtra(EXTRA_OLD_REF);
+        newRef = getIntent().getStringExtra(EXTRA_NEW_REF);
 
         viewModel = new ViewModelProvider(this).get(DiffViewerViewModel.class);
 
@@ -95,7 +115,7 @@ public class DiffViewerActivity extends BaseActivity {
         setupObservers();
 
         if (savedInstanceState == null) {
-            viewModel.loadDiff(projectPath, filePath, isStaged, commitSha);
+            viewModel.loadDiff(projectPath, filePath, isStaged, commitSha, oldRef, newRef);
         }
     }
 
@@ -109,7 +129,11 @@ public class DiffViewerActivity extends BaseActivity {
         String displayName = (fileName != null && !fileName.isEmpty()) ? fileName : filePath;
         binding.tvDiffFilename.setText(displayName);
 
-        if (commitSha != null && !commitSha.trim().isEmpty()) {
+        if (oldRef != null && newRef != null) {
+            String shortOld = oldRef.replace("refs/heads/", "");
+            String shortNew = newRef.replace("refs/remotes/", "");
+            binding.tvDiffFilepath.setText(shortOld + " ➔ " + shortNew + " • " + (filePath != null ? filePath : ""));
+        } else if (commitSha != null && !commitSha.trim().isEmpty()) {
             String shortSha = commitSha.length() > 7 ? commitSha.substring(0, 7) : commitSha;
             binding.tvDiffFilepath.setText(shortSha.concat(" • ").concat(filePath != null ? filePath : ""));
         } else {
@@ -187,7 +211,11 @@ public class DiffViewerActivity extends BaseActivity {
         // Show diff statistics badge in the subtitle if present
         if (additions > 0 || deletions > 0) {
             String stats = "+" + additions + " -" + deletions;
-            if (commitSha != null && !commitSha.trim().isEmpty()) {
+            if (oldRef != null && newRef != null) {
+                String shortOld = oldRef.replace("refs/heads/", "");
+                String shortNew = newRef.replace("refs/remotes/", "");
+                binding.tvDiffFilepath.setText(shortOld + " ➔ " + shortNew + " • " + stats + " • " + filePath);
+            } else if (commitSha != null && !commitSha.trim().isEmpty()) {
                 String shortSha = commitSha.length() > 7 ? commitSha.substring(0, 7) : commitSha;
                 binding.tvDiffFilepath.setText(shortSha + " • " + stats + " • " + filePath);
             } else {

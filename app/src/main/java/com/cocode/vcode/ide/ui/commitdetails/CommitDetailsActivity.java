@@ -25,6 +25,8 @@ import com.cocode.vcode.ide.utils.UiUtils;
  */
 public class CommitDetailsActivity extends BaseActivity {
 
+    public static final String EXTRA_READ_ONLY = "is_read_only";
+
     private ActivityCommitDetailsBinding binding;
     private CommitDetailsViewModel viewModel;
     private CommitFilesAdapter adapter;
@@ -56,7 +58,12 @@ public class CommitDetailsActivity extends BaseActivity {
             );
         }
 
-        setupOperationalButtons();
+        boolean isReadOnly = getIntent().getBooleanExtra(EXTRA_READ_ONLY, false);
+        if (isReadOnly) {
+            binding.layoutActionDeck.setVisibility(android.view.View.GONE);
+        } else {
+            setupOperationalButtons();
+        }
         binding.btnBack.setOnClickListener(v -> finish());
     }
 

@@ -116,4 +116,144 @@ public class GitRepositoryTest {
         }
         assertTrue("stage.txt should be unstaged after unstage", stageUnstaged);
     }
+
+    @Test
+    public void testBranchComparisonAndDiff() throws Exception {
+        File repoDir = tempFolder.newFolder("test-repo-diff");
+        gitRepository.setConfiguredDefaultBranch("master");
+        gitRepository.openRepository(repoDir);
+
+        File f1 = new File(repoDir, "file1.txt");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("hello master\n");
+        }
+        gitRepository.stageFile("file1.txt");
+        org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir);
+        git.commit().setMessage("Initial master commit").call();
+
+        // Create feature branch
+        gitRepository.createBranch("feature", "master");
+        gitRepository.checkoutBranch("feature");
+
+        File f2 = new File(repoDir, "file2.txt");
+        try (FileWriter fw = new FileWriter(f2)) {
+            fw.write("hello feature\nline 2\n");
+        }
+        gitRepository.stageFile("file2.txt");
+        git.commit().setMessage("Feature commit 1").call();
+
+        // Switch back to master
+        gitRepository.checkoutBranch("master");
+
+        // Test Branch Comparison
+        GitRepository.BranchComparison comparison = gitRepository.getBranchComparison("master", "feature");
+        assertEquals("Master should be 1 commit behind feature", 1, comparison.getBehindCount());
+        assertEquals("Master should be 0 commits ahead of feature", 0, comparison.getAheadCount());
+
+        // Test Incoming Commits
+        List<com.cocode.vcode.ide.git.model.CommitItem> incoming = gitRepository.getIncomingCommits("master", "feature");
+        assertEquals("Should have 1 incoming commit", 1, incoming.size());
+        assertEquals("Feature commit 1", incoming.get(0).getMessage());
+
+        // Test Changed Files between refs
+        List<GitFileItem> changedFiles = gitRepository.getChangedFilesBetweenRefs("master", "feature");
+        assertEquals("Should have 1 changed file", 1, changedFiles.size());
+        assertEquals("file2.txt", changedFiles.get(0).getFileName());
+
+        // Test Diff between refs for file
+        String diffText = gitRepository.getDiffBetweenRefsForFile("master", "feature", "file2.txt");
+        assertTrue("Diff text should not be null or empty", diffText != null && !diffText.isEmpty());
+        assertTrue("Diff should contain additions for file2", diffText.contains("+hello feature"));
+    }
+
+    @Test
+    public void testCheckoutConflictDetection() throws Exception {
+        File repoDir = tempFolder.newFolder("test-repo-checkout-conflict");
+        gitRepository.setConfiguredDefaultBranch("master");
+        gitRepository.openRepository(repoDir);
+
+        File f1 = new File(repoDir, "conflict.txt");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("original version\n");
+        }
+        gitRepository.stageFile("conflict.txt");
+        org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir);
+        git.commit().setMessage("Initial commit").call();
+
+        // Create feature branch and modify conflict.txt
+        gitRepository.createBranch("feature", "master");
+        gitRepository.checkoutBranch("feature");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("feature version\n");
+        }
+        gitRepository.stageFile("conflict.txt");
+        git.commit().setMessage("Feature commit").call();
+
+        // Checkout master
+        gitRepository.checkoutBranch("master");
+
+        // Now make an UNCOMMITTED local change to conflict.txt in master
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("local uncommitted change\n");
+        }
+
+        // Attempt to checkout feature -> should throw GitCheckoutConflictException!
+        boolean caughtCheckoutConflict = false;
+        try {
+            gitRepository.checkoutBranch("feature");
+        } catch (GitRepository.GitCheckoutConflictException e) {
+            caughtCheckoutConflict = true;
+            assertTrue("Conflicting files list should contain conflict.txt", e.getConflictingFiles().contains("conflict.txt"));
+        }
+        assertTrue("Should have caught GitCheckoutConflictException on checkout conflict", caughtCheckoutConflict);
+    }
+
+    @Test
+    public void testMergeBranchUsesConfiguredAuthorInsteadOfRoot() throws Exception {
+        File repoDir = tempFolder.newFolder("test-repo-merge-author");
+        gitRepository.setConfiguredDefaultBranch("master");
+        gitRepository.openRepository(repoDir);
+
+        File f1 = new File(repoDir, "file1.txt");
+        try (FileWriter fw = new FileWriter(f1)) {
+            fw.write("line 1\n");
+        }
+        gitRepository.stageFile("file1.txt");
+        org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir);
+        git.commit().setMessage("Initial commit").call();
+
+        // Create feature branch and add a commit
+        gitRepository.createBranch("feature", "master");
+        gitRepository.checkoutBranch("feature");
+        File f2 = new File(repoDir, "file2.txt");
+        try (FileWriter fw = new FileWriter(f2)) {
+            fw.write("feature work\n");
+        }
+        gitRepository.stageFile("file2.txt");
+        git.commit().setMessage("Feature work commit").call();
+
+        // Checkout master and add another commit to cause a 3-way merge commit (not fast-forward)
+        gitRepository.checkoutBranch("master");
+        File f3 = new File(repoDir, "file3.txt");
+        try (FileWriter fw = new FileWriter(f3)) {
+            fw.write("master independent work\n");
+        }
+        gitRepository.stageFile("file3.txt");
+        git.commit().setMessage("Master independent work commit").call();
+
+        // Now merge feature branch with explicit author
+        String testAuthorName = "Dev User";
+        String testAuthorEmail = "dev@example.com";
+        gitRepository.mergeBranch("feature", testAuthorName, testAuthorEmail);
+
+        // Verify the latest commit on master is the merge commit, and author/committer is Dev User, not root!
+        Iterable<org.eclipse.jgit.revwalk.RevCommit> logs = git.log().setMaxCount(1).call();
+        org.eclipse.jgit.revwalk.RevCommit latestCommit = logs.iterator().next();
+
+        assertEquals(2, latestCommit.getParentCount()); // It is a merge commit
+        assertEquals("Dev User", latestCommit.getAuthorIdent().getName());
+        assertEquals("dev@example.com", latestCommit.getAuthorIdent().getEmailAddress());
+        assertEquals("Dev User", latestCommit.getCommitterIdent().getName());
+        assertEquals("dev@example.com", latestCommit.getCommitterIdent().getEmailAddress());
+    }
 }

@@ -156,17 +156,17 @@
 
     </LinearLayout>
 
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_new_branch"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:text="@string/vcode_action_new_branch"
-        android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
-        android:textColor="?attr/colorOnPrimary"
+        android:layout_margin="24dp"
+        android:contentDescription="@string/vcode_action_new_branch"
+        android:importantForAccessibility="no"
         app:backgroundTint="?attr/colorPrimary"
-        app:icon="@drawable/ic_plus"
-        app:iconTint="?attr/colorOnPrimary" />
+        app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.ExtraExtraLarge"
+        app:srcCompat="@drawable/ic_plus"
+        app:tint="?attr/colorOnPrimary" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -90,6 +90,7 @@ public class GitViewModel extends AndroidViewModel {
                 }
                 repository.openRepository(projectDir);
                 isNotRepository.postValue(false);
+                syncAuthorConfig();
                 refreshAll();
             } catch (Exception e) {
                 postError("Initialization failed: " + e.getMessage());
@@ -110,6 +111,7 @@ public class GitViewModel extends AndroidViewModel {
             try {
                 repository.openRepository(projectDir);
                 isNotRepository.postValue(false);
+                syncAuthorConfig();
                 refreshAll();
             } catch (Exception e) {
                 postError("Failed to instantiate standard repository context layout: " + e.getMessage());
@@ -187,19 +189,71 @@ public class GitViewModel extends AndroidViewModel {
         });
     }
 
+    public static class AuthorInfo {
+        private final String name;
+        private final String email;
+
+        public AuthorInfo(String name, String email) {
+            this.name = name;
+            this.email = email;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+    }
+
+    /**
+     * Resolves the author details, prioritizing GitHub credentials over local author configuration.
+     * Returns null if neither is configured.
+     */
+    public AuthorInfo resolveAuthor() {
+        android.content.Context ctx = getApplication();
+        if (credentialStore.hasCredentials(ctx)) {
+            String name = credentialStore.getUsername(ctx);
+            if (name == null || name.trim().isEmpty()) {
+                name = "GitHub User";
+            }
+            String email = name.toLowerCase().replaceAll("\\s+", "") + "@users.noreply.github.com";
+            return new AuthorInfo(name, email);
+        } else if (credentialStore.hasLocalAuthor(ctx)) {
+            return new AuthorInfo(credentialStore.getLocalAuthorName(ctx), credentialStore.getLocalAuthorEmail(ctx));
+        }
+        return null;
+    }
+
     /**
      * Determines if the user needs to configure their Git name and email.
      */
     public boolean shouldPromptForAuthor() {
-        android.content.Context ctx = getApplication();
-        return !credentialStore.hasCredentials(ctx) && !credentialStore.hasLocalAuthor(ctx);
+        return resolveAuthor() == null;
     }
 
     /**
-     * Persists the Git author information locally.
+     * Persists the Git author information locally and syncs to repository configuration.
      */
     public void saveLocalAuthor(String name, String email) {
         credentialStore.saveLocalAuthor(getApplication(), name, email);
+        syncAuthorConfig();
+    }
+
+    /**
+     * Synchronizes active author credentials to .git/config so merges and commits don't default to 'root'.
+     */
+    public void syncAuthorConfig() {
+        AuthorInfo author = resolveAuthor();
+        if (author != null) {
+            ExecutorProvider.getInstance().runOnIo(() -> {
+                try {
+                    repository.ensureUserConfig(author.getName(), author.getEmail());
+                } catch (Exception ignored) {
+                }
+            });
+        }
     }
 
     /**
@@ -207,21 +261,9 @@ public class GitViewModel extends AndroidViewModel {
      */
     public void commit(String message) {
         runAction(() -> {
-            android.content.Context ctx = getApplication();
-            String resolvedName;
-            String resolvedEmail;
-
-            // Resolve author info prioritizing GitHub credentials over local author
-            if (credentialStore.hasCredentials(ctx)) {
-                resolvedName = credentialStore.getUsername(ctx);
-                if (resolvedName == null || resolvedName.trim().isEmpty()) {
-                    resolvedName = "GitHub User";
-                }
-                resolvedEmail = resolvedName.toLowerCase().replaceAll("\\s+", "") + "@users.noreply.github.com";
-            } else {
-                resolvedName = credentialStore.getLocalAuthorName(ctx);
-                resolvedEmail = credentialStore.getLocalAuthorEmail(ctx);
-            }
+            AuthorInfo author = resolveAuthor();
+            String resolvedName = author != null ? author.getName() : "GitHub User";
+            String resolvedEmail = author != null ? author.getEmail() : "user@noreply.github.com";
 
             repository.commit(message, resolvedName, resolvedEmail);
             clearDraftCommitMessage();
@@ -272,7 +314,12 @@ public class GitViewModel extends AndroidViewModel {
     }
 
     public void pull(String remoteUrl, String pat, String branch) {
-        runAction(() -> repository.pull(remoteUrl, pat, branch));
+        runAction(() -> {
+            AuthorInfo author = resolveAuthor();
+            String name = author != null ? author.getName() : null;
+            String email = author != null ? author.getEmail() : null;
+            repository.pull(remoteUrl, pat, branch, name, email);
+        });
     }
 
     public void fetch(String remoteUrl, String pat) {
@@ -281,20 +328,9 @@ public class GitViewModel extends AndroidViewModel {
 
     public void revertCommit(String commitSha) {
         runAction(() -> {
-            android.content.Context ctx = getApplication();
-            String resolvedName;
-            String resolvedEmail;
-
-            if (credentialStore.hasCredentials(ctx)) {
-                resolvedName = credentialStore.getUsername(ctx);
-                if (resolvedName == null || resolvedName.trim().isEmpty()) {
-                    resolvedName = "GitHub User";
-                }
-                resolvedEmail = resolvedName.toLowerCase().replaceAll("\\s+", "") + "@users.noreply.github.com";
-            } else {
-                resolvedName = credentialStore.getLocalAuthorName(ctx);
-                resolvedEmail = credentialStore.getLocalAuthorEmail(ctx);
-            }
+            AuthorInfo author = resolveAuthor();
+            String resolvedName = author != null ? author.getName() : "GitHub User";
+            String resolvedEmail = author != null ? author.getEmail() : "user@noreply.github.com";
 
             try {
                 repository.revertCommit(commitSha, resolvedName, resolvedEmail);
@@ -335,7 +371,12 @@ public class GitViewModel extends AndroidViewModel {
     }
 
     public void mergeBranch(String branchName) {
-        runAction(() -> repository.mergeBranch(branchName));
+        runAction(() -> {
+            AuthorInfo author = resolveAuthor();
+            String name = author != null ? author.getName() : null;
+            String email = author != null ? author.getEmail() : null;
+            repository.mergeBranch(branchName, name, email);
+        });
     }
 
     public void renameBranch(String oldName, String newName) {
@@ -380,12 +421,21 @@ public class GitViewModel extends AndroidViewModel {
             try {
                 action.execute();
                 refreshAll();
+                if (currentProjectDir != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(currentProjectDir);
+                }
+            } catch (GitRepository.GitConflictException e) {
+                conflictEvent.postValue(e);
             } catch (Exception e) {
                 postError(e.getMessage());
             } finally {
                 isLoading.postValue(false);
             }
         });
+    }
+
+    public void clearErrorMessage() {
+        errorMessage.setValue(null);
     }
 
     /**
