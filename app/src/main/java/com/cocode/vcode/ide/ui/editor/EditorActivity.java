@@ -731,13 +731,6 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 cfv.getLspBridge().setFile(currentActiveFile.getFile());
                             }
                         }
-
-                        // Synchronize editor buffer if file content on disk/model was updated externally (e.g. git pull/checkout)
-                        String currentEditorText = cfv.getCodeEditor().getTextAsString();
-                        String docContent = currentActiveFile.getContent() != null ? currentActiveFile.getContent() : "";
-                        if (!currentEditorText.equals(docContent)) {
-                            cfv.bindFile(currentActiveFile, viewModel);
-                        }
                     }
                 }
             } else {
@@ -775,6 +768,31 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 if (activeIndex != null && activeIndex >= 0 && files != null && activeIndex < files.size()) {
                                     EditorFile ef = files.get(activeIndex);
                                     if (ef.getContent() != null) {
+                                        cfv.updateRefactoredContent(ef.getContent());
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        viewModel.getExternallyChangedFiles().observe(this, modifiedFiles -> {
+            if (modifiedFiles == null || modifiedFiles.isEmpty()) return;
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+                if (cfv.getCodeEditor() != null) {
+                    File currentFile = cfv.getCodeEditor().getCurrentFile();
+                    if (currentFile != null) {
+                        for (File f : modifiedFiles) {
+                            if (f != null && isSameFile(f, currentFile)) {
+                                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
+                                List<EditorFile> files = viewModel.getOpenFiles().getValue();
+                                if (activeIndex != null && activeIndex >= 0 && files != null && activeIndex < files.size()) {
+                                    EditorFile ef = files.get(activeIndex);
+                                    if (ef.getContent() != null && !ef.isDirty()) {
                                         cfv.updateRefactoredContent(ef.getContent());
                                     }
                                 }

@@ -58,6 +58,7 @@ public class EditorViewModel extends ViewModel {
     private final MutableLiveData<AppSettings> settingsLiveData = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isEditorLoadingLiveData = new MutableLiveData<>(false);
     private final MutableLiveData<List<File>> refactoredFilesLiveData = new MutableLiveData<>();
+    private final MutableLiveData<List<File>> externallyChangedFilesLiveData = new MutableLiveData<>();
 
     /**
      * Maps repository-relative file paths to their current Git status (e.g., Modified, Untracked).
@@ -116,6 +117,10 @@ public class EditorViewModel extends ViewModel {
 
     public LiveData<List<File>> getRefactoredFiles() {
         return refactoredFilesLiveData;
+    }
+
+    public LiveData<List<File>> getExternallyChangedFiles() {
+        return externallyChangedFilesLiveData;
     }
 
     public LiveData<Integer> getActiveTabIndex() {
@@ -490,6 +495,7 @@ public class EditorViewModel extends ViewModel {
                     List<EditorFile> latestDocs = new java.util.ArrayList<>(getOpenFilesList());
                     boolean actuallyAltered = false;
                     int activeIndex = getActiveTabIndexValue();
+                    List<File> externallyModifiedFiles = new ArrayList<>();
 
                     java.util.Iterator<EditorFile> iterator = latestDocs.iterator();
                     int i = 0;
@@ -505,6 +511,9 @@ public class EditorViewModel extends ViewModel {
                                 doc.setContent(updatedContent.get(path));
                                 doc.markSaved();
                                 actuallyAltered = true;
+                                if (doc.getFile() != null) {
+                                    externallyModifiedFiles.add(doc.getFile());
+                                }
                             }
                             i++;
                         }
@@ -515,6 +524,9 @@ public class EditorViewModel extends ViewModel {
                         activeTabIndexLiveData.setValue(latestDocs.isEmpty() ? -1 : Math.min(activeIndex, latestDocs.size() - 1));
                         updateCurrentStateObject();
                         persistStateAsync();
+                        if (!externallyModifiedFiles.isEmpty()) {
+                            externallyChangedFilesLiveData.setValue(externallyModifiedFiles);
+                        }
                     }
                 });
             }
