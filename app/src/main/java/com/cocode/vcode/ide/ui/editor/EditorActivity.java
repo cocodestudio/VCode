@@ -208,6 +208,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     } else {
                         viewModel.openFile(file);
                     }
+                    viewModel.validateOpenFilesWithDisk();
                 }
             }
         }
@@ -729,6 +730,13 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             if (cfv.getLspBridge() != null && currentActiveFile.getFile() != null) {
                                 cfv.getLspBridge().setFile(currentActiveFile.getFile());
                             }
+                        }
+
+                        // Synchronize editor buffer if file content on disk/model was updated externally (e.g. git pull/checkout)
+                        String currentEditorText = cfv.getCodeEditor().getTextAsString();
+                        String docContent = currentActiveFile.getContent() != null ? currentActiveFile.getContent() : "";
+                        if (!currentEditorText.equals(docContent)) {
+                            cfv.bindFile(currentActiveFile, viewModel);
                         }
                     }
                 }

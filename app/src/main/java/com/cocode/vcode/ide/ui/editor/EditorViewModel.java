@@ -462,6 +462,9 @@ public class EditorViewModel extends ViewModel {
                 if (!fileOnDisk.exists()) {
                     missingPaths.add(fileOnDisk.getAbsolutePath());
                 } else if (!doc.isBinaryAsset()) {
+                    if (doc.isDirty()) {
+                        continue;
+                    }
                     long diskMod = fileOnDisk.lastModified();
                     long diskSize = fileOnDisk.length();
 
@@ -678,8 +681,16 @@ public class EditorViewModel extends ViewModel {
     public void openFile(File file, String sourceUriString) {
         List<EditorFile> currentDocs = getOpenFilesList();
         for (int i = 0; i < currentDocs.size(); i++) {
-            if (currentDocs.get(i).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+            EditorFile ef = currentDocs.get(i);
+            if (ef.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
                 activeTabIndexLiveData.setValue(i);
+                if (!ef.isDirty() && !ef.isVirtual() && !ef.isBinaryAsset() && file.exists()) {
+                    long diskMod = file.lastModified();
+                    long diskSize = file.length();
+                    if (ef.getLastDiskModified() == -1 || diskMod != ef.getLastDiskModified() || diskSize != ef.getLastDiskSize()) {
+                        validateOpenFilesWithDisk();
+                    }
+                }
                 return;
             }
         }
@@ -730,8 +741,16 @@ public class EditorViewModel extends ViewModel {
         List<EditorFile> currentDocs = getOpenFilesList();
         // Check if the file is already loaded in a tab
         for (int i = 0; i < currentDocs.size(); i++) {
-            if (currentDocs.get(i).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+            EditorFile ef = currentDocs.get(i);
+            if (ef.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
                 activeTabIndexLiveData.setValue(i);
+                if (!ef.isDirty() && !ef.isVirtual() && !ef.isBinaryAsset() && file.exists()) {
+                    long diskMod = file.lastModified();
+                    long diskSize = file.length();
+                    if (ef.getLastDiskModified() == -1 || diskMod != ef.getLastDiskModified() || diskSize != ef.getLastDiskSize()) {
+                        validateOpenFilesWithDisk();
+                    }
+                }
                 return;
             }
         }
