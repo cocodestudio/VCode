@@ -472,6 +472,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             }
             case OPEN_GIT: {
                 if (viewModel.getProjectRoot() != null) {
+                    saveCurrentEditorState();
                     Intent navToGit = new Intent(this, GitActivity.class);
                     navToGit.putExtra("project_path", viewModel.getProjectRoot().getAbsolutePath());
                     navToGit.putExtra("project_name", getIntent().getStringExtra(EXTRA_PROJECT_NAME));
@@ -781,24 +782,31 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         viewModel.getExternallyChangedFiles().observe(this, modifiedFiles -> {
             if (modifiedFiles == null || modifiedFiles.isEmpty()) return;
-            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-                com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
-                if (cfv.getCodeEditor() != null) {
-                    File currentFile = cfv.getCodeEditor().getCurrentFile();
-                    if (currentFile != null) {
-                        for (File f : modifiedFiles) {
-                            if (f != null && isSameFile(f, currentFile)) {
-                                Integer activeIndex = viewModel.getActiveTabIndex().getValue();
-                                List<EditorFile> files = viewModel.getOpenFiles().getValue();
-                                if (activeIndex != null && activeIndex >= 0 && files != null && activeIndex < files.size()) {
-                                    EditorFile ef = files.get(activeIndex);
-                                    if (ef.getContent() != null && !ef.isDirty()) {
-                                        cfv.updateRefactoredContent(ef.getContent());
-                                    }
+            List<EditorFile> files = viewModel.getOpenFiles().getValue();
+            if (files == null || files.isEmpty()) return;
+
+            for (File f : modifiedFiles) {
+                if (f == null) continue;
+                for (EditorFile ef : files) {
+                    if (ef.getFile() != null && isSameFile(f, ef.getFile())) {
+                        boolean isActive = false;
+                        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+                            if (cfv.getCodeEditor() != null && isSameFile(f, cfv.getCodeEditor().getCurrentFile())) {
+                                isActive = true;
+                                if (ef.getContent() != null) {
+                                    cfv.reloadExternalContent(ef.getContent());
                                 }
-                                break;
                             }
                         }
+                        if (!isActive) {
+                            // Inactive tab: invalidate cached viewer in ViewerManager so it never
+                            // retains or flushes stale text buffers back to disk.
+                            if (viewerManager != null) {
+                                viewerManager.destroyViewer(ef.getId());
+                            }
+                        }
+                        break;
                     }
                 }
             }

@@ -263,6 +263,23 @@ public class CodeFileViewer implements IFileViewer {
             currentFile.setCursorPosition(codeEditText.getSelectionStart());
             currentFile.setScrollY(codeEditText.getScrollY());
         }
+    }
+
+    /**
+     * Reloads external disk content in-place (e.g. from Git revert, pull, checkout, or external sync),
+     * ensuring the file model stays marked clean, resetting the undo baseline, and refreshing diagnostics.
+     */
+    public void reloadExternalContent(String newContent) {
+        if (codeEditText == null || newContent == null) return;
+        if (currentFile != null) {
+            currentFile.setContent(newContent);
+            currentFile.markSaved();
+        }
+        codeEditText.reloadExternalContent(newContent);
+        if (currentFile != null) {
+            currentFile.setCursorPosition(codeEditText.getSelectionStart());
+            currentFile.setScrollY(codeEditText.getScrollY());
+        }
         validateCodeIfRequired();
     }
 

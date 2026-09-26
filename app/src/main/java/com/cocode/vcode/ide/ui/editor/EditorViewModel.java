@@ -85,6 +85,14 @@ public class EditorViewModel extends ViewModel {
     private boolean skipDefaultFileOpen = false;
     private boolean isFromIntent = false;
 
+    private final com.cocode.vcode.ide.core.event.WorkspaceEventManager.WorkspaceChangeListener workspaceChangeListener =
+            changedRoot -> {
+                if (changedRoot == null || (projectRoot != null && changedRoot.getAbsolutePath().equals(projectRoot.getAbsolutePath()))) {
+                    validateOpenFilesWithDisk();
+                    refreshGitStatuses();
+                }
+            };
+
     public EditorViewModel(Context appContext, FileRepository fileRepo, ProjectStateRepository stateRepo, SettingsRepository settingsRepo, ProjectRepository projectRepo) {
         this.appContext = appContext != null ? appContext.getApplicationContext() : null;
         this.fileRepo = fileRepo;
@@ -92,6 +100,7 @@ public class EditorViewModel extends ViewModel {
         this.settingsRepo = settingsRepo;
         this.projectRepo = projectRepo;
         reloadSettings();
+        com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().addListener(workspaceChangeListener);
     }
 
     public void setSkipDefaultFileOpen(boolean skip) {
@@ -1261,6 +1270,7 @@ public class EditorViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().removeListener(workspaceChangeListener);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(refreshFileTreeRunnable);

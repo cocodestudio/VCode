@@ -25,7 +25,7 @@ public class CommitDetailsViewModel extends AndroidViewModel {
 
     private final GitRepository repository;
     private final GitCredentialStore credentialStore;
-
+    private File projectDir;
 
     // Observable metadata fields
     private final MutableLiveData<String> commitSha = new MutableLiveData<>();
@@ -55,9 +55,10 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         commitTimestamp.setValue(time);
 
         if (projectPath != null) {
+            this.projectDir = new File(projectPath);
             ExecutorProvider.getInstance().runOnIo(() -> {
                 try {
-                    repository.openRepository(new File(projectPath));
+                    repository.openRepository(projectDir);
                     if (sha != null) {
                         loadFilesInCommit(sha);
                     }
@@ -108,6 +109,9 @@ public class CommitDetailsViewModel extends AndroidViewModel {
                 }
 
                 repository.revertCommit(sha, resolvedName, resolvedEmail);
+                if (projectDir != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(projectDir);
+                }
                 actionCompleted.postValue(true);
             } catch (Exception e) {
                 errorMessage.postValue("Revert failed: " + e.getMessage());
@@ -119,6 +123,9 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.softReset(commitRef);
+                if (projectDir != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(projectDir);
+                }
                 actionCompleted.postValue(true);
             } catch (Exception e) {
                 errorMessage.postValue("Soft reset failed: " + e.getMessage());
@@ -130,6 +137,9 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.mixedReset(commitRef);
+                if (projectDir != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(projectDir);
+                }
                 actionCompleted.postValue(true);
             } catch (Exception e) {
                 errorMessage.postValue("Mixed reset failed: " + e.getMessage());
@@ -141,6 +151,9 @@ public class CommitDetailsViewModel extends AndroidViewModel {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 repository.hardReset(commitRef);
+                if (projectDir != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(projectDir);
+                }
                 actionCompleted.postValue(true);
             } catch (Exception e) {
                 errorMessage.postValue("Hard reset failed: " + e.getMessage());

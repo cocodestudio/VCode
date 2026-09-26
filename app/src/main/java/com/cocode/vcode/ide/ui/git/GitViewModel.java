@@ -421,6 +421,9 @@ public class GitViewModel extends AndroidViewModel {
             try {
                 action.execute();
                 refreshAll();
+                if (currentProjectDir != null) {
+                    com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().notifyWorkspaceFilesChanged(currentProjectDir);
+                }
             } catch (GitRepository.GitConflictException e) {
                 conflictEvent.postValue(e);
             } catch (Exception e) {
