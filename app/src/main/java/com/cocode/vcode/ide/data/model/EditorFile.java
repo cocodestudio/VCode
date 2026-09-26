@@ -112,20 +112,7 @@ public class EditorFile {
      */
     public String getRelativePath(File projectRoot) {
         if (file == null || projectRoot == null) return getFileName();
-        try {
-            String root = projectRoot.getCanonicalPath();
-            String path = file.getCanonicalPath();
-            if (path.startsWith(root)) {
-                String relative = path.substring(root.length());
-                if (relative.startsWith(File.separator)) {
-                    relative = relative.substring(File.separator.length());
-                }
-                return relative;
-            }
-        } catch (Exception e) {
-            // Fall through to name only if file validation checks encounter an error
-        }
-        return getFileName();
+        return FileUtils.getRelativePath(projectRoot, file);
     }
 
     public String getId() {

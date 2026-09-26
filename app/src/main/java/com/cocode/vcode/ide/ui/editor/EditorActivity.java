@@ -1122,15 +1122,19 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     private void saveCurrentEditorState() {
         if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+            cfv.flushContentToViewModel();
+            if (cfv.isPositionRestoring()) {
+                return;
+            }
         }
         CodeEditText codeEditText = getActiveCodeEditor();
-        if (codeEditText != null && codeEditText.getTag() != null) {
+        if (codeEditText != null && !codeEditText.isSettingText()) {
             List<EditorFile> files = viewModel.getOpenFiles().getValue();
             Integer activeIndex = viewModel.getActiveTabIndex().getValue();
             if (files != null && activeIndex != null && activeIndex >= 0 && activeIndex < files.size()) {
                 EditorFile activeFile = files.get(activeIndex);
-                if (!activeFile.isBinaryAsset()) {
+                if (!activeFile.isBinaryAsset() && codeEditText.getTag() != null && codeEditText.getTag().equals(activeFile.getId())) {
                     viewModel.updateActiveFileState(codeEditText.getSelectionStart(), codeEditText.getScrollY());
                 }
             }

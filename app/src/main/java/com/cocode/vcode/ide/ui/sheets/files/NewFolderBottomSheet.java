@@ -16,6 +16,7 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.databinding.BottomSheetCreateFolderBinding;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
+import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
@@ -139,18 +140,8 @@ public class NewFolderBottomSheet extends BaseBottomSheetDialogFragment {
      * Resolves the workspace-relative path for the parent directory.
      */
     private String getRelativePath(File file) {
-        File projectRoot = viewModel.getProjectRoot();
-        if (projectRoot == null) return file.getName();
-        String rootPath = projectRoot.getAbsolutePath();
-        String filePath = file.getAbsolutePath();
-        if (filePath.startsWith(rootPath)) {
-            String rel = filePath.substring(rootPath.length());
-            if (rel.startsWith(File.separator)) {
-                rel = rel.substring(1);
-            }
-            return rel.replace('\\', '/');
-        }
-        return file.getName();
+        if (viewModel == null) return file != null ? file.getName() : "";
+        return FileUtils.getRelativePath(viewModel.getProjectRoot(), file);
     }
 
     @Override

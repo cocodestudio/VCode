@@ -33,38 +33,47 @@ public class ProjectState {
         this.projectId = projectId;
     }
 
+    private String normalizePath(String path) {
+        if (path == null) return null;
+        String normalized = path.replace('\\', '/');
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
+    }
+
     public void setCursorFor(String relativePath, int cursor) {
-        if (relativePath != null) cursorPositions.put(relativePath, cursor);
+        if (relativePath != null) cursorPositions.put(normalizePath(relativePath), cursor);
     }
 
     public int getCursorFor(String relativePath) {
         if (relativePath == null) return 0;
-        Integer val = cursorPositions.get(relativePath);
+        Integer val = cursorPositions.get(normalizePath(relativePath));
         return val != null ? val : 0;
     }
 
     public void setScrollFor(String relativePath, int scrollY) {
-        if (relativePath != null) scrollPositions.put(relativePath, scrollY);
+        if (relativePath != null) scrollPositions.put(normalizePath(relativePath), scrollY);
     }
 
     public int getScrollFor(String relativePath) {
         if (relativePath == null) return 0;
-        Integer val = scrollPositions.get(relativePath);
+        Integer val = scrollPositions.get(normalizePath(relativePath));
         return val != null ? val : 0;
     }
 
     public void setPreviewStateFor(String relativePath, boolean isPreview) {
-        if (relativePath != null) previewStates.put(relativePath, isPreview);
+        if (relativePath != null) previewStates.put(normalizePath(relativePath), isPreview);
     }
 
     public boolean getPreviewStateFor(String relativePath) {
         if (relativePath == null) return false;
-        Boolean val = previewStates.get(relativePath);
+        Boolean val = previewStates.get(normalizePath(relativePath));
         return val != null ? val : true;
     }
 
     public boolean hasExplicitPreviewState(String relativePath) {
-        return relativePath != null && previewStates.containsKey(relativePath);
+        return relativePath != null && previewStates.containsKey(normalizePath(relativePath));
     }
 
     public Map<String, String> getVirtualFiles() {
@@ -72,11 +81,11 @@ public class ProjectState {
     }
 
     public void setVirtualFile(String relativePath, String content) {
-        if (relativePath != null) virtualFiles.put(relativePath, content);
+        if (relativePath != null) virtualFiles.put(normalizePath(relativePath), content);
     }
 
     public String getVirtualFile(String relativePath) {
-        return relativePath != null ? virtualFiles.get(relativePath) : null;
+        return relativePath != null ? virtualFiles.get(normalizePath(relativePath)) : null;
     }
 
     public String getProjectId() {
@@ -92,7 +101,17 @@ public class ProjectState {
     }
 
     public void setOpenFilePaths(List<String> paths) {
-        this.openFilePaths = paths != null ? paths : new ArrayList<>();
+        if (paths == null) {
+            this.openFilePaths = new ArrayList<>();
+            return;
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String p : paths) {
+            if (p != null) {
+                normalized.add(normalizePath(p));
+            }
+        }
+        this.openFilePaths = normalized;
     }
 
     public int getActiveTabIndex() {
@@ -108,7 +127,14 @@ public class ProjectState {
     }
 
     public void setCursorPositions(Map<String, Integer> map) {
-        this.cursorPositions = map != null ? map : new HashMap<>();
+        this.cursorPositions = new HashMap<>();
+        if (map != null) {
+            for (Map.Entry<String, Integer> entry : map.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    this.cursorPositions.put(normalizePath(entry.getKey()), entry.getValue());
+                }
+            }
+        }
     }
 
     public Map<String, Integer> getScrollPositions() {
@@ -116,7 +142,14 @@ public class ProjectState {
     }
 
     public void setScrollPositions(Map<String, Integer> map) {
-        this.scrollPositions = map != null ? map : new HashMap<>();
+        this.scrollPositions = new HashMap<>();
+        if (map != null) {
+            for (Map.Entry<String, Integer> entry : map.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    this.scrollPositions.put(normalizePath(entry.getKey()), entry.getValue());
+                }
+            }
+        }
     }
 
     public Map<String, Boolean> getPreviewStates() {
@@ -124,6 +157,13 @@ public class ProjectState {
     }
 
     public void setPreviewStates(Map<String, Boolean> map) {
-        this.previewStates = map != null ? map : new HashMap<>();
+        this.previewStates = new HashMap<>();
+        if (map != null) {
+            for (Map.Entry<String, Boolean> entry : map.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    this.previewStates.put(normalizePath(entry.getKey()), entry.getValue());
+                }
+            }
+        }
     }
 }

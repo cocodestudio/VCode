@@ -734,6 +734,13 @@ public class EditorViewModel extends ViewModel {
                     newFile.setSourceUriString(sourceUriString);
                 }
 
+                // Restore previous scroll and cursor if available in the state object
+                if (currentState != null) {
+                    String relativePath = getRelativePath(file);
+                    newFile.setScrollY(currentState.getScrollFor(relativePath));
+                    newFile.setCursorPosition(currentState.getCursorFor(relativePath));
+                }
+
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     List<EditorFile> latestDocs = getOpenFilesList();
                     for (int i = 0; i < latestDocs.size(); i++) {
@@ -1235,15 +1242,8 @@ public class EditorViewModel extends ViewModel {
      * Computes the relative path of a file with respect to the project root.
      */
     public String getRelativePath(File file) {
-        if (projectRoot == null) return file.getName();
-        String rootPath = projectRoot.getAbsolutePath();
-        String filePath = file.getAbsolutePath();
-        if (filePath.startsWith(rootPath)) {
-            String rel = filePath.substring(rootPath.length());
-            if (rel.startsWith(File.separator)) rel = rel.substring(1);
-            return rel;
-        }
-        return file.getName();
+        if (projectRoot == null) return file != null ? file.getName() : "";
+        return FileUtils.getRelativePath(projectRoot, file);
     }
 
     public void setPreviewState(String relativePath, boolean isPreview) {

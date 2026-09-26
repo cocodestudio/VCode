@@ -31,12 +31,17 @@ public class CodeFileViewer implements IFileViewer {
     private EditorFile currentFile;
     private EditorViewModel viewModel;
     private IEditorCallback editorCallback;
+    private boolean isPositionRestoring = false;
+
+    public boolean isPositionRestoring() {
+        return isPositionRestoring;
+    }
 
     public void flushContentToViewModel() {
         if (currentFile != null && codeEditText != null) {
-            // Prevent flushing during async text load to avoid overwriting the data model
-            // with the previous tab's content.
-            if (codeEditText.isSettingText()) {
+            // Prevent flushing during async text load or position restoration to avoid
+            // overwriting the data model with uninitialized (0, 0) coordinates.
+            if (codeEditText.isSettingText() || isPositionRestoring) {
                 return;
             }
             currentFile.setContent(codeEditText.getTextAsString());
@@ -216,15 +221,22 @@ public class CodeFileViewer implements IFileViewer {
         // load so only content for the file we're actually bound to can ever land.
         String currentText = codeEditText.getText() != null ? codeEditText.getText().toString() : "";
         if (!currentText.equals(file.getContent()) || codeEditText.isSettingText()) {
+            isPositionRestoring = true;
             codeEditText.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
                 @Override
                 public void onTextLoadStateChanged(boolean isLoading) {
                     if (!isLoading) {
                         codeEditText.removeTextLoadListener(this);
-                        if (currentFile != file) return;
+                        if (currentFile != file) {
+                            isPositionRestoring = false;
+                            return;
+                        }
                         codeEditText.scrollTo(0, file.getScrollY());
                         codeEditText.setSelection(file.getCursorPosition());
-                        codeEditText.post(codeEditText::ensureCursorVisible);
+                        codeEditText.post(() -> {
+                            codeEditText.ensureCursorVisible();
+                            isPositionRestoring = false;
+                        });
                     }
                 }
             });
@@ -238,6 +250,7 @@ public class CodeFileViewer implements IFileViewer {
                 codeEditText.setSelection(file.getCursorPosition());
                 codeEditText.post(codeEditText::ensureCursorVisible);
             }
+            isPositionRestoring = false;
             // Since setText wasn't called, the async load event won't fire, so we must
             // clear the LSP bridge's content-sync guard manually to allow diagnostics to run.
             lspBridge.clearContentSyncPending();
@@ -374,7 +387,7 @@ public class CodeFileViewer implements IFileViewer {
             // the wrong file's content. Instead, bail out entirely and re-arm via a one-shot
             // text-load listener gated on capturedFile, so this only ever re-fires once
             // loading has genuinely finished for the bind that's actually current.
-            if (codeEditText != null && codeEditText.isSettingText()) {
+            if (codeEditText != null && (codeEditText.isSettingText() || isPositionRestoring)) {
                 final CodeEditText ed = codeEditText;
                 ed.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
                     @Override
@@ -390,10 +403,10 @@ public class CodeFileViewer implements IFileViewer {
                 return;
             }
 
-            // Capture UI state on main thread ONLY AFTER text is fully loaded.
+            // Capture UI state on main thread ONLY AFTER text is fully loaded and positions restored.
             final String textSnapshot = codeEditText != null ? codeEditText.getTextAsString() : "";
-            final int cursor = codeEditText != null ? codeEditText.getSelectionStart() : 0;
-            final int scrollY = codeEditText != null ? codeEditText.getScrollY() : 0;
+            final int cursor = (codeEditText != null && !isPositionRestoring) ? codeEditText.getSelectionStart() : capturedFile.getCursorPosition();
+            final int scrollY = (codeEditText != null && !isPositionRestoring) ? codeEditText.getScrollY() : capturedFile.getScrollY();
 
             // 1. Update EditorFile with latest state synchronously on the Main Thread.
             //    This ensures that the model always gets the most recent keystrokes in order.

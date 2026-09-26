@@ -78,6 +78,41 @@ public class FileUtils {
     }
 
     /**
+     * Computes the normalized relative path of a file with respect to a base directory.
+     * Always uses forward slashes '/' and strips leading slashes for cross-platform
+     * compatibility and consistency with Git and session storage.
+     */
+    public static String getRelativePath(File base, File file) {
+        if (file == null) return "";
+        if (base == null) return file.getName();
+        try {
+            String basePath = base.getCanonicalPath();
+            String filePath = file.getCanonicalPath();
+            if (filePath.startsWith(basePath)) {
+                String rel = filePath.substring(basePath.length()).replace('\\', '/');
+                while (rel.startsWith("/")) {
+                    rel = rel.substring(1);
+                }
+                return rel;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            String basePath = base.getAbsolutePath();
+            String filePath = file.getAbsolutePath();
+            if (filePath.startsWith(basePath)) {
+                String rel = filePath.substring(basePath.length()).replace('\\', '/');
+                while (rel.startsWith("/")) {
+                    rel = rel.substring(1);
+                }
+                return rel;
+            }
+        } catch (Exception ignored) {
+        }
+        return file.getName();
+    }
+
+    /**
      * Creates a new empty file in the specified directory.
      */
     public static File createFile(File dir, String name) throws IOException {
