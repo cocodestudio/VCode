@@ -75,7 +75,6 @@ public class GitBranchFragment extends Fragment implements BranchAdapter.BranchL
         binding.tvCurrentBranchLabel.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.tvActiveBranchPill.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.tvBranchesListLabel.setTypeface(FontManager.getInstance().getUiSemiBold(context));
-        binding.fabNewBranch.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.tvRemoteBranchesLabel.setTypeface(FontManager.getInstance().getUiSemiBold(context));
         binding.tvRemoteBranchCount.setTypeface(FontManager.getInstance().getUiMedium(context));
     }
