@@ -121,7 +121,8 @@ public class BracketMatcher {
         while (!stack.isEmpty()) {
             int[] pos = stack.remove(stack.size() - 1);
             String name = (pos[0] == 1) ? "parenthesis '('" : (pos[0] == 2) ? "bracket '['" : "brace '{'";
-            problems.add(new Problem(file, pos[1], pos[2], 1, "Unclosed " + name, Problem.Severity.ERROR));
+            problems.add(new Problem(file, pos[1], pos[2], 1, "Unclosed " + name, Problem.Severity.ERROR,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.BRACKET_MISMATCH));
         }
 
         return problems;
@@ -130,7 +131,8 @@ public class BracketMatcher {
     private static void handleClosing(java.io.File file, int line, int col, int type, String name, char closeChar, char openChar,
                                       java.util.List<int[]> stack, java.util.List<Problem> problems) {
         if (stack.isEmpty()) {
-            problems.add(new Problem(file, line, col, 1, "Unmatched closing " + name + " '" + closeChar + "'", Problem.Severity.ERROR));
+            problems.add(new Problem(file, line, col, 1, "Unmatched closing " + name + " '" + closeChar + "'", Problem.Severity.ERROR,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.BRACKET_MISMATCH));
             return;
         }
 
@@ -155,7 +157,8 @@ public class BracketMatcher {
             while (stack.size() - 1 > matchIdx) {
                 int[] unclosed = stack.remove(stack.size() - 1);
                 String uName = (unclosed[0] == 1) ? "parenthesis '('" : (unclosed[0] == 2) ? "bracket '['" : "brace '{'";
-                problems.add(new Problem(file, unclosed[1], unclosed[2], 1, "Unclosed " + uName, Problem.Severity.ERROR));
+                problems.add(new Problem(file, unclosed[1], unclosed[2], 1, "Unclosed " + uName, Problem.Severity.ERROR,
+                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.BRACKET_MISMATCH));
             }
             // Pop the matching open bracket
             stack.remove(matchIdx);

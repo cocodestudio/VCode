@@ -12,19 +12,29 @@ public class Problem {
     private final int length;
     private final String message;
     private final Severity severity;
+    private final String code;
     private android.graphics.Path cachedPath;
 
-    public Problem(File file, int line, int column, int length, String message, Severity severity) {
+    public Problem(File file, int line, int column, int length, String message, Severity severity, String code) {
         this.file = file;
         this.line = line;
         this.column = column;
         this.length = length;
         this.message = message;
         this.severity = severity;
+        this.code = code;
+    }
+
+    public Problem(File file, int line, int column, int length, String message, Severity severity, com.cocode.vcode.ide.core.diagnostic.ProblemCode problemCode) {
+        this(file, line, column, length, message, severity, problemCode != null ? problemCode.name() : null);
+    }
+
+    public Problem(File file, int line, int column, int length, String message, Severity severity) {
+        this(file, line, column, length, message, severity, (String) null);
     }
 
     public Problem(File file, int line, int column, String message, Severity severity) {
-        this(file, line, column, 1, message, severity);
+        this(file, line, column, 1, message, severity, (String) null);
     }
 
     public File getFile() {
@@ -49,6 +59,19 @@ public class Problem {
 
     public Severity getSeverity() {
         return severity;
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    public com.cocode.vcode.ide.core.diagnostic.ProblemCode getProblemCode() {
+        if (code == null) return null;
+        try {
+            return com.cocode.vcode.ide.core.diagnostic.ProblemCode.valueOf(code);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public android.graphics.Path getCachedPath() {

@@ -152,6 +152,14 @@ public class EditorViewModel extends ViewModel {
         return problemsLiveData;
     }
 
+    public LiveData<List<com.cocode.vcode.ide.core.console.ConsoleLogEntry>> getLiveConsoleLogs() {
+        return com.cocode.vcode.ide.core.console.LiveConsoleManager.getInstance().getLogs();
+    }
+
+    public void clearLiveConsoleLogs() {
+        com.cocode.vcode.ide.core.console.LiveConsoleManager.getInstance().clearLogs();
+    }
+
     public LiveData<int[]> getActiveFileDiagnostics() {
         return activeFileDiagnostics;
     }

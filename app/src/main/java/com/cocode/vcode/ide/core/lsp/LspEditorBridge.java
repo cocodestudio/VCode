@@ -754,6 +754,20 @@ public final class LspEditorBridge {
     }
 
     /**
+     * Requests rich hover documentation for the symbol under the caret.
+     *
+     * @param callback delivers the result on the main thread
+     */
+    public void requestHover(LspCallback<HoverInfo> callback) {
+        LspDocument doc = buildSnapshot();
+        if (doc == null) {
+            if (callback != null) callback.onError("No document");
+            return;
+        }
+        LspClientManager.getInstance().requestHover(doc, cursorPosition(), callback);
+    }
+
+    /**
      * Requests signature help at the current caret position.
      * Typically called when the user types {@code (} or {@code ,}.
      *

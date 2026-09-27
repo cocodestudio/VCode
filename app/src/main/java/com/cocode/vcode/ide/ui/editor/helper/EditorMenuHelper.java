@@ -64,6 +64,11 @@ public class EditorMenuHelper {
             }
         }
 
+        options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_terminal, activity.getString(R.string.vcode_web_console), () -> {
+            com.cocode.vcode.ide.ui.sheets.editor.ConsoleBottomSheet consoleSheet = new com.cocode.vcode.ide.ui.sheets.editor.ConsoleBottomSheet();
+            consoleSheet.show(fragmentManager, "ConsoleSheet");
+        }));
+
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_star, "Snippet Manager", callbacks::onShowSnippetManager));
 
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_globe, "API Tester", () -> viewModel.openApiTester()));

@@ -146,6 +146,10 @@ public class PreviewActivity extends BaseActivity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
 
+        binding.webView.addJavascriptInterface(
+                new com.cocode.vcode.ide.core.console.VCodeConsoleBridge(),
+                com.cocode.vcode.ide.core.console.VCodeConsoleBridge.JS_INTERFACE_NAME);
+
         // Track and display page loading progress
         binding.webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -162,18 +166,23 @@ public class PreviewActivity extends BaseActivity {
             public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
                 String prefix = "";
                 int prefixColorRes;
+                com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level level =
+                        com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.LOG;
                 switch (consoleMessage.messageLevel()) {
                     case ERROR:
                         prefix = " ERR ";
                         prefixColorRes = com.cocode.vcode.ide.R.color.vcode_accent_error;
+                        level = com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.ERROR;
                         break;
                     case WARNING:
                         prefix = " WRN ";
                         prefixColorRes = com.cocode.vcode.ide.R.color.vcode_accent_warning;
+                        level = com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.WARN;
                         break;
                     default:
                         prefix = " LOG ";
                         prefixColorRes = com.cocode.vcode.ide.R.color.vcode_accent_primary;
+                        level = com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.LOG;
                         break;
                 }
 
@@ -182,6 +191,12 @@ public class PreviewActivity extends BaseActivity {
                         : com.cocode.vcode.ide.R.color.vcode_text_primary;
 
                 appendLog(prefix, consoleMessage.message(), prefixColorRes, msgColor);
+                com.cocode.vcode.ide.core.console.LiveConsoleManager.getInstance().addLog(
+                        new com.cocode.vcode.ide.core.console.ConsoleLogEntry(
+                                level,
+                                consoleMessage.message(),
+                                System.currentTimeMillis(),
+                                consoleMessage.sourceId() + ":" + consoleMessage.lineNumber()));
                 return super.onConsoleMessage(consoleMessage);
             }
         });
@@ -193,11 +208,13 @@ public class PreviewActivity extends BaseActivity {
                 super.onPageStarted(view, url, favicon);
                 binding.layoutError.setVisibility(View.GONE);
                 binding.webView.setVisibility(View.VISIBLE);
+                view.evaluateJavascript(com.cocode.vcode.ide.core.console.VCodeConsoleBridge.INJECTION_SCRIPT, null);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                view.evaluateJavascript(com.cocode.vcode.ide.core.console.VCodeConsoleBridge.INJECTION_SCRIPT, null);
             }
 
             @Override

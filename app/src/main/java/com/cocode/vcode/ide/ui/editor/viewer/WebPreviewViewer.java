@@ -34,6 +34,28 @@ public class WebPreviewViewer implements IFileViewer {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
             webView.setBackgroundColor(Color.TRANSPARENT);
+            webView.addJavascriptInterface(
+                    new com.cocode.vcode.ide.core.console.VCodeConsoleBridge(),
+                    com.cocode.vcode.ide.core.console.VCodeConsoleBridge.JS_INTERFACE_NAME);
+            webView.setWebChromeClient(new android.webkit.WebChromeClient() {
+                @Override
+                public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                    com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level level =
+                            com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.LOG;
+                    if (consoleMessage.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                        level = com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.ERROR;
+                    } else if (consoleMessage.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) {
+                        level = com.cocode.vcode.ide.core.console.ConsoleLogEntry.Level.WARN;
+                    }
+                    com.cocode.vcode.ide.core.console.LiveConsoleManager.getInstance().addLog(
+                            new com.cocode.vcode.ide.core.console.ConsoleLogEntry(
+                                    level,
+                                    consoleMessage.message(),
+                                    System.currentTimeMillis(),
+                                    consoleMessage.sourceId() + ":" + consoleMessage.lineNumber()));
+                    return super.onConsoleMessage(consoleMessage);
+                }
+            });
         }
         return webView;
     }
@@ -56,7 +78,30 @@ public class WebPreviewViewer implements IFileViewer {
             renderCsv(content);
         } else if (type == FileType.MARKDOWN) {
             renderMarkdown(content);
+        } else if (type == FileType.HTML) {
+            renderHtml(file);
         }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void renderHtml(EditorFile file) {
+        if (webView == null || file == null) return;
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setDomStorageEnabled(true);
+        webView.getSettings().setAllowFileAccess(true);
+        String content = file.getContent() != null ? file.getContent() : "";
+        String script = "<script>" + com.cocode.vcode.ide.core.console.VCodeConsoleBridge.INJECTION_SCRIPT + "</script>";
+        String html;
+        if (content.contains("</head>")) {
+            html = content.replace("</head>", script + "</head>");
+        } else {
+            html = script + content;
+        }
+        String baseUrl = null;
+        if (file.getFile() != null && file.getFile().getParentFile() != null) {
+            baseUrl = file.getFile().getParentFile().toURI().toString();
+        }
+        webView.loadDataWithBaseURL(baseUrl, html, "text/html", "utf-8", null);
     }
 
     private void renderCsv(String content) {

@@ -247,7 +247,8 @@ public class JsSemanticLinter {
                             int col = LinterUtils.getColumn(text, targetOffset);
                             problems.add(new Problem(file, line, col, baseIdentifier.length(),
                                     "Cannot reassign 'const' variable '" + baseIdentifier + "'",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.JS_CONST_REASSIGNMENT));
                         }
                     }
                 }

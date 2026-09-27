@@ -100,4 +100,15 @@ public interface LspServer {
      * @return signature help result, or null if not applicable
      */
     LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos);
+
+    /**
+     * Compute rich hover documentation for the symbol at the given position.
+     *
+     * @param doc current document snapshot
+     * @param pos caret position
+     * @return hover info with markdown documentation, or null if not applicable
+     */
+    default HoverInfo hover(LspDocument doc, LspPosition pos) {
+        return null;
+    }
 }

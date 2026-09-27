@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="42dp"
+    android:background="@color/vcode_bg_card"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="4dp">
+
+    <ImageView
+        android:id="@+id/btn_quick_fix"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:background="@drawable/vcode_bg_symbol_key_interactive"
+        android:contentDescription="@string/vcode_quick_fix"
+        android:padding="6dp"
+        android:src="@drawable/vcode_ic_lightbulb"
+        android:visibility="gone"
+        app:tint="@color/vcode_accent_warning" />
+
+    <View
+        android:id="@+id/divider_quick_fix"
+        android:layout_width="1dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="4dp"
+        android:background="@color/vcode_divider"
+        android:visibility="gone" />
+
+    <HorizontalScrollView
+        android:id="@+id/scroll_symbols"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:fadingEdge="horizontal"
+        android:requiresFadingEdge="horizontal"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/layout_keys_container"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="4dp" />
+    </HorizontalScrollView>
+</LinearLayout>

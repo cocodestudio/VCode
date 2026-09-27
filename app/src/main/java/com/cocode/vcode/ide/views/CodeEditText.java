@@ -110,6 +110,7 @@ public class CodeEditText extends View {
     private final List<Runnable> cursorChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AutoCompletePopup autoCompletePopup;
     private final SignatureHintPopup signatureHintPopup;
+    private final HoverDocPopup hoverDocPopup;
     private LspNavigationToolbar lspNavigationToolbar;
     private com.cocode.vcode.ide.core.lsp.LspSignatureHelp pendingSignatureHelp = null;
     private static final int CURSOR_IDLE_DELAY_MS = 800;
@@ -231,6 +232,7 @@ public class CodeEditText extends View {
         super(context);
         autoCompletePopup = new AutoCompletePopup(context);
         signatureHintPopup = new SignatureHintPopup(context);
+        hoverDocPopup = new HoverDocPopup(context);
         init(context);
     }
 
@@ -238,6 +240,7 @@ public class CodeEditText extends View {
         super(context, attrs);
         autoCompletePopup = new AutoCompletePopup(context);
         signatureHintPopup = new SignatureHintPopup(context);
+        hoverDocPopup = new HoverDocPopup(context);
         init(context);
     }
 
@@ -245,6 +248,7 @@ public class CodeEditText extends View {
         super(context, attrs, defStyleAttr);
         autoCompletePopup = new AutoCompletePopup(context);
         signatureHintPopup = new SignatureHintPopup(context);
+        hoverDocPopup = new HoverDocPopup(context);
         init(context);
     }
 
@@ -2518,6 +2522,26 @@ public class CodeEditText extends View {
         return (signatureHintPopup != null && signatureHintPopup.isShowing()) || pendingSignatureHelp != null;
     }
 
+    public void showHoverDoc(com.cocode.vcode.ide.core.lsp.HoverInfo info) {
+        if (info == null || hoverDocPopup == null) {
+            dismissHoverDoc();
+            return;
+        }
+        int flatCursor = content.flatOffset(cursor);
+        int[] coords = getCursorScreenCoords(flatCursor);
+        hoverDocPopup.show(info, this, coords[0], coords[1]);
+    }
+
+    public void dismissHoverDoc() {
+        if (hoverDocPopup != null) {
+            hoverDocPopup.dismiss();
+        }
+    }
+
+    public boolean isHoverDocVisible() {
+        return hoverDocPopup != null && hoverDocPopup.isShowing();
+    }
+
     public boolean isAutoCompleteVisible() {
         return autoCompletePopup != null && autoCompletePopup.isShowing();
     }
@@ -2541,6 +2565,7 @@ public class CodeEditText extends View {
     public void cancelAutoComplete() {
         mainHandler.removeCallbacks(autoCompleteRunnable);
         dismissAutoCompletePopup();
+        dismissHoverDoc();
     }
 
     void executeDeletion(Runnable deletionAction) {
@@ -2734,6 +2759,155 @@ public class CodeEditText extends View {
         invalidate();
         scheduleHighlight();
         notifySelectionChanged();
+    }
+
+    /**
+     * Inserts text at the current cursor position, replacing any active selection.
+     * Records an undoable transaction and schedules syntax highlighting.
+     */
+    public void insertText(String textToInsert) {
+        if (textToInsert == null || textToInsert.isEmpty()) return;
+
+        ContentPosition selAnchorBefore = selectionAnchor;
+        ContentPosition beforeCursor = cursor;
+        String deletedSel = "";
+        ContentPosition delStart = null;
+        ContentPosition delEnd = null;
+
+        if (selectionAnchor != null) {
+            int selStart = getSelectionStart();
+            int selEnd = getSelectionEnd();
+            if (selStart != selEnd) {
+                delStart = content.positionAt(selStart);
+                delEnd = content.positionAt(selEnd);
+                try {
+                    deletedSel = content.getSubstring(selStart, selEnd);
+                } catch (Exception e) {
+                    deletedSel = "";
+                }
+                content.delete(delStart.line, delStart.column, delEnd.line, delEnd.column);
+                cursor = delStart;
+            }
+            selectionAnchor = null;
+        }
+
+        ContentPosition insertStart = cursor;
+        content.insert(insertStart.line, insertStart.column, textToInsert);
+        ContentPosition newCursor = UndoStack.advancePosition(insertStart.line, insertStart.column, textToInsert);
+
+        if (!deletedSel.isEmpty()) {
+            undoStack.recordReplace(delStart.line, delStart.column, delEnd.line, delEnd.column,
+                    deletedSel, textToInsert, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(newCursor, null));
+        } else {
+            undoStack.recordInsert(insertStart.line, insertStart.column, textToInsert,
+                    snapshotAt(insertStart, null), snapshotAt(newCursor, null));
+        }
+        undoStack.commitPending();
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        invalidate();
+        scheduleHighlight();
+        dispatchContentChanged();
+        notifySelectionChanged();
+        scheduleBlink();
+    }
+
+    /**
+     * Wraps the current selection with opening and closing delimiters (e.g. quotes or brackets).
+     * If there is no selection, inserts the paired symbols and places the cursor between them.
+     */
+    public void wrapSelection(String open, String close) {
+        if (open == null || close == null) return;
+        if (selectionAnchor == null || getSelectionStart() == getSelectionEnd()) {
+            insertText(open + close);
+            // Move cursor inside the pair
+            if (cursor.column >= close.length()) {
+                cursor = new ContentPosition(cursor.line, cursor.column - close.length());
+                invalidate();
+                scheduleBlink();
+            }
+            return;
+        }
+
+        int selStart = getSelectionStart();
+        int selEnd = getSelectionEnd();
+        String selected;
+        try {
+            selected = content.getSubstring(selStart, selEnd);
+        } catch (Exception e) {
+            selected = "";
+        }
+        String wrapped = open + selected + close;
+        ContentPosition selAnchorBefore = selectionAnchor;
+        ContentPosition beforeCursor = cursor;
+        ContentPosition delStart = content.positionAt(selStart);
+        ContentPosition delEnd = content.positionAt(selEnd);
+
+        content.delete(delStart.line, delStart.column, delEnd.line, delEnd.column);
+        content.insert(delStart.line, delStart.column, wrapped);
+        ContentPosition newCursor = UndoStack.advancePosition(delStart.line, delStart.column, wrapped);
+
+        undoStack.recordReplace(delStart.line, delStart.column, delEnd.line, delEnd.column,
+                selected, wrapped, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(newCursor, null));
+        undoStack.commitPending();
+
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        invalidate();
+        scheduleHighlight();
+        dispatchContentChanged();
+        notifySelectionChanged();
+        scheduleBlink();
+    }
+
+    public void beginAtomicGroup() {
+        undoStack.beginAtomicGroup();
+    }
+
+    public void endAtomicGroup() {
+        undoStack.endAtomicGroup();
+    }
+
+    public void replaceRange(int startLine, int startCol, int endLine, int endCol, String replacement) {
+        if (replacement == null) replacement = "";
+        ContentPosition beforeCursor = cursor;
+        ContentPosition selAnchorBefore = selectionAnchor;
+
+        String oldText = "";
+        try {
+            int sOffset = content.flatOffset(new ContentPosition(startLine, startCol));
+            int eOffset = content.flatOffset(new ContentPosition(endLine, endCol));
+            oldText = content.getSubstring(sOffset, eOffset);
+        } catch (Exception ignored) {
+        }
+
+        content.delete(startLine, startCol, endLine, endCol);
+        if (!replacement.isEmpty()) {
+            content.insert(startLine, startCol, replacement);
+        }
+        ContentPosition newCursor = UndoStack.advancePosition(startLine, startCol, replacement);
+
+        undoStack.recordReplace(startLine, startCol, endLine, endCol,
+                oldText, replacement, snapshotAt(beforeCursor, selAnchorBefore), snapshotAt(newCursor, null));
+        undoStack.commitPending();
+
+        cursor = newCursor;
+        selectionAnchor = null;
+        cursorVisible = true;
+        invalidate();
+        scheduleHighlight();
+        dispatchContentChanged();
+        notifySelectionChanged();
+        scheduleBlink();
+    }
+
+    public String getLineText(int line) {
+        if (line >= 0 && line < content.lineCount()) {
+            return content.getLineCopy(line);
+        }
+        return "";
     }
 
     public void addCursorChangeListener(Runnable listener) {
@@ -3218,6 +3392,18 @@ public class CodeEditText extends View {
     public void applyDiagnostics(List<Problem> problems) {
         this.currentProblems = problems != null ? problems : new ArrayList<>();
         invalidate();
+    }
+
+    public List<Problem> getProblemsAtCursor() {
+        if (currentProblems == null || currentProblems.isEmpty()) return java.util.Collections.emptyList();
+        int curLine = cursor.line + 1;
+        List<Problem> result = new ArrayList<>();
+        for (Problem p : currentProblems) {
+            if (p.getLine() == curLine) {
+                result.add(p);
+            }
+        }
+        return result;
     }
 
     public boolean isShowSquigglyLines() {

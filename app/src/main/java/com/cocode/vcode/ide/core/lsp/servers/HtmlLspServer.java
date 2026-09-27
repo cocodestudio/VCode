@@ -442,4 +442,53 @@ public final class HtmlLspServer implements LspServer {
         }
         return result;
     }
+
+    @Override
+    public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return null;
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
+
+        HtmlTokenStream stream = HtmlLexer.tokenize(doc.text);
+        ParseResult result = HtmlParser.parse(doc.text, stream);
+        HtmlSyntaxTree tree = result != null ? result.htmlTree : null;
+        if (tree == null) return null;
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (offset >= tree.nodeStart[i] && offset <= tree.nodeEnd[i]) {
+                if (tree.nodeType[i] == HtmlSyntaxTree.N_ELEMENT) {
+                    String tagName = tree.nodeName[i];
+                    if (tagName != null) {
+                        for (com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item : com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTags()) {
+                            if (tagName.equalsIgnoreCase(item.label)) {
+                                String detail = item.detail != null ? item.detail : "HTML Element";
+                                StringBuilder md = new StringBuilder("### `<").append(item.label).append(">`\n\n").append(detail);
+                                if (item.attributes != null && item.attributes.length > 0) {
+                                    md.append("\n\n**Common Attributes:** `").append(android.text.TextUtils.join("`, `", item.attributes)).append("`");
+                                }
+                                com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(
+                                        doc.toPosition(tree.nodeStart[i]),
+                                        doc.toPosition(tree.nodeStart[i] + tagName.length() + 1));
+                                return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md.toString());
+                            }
+                        }
+                    }
+                } else if (tree.nodeType[i] == HtmlSyntaxTree.N_ATTRIBUTE) {
+                    String attrName = tree.nodeName[i];
+                    if (attrName != null) {
+                        String detail = "HTML Attribute";
+                        if (com.cocode.vcode.ide.core.diagnostic.util.KnownElements.DEPRECATED_ATTRIBUTES.containsKey(attrName.toLowerCase())) {
+                            detail = "Deprecated attribute: " + com.cocode.vcode.ide.core.diagnostic.util.KnownElements.DEPRECATED_ATTRIBUTES.get(attrName.toLowerCase());
+                        }
+                        String md = "### `" + attrName + "`\n\n" + detail;
+                        com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(
+                                doc.toPosition(tree.nodeStart[i]),
+                                doc.toPosition(tree.nodeStart[i] + attrName.length()));
+                        return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md);
+                    }
+                }
+            }
+        }
+        return null;
+    }
 }

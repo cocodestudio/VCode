@@ -442,7 +442,8 @@ public class CssLinter {
                 } else {
                     problems.add(new Problem(file, propLine, propCol, propLen,
                             "Unknown CSS property '" + prop + "': not a standard CSS property",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            com.cocode.vcode.ide.core.diagnostic.ProblemCode.CSS_UNKNOWN_PROPERTY));
                 }
             }
         } else if (prop.startsWith("-")) {

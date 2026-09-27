@@ -238,6 +238,33 @@ public final class LspClientManager {
         });
     }
 
+    /**
+     * Requests rich hover documentation for the symbol at the given position.
+     *
+     * @param doc      current document snapshot
+     * @param pos      caret position
+     * @param callback result delivered on the main thread; result may be null if not available
+     */
+    public void requestHover(LspDocument doc, LspPosition pos,
+                             LspCallback<HoverInfo> callback) {
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                LspServer server = getOrStartServer(doc.languageId);
+                if (server == null || !server.isReady()) {
+                    deliverResult(callback, null);
+                    return;
+                }
+                HoverInfo hover = server.hover(doc, pos);
+                for (com.cocode.vcode.ide.core.lsp.middleware.LspMiddleware mw : LspServerRegistry.getInstance().getMiddlewares()) {
+                    hover = mw.onHover(doc, pos, hover);
+                }
+                deliverResult(callback, hover);
+            } catch (Exception e) {
+                deliverError(callback, e.getMessage());
+            }
+        });
+    }
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------

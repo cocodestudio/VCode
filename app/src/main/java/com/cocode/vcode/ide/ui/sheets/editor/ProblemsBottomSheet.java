@@ -92,6 +92,7 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
 
     public interface ProblemListener {
         void onProblemSelected(Problem problem);
+        default void onQuickFixSelected(Problem problem) {}
     }
 
     private class ProblemsAdapter extends RecyclerView.Adapter<ProblemsAdapter.ViewHolder> {
@@ -149,6 +150,19 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
             holder.binding.ivSeverity.setImageResource(iconRes);
             holder.binding.ivSeverity.setColorFilter(
                     androidx.core.content.ContextCompat.getColor(ctx, colorRes));
+
+            boolean hasFix = com.cocode.vcode.ide.core.quickfix.QuickFixRegistry.hasFixes(item);
+            holder.binding.btnQuickFix.setVisibility(hasFix ? View.VISIBLE : View.GONE);
+            if (hasFix) {
+                holder.binding.btnQuickFix.setOnClickListener(v -> {
+                    if (listener != null) {
+                        listener.onQuickFixSelected(item);
+                    }
+                    dismiss();
+                });
+            } else {
+                holder.binding.btnQuickFix.setOnClickListener(null);
+            }
 
             holder.itemView.setOnClickListener(v -> {
                 if (listener != null) {

@@ -218,6 +218,12 @@
             </LinearLayout>
 
         </FrameLayout>
+
+        <com.cocode.vcode.ide.views.QuickSymbolBar
+            android:id="@+id/quick_symbol_bar"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <FrameLayout

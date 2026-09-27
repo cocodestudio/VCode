@@ -741,6 +741,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 }
                 binding.tabBar.setVisibility(View.GONE);
                 binding.diagnosticBar.setVisibility(View.GONE);
+                binding.quickSymbolBar.setVisibility(View.GONE);
+                binding.quickSymbolBar.bindEditor(null);
                 updateBreadcrumbVisibility();
 
                 // Hide keyboard
@@ -935,6 +937,15 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         activeViewer.bindFile(activeFile, viewModel);
         activeViewer.onResume();
+
+        CodeEditText editor = activeViewer.getCodeEditor();
+        if (editor != null && !isPreview) {
+            binding.quickSymbolBar.setVisibility(View.VISIBLE);
+            binding.quickSymbolBar.bindEditor(editor);
+        } else {
+            binding.quickSymbolBar.setVisibility(View.GONE);
+            binding.quickSymbolBar.bindEditor(null);
+        }
 
         applyReadOnlyState();
 
@@ -1181,9 +1192,29 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     private void showProblemsSheet() {
         ProblemsBottomSheet sheet = new ProblemsBottomSheet();
-        sheet.setListener(problem -> {
-            if (problem != null) {
-                jumpToPosition(problem.getFile(), problem.getLine(), problem.getColumn());
+        sheet.setListener(new ProblemsBottomSheet.ProblemListener() {
+            @Override
+            public void onProblemSelected(Problem problem) {
+                if (problem != null) {
+                    jumpToPosition(problem.getFile(), problem.getLine(), problem.getColumn());
+                }
+            }
+
+            @Override
+            public void onQuickFixSelected(Problem problem) {
+                if (problem != null) {
+                    jumpToPosition(problem.getFile(), problem.getLine(), problem.getColumn());
+                    CodeEditText editor = getActiveCodeEditor();
+                    if (editor != null) {
+                        List<com.cocode.vcode.ide.core.quickfix.QuickFix> fixes =
+                                com.cocode.vcode.ide.core.quickfix.QuickFixRegistry.getFixesForProblem(problem, editor);
+                        if (!fixes.isEmpty()) {
+                            fixes.get(0).apply(editor, problem);
+                            Toast.makeText(EditorActivity.this, fixes.get(0).getTitle(), Toast.LENGTH_SHORT).show();
+                            binding.quickSymbolBar.checkQuickFixAvailable();
+                        }
+                    }
+                }
             }
         });
         Integer activeIndex = viewModel.getActiveTabIndex().getValue();

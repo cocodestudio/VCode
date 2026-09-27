@@ -705,4 +705,19 @@
     <string name="vcode_no_templates_found">No matching templates found</string>
     <string name="vcode_file_name_cannot_be_empty">File name cannot be empty</string>
     <string name="vcode_binary_template_not_supported">Templates cannot be created for binary file extensions</string>
+
+    <!-- Diagnostics, Quick Fixes & Web Console -->
+    <string name="vcode_web_console">Web Console</string>
+    <string name="vcode_quick_fix">Quick Fix</string>
+    <string name="vcode_quick_fixes">Quick Fixes</string>
+    <string name="vcode_no_quick_fixes">No quick fixes available</string>
+    <string name="vcode_console_clear">Clear Console</string>
+    <string name="vcode_console_empty">No console logs</string>
+    <string name="vcode_console_empty_desc">Console output from preview and scripts will appear here</string>
+    <string name="vcode_filter_all">All</string>
+    <string name="vcode_filter_log">Log</string>
+    <string name="vcode_filter_info">Info</string>
+    <string name="vcode_filter_warn">Warn</string>
+    <string name="vcode_filter_error">Error</string>
+    <string name="vcode_copied">Copied to clipboard</string>
 </resources>

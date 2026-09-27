@@ -281,4 +281,52 @@ public final class JsLspServer implements LspServer {
     public LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos) {
         return JsSignatureParser.parse(doc, pos);
     }
+
+    @Override
+    public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return null;
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
+
+        com.cocode.vcode.ide.core.diagnostic.util.TokenStream tokens = com.cocode.vcode.ide.core.language.js.JsLexer.tokenize(doc.text);
+        if (offset < tokens.length) {
+            byte type = tokens.types[offset];
+            int s = tokens.tokenStart[offset];
+            int e = s;
+            while (e < tokens.length && tokens.tokenStart[e] == s && tokens.types[e] == type) {
+                e++;
+            }
+            String word = doc.text.substring(s, Math.min(e, doc.text.length())).trim();
+
+            if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_KEYWORD) {
+                for (com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item : com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getJsKeywords()) {
+                    if (word.equals(item.label)) {
+                        String detail = item.detail != null ? item.detail : "JavaScript Keyword";
+                        String md = "### `" + item.label + "`\n\n" + detail;
+                        return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
+                    }
+                }
+                return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), "### `" + word + "`\n\nJavaScript Keyword");
+            }
+
+            com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(doc.text, tokens);
+            if (tree != null) {
+                for (int i = 1; i < tree.nodeCount; i++) {
+                    if (tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_FUNC_DECL
+                            || tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_METHOD) {
+                        if (word.equals(tree.nodeName[i])) {
+                            String typeAnn = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[i] : null;
+                            String sig = "function " + word + "(...)";
+                            if (typeAnn != null && !typeAnn.isEmpty()) {
+                                sig += ": " + typeAnn;
+                            }
+                            String md = "```javascript\n" + sig + "\n```";
+                            return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
 }

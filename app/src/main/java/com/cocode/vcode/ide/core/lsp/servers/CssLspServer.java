@@ -300,4 +300,33 @@ public final class CssLspServer implements LspServer {
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
         return java.util.Collections.emptyList();
     }
+
+    @Override
+    public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return null;
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
+
+        com.cocode.vcode.ide.core.language.css.CssTokenStream stream = com.cocode.vcode.ide.core.language.css.CssLexer.tokenize(doc.text);
+        if (offset < stream.length && stream.types[offset] == com.cocode.vcode.ide.core.language.css.CssTokenStream.TK_PROPERTY) {
+            int s = stream.tokenStart[offset];
+            int e = s;
+            while (e < stream.length && stream.tokenStart[e] == s && stream.types[e] == com.cocode.vcode.ide.core.language.css.CssTokenStream.TK_PROPERTY) {
+                e++;
+            }
+            String propName = doc.text.substring(s, Math.min(e, doc.text.length())).trim();
+            com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item =
+                    com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssProperty(propName);
+            if (item != null) {
+                String detail = item.detail != null ? item.detail : "CSS Property";
+                StringBuilder md = new StringBuilder("### `").append(item.label).append("`\n\n").append(detail);
+                if (item.values != null && item.values.length > 0) {
+                    md.append("\n\n**Common Values:** `").append(String.join("`, `", item.values)).append("`");
+                }
+                com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(doc.toPosition(s), doc.toPosition(e));
+                return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md.toString());
+            }
+        }
+        return null;
+    }
 }

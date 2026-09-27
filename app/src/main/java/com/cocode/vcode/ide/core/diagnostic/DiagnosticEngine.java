@@ -22,26 +22,36 @@ import java.util.Set;
 public class DiagnosticEngine {
     private static final int MAX_PROBLEMS = 60;
 
-    public static List<Problem> analyze(File file, String text, FileType type) {
-        return analyze(file, text, type, null);
-    }
-
-    public static List<Problem> analyze(File file, String text, FileType type, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+    /**
+     * Tier 1: Fast syntactic checks executed immediately during active typing (<5ms).
+     * Validates bracket nesting, JSON structure, and basic lexical errors.
+     */
+    public static List<Problem> runSyntacticLint(File file, String text, FileType type) {
         if (text == null || text.isEmpty()) return new ArrayList<>();
-
         List<Problem> problems = new ArrayList<>();
-
         try {
-            // BracketMatcher handles () [] {} for programming languages — skip for CSS/SCSS, HTML, and Markdown
             if (type != null && type.isTextBased()
                     && type != FileType.CSS && type != FileType.SCSS
                     && type != FileType.HTML && type != FileType.MARKDOWN) {
                 problems.addAll(BracketMatcher.findMismatches(file, text));
             }
-
             if (type == FileType.JSON) {
                 problems.addAll(JsonLinter.analyze(file, text));
-            } else if (type == FileType.HTML) {
+            }
+        } catch (Throwable ignored) {
+        }
+        return problems;
+    }
+
+    /**
+     * Tier 2: Comprehensive semantic checks executed after typing pause (e.g. 400ms idle).
+     * Validates AST structures, scopes, undefined references, accessibility rules, and cross-file exports.
+     */
+    public static List<Problem> runSemanticLint(File file, String text, FileType type, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+        if (text == null || text.isEmpty()) return new ArrayList<>();
+        List<Problem> problems = new ArrayList<>();
+        try {
+            if (type == FileType.HTML) {
                 com.cocode.vcode.ide.core.language.js.ParseResult parseResult = (index != null && file != null)
                         ? index.getParseResult(file.getAbsolutePath()) : null;
                 if (parseResult != null && parseResult.htmlTree != null && parseResult.htmlTokens != null) {
@@ -71,7 +81,7 @@ public class DiagnosticEngine {
                             int absoluteOffset = emb.startOffset + pOffset;
                             int absLine = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.getLine(text, absoluteOffset);
                             int absCol = com.cocode.vcode.ide.core.diagnostic.util.LinterUtils.getColumn(text, absoluteOffset);
-                            problems.add(new Problem(p.getFile(), absLine, absCol, p.getLength(), p.getMessage(), p.getSeverity()));
+                            problems.add(new Problem(p.getFile(), absLine, absCol, p.getLength(), p.getMessage(), p.getSeverity(), p.getCode()));
                         }
                     }
                 }
@@ -93,6 +103,19 @@ public class DiagnosticEngine {
         } catch (Throwable e) {
             problems.add(new Problem(file, 1, 1, 1, "Internal Linter Error: " + e.getMessage() + " (" + e.getClass().getSimpleName() + ")", Problem.Severity.ERROR));
         }
+        return problems;
+    }
+
+    public static List<Problem> analyze(File file, String text, FileType type) {
+        return analyze(file, text, type, null);
+    }
+
+    public static List<Problem> analyze(File file, String text, FileType type, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
+        if (text == null || text.isEmpty()) return new ArrayList<>();
+
+        List<Problem> problems = new ArrayList<>();
+        problems.addAll(runSyntacticLint(file, text, type));
+        problems.addAll(runSemanticLint(file, text, type, index));
 
         return deduplicateAndSort(file, problems);
     }

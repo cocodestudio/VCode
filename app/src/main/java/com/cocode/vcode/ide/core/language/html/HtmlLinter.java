@@ -274,7 +274,8 @@ public class HtmlLinter {
                         if (!hasNonWhitespaceText) {
                             problems.add(new Problem(file, tagLine, tagCol, 7,
                                     "Empty '<title>' element: page title is required for accessibility and SEO",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.HTML_EMPTY_TITLE));
                         }
                         break;
                     case "img":
@@ -288,7 +289,8 @@ public class HtmlLinter {
                         if (!hasAlt) {
                             problems.add(new Problem(file, tagLine, tagCol, 5,
                                     "'<img>' is missing 'alt' attribute: required for accessibility",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.HTML_MISSING_ALT));
                         }
                         if (!attrs.containsKey("loading")) {
                             problems.add(new Problem(file, tagLine, tagCol, 5,
@@ -324,7 +326,8 @@ public class HtmlLinter {
                         if (!attrs.containsKey("type")) {
                             problems.add(new Problem(file, tagLine, tagCol, 8,
                                     "'<button>' is missing 'type' attribute (defaults to 'submit', which can cause bugs)",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.HTML_BUTTON_MISSING_TYPE));
                         }
                         break;
                     case "label":

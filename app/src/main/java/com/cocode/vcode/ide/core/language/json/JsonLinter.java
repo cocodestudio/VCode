@@ -42,7 +42,8 @@ public class JsonLinter {
                     int line = LinterUtils.getLine(text, cStart);
                     int col = LinterUtils.getColumn(text, cStart);
                     problems.add(new Problem(file, line, col, Math.max(1, cEnd - cStart),
-                            "Comments are not permitted in standard JSON", Problem.Severity.WARNING));
+                            "Comments are not permitted in standard JSON", Problem.Severity.WARNING,
+                            com.cocode.vcode.ide.core.diagnostic.ProblemCode.JSON_COMMENTS_DISALLOWED));
                     k = cEnd;
                 } else {
                     k++;
@@ -66,7 +67,8 @@ public class JsonLinter {
                 String msg = tree.nodeName[i];
                 if (msg == null || msg.isEmpty()) msg = "Syntax error";
 
-                problems.add(new Problem(file, line, col, len, msg, Problem.Severity.ERROR));
+                problems.add(new Problem(file, line, col, len, msg, Problem.Severity.ERROR,
+                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.JSON_SYNTAX_ERROR));
             } else if (type == JsonSyntaxTree.N_OBJECT) {
                 Set<String> seenKeys = new HashSet<>();
                 int child = tree.nodeChild[i];

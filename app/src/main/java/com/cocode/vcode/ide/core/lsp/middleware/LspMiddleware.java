@@ -25,4 +25,8 @@ public interface LspMiddleware {
     default LspSignatureHelp onSignatureHelp(LspDocument doc, LspPosition pos, LspSignatureHelp help) {
         return help;
     }
+
+    default com.cocode.vcode.ide.core.lsp.HoverInfo onHover(LspDocument doc, LspPosition pos, com.cocode.vcode.ide.core.lsp.HoverInfo hover) {
+        return hover;
+    }
 }

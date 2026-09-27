@@ -87,4 +87,21 @@ public final class LspDocument {
         int offset = i + pos.character;
         return offset <= text.length() ? offset : -1;
     }
+
+    /**
+     * Converts a flat character offset to a zero-based (line, character) position.
+     */
+    public LspPosition toPosition(int offset) {
+        if (text == null || offset <= 0) return new LspPosition(0, 0);
+        int target = Math.min(offset, text.length());
+        int line = 0;
+        int lineStart = 0;
+        for (int i = 0; i < target; i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+                lineStart = i + 1;
+            }
+        }
+        return new LspPosition(line, target - lineStart);
+    }
 }
