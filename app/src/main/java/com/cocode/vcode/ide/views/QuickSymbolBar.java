@@ -72,8 +72,8 @@ public class QuickSymbolBar extends LinearLayout {
         layoutKeysContainer.removeAllViews();
         FontManager fm = FontManager.getInstance();
 
-        int heightPx = UiUtils.dpToPx(context, 34);
-        int marginPx = UiUtils.dpToPx(context, 3);
+        int heightPx = UiUtils.dpToPx(context, 28);
+        int marginPx = UiUtils.dpToPx(context, 2);
         int textColor = ContextCompat.getColor(context, R.color.vcode_text_primary);
 
         for (String sym : DEFAULT_SYMBOLS) {
@@ -81,21 +81,25 @@ public class QuickSymbolBar extends LinearLayout {
             keyView.setText(sym);
             keyView.setGravity(Gravity.CENTER);
             keyView.setTextColor(textColor);
-            keyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sym.equals("Tab") || sym.equals("->") || sym.equals("=>") ? 12 : 15);
-            keyView.setTypeface(fm.getUiSemiBold(context));
+            boolean isTextLabel = sym.equals("Tab");
+            keyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, isTextLabel ? 11 : 13);
+            keyView.setTypeface(isTextLabel ? fm.getUiMedium(context) : fm.getCodeFont(context));
             keyView.setBackgroundResource(R.drawable.vcode_bg_symbol_key_interactive);
             keyView.setClickable(true);
             keyView.setFocusable(true);
 
-            int minWidth = sym.equals("Tab") ? UiUtils.dpToPx(context, 48) : UiUtils.dpToPx(context, 36);
+            int minWidth = isTextLabel ? UiUtils.dpToPx(context, 42) : UiUtils.dpToPx(context, 32);
             keyView.setMinWidth(minWidth);
-            keyView.setPadding(UiUtils.dpToPx(context, 6), 0, UiUtils.dpToPx(context, 6), 0);
+            keyView.setPadding(UiUtils.dpToPx(context, 4), 0, UiUtils.dpToPx(context, 4), 0);
 
             LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, heightPx);
             lp.setMargins(marginPx, 0, marginPx, 0);
             keyView.setLayoutParams(lp);
 
-            keyView.setOnClickListener(v -> onSymbolClicked(sym));
+            keyView.setOnClickListener(v -> {
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+                onSymbolClicked(sym);
+            });
             layoutKeysContainer.addView(keyView);
         }
     }

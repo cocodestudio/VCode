@@ -62,27 +62,61 @@ public class ConsoleBottomSheet extends BaseBottomSheetDialogFragment {
 
         binding.btnClear.setOnClickListener(v -> LiveConsoleManager.getInstance().clearLogs());
 
-        binding.chipGroupFilter.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty()) {
-                filterLevel = null;
-            } else {
-                int id = checkedIds.get(0);
-                if (id == R.id.chip_log) {
-                    filterLevel = ConsoleLogEntry.Level.LOG;
-                } else if (id == R.id.chip_info) {
-                    filterLevel = ConsoleLogEntry.Level.INFO;
-                } else if (id == R.id.chip_warn) {
-                    filterLevel = ConsoleLogEntry.Level.WARN;
-                } else if (id == R.id.chip_error) {
-                    filterLevel = ConsoleLogEntry.Level.ERROR;
-                } else {
-                    filterLevel = null;
-                }
-            }
-            updateFilteredList(LiveConsoleManager.getInstance().getLogs().getValue());
-        });
+        setupFilterTabs();
 
         LiveConsoleManager.getInstance().getLogs().observe(getViewLifecycleOwner(), this::updateFilteredList);
+    }
+
+    private void setupFilterTabs() {
+        FontManager fm = FontManager.getInstance();
+        binding.btnFilterAll.setTypeface(fm.getUiMedium(requireContext()));
+        binding.btnFilterLog.setTypeface(fm.getUiMedium(requireContext()));
+        binding.btnFilterInfo.setTypeface(fm.getUiMedium(requireContext()));
+        binding.btnFilterWarn.setTypeface(fm.getUiMedium(requireContext()));
+        binding.btnFilterError.setTypeface(fm.getUiMedium(requireContext()));
+
+        binding.btnFilterAll.setOnClickListener(v -> setFilterLevel(null));
+        binding.btnFilterLog.setOnClickListener(v -> setFilterLevel(ConsoleLogEntry.Level.LOG));
+        binding.btnFilterInfo.setOnClickListener(v -> setFilterLevel(ConsoleLogEntry.Level.INFO));
+        binding.btnFilterWarn.setOnClickListener(v -> setFilterLevel(ConsoleLogEntry.Level.WARN));
+        binding.btnFilterError.setOnClickListener(v -> setFilterLevel(ConsoleLogEntry.Level.ERROR));
+
+        updateFilterTabStyles();
+    }
+
+    private void setFilterLevel(@Nullable ConsoleLogEntry.Level level) {
+        this.filterLevel = level;
+        updateFilterTabStyles();
+        updateFilteredList(LiveConsoleManager.getInstance().getLogs().getValue());
+    }
+
+    private void updateFilterTabStyles() {
+        if (binding == null || getContext() == null) return;
+
+        int activeBg = getThemeColor(com.google.android.material.R.attr.colorPrimaryContainer);
+        int activeText = getThemeColor(com.google.android.material.R.attr.colorOnPrimaryContainer);
+        int inactiveBg = android.graphics.Color.TRANSPARENT;
+        int inactiveText = getThemeColor(com.google.android.material.R.attr.colorOnSurfaceVariant);
+
+        applyTabStyle(binding.btnFilterAll, filterLevel == null, activeBg, activeText, inactiveBg, inactiveText);
+        applyTabStyle(binding.btnFilterLog, filterLevel == ConsoleLogEntry.Level.LOG, activeBg, activeText, inactiveBg, inactiveText);
+        applyTabStyle(binding.btnFilterInfo, filterLevel == ConsoleLogEntry.Level.INFO, activeBg, activeText, inactiveBg, inactiveText);
+        applyTabStyle(binding.btnFilterWarn, filterLevel == ConsoleLogEntry.Level.WARN, activeBg, activeText, inactiveBg, inactiveText);
+        applyTabStyle(binding.btnFilterError, filterLevel == ConsoleLogEntry.Level.ERROR, activeBg, activeText, inactiveBg, inactiveText);
+    }
+
+    private void applyTabStyle(com.google.android.material.button.MaterialButton button, boolean isActive,
+                               int activeBg, int activeText, int inactiveBg, int inactiveText) {
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(isActive ? activeBg : inactiveBg));
+        button.setTextColor(isActive ? activeText : inactiveText);
+    }
+
+    private int getThemeColor(int attr) {
+        android.util.TypedValue typedValue = new android.util.TypedValue();
+        if (requireContext().getTheme().resolveAttribute(attr, typedValue, true)) {
+            return typedValue.data;
+        }
+        return android.graphics.Color.TRANSPARENT;
     }
 
     private void updateFilteredList(List<ConsoleLogEntry> allLogs) {

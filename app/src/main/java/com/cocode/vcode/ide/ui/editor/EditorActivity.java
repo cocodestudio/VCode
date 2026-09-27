@@ -679,6 +679,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             if (editor != null && !isReadOnly) {
                                 editor.requestFocus();
                             }
+                            if (editor != null) {
+                                binding.quickSymbolBar.setVisibility(View.VISIBLE);
+                                binding.quickSymbolBar.bindEditor(editor);
+                            }
                         });
                     }
                 } else {
@@ -823,7 +827,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 String relPath = activeFile.getRelativePath(viewModel.getProjectRoot());
                 updateBreadcrumbVisibility();
 
-                boolean isPreview = viewModel.getPreviewState(relPath);
+                FileType fileType = activeFile.getFileType();
+                boolean supportsInlinePreview = (fileType == FileType.SVG
+                        || fileType == FileType.CSV
+                        || fileType == FileType.MARKDOWN);
+                boolean isPreview = supportsInlinePreview && viewModel.getPreviewState(relPath);
                 // Don't default to preview mode for empty files (freshly created)
                 if (isPreview && !viewModel.hasExplicitPreviewState(relPath)) {
                     String content = activeFile.getContent();

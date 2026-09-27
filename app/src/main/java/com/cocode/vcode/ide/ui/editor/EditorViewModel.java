@@ -1265,7 +1265,7 @@ public class EditorViewModel extends ViewModel {
         if (currentState != null) {
             return currentState.getPreviewStateFor(relativePath);
         }
-        return true;
+        return false;
     }
 
     public boolean hasExplicitPreviewState(String relativePath) {

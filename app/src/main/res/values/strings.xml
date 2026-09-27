@@ -727,4 +727,5 @@
     <string name="vcode_filter_warn">Warn</string>
     <string name="vcode_filter_error">Error</string>
     <string name="vcode_copied">Copied to clipboard</string>
+    <string name="vcode_action_hover_doc">Documentation</string>
 </resources>

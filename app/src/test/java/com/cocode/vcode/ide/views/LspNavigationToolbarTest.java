@@ -164,4 +164,27 @@ public class LspNavigationToolbarTest {
         assertFalse(toolbar.isVisible());
         verify(mockBridge, never()).requestDefinition(any());
     }
+
+    @Test
+    public void testOnCursorIdle_HoverAvailable_ShowsHoverDoc() {
+        when(mockBridge.isLspActive()).thenReturn(true);
+        toolbar.onCursorIdle(50);
+
+        ArgumentCaptor<LspCallback> defCaptor = ArgumentCaptor.forClass(LspCallback.class);
+        ArgumentCaptor<LspCallback> refCaptor = ArgumentCaptor.forClass(LspCallback.class);
+        ArgumentCaptor<LspCallback> renameCaptor = ArgumentCaptor.forClass(LspCallback.class);
+        ArgumentCaptor<LspCallback> hoverCaptor = ArgumentCaptor.forClass(LspCallback.class);
+
+        verify(mockBridge).requestDefinition(defCaptor.capture());
+        verify(mockBridge).requestReferences(refCaptor.capture());
+        verify(mockBridge).requestRename(renameCaptor.capture());
+        verify(mockBridge).requestHover(hoverCaptor.capture());
+
+        defCaptor.getValue().onResult(null);
+        refCaptor.getValue().onResult(new ArrayList<>());
+        renameCaptor.getValue().onResult(null);
+        hoverCaptor.getValue().onResult(new com.cocode.vcode.ide.core.lsp.HoverInfo("### `test`\n\nDoc"));
+
+        assertTrue("Toolbar should be visible when hover documentation is available", toolbar.isVisible());
+    }
 }

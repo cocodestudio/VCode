@@ -69,7 +69,7 @@ public class ProjectState {
     public boolean getPreviewStateFor(String relativePath) {
         if (relativePath == null) return false;
         Boolean val = previewStates.get(normalizePath(relativePath));
-        return val != null ? val : true;
+        return val != null ? val : false;
     }
 
     public boolean hasExplicitPreviewState(String relativePath) {
