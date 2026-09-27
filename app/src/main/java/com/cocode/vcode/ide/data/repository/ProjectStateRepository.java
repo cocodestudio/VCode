@@ -239,14 +239,7 @@ public class ProjectStateRepository {
         root.put("virtualFiles", virtuals);
 
         File sessionFile = getSessionFile(projectDir, isFromIntent);
-        File parentDir = sessionFile.getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs();
-        }
-        try (BufferedWriter writer = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(sessionFile), StandardCharsets.UTF_8))) {
-            writer.write(root.toString(2));
-        }
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(sessionFile, root.toString(2));
     }
 
     private ProjectState readStateFromDisk(File projectDir, String projectId, boolean isFromIntent) throws Exception {

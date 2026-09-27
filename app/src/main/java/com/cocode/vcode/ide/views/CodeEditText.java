@@ -2463,6 +2463,16 @@ public class CodeEditText extends View {
     }
 
     /**
+     * Appends deferred project symbols to the active autocomplete popup without resetting
+     * scroll position or keyboard selection.
+     */
+    public void appendLspCompletions(java.util.List<CompletionItem> items) {
+        if (autoCompletePopup != null && autoCompletePopup.isShowing()) {
+            autoCompletePopup.appendItems(items);
+        }
+    }
+
+    /**
      * Dismisses the autocomplete popup if it is currently showing.
      * Called by {@link com.cocode.vcode.ide.core.lsp.LspEditorBridge} when the LSP
      * server returns an empty completion list for the current position.

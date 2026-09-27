@@ -8,7 +8,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import com.cocode.vcode.ide.core.lsp.index.PersistentSymbolStore;
+import com.cocode.vcode.ide.core.lsp.index.PersistentSymbolStore.FileSymbolRecord;
 
 /**
  * Project-wide symbol index.
@@ -46,9 +49,28 @@ public final class ProjectIndex {
     private final ConcurrentHashMap<String, List<SymbolEntry>> fileSymbols = new ConcurrentHashMap<>();
 
     /**
-     * Cache of the latest ParseResult for each file, keyed by absolute file path.
+     * Maximum number of parsed ASTs retained concurrently in memory.
+     * Keeps heap footprint bounded under low memory constraints (e.g. 512MB heap).
      */
-    private final ConcurrentHashMap<String, com.cocode.vcode.ide.core.language.js.ParseResult> parseResults = new ConcurrentHashMap<>();
+    private static final int MAX_CACHED_AST_COUNT = 8;
+
+    /**
+     * Bounded LRU cache of the latest ParseResult for each file, keyed by canonical absolute file path.
+     * Evicts oldest ASTs when size exceeds MAX_CACHED_AST_COUNT. Evicted files retain their lightweight
+     * symbol records in {@link #fileSymbols} and are lazily re-parsed on demand.
+     */
+    private final Map<String, com.cocode.vcode.ide.core.language.js.ParseResult> parseResults =
+            Collections.synchronizedMap(new java.util.LinkedHashMap<String, com.cocode.vcode.ide.core.language.js.ParseResult>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, com.cocode.vcode.ide.core.language.js.ParseResult> eldest) {
+                    return size() > MAX_CACHED_AST_COUNT;
+                }
+            });
+
+    /**
+     * Workspace symbol records loaded from or to be serialized to .vcode/cache/symbols.idx.
+     */
+    private final ConcurrentHashMap<String, FileSymbolRecord> persistentRecords = new ConcurrentHashMap<>();
 
     /**
      * Per-file export table, keyed by absolute file path. Populated
@@ -143,6 +165,15 @@ public final class ProjectIndex {
      * this for a full reset (e.g. when the project itself changes). For normal tab-switch
      * scenarios, use {@link #indexProjectIncremental(File)} instead so live editor data
      * is not discarded.
+     */
+    private static File getSymbolCacheFile(String root) {
+        if (root == null) return null;
+        File cacheDir = new File(root, ".vcode" + File.separator + "cache");
+        return new File(cacheDir, "symbols.idx");
+    }
+
+    /**
+     * Recursively indexes all supported source files under {@code root} on the IO thread pool.
      *
      * @param root       project root directory
      * @param onComplete optional callback, invoked on the main thread when indexing is done
@@ -153,7 +184,14 @@ public final class ProjectIndex {
         ExecutorProvider.getInstance().runOnIo(() -> {
             documents.clear();
             fileSymbols.clear();
+            persistentRecords.clear();
+            File cacheFile = getSymbolCacheFile(projectRoot);
+            Map<String, FileSymbolRecord> loaded = PersistentSymbolStore.loadIndex(cacheFile, projectRoot);
+            if (loaded != null && !loaded.isEmpty()) {
+                persistentRecords.putAll(loaded);
+            }
             indexDirectory(root);
+            PersistentSymbolStore.saveIndex(cacheFile, projectRoot, persistentRecords);
             if (onComplete != null) {
                 ExecutorProvider.getInstance().runOnMain(onComplete);
             }
@@ -177,7 +215,15 @@ public final class ProjectIndex {
         projectRoot = root.getAbsolutePath();
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
+                File cacheFile = getSymbolCacheFile(projectRoot);
+                if (persistentRecords.isEmpty()) {
+                    Map<String, FileSymbolRecord> loaded = PersistentSymbolStore.loadIndex(cacheFile, projectRoot);
+                    if (loaded != null && !loaded.isEmpty()) {
+                        persistentRecords.putAll(loaded);
+                    }
+                }
                 indexDirectoryIncremental(root);
+                PersistentSymbolStore.saveIndex(cacheFile, projectRoot, persistentRecords);
             } finally {
                 isIncrementalScanRunning.set(false);
             }
@@ -193,6 +239,7 @@ public final class ProjectIndex {
         fileSymbols.clear();
         parseResults.clear();
         exportTables.clear();
+        persistentRecords.clear();
         LspEditorBridge.resetProjectSession();
     }
 
@@ -332,6 +379,10 @@ public final class ProjectIndex {
         if (canon != null && !canon.equals(uri)) {
             fileSymbols.put(canon, symbols);
         }
+        File f = new File(uri);
+        if (f.exists()) {
+            persistentRecords.put(uri, new FileSymbolRecord(f.lastModified(), f.length(), symbols));
+        }
     }
 
     /**
@@ -355,9 +406,11 @@ public final class ProjectIndex {
     public void invalidateSymbols(String uri) {
         if (uri == null) return;
         fileSymbols.remove(uri);
+        persistentRecords.remove(uri);
         String canon = canonicalize(uri);
         if (canon != null) {
             fileSymbols.remove(canon);
+            persistentRecords.remove(canon);
         }
     }
 
@@ -511,6 +564,23 @@ public final class ProjectIndex {
         return projectRoot;
     }
 
+    private void indexFileIncrementalOrCached(File file) {
+        String uri = file.getAbsolutePath();
+        FileSymbolRecord record = persistentRecords.get(uri);
+        if (record == null) {
+            record = persistentRecords.get(canonicalize(uri));
+        }
+        if (record != null && record.lastModified == file.lastModified() && record.fileLength == file.length()) {
+            fileSymbols.put(uri, record.symbols);
+            String canon = canonicalize(uri);
+            if (canon != null && !canon.equals(uri)) {
+                fileSymbols.put(canon, record.symbols);
+            }
+            return;
+        }
+        indexFile(file);
+    }
+
     private void indexDirectory(File dir) {
         File[] files = dir.listFiles();
         if (files == null) return;
@@ -520,7 +590,7 @@ public final class ProjectIndex {
                     indexDirectory(f);
                 }
             } else if (isSupportedFile(f)) {
-                indexFile(f);
+                indexFileIncrementalOrCached(f);
             }
         }
     }
@@ -542,7 +612,7 @@ public final class ProjectIndex {
                 // Only read from disk if this file hasn't been opened by the editor.
                 // The editor's live snapshot (version > 0) is the authoritative source.
                 if (!documents.containsKey(f.getAbsolutePath())) {
-                    indexFile(f);
+                    indexFileIncrementalOrCached(f);
                 }
             }
         }
@@ -558,6 +628,7 @@ public final class ProjectIndex {
                 // Re-derive symbols from the live copy without touching the text.
                 List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(existing);
                 fileSymbols.put(uri, symbols);
+                persistentRecords.put(uri, new FileSymbolRecord(file.lastModified(), file.length(), symbols));
                 return;
             }
             String text = readFile(file);
@@ -566,6 +637,7 @@ public final class ProjectIndex {
             documents.put(uri, doc);
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
             fileSymbols.put(uri, symbols);
+            persistentRecords.put(uri, new FileSymbolRecord(file.lastModified(), file.length(), symbols));
 
             if ("javascript".equals(languageId) || "typescript".equals(languageId)) {
                 try {

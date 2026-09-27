@@ -255,9 +255,7 @@ public class SnippetRepository {
     private void writeSnippetsToDisk(List<SnippetItem> snippets) throws Exception {
         JSONArray array = new JSONArray();
         for (SnippetItem s : snippets) array.put(toJson(s));
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(getSnippetsFile()), StandardCharsets.UTF_8))) {
-            writer.write(array.toString(2));
-        }
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(getSnippetsFile(), array.toString(2));
     }
 
     private JSONObject toJson(SnippetItem item) throws JSONException {

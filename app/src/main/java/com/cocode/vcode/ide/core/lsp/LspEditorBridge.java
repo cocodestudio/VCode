@@ -63,7 +63,14 @@ public final class LspEditorBridge {
      */
     private boolean attached = false;
     private boolean diagnosticsEnabled = true;
-    private IEditorCallback editorCallback;    private final Runnable diagnosticRunnable = this::performDiagnostics;
+    private IEditorCallback editorCallback;
+    /**
+     * Active cancellation tokens for ongoing background diagnostic and completion jobs.
+     * Cancelled instantly on every keystroke to abort stale worker tasks without CPU churn.
+     */
+    private volatile CancellationToken activeDiagnosticToken;
+    private volatile CancellationToken activeCompletionToken;
+    private final Runnable diagnosticRunnable = this::performDiagnostics;
     /**
      * True from the moment {@link #setFile(File)} switches {@code currentFile} until
      * {@link #textLoadListener} reports the load complete. {@link CodeEditText#setText}
@@ -466,10 +473,23 @@ public final class LspEditorBridge {
             }
         }
         return filtered;
-    }    private final CodeEditText.OnContentChangeListener contentListener = () -> {
+    }
+
+    private final CodeEditText.OnContentChangeListener contentListener = () -> {
         if (!attached || editor == null) return;
         lastActionWasTextChange = true;
         docVersion.incrementAndGet();
+
+        // Cancel active background tasks immediately to prevent CPU churn
+        if (activeDiagnosticToken != null) {
+            activeDiagnosticToken.cancel();
+        }
+        if (activeCompletionToken != null) {
+            activeCompletionToken.cancel();
+        }
+        activeDiagnosticToken = new CancellationToken();
+        activeCompletionToken = new CancellationToken();
+
         // Reschedule debounced diagnostics
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
@@ -755,6 +775,14 @@ public final class LspEditorBridge {
     public void detach() {
         attached = false;
         contentSyncPending = false;
+        if (activeDiagnosticToken != null) {
+            activeDiagnosticToken.cancel();
+            activeDiagnosticToken = null;
+        }
+        if (activeCompletionToken != null) {
+            activeCompletionToken.cancel();
+            activeCompletionToken = null;
+        }
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.removeCallbacks(completionRunnable);
         mainHandler.removeCallbacks(signatureHelpRunnable);
@@ -811,15 +839,16 @@ public final class LspEditorBridge {
         }
 
         final int capturedVersion = doc.version;
+        final CancellationToken token = activeDiagnosticToken;
 
         if (editorCallback != null && currentFile != null) {
             editorCallback.reportDiagnosticLoading(currentFile);
         }
 
-        LspClientManager.getInstance().requestDiagnostics(doc, new LspCallback<List<Problem>>() {
+        LspClientManager.getInstance().requestDiagnostics(doc, token, new LspCallback<List<Problem>>() {
             @Override
             public void onResult(List<Problem> result) {
-                if (!attached || editor == null) return;
+                if (!attached || editor == null || (token != null && token.isCancelled())) return;
                 List<Problem> finalResult = result != null ? result : Collections.emptyList();
                 // If the document has changed since this request was made, ensure another diagnostic pass runs
                 if (capturedVersion != docVersion.get()) {
@@ -835,6 +864,7 @@ public final class LspEditorBridge {
 
             @Override
             public void onError(String errorMessage) {
+                if (token != null && token.isCancelled()) return;
                 // Clear any stale squiggles and clear the analyzing UI
                 if (attached && editor != null) {
                     editor.applyDiagnostics(new ArrayList<>());
@@ -893,11 +923,12 @@ public final class LspEditorBridge {
 
         LspPosition pos = cursorPosition();
         final int capturedVersion = docVersion.get();
+        final CancellationToken token = activeCompletionToken;
 
-        LspClientManager.getInstance().requestCompletion(doc, pos, new LspCallback<List<LspCompletionItem>>() {
+        LspClientManager.getInstance().requestCompletion(doc, pos, token, new LspCallback<List<LspCompletionItem>>() {
             @Override
             public void onResult(List<LspCompletionItem> result) {
-                if (capturedVersion != docVersion.get() || !attached || editor == null) return;
+                if (capturedVersion != docVersion.get() || !attached || editor == null || (token != null && token.isCancelled())) return;
 
                 if (result != null && isInsideCallArgs) {
                     result = filterForArgumentContext(result);
@@ -913,6 +944,7 @@ public final class LspEditorBridge {
 
             @Override
             public void onError(String errorMessage) {
+                if (token != null && token.isCancelled()) return;
                 // Server not ready — dismiss stale popup silently
                 if (attached && editor != null && capturedVersion == docVersion.get()) {
                     editor.dismissAutoCompletePopup();

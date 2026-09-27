@@ -74,22 +74,27 @@ public final class LspClientManager {
     // -------------------------------------------------------------------------
 
     /**
-     * Requests completion items for the given position in the document.
+     * Requests completion items for the given position in the document with cancellation support.
      *
-     * @param doc      current document snapshot
-     * @param pos      caret position
-     * @param callback result delivered on the main thread
+     * @param doc               current document snapshot
+     * @param pos               caret position
+     * @param cancellationToken optional token to abort execution if a newer keystroke occurred
+     * @param callback          result delivered on the main thread
      */
     public void requestCompletion(LspDocument doc, LspPosition pos,
+                                  CancellationToken cancellationToken,
                                   LspCallback<List<LspCompletionItem>> callback) {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 LspServer server = getOrStartServer(doc.languageId);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 if (server == null || !server.isReady()) {
                     deliverError(callback, "Language server not ready");
                     return;
                 }
                 List<LspCompletionItem> items = server.completion(doc, pos);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 deliverResult(callback, items != null ? items : Collections.emptyList());
             } catch (Exception e) {
                 deliverError(callback, e.getMessage());
@@ -97,29 +102,44 @@ public final class LspClientManager {
         });
     }
 
+    public void requestCompletion(LspDocument doc, LspPosition pos,
+                                  LspCallback<List<LspCompletionItem>> callback) {
+        requestCompletion(doc, pos, null, callback);
+    }
+
     /**
-     * Requests diagnostics (errors / warnings) for the document.
+     * Requests diagnostics (errors / warnings) for the document with cancellation support.
      * Runs on the dedicated diagnostic executor — isolated from disk I/O — so results
      * arrive immediately without waiting for auto-saves or project indexing to complete.
      *
-     * @param doc      current document snapshot
-     * @param callback result delivered on the main thread
+     * @param doc               current document snapshot
+     * @param cancellationToken optional token to abort execution if a newer keystroke occurred
+     * @param callback          result delivered on the main thread
      */
     public void requestDiagnostics(LspDocument doc,
+                                   CancellationToken cancellationToken,
                                    LspCallback<List<Problem>> callback) {
         ExecutorProvider.getInstance().runOnDiagnostic(() -> {
             try {
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 LspServer server = getOrStartServer(doc.languageId);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 if (server == null || !server.isReady()) {
                     deliverResult(callback, Collections.emptyList());
                     return;
                 }
                 List<Problem> diags = server.diagnostics(doc);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 deliverResult(callback, diags != null ? diags : Collections.emptyList());
             } catch (Throwable t) {
                 deliverError(callback, t.getMessage());
             }
         });
+    }
+
+    public void requestDiagnostics(LspDocument doc,
+                                   LspCallback<List<Problem>> callback) {
+        requestDiagnostics(doc, null, callback);
     }
 
     /**

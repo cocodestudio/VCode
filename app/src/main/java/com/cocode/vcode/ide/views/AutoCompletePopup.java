@@ -133,6 +133,25 @@ public class AutoCompletePopup {
         }
     }
 
+    /**
+     * Appends deferred (Tier 2) project completion items to the active popup
+     * without resetting the user's scroll position or selected index.
+     *
+     * @param newItems completion items to append
+     */
+    public void appendItems(List<CompletionItem> newItems) {
+        if (newItems == null || newItems.isEmpty() || !popupWindow.isShowing()) {
+            return;
+        }
+        int oldCount = adapter.getItemCount();
+        adapter.appendUniqueItems(newItems);
+        int newCount = adapter.getItemCount();
+        if (newCount > oldCount && newCount <= MAX_VISIBLE_ITEMS) {
+            int estimatedHeight = newCount * UiUtils.dpToPx(context, ITEM_HEIGHT_DP);
+            popupWindow.setHeight(estimatedHeight);
+        }
+    }
+
     public void dismiss() {
         if (popupWindow.isShowing()) {
             popupWindow.dismiss();
@@ -208,8 +227,30 @@ public class AutoCompletePopup {
 
         @SuppressLint("NotifyDataSetChanged")
         void setItems(List<CompletionItem> items) {
-            this.items = items != null ? items : new ArrayList<>();
+            this.items = items != null ? new ArrayList<>(items) : new ArrayList<>();
             notifyDataSetChanged();
+        }
+
+        void appendUniqueItems(List<CompletionItem> newItems) {
+            if (newItems == null || newItems.isEmpty()) return;
+            java.util.Set<String> existingLabels = new java.util.HashSet<>();
+            for (CompletionItem item : items) {
+                if (item != null && item.getLabel() != null) {
+                    existingLabels.add(item.getLabel());
+                }
+            }
+            int startPos = items.size();
+            List<CompletionItem> toAdd = new ArrayList<>();
+            for (CompletionItem item : newItems) {
+                if (item != null && item.getLabel() != null && !existingLabels.contains(item.getLabel())) {
+                    toAdd.add(item);
+                    existingLabels.add(item.getLabel());
+                }
+            }
+            if (!toAdd.isEmpty()) {
+                items.addAll(toAdd);
+                notifyItemRangeInserted(startPos, toAdd.size());
+            }
         }
 
         void setListener(OnItemSelectedListener l) {

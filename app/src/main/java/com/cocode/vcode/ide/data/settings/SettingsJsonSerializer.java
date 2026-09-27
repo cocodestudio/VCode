@@ -287,18 +287,9 @@ public final class SettingsJsonSerializer {
      * Writes formatted settings JSON to a destination file.
      */
     public static void writeSettingsToFile(@NonNull File targetFile, @NonNull AppSettings settings) throws IOException, JSONException {
-        File parent = targetFile.getParentFile();
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs();
-        }
-
         JSONObject json = serialize(settings);
         String formatted = json.toString(2);
-
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(targetFile), StandardCharsets.UTF_8))) {
-            writer.write(formatted);
-            writer.flush();
-        }
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(targetFile, formatted);
     }
 
     /**

@@ -55,15 +55,37 @@ public class FileUtils {
     }
 
     /**
-     * Writes the provided text content to a file with UTF-8 encoding, creating parent directories if needed.
+     * Writes the provided text content to a file with UTF-8 encoding atomically and crash-safely.
+     * Content is written to a temporary sibling file first, flushed and synced to physical flash storage,
+     * and atomically renamed to the destination.
      */
     public static void writeFile(File file, String content) throws IOException {
         if (file == null) throw new IOException("File is null");
         File parent = file.getParentFile();
         if (parent != null && !parent.exists()) parent.mkdirs();
-        try (BufferedWriter writer = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
-            writer.write(content == null ? "" : content);
+
+        File tempFile = new File(parent != null ? parent : file.getAbsoluteFile().getParentFile(),
+                file.getName() + "." + System.currentTimeMillis() + ".tmp");
+        try {
+            try (FileOutputStream fos = new FileOutputStream(tempFile);
+                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(fos, StandardCharsets.UTF_8))) {
+                writer.write(content == null ? "" : content);
+                writer.flush();
+                fos.getFD().sync();
+            }
+
+            if (!tempFile.renameTo(file)) {
+                if (file.exists() && !file.delete()) {
+                    throw new IOException("Failed to replace destination file: " + file);
+                }
+                if (!tempFile.renameTo(file)) {
+                    throw new IOException("Failed to rename temporary file " + tempFile + " to destination " + file);
+                }
+            }
+        } finally {
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
         }
     }
 
