@@ -711,6 +711,13 @@
     <string name="vcode_quick_fix">Quick Fix</string>
     <string name="vcode_quick_fixes">Quick Fixes</string>
     <string name="vcode_no_quick_fixes">No quick fixes available</string>
+    <string name="vcode_quick_fix_add_alt">Add alt=\"\" attribute</string>
+    <string name="vcode_quick_fix_add_button_type">Add type=\"button\" attribute</string>
+    <string name="vcode_quick_fix_add_title">Add title text</string>
+    <string name="vcode_quick_fix_const_to_let">Convert \'const\' declaration to \'let\'</string>
+    <string name="vcode_quick_fix_remove_json_comment">Remove disallowed comment</string>
+    <string name="vcode_quick_fix_insert_semicolon">Insert missing \';\'</string>
+    <string name="vcode_quick_fix_prefix_unused">Prefix unused identifier with \'_\'</string>
     <string name="vcode_console_clear">Clear Console</string>
     <string name="vcode_console_empty">No console logs</string>
     <string name="vcode_console_empty_desc">Console output from preview and scripts will appear here</string>

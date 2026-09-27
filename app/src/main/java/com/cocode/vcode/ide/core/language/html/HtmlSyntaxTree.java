@@ -1,5 +1,8 @@
 package com.cocode.vcode.ide.core.language.html;
 
+import com.cocode.vcode.ide.core.language.base.DomFile;
+import com.cocode.vcode.ide.core.language.base.SyntaxTreeDomAdapter;
+
 import java.util.Arrays;
 
 /**
@@ -417,5 +420,13 @@ public final class HtmlSyntaxTree {
             child = nodeSibling[child];
         }
         return null;
+    }
+
+    /**
+     * Converts this flat syntax tree into a neutral {@link DomFile} representation for code folding,
+     * breadcrumbs, and outline navigation.
+     */
+    public DomFile toDomFile() {
+        return SyntaxTreeDomAdapter.fromHtml(this);
     }
 }

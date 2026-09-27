@@ -65,6 +65,6 @@ public class MarkdownLanguageBackend implements LanguageBackend {
         String src = text != null ? text.toString() : "";
         MdLineStream stream = MdLexer.lex(src);
         MdSyntaxTree tree = MdParser.parseBlocks(stream, src);
-        return SyntaxTreeDomAdapter.fromMd(tree);
+        return tree != null ? tree.toDomFile() : null;
     }
 }

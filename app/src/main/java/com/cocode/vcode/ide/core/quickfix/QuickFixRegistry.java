@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.quickfix;
 
+import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.views.CodeEditText;
@@ -35,7 +36,7 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return "Add alt=\"\" attribute";
+                    return getFixTitle(editor, R.string.vcode_quick_fix_add_alt, "Add alt=\"\" attribute");
                 }
 
                 @Override
@@ -67,7 +68,7 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return "Add type=\"button\" attribute";
+                    return getFixTitle(editor, R.string.vcode_quick_fix_add_button_type, "Add type=\"button\" attribute");
                 }
 
                 @Override
@@ -99,7 +100,7 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return "Add title text";
+                    return getFixTitle(editor, R.string.vcode_quick_fix_add_title, "Add title text");
                 }
 
                 @Override
@@ -125,7 +126,7 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return "Convert 'const' declaration to 'let'";
+                    return getFixTitle(editor, R.string.vcode_quick_fix_const_to_let, "Convert 'const' declaration to 'let'");
                 }
 
                 @Override
@@ -163,7 +164,7 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return "Remove disallowed comment";
+                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_json_comment, "Remove disallowed comment");
                 }
 
                 @Override
@@ -186,7 +187,81 @@ public final class QuickFixRegistry {
             });
         }
 
+        // 6. JS/TS: Missing semicolon -> insert semicolon
+        if (code == ProblemCode.JS_MISSING_SEMICOLON || (code == null && msg.toLowerCase().contains("missing semicolon"))) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return getFixTitle(editor, R.string.vcode_quick_fix_insert_semicolon, "Insert missing ';'");
+                }
+
+                @Override
+                public void apply(CodeEditText ed, Problem prob) {
+                    int pLine = Math.max(0, prob.getLine() - 1);
+                    if (pLine >= 0 && pLine < ed.getLineCount()) {
+                        String lt = ed.getLineText(pLine);
+                        int col = prob.getColumn() - 1;
+                        int insertCol = (col >= 0 && col <= lt.length()) ? col : lt.length();
+                        ed.beginAtomicGroup();
+                        try {
+                            ed.replaceRange(pLine, insertCol, pLine, insertCol, ";");
+                        } finally {
+                            ed.endAtomicGroup();
+                        }
+                    }
+                }
+            });
+        }
+
+        // 7. JS/TS: Unused variable -> prefix with '_'
+        if (code == ProblemCode.JS_UNUSED_VARIABLE || (code == null && msg.contains("never used"))) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return getFixTitle(editor, R.string.vcode_quick_fix_prefix_unused, "Prefix unused identifier with '_'");
+                }
+
+                @Override
+                public void apply(CodeEditText ed, Problem prob) {
+                    String varName = "";
+                    int q1 = prob.getMessage().lastIndexOf('\'');
+                    if (q1 > 0) {
+                        int q0 = prob.getMessage().lastIndexOf('\'', q1 - 1);
+                        if (q0 >= 0) {
+                            varName = prob.getMessage().substring(q0 + 1, q1);
+                        }
+                    }
+                    int pLine = Math.max(0, prob.getLine() - 1);
+                    if (pLine >= 0 && pLine < ed.getLineCount()) {
+                        String lt = ed.getLineText(pLine);
+                        int vIdx = !varName.isEmpty() ? lt.indexOf(varName) : -1;
+                        if (vIdx < 0 && prob.getColumn() > 0) {
+                            vIdx = prob.getColumn() - 1;
+                        }
+                        if (vIdx >= 0 && vIdx <= lt.length()) {
+                            ed.beginAtomicGroup();
+                            try {
+                                ed.replaceRange(pLine, vIdx, pLine, vIdx, "_");
+                            } finally {
+                                ed.endAtomicGroup();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         return fixes;
+    }
+
+    private static String getFixTitle(CodeEditText ed, int resId, String defaultTitle) {
+        if (ed != null && ed.getContext() != null) {
+            try {
+                return ed.getContext().getString(resId);
+            } catch (Throwable ignored) {
+            }
+        }
+        return defaultTitle;
     }
 
     /**
@@ -201,6 +276,8 @@ public final class QuickFixRegistry {
         if (code == ProblemCode.HTML_EMPTY_TITLE || (code == null && msg.contains("Empty '<title>'"))) return true;
         if (code == ProblemCode.JS_CONST_REASSIGNMENT || (code == null && msg.contains("reassign 'const' variable"))) return true;
         if (code == ProblemCode.JSON_COMMENTS_DISALLOWED || (code == null && msg.contains("Comments are not permitted in standard JSON"))) return true;
+        if (code == ProblemCode.JS_MISSING_SEMICOLON || (code == null && msg.toLowerCase().contains("missing semicolon"))) return true;
+        if (code == ProblemCode.JS_UNUSED_VARIABLE || (code == null && msg.contains("never used"))) return true;
         return false;
     }
 }

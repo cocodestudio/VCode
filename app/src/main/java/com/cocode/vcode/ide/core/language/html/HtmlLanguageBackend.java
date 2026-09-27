@@ -68,6 +68,6 @@ public class HtmlLanguageBackend implements LanguageBackend {
     @Override
     public DomNode parseToDom(CharSequence text) {
         ParseResult res = HtmlParser.parse(text != null ? text.toString() : "");
-        return SyntaxTreeDomAdapter.fromHtml(res.htmlTree);
+        return res != null && res.htmlTree != null ? res.htmlTree.toDomFile() : null;
     }
 }

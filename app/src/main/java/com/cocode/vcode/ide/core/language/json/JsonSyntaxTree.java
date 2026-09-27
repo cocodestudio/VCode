@@ -1,5 +1,8 @@
 package com.cocode.vcode.ide.core.language.json;
 
+import com.cocode.vcode.ide.core.language.base.DomFile;
+import com.cocode.vcode.ide.core.language.base.SyntaxTreeDomAdapter;
+
 import java.util.Arrays;
 
 /**
@@ -295,5 +298,13 @@ public class JsonSyntaxTree {
             }
         }
         return current;
+    }
+
+    /**
+     * Converts this flat syntax tree into a neutral {@link DomFile} representation for code folding,
+     * breadcrumbs, and outline navigation.
+     */
+    public DomFile toDomFile() {
+        return SyntaxTreeDomAdapter.fromJson(this);
     }
 }

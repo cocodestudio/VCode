@@ -1,5 +1,11 @@
 package com.cocode.vcode.ide.core.language.base;
 
+import com.cocode.vcode.ide.core.language.css.CssParser;
+import com.cocode.vcode.ide.core.language.html.HtmlParser;
+import com.cocode.vcode.ide.core.language.js.JsLexer;
+import com.cocode.vcode.ide.core.language.js.JsParser;
+import com.cocode.vcode.ide.core.language.json.JsonParser;
+import com.cocode.vcode.ide.core.language.md.MdParser;
 import com.cocode.vcode.ide.core.lsp.LspClientManager;
 import com.cocode.vcode.ide.core.lsp.LspServer;
 import com.cocode.vcode.ide.core.lsp.LspServerRegistry;
@@ -198,5 +204,42 @@ public class LanguageArchitectureTest {
         assertTrue(CodeFormatter.isFormatSupported(FileType.JAVASCRIPT));
         assertTrue(CodeFormatter.isFormatSupported(FileType.TYPESCRIPT));
         assertTrue(CodeFormatter.isFormatSupported(FileType.JSON));
+    }
+
+    @Test
+    public void testSyntaxTreeToDomFileAdapters() {
+        // 1. HTML
+        DomFile htmlDom = HtmlParser.parse("<div><span>Test</span></div>").htmlTree.toDomFile();
+        assertNotNull(htmlDom);
+        assertEquals(FileType.HTML, htmlDom.getFileType());
+        assertTrue(htmlDom.getNodeCount() > 0);
+
+        // 2. JS
+        String js = "function hello() { return 1; }";
+        DomFile jsDom = JsParser.parseFull(js, JsLexer.tokenize(js)).toDomFile();
+        assertNotNull(jsDom);
+        assertEquals(FileType.JAVASCRIPT, jsDom.getFileType());
+        assertTrue(jsDom.getNodeCount() > 0);
+
+        // 3. CSS
+        String css = ".btn { color: red; }";
+        DomFile cssDom = CssParser.parse(com.cocode.vcode.ide.core.language.css.CssLexer.tokenize(css), css).toDomFile();
+        assertNotNull(cssDom);
+        assertEquals(FileType.CSS, cssDom.getFileType());
+        assertTrue(cssDom.getNodeCount() > 0);
+
+        // 4. JSON
+        String json = "{\"name\": \"VCode\"}";
+        DomFile jsonDom = JsonParser.parse(com.cocode.vcode.ide.core.language.json.JsonLexer.tokenize(json), json).toDomFile();
+        assertNotNull(jsonDom);
+        assertEquals(FileType.JSON, jsonDom.getFileType());
+        assertTrue(jsonDom.getNodeCount() > 0);
+
+        // 5. Markdown
+        String md = "# Header\nContent";
+        DomFile mdDom = MdParser.parseBlocks(com.cocode.vcode.ide.core.language.md.MdLexer.lex(md), md).toDomFile();
+        assertNotNull(mdDom);
+        assertEquals(FileType.MARKDOWN, mdDom.getFileType());
+        assertTrue(mdDom.getNodeCount() > 0);
     }
 }

@@ -1,5 +1,8 @@
 package com.cocode.vcode.ide.core.language.md;
 
+import com.cocode.vcode.ide.core.language.base.DomFile;
+import com.cocode.vcode.ide.core.language.base.SyntaxTreeDomAdapter;
+
 import java.util.Arrays;
 
 /**
@@ -336,5 +339,13 @@ public final class MdSyntaxTree {
             child = nodeSibling[child];
         }
         return best;
+    }
+
+    /**
+     * Converts this flat syntax tree into a neutral {@link DomFile} representation for code folding,
+     * breadcrumbs, and outline navigation.
+     */
+    public DomFile toDomFile() {
+        return SyntaxTreeDomAdapter.fromMd(this);
     }
 }

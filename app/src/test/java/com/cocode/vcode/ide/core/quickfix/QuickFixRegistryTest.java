@@ -29,6 +29,12 @@ public class QuickFixRegistryTest {
 
         Problem pComment = new Problem(mockFile, 1, 1, 1, "Comments are not permitted in standard JSON", Problem.Severity.ERROR, ProblemCode.JSON_COMMENTS_DISALLOWED);
         assertTrue(QuickFixRegistry.hasFixes(pComment));
+
+        Problem pSemi = new Problem(mockFile, 1, 1, 1, "Missing semicolon", Problem.Severity.WARNING, ProblemCode.JS_MISSING_SEMICOLON);
+        assertTrue(QuickFixRegistry.hasFixes(pSemi));
+
+        Problem pUnused = new Problem(mockFile, 1, 1, 1, "Variable 'unusedVar' is defined but never used", Problem.Severity.WARNING, ProblemCode.JS_UNUSED_VARIABLE);
+        assertTrue(QuickFixRegistry.hasFixes(pUnused));
     }
 
     @Test

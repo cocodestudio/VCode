@@ -69,6 +69,6 @@ public class CssLanguageBackend implements LanguageBackend {
         String src = text != null ? text.toString() : "";
         CssTokenStream stream = CssLexer.tokenize(src);
         CssSyntaxTree tree = CssParser.parse(stream, src);
-        return SyntaxTreeDomAdapter.fromCss(tree);
+        return tree != null ? tree.toDomFile() : null;
     }
 }

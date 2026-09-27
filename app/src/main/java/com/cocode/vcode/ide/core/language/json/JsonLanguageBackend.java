@@ -66,6 +66,6 @@ public class JsonLanguageBackend implements LanguageBackend {
         String src = text != null ? text.toString() : "";
         JsonTokenStream stream = JsonLexer.tokenize(src);
         JsonSyntaxTree tree = JsonParser.parse(stream, src);
-        return SyntaxTreeDomAdapter.fromJson(tree);
+        return tree != null ? tree.toDomFile() : null;
     }
 }

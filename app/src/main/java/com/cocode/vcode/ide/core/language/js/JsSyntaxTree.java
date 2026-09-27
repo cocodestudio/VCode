@@ -1,5 +1,9 @@
 package com.cocode.vcode.ide.core.language.js;
 
+import com.cocode.vcode.ide.core.language.base.DomFile;
+import com.cocode.vcode.ide.core.language.base.SyntaxTreeDomAdapter;
+import com.cocode.vcode.ide.core.model.FileType;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -375,5 +379,20 @@ public final class JsSyntaxTree {
             }
         }
         return best;
+    }
+
+    /**
+     * Converts this flat syntax tree into a neutral {@link DomFile} representation for code folding,
+     * breadcrumbs, and outline navigation.
+     */
+    public DomFile toDomFile() {
+        return SyntaxTreeDomAdapter.fromJs(this, FileType.JAVASCRIPT);
+    }
+
+    /**
+     * Converts this flat syntax tree into a neutral {@link DomFile} representation with specific file type.
+     */
+    public DomFile toDomFile(FileType type) {
+        return SyntaxTreeDomAdapter.fromJs(this, type);
     }
 }

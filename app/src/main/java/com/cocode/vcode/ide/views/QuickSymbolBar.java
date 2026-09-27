@@ -33,7 +33,7 @@ import java.util.List;
 public class QuickSymbolBar extends LinearLayout {
 
     private static final String[] DEFAULT_SYMBOLS = {
-            "Tab", "{", "}", "(", ")", "[", "]", ";", ":", "\"", "'", "=", ">", "<", "!", "/", "->"
+            "Tab", "{", "}", "(", ")", "[", "]", ";", ":", "\"", "'", "=", ">", "<", "!", "/", "->", "=>"
     };
 
     private ImageView btnQuickFix;
@@ -81,7 +81,7 @@ public class QuickSymbolBar extends LinearLayout {
             keyView.setText(sym);
             keyView.setGravity(Gravity.CENTER);
             keyView.setTextColor(textColor);
-            keyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sym.equals("Tab") || sym.equals("->") ? 12 : 15);
+            keyView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sym.equals("Tab") || sym.equals("->") || sym.equals("=>") ? 12 : 15);
             keyView.setTypeface(fm.getUiSemiBold(context));
             keyView.setBackgroundResource(R.drawable.vcode_bg_symbol_key_interactive);
             keyView.setClickable(true);
@@ -232,6 +232,9 @@ public class QuickSymbolBar extends LinearLayout {
                 break;
             case "->":
                 editor.insertText("->");
+                break;
+            case "=>":
+                editor.insertText("=>");
                 break;
             default:
                 editor.insertText(sym);

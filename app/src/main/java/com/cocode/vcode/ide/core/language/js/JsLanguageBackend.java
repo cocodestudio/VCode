@@ -64,6 +64,6 @@ public class JsLanguageBackend implements LanguageBackend {
         String src = text != null ? text.toString() : "";
         TokenStream stream = JsLexer.tokenize(src);
         JsSyntaxTree tree = JsParser.parseFull(src, stream);
-        return SyntaxTreeDomAdapter.fromJs(tree, FileType.JAVASCRIPT);
+        return tree != null ? tree.toDomFile() : null;
     }
 }
