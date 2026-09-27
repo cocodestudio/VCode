@@ -328,4 +328,52 @@ public final class JsSyntaxTree {
 
         return id;
     }
+
+    /**
+     * Finds the narrowest/deepest AST node covering the given offset.
+     * Returns 0 if no node covers the offset.
+     */
+    public int findNodeAt(int offset) {
+        if (nodesByOffset == null || nodeCount <= 1) {
+            int best = 0;
+            int bestLen = Integer.MAX_VALUE;
+            for (int i = 1; i < nodeCount; i++) {
+                if (offset >= nodeStart[i] && offset <= nodeEnd[i]) {
+                    int len = nodeEnd[i] - nodeStart[i];
+                    if (len <= bestLen) {
+                        best = i;
+                        bestLen = len;
+                    }
+                }
+            }
+            return best;
+        }
+
+        int low = 1, high = nodeCount - 1;
+        int candidateIdx = -1;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            int id = nodesByOffset[mid];
+            if (nodeStart[id] <= offset) {
+                candidateIdx = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        int best = 0;
+        int bestLen = Integer.MAX_VALUE;
+        for (int i = candidateIdx; i >= 1; i--) {
+            int id = nodesByOffset[i];
+            if (offset >= nodeStart[id] && offset <= nodeEnd[id]) {
+                int len = nodeEnd[id] - nodeStart[id];
+                if (len < bestLen) {
+                    best = id;
+                    bestLen = len;
+                }
+            }
+        }
+        return best;
+    }
 }

@@ -6,6 +6,8 @@ import com.cocode.vcode.ide.core.language.html.HtmlFormatter;
 import com.cocode.vcode.ide.core.language.js.JsFormatter;
 import com.cocode.vcode.ide.core.language.json.JsonFormatter;
 import com.cocode.vcode.ide.core.language.ts.TsFormatter;
+import com.cocode.vcode.ide.core.language.base.LanguageBackend;
+import com.cocode.vcode.ide.core.language.base.LanguageRegistry;
 import com.cocode.vcode.ide.core.model.FileType;
 
 import java.util.EnumMap;
@@ -13,7 +15,7 @@ import java.util.Map;
 
 /**
  * Dispatcher that routes source code formatting requests to language-specific formatters
- * (HTML, CSS, JavaScript, TypeScript, JSON).
+ * (HTML, CSS, JavaScript, TypeScript, JSON, etc.) via {@link LanguageRegistry}.
  */
 public class CodeFormatter {
 
@@ -31,7 +33,9 @@ public class CodeFormatter {
      * Returns true if code formatting is supported for the given file type.
      */
     public static boolean isFormatSupported(FileType language) {
-        return FORMATTERS.containsKey(language);
+        if (FORMATTERS.containsKey(language)) return true;
+        LanguageBackend backend = LanguageRegistry.getInstance().getBackend(language);
+        return backend != null && backend.getFormatter() != null;
     }
 
     /**
@@ -46,6 +50,12 @@ public class CodeFormatter {
 
         try {
             BaseFormatter formatter = FORMATTERS.get(language);
+            if (formatter == null) {
+                LanguageBackend backend = LanguageRegistry.getInstance().getBackend(language);
+                if (backend != null) {
+                    formatter = backend.getFormatter();
+                }
+            }
             if (formatter != null) {
                 return formatter.format(code);
             }

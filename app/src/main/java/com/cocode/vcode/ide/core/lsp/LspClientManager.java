@@ -283,47 +283,17 @@ public final class LspClientManager {
      * Checks if an LSP server is registered and supported for the given language id.
      */
     public boolean hasServerForLanguage(String languageId) {
-        if (languageId == null || "plaintext".equals(languageId)) return false;
-        switch (languageId) {
-            case "html":
-            case "css":
-            case "scss":
-            case "javascript":
-            case "typescript":
-            case "json":
-            case "markdown":
-                return true;
-            default:
-                return false;
-        }
+        return LspServerRegistry.getInstance().hasServer(languageId);
     }
 
     /**
-     * Factory method that maps a language id to its server implementation.
-     * Add new language servers here as they are implemented.
+     * Factory method that maps a language id to its server implementation via {@link LspServerRegistry}.
      *
      * @param languageId LSP language identifier
      * @return new uninitialised server instance, or null if unsupported
      */
     private LspServer createServer(String languageId) {
-        // Register language servers according to supported language identifiers
-        switch (languageId) {
-            case "html":
-                return new com.cocode.vcode.ide.core.lsp.servers.HtmlLspServer(appContext);
-            case "css":
-            case "scss":
-                return new com.cocode.vcode.ide.core.lsp.servers.CssLspServer(appContext);
-            case "javascript":
-                return new com.cocode.vcode.ide.core.lsp.servers.JsLspServer(appContext);
-            case "typescript":
-                return new com.cocode.vcode.ide.core.lsp.servers.TsLspServer(appContext);
-            case "json":
-                return new com.cocode.vcode.ide.core.lsp.servers.JsonLspServer();
-            case "markdown":
-                return new com.cocode.vcode.ide.core.lsp.servers.MarkdownLspServer(appContext);
-            default:
-                return null;
-        }
+        return LspServerRegistry.getInstance().createServer(languageId, appContext);
     }
 
     private <T> void deliverResult(LspCallback<T> callback, T result) {
