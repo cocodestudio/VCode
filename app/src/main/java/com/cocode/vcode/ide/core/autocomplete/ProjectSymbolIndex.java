@@ -14,6 +14,11 @@ import com.cocode.vcode.ide.core.language.js.JsLexer;
 import com.cocode.vcode.ide.core.language.js.JsParser;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
 import com.cocode.vcode.ide.core.language.js.ParseResult;
+import com.cocode.vcode.ide.core.lsp.index.IndexSymbolEntry;
+import com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener;
+import com.cocode.vcode.ide.core.lsp.index.SegmentSearchQuery;
+import com.cocode.vcode.ide.core.lsp.index.SegmentedSymbolStore;
+import com.cocode.vcode.ide.core.lsp.index.SymbolKey;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
@@ -29,10 +34,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Global project indexer that extracts CSS classes, IDs, HTML IDs, and JS/TS exports
- * and class members for cross-file intellisense using pure AST parsing.
+ * and class members for cross-file intellisense using pure AST parsing and flat-memory segments.
  */
 public class ProjectSymbolIndex {
     private static ProjectSymbolIndex instance;
@@ -48,6 +54,8 @@ public class ProjectSymbolIndex {
     // Guards against multiple concurrent buildIndex() calls for the same root.
     private final java.util.concurrent.atomic.AtomicBoolean isBuilding = new java.util.concurrent.atomic.AtomicBoolean(false);
     private String projectRoot = null;
+    private SegmentedSymbolStore segmentedStore;
+    private final List<IndexingProgressListener> progressListeners = new CopyOnWriteArrayList<>();
 
     private ProjectSymbolIndex() {
     }
@@ -61,6 +69,22 @@ public class ProjectSymbolIndex {
 
     public static File getProjectRoot(File file) {
         return ProjectRepository.findProjectRoot(file);
+    }
+
+    public void addProgressListener(IndexingProgressListener listener) {
+        if (listener != null && !progressListeners.contains(listener)) {
+            progressListeners.add(listener);
+        }
+    }
+
+    public void removeProgressListener(IndexingProgressListener listener) {
+        if (listener != null) {
+            progressListeners.remove(listener);
+        }
+    }
+
+    public SegmentedSymbolStore getSegmentedStore() {
+        return segmentedStore;
     }
 
     private static void extractCssClassesAndIds(String selector, Set<String> classNames, Set<String> cssIds) {
@@ -110,20 +134,84 @@ public class ProjectSymbolIndex {
 
     public void buildIndex(File rootDir) {
         if (rootDir == null) return;
-        // Use a CAS guard to avoid concurrent rebuilds. Unlike the old project-root equality
-        // check (which permanently prevented re-indexing after the first build), this guard
-        // only blocks concurrent runs — a subsequent call after the previous one completes
-        // will proceed normally, picking up any new files added to the project.
         if (!isBuilding.compareAndSet(false, true)) return;
 
         projectRoot = rootDir.getAbsolutePath();
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
+                if (segmentedStore == null || !rootDir.getAbsolutePath().equals(projectRoot)) {
+                    segmentedStore = new SegmentedSymbolStore(rootDir);
+                }
+
+                IndexingProgressListener forwarder = new IndexingProgressListener() {
+                    @Override
+                    public void onIndexingStarted(int totalFiles) {
+                        for (IndexingProgressListener l : progressListeners) {
+                            try { l.onIndexingStarted(totalFiles); } catch (Exception ignored) {}
+                        }
+                    }
+
+                    @Override
+                    public void onIndexingProgress(int processed, int total, String currentFile) {
+                        for (IndexingProgressListener l : progressListeners) {
+                            try { l.onIndexingProgress(processed, total, currentFile); } catch (Exception ignored) {}
+                        }
+                    }
+
+                    @Override
+                    public void onIndexingCompleted(int totalSymbols, long durationMs) {
+                        for (IndexingProgressListener l : progressListeners) {
+                            try { l.onIndexingCompleted(totalSymbols, durationMs); } catch (Exception ignored) {}
+                        }
+                    }
+
+                    @Override
+                    public void onIndexingError(Throwable error) {
+                        for (IndexingProgressListener l : progressListeners) {
+                            try { l.onIndexingError(error); } catch (Exception ignored) {}
+                        }
+                    }
+                };
+
+                segmentedStore.addProgressListener(forwarder);
+
+                List<File> candidateFiles = new ArrayList<>();
+                collectCandidateFiles(rootDir, candidateFiles);
+
                 Set<String> classNames = new HashSet<>();
                 Set<String> cssIds = new HashSet<>();
                 Set<String> htmlIds = new HashSet<>();
 
-                indexDirectoryRecursively(rootDir, classNames, cssIds, htmlIds);
+                segmentedStore.indexFiles(rootDir, candidateFiles, (file, relPath, fileId) -> {
+                    List<IndexSymbolEntry> entries = new ArrayList<>();
+                    String name = file.getName().toLowerCase();
+                    if (name.endsWith(".css") || name.endsWith(".scss")) {
+                        indexCssFile(file, classNames, cssIds, entries, fileId);
+                    } else if (name.endsWith(".html") || name.endsWith(".htm")) {
+                        indexHtmlFile(file, classNames, htmlIds, entries, fileId);
+                    } else if (name.endsWith(".js") || name.endsWith(".ts") || name.endsWith(".jsx") || name.endsWith(".tsx") || name.endsWith(".mjs")) {
+                        indexJsFile(file, relPath, entries, fileId);
+                    }
+                    return entries;
+                });
+
+                segmentedStore.removeProgressListener(forwarder);
+
+                // If candidate files were all cached, populate in-memory sets from segmented store
+                if (classNames.isEmpty()) {
+                    List<IndexSymbolEntry> cachedClasses = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_CLASS, 0));
+                    for (IndexSymbolEntry e : cachedClasses) {
+                        classNames.add(e.getName());
+                    }
+                    List<IndexSymbolEntry> cachedCssIds = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_ID, 0));
+                    for (IndexSymbolEntry e : cachedCssIds) {
+                        cssIds.add(e.getName());
+                    }
+                    List<IndexSymbolEntry> cachedHtmlIds = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_HTML_ID, 0));
+                    for (IndexSymbolEntry e : cachedHtmlIds) {
+                        htmlIds.add(e.getName());
+                    }
+                }
 
                 synchronized (this) {
                     cssClassItems.clear();
@@ -139,16 +227,27 @@ public class ProjectSymbolIndex {
                         htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
                     }
                 }
+            } catch (Throwable t) {
+                for (IndexingProgressListener l : progressListeners) {
+                    try { l.onIndexingError(t); } catch (Exception ignored) {}
+                }
             } finally {
                 isBuilding.set(false);
             }
         });
     }
 
-    private void indexDirectoryRecursively(File dir, Set<String> classNames, Set<String> cssIds, Set<String> htmlIds) {
+    private void collectCandidateFiles(File dir, List<File> candidateFiles) {
+        if (dir == null || !dir.exists()) return;
+        String dirName = dir.getName();
+        if (dirName.startsWith(".") || "node_modules".equals(dirName) || "build".equals(dirName)
+                || "dist".equals(dirName) || "out".equals(dirName) || "vendor".equals(dirName)
+                || ".next".equals(dirName) || ".nuxt".equals(dirName) || ".vcode".equals(dirName)) {
+            return;
+        }
+
         List<File> files = com.cocode.vcode.ide.core.autocomplete.VFSManager.getInstance().listCachedFiles(dir);
         if (files == null) {
-            // Fallback if VFS isn't built yet
             File[] diskFiles = dir.listFiles();
             if (diskFiles == null) return;
             files = new ArrayList<>();
@@ -161,38 +260,71 @@ public class ProjectSymbolIndex {
 
         for (File f : files) {
             if (f.isDirectory()) {
-                indexDirectoryRecursively(f, classNames, cssIds, htmlIds);
+                collectCandidateFiles(f, candidateFiles);
             } else {
                 String name = f.getName().toLowerCase();
-                if (name.endsWith(".css")) {
-                    indexCssFile(f, classNames, cssIds);
-                } else if (name.endsWith(".html") || name.endsWith(".htm")) {
-                    indexHtmlFile(f, classNames, htmlIds);
-                } else if (name.endsWith(".js") || name.endsWith(".ts") || name.endsWith(".jsx") || name.endsWith(".tsx") || name.endsWith(".mjs")) {
-                    indexJsFile(f);
+                if (name.endsWith(".css") || name.endsWith(".scss") || name.endsWith(".html") || name.endsWith(".htm")
+                        || name.endsWith(".js") || name.endsWith(".ts") || name.endsWith(".jsx") || name.endsWith(".tsx") || name.endsWith(".mjs")) {
+                    candidateFiles.add(f);
                 }
             }
         }
     }
 
+    private void indexDirectoryRecursively(File dir, Set<String> classNames, Set<String> cssIds, Set<String> htmlIds) {
+        List<File> candidateFiles = new ArrayList<>();
+        collectCandidateFiles(dir, candidateFiles);
+        for (File f : candidateFiles) {
+            String name = f.getName().toLowerCase();
+            if (name.endsWith(".css") || name.endsWith(".scss")) {
+                indexCssFile(f, classNames, cssIds);
+            } else if (name.endsWith(".html") || name.endsWith(".htm")) {
+                indexHtmlFile(f, classNames, htmlIds);
+            } else if (name.endsWith(".js") || name.endsWith(".ts") || name.endsWith(".jsx") || name.endsWith(".tsx") || name.endsWith(".mjs")) {
+                indexJsFile(f);
+            }
+        }
+    }
+
     private void indexCssFile(File file, Set<String> classNames, Set<String> cssIds) {
+        indexCssFile(file, classNames, cssIds, null, 0);
+    }
+
+    private void indexCssFile(File file, Set<String> classNames, Set<String> cssIds, List<IndexSymbolEntry> entries, int fileId) {
         String content = readFile(file);
         if (content == null) return;
 
         CssTokenStream stream = CssLexer.tokenize(content);
         CssSyntaxTree tree = CssParser.parse(stream, content);
 
+        Set<String> fileClasses = new HashSet<>();
+        Set<String> fileIds = new HashSet<>();
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
                 String sel = tree.nodeName[i];
                 if (sel != null && !sel.isEmpty()) {
-                    extractCssClassesAndIds(sel, classNames, cssIds);
+                    extractCssClassesAndIds(sel, fileClasses, fileIds);
                 }
+            }
+        }
+
+        classNames.addAll(fileClasses);
+        cssIds.addAll(fileIds);
+        if (entries != null) {
+            for (String c : fileClasses) {
+                entries.add(new IndexSymbolEntry(SymbolKey.cssClass(c), c, IndexSymbolEntry.KIND_CSS_CLASS, IndexSymbolEntry.FLAG_NONE, fileId, 1, "CSS Class"));
+            }
+            for (String id : fileIds) {
+                entries.add(new IndexSymbolEntry(SymbolKey.cssId(id), id, IndexSymbolEntry.KIND_CSS_ID, IndexSymbolEntry.FLAG_NONE, fileId, 1, "CSS ID"));
             }
         }
     }
 
     private void indexHtmlFile(File file, Set<String> classNames, Set<String> htmlIds) {
+        indexHtmlFile(file, classNames, htmlIds, null, 0);
+    }
+
+    private void indexHtmlFile(File file, Set<String> classNames, Set<String> htmlIds, List<IndexSymbolEntry> entries, int fileId) {
         String content = readFile(file);
         if (content == null) return;
 
@@ -200,6 +332,9 @@ public class ProjectSymbolIndex {
         ParseResult result = HtmlParser.parse(content, stream);
         HtmlSyntaxTree tree = result != null ? result.htmlTree : null;
         if (tree == null) return;
+
+        Set<String> fileClasses = new HashSet<>();
+        Set<String> fileHtmlIds = new HashSet<>();
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == HtmlSyntaxTree.N_ATTRIBUTE) {
                 String attrName = tree.nodeName[i];
@@ -208,7 +343,7 @@ public class ProjectSymbolIndex {
                 if ("id".equalsIgnoreCase(attrName)) {
                     String id = stripQuotes(attrValue).trim();
                     if (!id.isEmpty()) {
-                        htmlIds.add(id);
+                        fileHtmlIds.add(id);
                     }
                 } else if ("class".equalsIgnoreCase(attrName)) {
                     String unquoted = stripQuotes(attrValue);
@@ -217,10 +352,51 @@ public class ProjectSymbolIndex {
                     for (int j = 0; j <= vLen; j++) {
                         if (j == vLen || Character.isWhitespace(unquoted.charAt(j))) {
                             if (j > start) {
-                                classNames.add(unquoted.substring(start, j));
+                                fileClasses.add(unquoted.substring(start, j));
                             }
                             start = j + 1;
                         }
+                    }
+                }
+            }
+        }
+
+        classNames.addAll(fileClasses);
+        htmlIds.addAll(fileHtmlIds);
+        if (entries != null) {
+            for (String c : fileClasses) {
+                entries.add(new IndexSymbolEntry(SymbolKey.cssClass(c), c, IndexSymbolEntry.KIND_CSS_CLASS, IndexSymbolEntry.FLAG_NONE, fileId, 1, "CSS Class"));
+            }
+            for (String id : fileHtmlIds) {
+                entries.add(new IndexSymbolEntry(SymbolKey.htmlId(id), id, IndexSymbolEntry.KIND_HTML_ID, IndexSymbolEntry.FLAG_NONE, fileId, 1, "HTML ID"));
+            }
+        }
+    }
+
+    private void indexJsFile(File file, String relPath, List<IndexSymbolEntry> entries, int fileId) {
+        indexJsFile(file);
+        if (entries != null) {
+            String pathKey = file.getAbsolutePath();
+            try {
+                pathKey = file.getCanonicalPath();
+            } catch (Exception ignored) {
+            }
+            List<CompletionItem> exports = jsFileExports.get(pathKey);
+            if (exports != null) {
+                for (CompletionItem ci : exports) {
+                    String name = ci.getEffectiveInsertText();
+                    String key = SymbolKey.jsExport(relPath, name);
+                    entries.add(new IndexSymbolEntry(key, name, IndexSymbolEntry.KIND_JS_EXPORT, IndexSymbolEntry.FLAG_EXPORTED, fileId, 1, ci.getDetail()));
+                }
+            }
+            Map<String, List<CompletionItem>> classes = fileClassMembers.get(pathKey);
+            if (classes != null) {
+                for (Map.Entry<String, List<CompletionItem>> entry : classes.entrySet()) {
+                    String className = entry.getKey();
+                    for (CompletionItem member : entry.getValue()) {
+                        String memberName = member.getLabel();
+                        String key = SymbolKey.jsClassMember(className, memberName);
+                        entries.add(new IndexSymbolEntry(key, memberName, IndexSymbolEntry.KIND_JS_CLASS_MEMBER, IndexSymbolEntry.FLAG_NONE, fileId, 1, member.getDetail()));
                     }
                 }
             }
@@ -529,6 +705,10 @@ public class ProjectSymbolIndex {
         }
         jsFileExports.remove(absolutePath);
         fileClassMembers.remove(absolutePath);
+        if (segmentedStore != null && projectRoot != null) {
+            String rel = SegmentedSymbolStore.getRelativePath(new File(projectRoot), new File(absolutePath));
+            segmentedStore.invalidateFile(rel);
+        }
     }
 
     /**

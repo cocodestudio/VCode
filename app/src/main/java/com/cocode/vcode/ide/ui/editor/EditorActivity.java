@@ -95,6 +95,23 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private String pendingOpenSourceUri = null;
     private IFileViewer activeViewer;
     private boolean isReadOnly = false;
+    private com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener indexingProgressListener;
+    private final Runnable hideIndexingCardRunnable = () -> {
+        if (binding == null || binding.cardIndexingStatus == null) return;
+        binding.cardIndexingStatus.getRoot().animate()
+                .alpha(0f)
+                .translationY(30f)
+                .setDuration(250)
+                .withEndAction(() -> {
+                    if (binding != null && binding.cardIndexingStatus != null) {
+                        binding.cardIndexingStatus.getRoot().setVisibility(View.GONE);
+                        binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_arrows_rotate);
+                        binding.cardIndexingStatus.ivIndexingIcon.setColorFilter(
+                                ContextCompat.getColor(EditorActivity.this, R.color.vcode_accent_primary));
+                    }
+                })
+                .start();
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,6 +163,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         setupFloatingPreviewStyles();
         setupListeners();
         setupObservers();
+        setupIndexingProgressCard();
+        com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().buildIndex(projectDirectory);
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -1427,6 +1446,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     @Override
     protected void onDestroy() {
+        if (indexingProgressListener != null) {
+            com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().removeProgressListener(indexingProgressListener);
+        }
+        if (binding != null && binding.cardIndexingStatus != null) {
+            binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+        }
         super.onDestroy();
         if (localWebServer != null) localWebServer.stop();
         ServerNotificationHelper.cancelServerNotification(this);
@@ -1495,5 +1520,88 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         sheet.setUsages(getString(R.string.vcode_find_usages), query, result);
         sheet.setListener(this::jumpToPosition);
         sheet.show(getSupportFragmentManager(), "FindUsages");
+    }
+
+    private void setupIndexingProgressCard() {
+        if (binding == null || binding.cardIndexingStatus == null) return;
+        binding.cardIndexingStatus.tvIndexingTitle.setTypeface(FontManager.getInstance().getUiSemiBold(this));
+        binding.cardIndexingStatus.tvIndexingStatus.setTypeface(FontManager.getInstance().getUiMedium(this));
+
+        indexingProgressListener = new com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener() {
+            @Override
+            public void onIndexingStarted(int totalFiles) {
+                ExecutorProvider.getInstance().runOnMain(() -> {
+                    if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
+                    binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+                    binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_arrows_rotate);
+                    binding.cardIndexingStatus.ivIndexingIcon.setColorFilter(
+                            ContextCompat.getColor(EditorActivity.this, R.color.vcode_accent_primary));
+                    binding.cardIndexingStatus.tvIndexingStatus.setText(R.string.vcode_indexing_scanning_files);
+
+                    if (totalFiles > 0) {
+                        binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(false);
+                        binding.cardIndexingStatus.progressIndexingLinear.setMax(totalFiles);
+                        binding.cardIndexingStatus.progressIndexingLinear.setProgressCompat(0, false);
+                    } else {
+                        binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(true);
+                    }
+
+                    if (binding.cardIndexingStatus.getRoot().getVisibility() != View.VISIBLE) {
+                        binding.cardIndexingStatus.getRoot().setAlpha(0f);
+                        binding.cardIndexingStatus.getRoot().setTranslationY(30f);
+                        binding.cardIndexingStatus.getRoot().setVisibility(View.VISIBLE);
+                        binding.cardIndexingStatus.getRoot().animate()
+                                .alpha(1f)
+                                .translationY(0f)
+                                .setDuration(250)
+                                .start();
+                    }
+                });
+            }
+
+            @Override
+            public void onIndexingProgress(int processedFiles, int totalFiles, String currentFileName) {
+                ExecutorProvider.getInstance().runOnMain(() -> {
+                    if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
+                    if (totalFiles > 0) {
+                        binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(false);
+                        binding.cardIndexingStatus.progressIndexingLinear.setMax(totalFiles);
+                        binding.cardIndexingStatus.progressIndexingLinear.setProgressCompat(processedFiles, true);
+                    }
+                    String display = (currentFileName != null && !currentFileName.isEmpty())
+                            ? String.format(getString(R.string.vcode_indexing_status_format), currentFileName, processedFiles, totalFiles)
+                            : getString(R.string.vcode_indexing_scanning_files);
+                    binding.cardIndexingStatus.tvIndexingStatus.setText(display);
+                });
+            }
+
+            @Override
+            public void onIndexingCompleted(int totalIndexedSymbols, long durationMs) {
+                ExecutorProvider.getInstance().runOnMain(() -> {
+                    if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
+                    binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(false);
+                    binding.cardIndexingStatus.progressIndexingLinear.setProgressCompat(
+                            binding.cardIndexingStatus.progressIndexingLinear.getMax(), true);
+                    binding.cardIndexingStatus.tvIndexingStatus.setText(R.string.vcode_indexing_complete);
+                    binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_check);
+                    binding.cardIndexingStatus.ivIndexingIcon.setColorFilter(
+                            ContextCompat.getColor(EditorActivity.this, R.color.vcode_accent_success));
+
+                    binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+                    binding.cardIndexingStatus.getRoot().postDelayed(hideIndexingCardRunnable, 1000L);
+                });
+            }
+
+            @Override
+            public void onIndexingError(Throwable error) {
+                ExecutorProvider.getInstance().runOnMain(() -> {
+                    if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
+                    binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+                    binding.cardIndexingStatus.getRoot().postDelayed(hideIndexingCardRunnable, 1500L);
+                });
+            }
+        };
+
+        com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().addProgressListener(indexingProgressListener);
     }
 }

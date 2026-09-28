@@ -728,4 +728,10 @@
     <string name="vcode_filter_error">Error</string>
     <string name="vcode_copied">Copied to clipboard</string>
     <string name="vcode_action_hover_doc">Documentation</string>
+
+    <!-- Indexing Status Card -->
+    <string name="vcode_indexing_workspace">Indexing workspace…</string>
+    <string name="vcode_indexing_scanning_files">Scanning project files…</string>
+    <string name="vcode_indexing_complete">Indexing complete</string>
+    <string name="vcode_indexing_status_format">%1$s (%2$d/%3$d)</string>
 </resources>
