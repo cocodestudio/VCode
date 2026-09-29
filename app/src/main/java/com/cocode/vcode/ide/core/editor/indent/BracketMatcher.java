@@ -167,7 +167,8 @@ public class BracketMatcher {
             String expectedClose = (top[0] == 1) ? "')'" : (top[0] == 2) ? "']'" : "'}'";
             problems.add(new Problem(file, line, col, 1,
                     "Mismatched closing " + name + " '" + closeChar + "': expected " + expectedClose,
-                    Problem.Severity.ERROR));
+                    Problem.Severity.ERROR,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.BRACKET_MISMATCH));
         }
     }
 

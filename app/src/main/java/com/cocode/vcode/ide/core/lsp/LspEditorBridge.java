@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.core.lsp;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -71,6 +72,12 @@ public final class LspEditorBridge {
     private volatile CancellationToken activeDiagnosticToken;
     private volatile CancellationToken activeCompletionToken;
     private final Runnable diagnosticRunnable = this::performDiagnostics;
+    private static final long SILENT_INDEX_DEBOUNCE_MS = 600L;
+    private final Runnable silentIndexRunnable = () -> {
+        if (currentFile != null) {
+            com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().updateFileSilently(currentFile);
+        }
+    };
     /**
      * True from the moment {@link #setFile(File)} switches {@code currentFile} until
      * {@link #textLoadListener} reports the load complete. {@link CodeEditText#setText}
@@ -497,6 +504,10 @@ public final class LspEditorBridge {
         // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
         updateProjectIndex();
 
+        // Reschedule debounced silent single-file indexing in the background
+        mainHandler.removeCallbacks(silentIndexRunnable);
+        mainHandler.postDelayed(silentIndexRunnable, SILENT_INDEX_DEBOUNCE_MS);
+
         // Suppress completion and signature popups during automated text updates
         if (editor.isProgrammaticChange()) {
             mainHandler.removeCallbacks(completionRunnable);
@@ -800,6 +811,7 @@ public final class LspEditorBridge {
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.removeCallbacks(completionRunnable);
         mainHandler.removeCallbacks(signatureHelpRunnable);
+        mainHandler.removeCallbacks(silentIndexRunnable);
         if (editor != null) {
             editor.removeContentChangeListener(contentListener);
             editor.removeCursorChangeListener(cursorChangeListener);
@@ -925,7 +937,7 @@ public final class LspEditorBridge {
             return;
         }
 
-        String triggerChars = ".</:'\"@#!>+^*[]})%";
+        String triggerChars = editor != null ? editor.getTriggerCharacters() : AutoCompleteEngine.getTriggerCharacters(doc != null ? FileType.fromExtension(doc.uri) : FileType.TEXT);
         boolean isTriggerChar = triggerChars.indexOf(lastChar) >= 0;
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$' || lastChar == '-';

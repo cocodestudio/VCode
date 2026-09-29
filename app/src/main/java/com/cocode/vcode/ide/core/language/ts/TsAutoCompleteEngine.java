@@ -44,6 +44,11 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return ".'\"`/@({*:<|&";
+    }
+
+    @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
         if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
             return new ArrayList<>();

@@ -19,6 +19,11 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         super(context);
     }
 
+    @Override
+    public String getTriggerCharacters() {
+        return "/\\.";
+    }
+
     public void setCurrentFile(File file) {
         this.currentFile = file;
     }

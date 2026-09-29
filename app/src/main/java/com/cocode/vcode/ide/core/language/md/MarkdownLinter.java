@@ -44,7 +44,8 @@ public class MarkdownLinter {
                 int line = LinterUtils.getLine(text, start);
                 int col = LinterUtils.getColumn(text, start);
                 String msg = tree.nodeName[i] != null ? tree.nodeName[i] : "Markdown syntax error";
-                problems.add(new Problem(file, line, col, Math.min(len, 3), msg, Problem.Severity.ERROR));
+                problems.add(new Problem(file, line, col, Math.min(len, 3), msg, Problem.Severity.ERROR,
+                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.SYNTAX_ERROR));
             } else if (type == MdSyntaxTree.N_HEADER) {
                 listMarker = '\0';
                 int level = tree.nodeExtra[i];
@@ -53,7 +54,8 @@ public class MarkdownLinter {
                     int col = LinterUtils.getColumn(text, start);
                     problems.add(new Problem(file, line, col, len,
                             "Heading levels should only increment by one level at a time.",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_HEADING_INCREMENT));
                 }
                 lastHeadingLevel = level;
             } else if (type == MdSyntaxTree.N_BLOCKQUOTE) {
@@ -63,7 +65,8 @@ public class MarkdownLinter {
                     if (bqText.equals(">") || bqText.isEmpty()) {
                         int line = LinterUtils.getLine(text, start);
                         int col = LinterUtils.getColumn(text, start);
-                        problems.add(new Problem(file, line, col, len, "Empty blockquote", Problem.Severity.INFO));
+                        problems.add(new Problem(file, line, col, len, "Empty blockquote", Problem.Severity.INFO,
+                                com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_EMPTY_BLOCKQUOTE));
                     }
                 }
             } else if (type == MdSyntaxTree.N_PARAGRAPH) {
@@ -86,7 +89,8 @@ public class MarkdownLinter {
                                 int col = LinterUtils.getColumn(text, j);
                                 problems.add(new Problem(file, line, col, 1,
                                         "Inconsistent list marker. Expected '" + listMarker + "' but found '" + mChar + "'.",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_INCONSISTENT_LIST_MARKER));
                             }
                         }
                     }
@@ -117,25 +121,29 @@ public class MarkdownLinter {
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
             if (m.start() > 0 && text.charAt(m.start() - 1) == '!') continue;
-            problems.add(createProblem(file, text, m, "Link has no text", Problem.Severity.WARNING));
+            problems.add(createProblem(file, text, m, "Link has no text", Problem.Severity.WARNING,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_EMPTY_LINK_TEXT));
         }
 
         m = EMPTY_IMAGE_ALT.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Image is missing alt text: required for accessibility", Problem.Severity.WARNING));
+            problems.add(createProblem(file, text, m, "Image is missing alt text: required for accessibility", Problem.Severity.WARNING,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_MISSING_IMAGE_ALT));
         }
 
         m = USELESS_IMAGE_ALT.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Useless alt text. Avoid using words like 'image' or 'picture'.", Problem.Severity.WARNING));
+            problems.add(createProblem(file, text, m, "Useless alt text. Avoid using words like 'image' or 'picture'.", Problem.Severity.WARNING,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_USELESS_IMAGE_ALT));
         }
 
         m = RAW_URL.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Raw URL detected. Enclose in < > or use a standard link format.", Problem.Severity.INFO));
+            problems.add(createProblem(file, text, m, "Raw URL detected. Enclose in < > or use a standard link format.", Problem.Severity.INFO,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_RAW_URL));
         }
 
         m = TRAILING_WHITESPACE.matcher(text);
@@ -147,13 +155,15 @@ public class MarkdownLinter {
                     && m.end() < text.length() && (text.charAt(m.end()) == '\n' || text.charAt(m.end()) == '\r')) {
                 continue;
             }
-            problems.add(createProblem(file, text, m, "Trailing whitespace detected", Problem.Severity.INFO));
+            problems.add(createProblem(file, text, m, "Trailing whitespace detected", Problem.Severity.INFO,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_TRAILING_WHITESPACE));
         }
 
         m = HARD_TAB.matcher(text);
         while (m.find()) {
             if (isInsideCode(m.start(), codeSpans)) continue;
-            problems.add(createProblem(file, text, m, "Hard tab detected. Use spaces instead.", Problem.Severity.INFO));
+            problems.add(createProblem(file, text, m, "Hard tab detected. Use spaces instead.", Problem.Severity.INFO,
+                    com.cocode.vcode.ide.core.diagnostic.ProblemCode.MD_HARD_TAB));
         }
 
         return problems;
@@ -166,9 +176,10 @@ public class MarkdownLinter {
         return false;
     }
 
-    private static Problem createProblem(File file, String text, Matcher m, String message, Problem.Severity severity) {
+    private static Problem createProblem(File file, String text, Matcher m, String message, Problem.Severity severity,
+                                         com.cocode.vcode.ide.core.diagnostic.ProblemCode code) {
         int line = LinterUtils.getLine(text, m.start());
         int col = LinterUtils.getColumn(text, m.start());
-        return new Problem(file, line, col, m.end() - m.start(), message, severity);
+        return new Problem(file, line, col, m.end() - m.start(), message, severity, code);
     }
 }

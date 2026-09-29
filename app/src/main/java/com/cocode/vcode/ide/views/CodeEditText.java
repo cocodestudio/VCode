@@ -84,7 +84,20 @@ public class CodeEditText extends View {
     public static final int LARGE_FILE_LINE_THRESHOLD = 10000;
     private static final int VIEWPORT_BUFFER_LINES = 200;
     private static final long AUTOCOMPLETE_DELAY_MS = 100;
-    private static final String TRIGGER_CHARS = ".</:'\"@#!({&>+^*[]})%";
+    private static final String DEFAULT_TRIGGER_CHARS = ".</:'\"@#!({&>+^*[]})%";
+
+    /**
+     * Returns the trigger characters for the currently active language/engine.
+     */
+    public String getTriggerCharacters() {
+        if (autoCompleteEngine != null) {
+            String triggers = autoCompleteEngine.getTriggerCharacters();
+            if (triggers != null && !triggers.isEmpty()) {
+                return triggers;
+            }
+        }
+        return AutoCompleteEngine.getTriggerCharacters(fileType);
+    }
     // Selection handle drag states
     private static final int HANDLE_DRAG_NONE = 0;
     private static final int HANDLE_DRAG_START = 1;
@@ -878,11 +891,14 @@ public class CodeEditText extends View {
             if (problem.getSeverity() == Problem.Severity.INFO) continue;
 
             int colStart = Math.max(0, problem.getColumn() - 1);
-            int colEnd = colStart + Math.max(1, problem.getLength());
             int lineLen = content.lineLength(lineIdx);
-            colEnd = Math.min(colEnd, lineLen);
-
-            if (colStart >= colEnd && lineLen > 0) colEnd = colStart + 1;
+            if (lineLen > 0 && colStart >= lineLen) {
+                colStart = lineLen - 1;
+            }
+            int colEnd = Math.min(colStart + Math.max(1, problem.getLength()), lineLen);
+            if (colStart >= colEnd && lineLen > 0) {
+                colEnd = Math.min(colStart + 1, lineLen);
+            }
 
             int color;
             if (problem.getSeverity() == Problem.Severity.ERROR)
@@ -4009,7 +4025,8 @@ public class CodeEditText extends View {
                 ? content.charAt(cursor.line, cursor.column - 2)
                 : (flatCursor >= 2 ? content.getSubstring(flatCursor - 2, flatCursor - 1).charAt(0) : '\0');
 
-        boolean isTriggerChar = TRIGGER_CHARS.indexOf(lastChar) >= 0
+        String triggerChars = getTriggerCharacters();
+        boolean isTriggerChar = triggerChars.indexOf(lastChar) >= 0
                 || (lastChar == '{' && flatCursor >= 2 && prevChar == '$');
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$'
@@ -4083,6 +4100,25 @@ public class CodeEditText extends View {
                     col--;
                 }
                 if (col > 0 && linePrefix.charAt(col - 1) == '&' && insertText.startsWith("&")) {
+                    col--;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '.' && insertText.startsWith(".")) {
+                    col--;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '#' && insertText.startsWith("#")) {
+                    col--;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == ':' && insertText.startsWith(":")) {
+                    col--;
+                }
+                if (col > 0 && linePrefix.charAt(col - 1) == '@' && insertText.startsWith("@")) {
+                    col--;
+                }
+            }
+            if (col > 0 && insertText.length() > 0) {
+                char firstChar = insertText.charAt(0);
+                if ((firstChar == '.' || firstChar == '#' || firstChar == ':' || firstChar == '@')
+                        && linePrefix.charAt(col - 1) == firstChar) {
                     col--;
                 }
             }

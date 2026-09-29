@@ -18,6 +18,8 @@ public class JsonParser {
 
         boolean expectColon = false;
         boolean lastWasComma = false;
+        int lastCommaStart = -1;
+        int lastCommaEnd = -1;
 
         while (p < stream.length) {
             byte type = stream.types[p];
@@ -47,7 +49,7 @@ public class JsonParser {
             if (parentType == JsonSyntaxTree.N_OBJECT) {
                 if (type == JsonTokenStream.TK_BRACE_CLOSE) {
                     if (lastWasComma) {
-                        tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Trailing comma");
+                        tree.addNode(JsonSyntaxTree.N_ERROR, lastCommaStart >= 0 ? lastCommaStart : start, lastCommaEnd >= 0 ? lastCommaEnd : end, currentParent, "Trailing comma");
                     }
                     tree.nodeEnd[currentParent] = end;
 
@@ -63,6 +65,8 @@ public class JsonParser {
                     continue;
                 } else if (type == JsonTokenStream.TK_COMMA) {
                     lastWasComma = true;
+                    lastCommaStart = start;
+                    lastCommaEnd = end;
                     continue;
                 } else if (type == JsonTokenStream.TK_STRING) {
                     checkMissingQuote(tree, start, end, currentParent, source);
@@ -93,7 +97,7 @@ public class JsonParser {
                     } else if (type == JsonTokenStream.TK_STRING || type == JsonTokenStream.TK_NUMBER ||
                             type == JsonTokenStream.TK_BRACE_OPEN || type == JsonTokenStream.TK_BRACKET_OPEN ||
                             type == JsonTokenStream.TK_KEYWORD) {
-                        tree.addNode(JsonSyntaxTree.N_ERROR, start, start, currentParent, "Missing colon");
+                        tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Missing colon");
                         expectColon = false;
                         // DO NOT continue, process this token as value
                     } else {
@@ -150,7 +154,7 @@ public class JsonParser {
                 if (type == JsonTokenStream.TK_BRACKET_CLOSE) {
                     if (parentType == JsonSyntaxTree.N_ARRAY) {
                         if (lastWasComma) {
-                            tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Trailing comma");
+                            tree.addNode(JsonSyntaxTree.N_ERROR, lastCommaStart >= 0 ? lastCommaStart : start, lastCommaEnd >= 0 ? lastCommaEnd : end, currentParent, "Trailing comma");
                         }
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];

@@ -80,12 +80,12 @@ public class JsonLinter {
                             String normalized = normalizeKey(keyName);
                             if (!seenKeys.add(normalized)) {
                                 int start = tree.nodeStart[child];
-                                int end = tree.nodeEnd[child];
-                                int len = Math.max(1, end - start);
+                                int len = keyName != null ? keyName.length() : Math.max(1, tree.nodeEnd[child] - start);
                                 int line = LinterUtils.getLine(text, start);
                                 int col = LinterUtils.getColumn(text, start);
 
-                                problems.add(new Problem(file, line, col, len, "Duplicate object key: " + keyName, Problem.Severity.WARNING));
+                                problems.add(new Problem(file, line, col, len, "Duplicate object key: " + keyName, Problem.Severity.WARNING,
+                                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.JSON_DUPLICATE_KEY));
                             }
                         }
                     }

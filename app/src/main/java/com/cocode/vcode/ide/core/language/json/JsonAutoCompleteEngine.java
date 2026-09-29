@@ -72,6 +72,11 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         loadSnippets();
     }
 
+    @Override
+    public String getTriggerCharacters() {
+        return "\"':{}[/";
+    }
+
     private static void ensureSchemasLoaded() {
         if (schemasLoaded) return;
         synchronized (lock) {

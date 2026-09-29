@@ -40,6 +40,11 @@ public class SvgAutoCompleteEngine extends AutoCompleteEngine {
         loadSvgCompletions();
     }
 
+    @Override
+    public String getTriggerCharacters() {
+        return "<'/\"!=:-&";
+    }
+
     private void loadSvgCompletions() {
         try {
             String json = loadAssetJson("completions/svg_completions.json");

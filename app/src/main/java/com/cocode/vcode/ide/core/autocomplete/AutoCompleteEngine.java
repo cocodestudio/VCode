@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.core.autocomplete;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.core.model.FileType;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -84,6 +85,41 @@ public abstract class AutoCompleteEngine {
     }
 
     // Text extraction helpers
+
+    /**
+     * Returns characters that trigger autocomplete in this language/engine,
+     * in addition to standard identifier characters.
+     */
+    public String getTriggerCharacters() {
+        return ".";
+    }
+
+    /**
+     * Central fallback mapping of trigger characters per file type.
+     */
+    public static String getTriggerCharacters(FileType fileType) {
+        if (fileType == null) return ".";
+        switch (fileType) {
+            case CSS:
+                return ".#:@-(!&/\"'";
+            case HTML:
+                return "<'/\"!=:@-.*+^[]{}()#>&";
+            case JAVASCRIPT:
+                return ".'\"`/@({*";
+            case TYPESCRIPT:
+                return ".'\"`/@({*:<|&";
+            case JSON:
+                return "\"':{}[/";
+            case MARKDOWN:
+                return "[(#*`!|<->:";
+            case SVG:
+                return "<'/\"!=:-&";
+            case GITIGNORE:
+                return "/\\.";
+            default:
+                return ".";
+        }
+    }
 
     /**
      * Scans the editor text at the specified cursor pointer to compute valid choices.

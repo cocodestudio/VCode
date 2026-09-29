@@ -718,6 +718,76 @@
     <string name="vcode_quick_fix_remove_json_comment">Remove disallowed comment</string>
     <string name="vcode_quick_fix_insert_semicolon">Insert missing \';\'</string>
     <string name="vcode_quick_fix_prefix_unused">Prefix unused identifier with \'_\'</string>
+    <string name="vcode_quick_fix_add_lang">Add lang=\"en\" attribute</string>
+    <string name="vcode_quick_fix_add_src">Add src=\"\" attribute</string>
+    <string name="vcode_quick_fix_add_content">Add content=\"\" attribute</string>
+    <string name="vcode_quick_fix_add_for">Add for=\"\" attribute</string>
+    <string name="vcode_quick_fix_add_charset">Insert &lt;meta charset=\"UTF-8\"&gt;</string>
+    <string name="vcode_quick_fix_add_viewport">Insert viewport meta tag</string>
+    <string name="vcode_quick_fix_insert_title_tag">Insert &lt;title&gt; tag</string>
+    <string name="vcode_quick_fix_add_meta_desc">Add meta description</string>
+    <string name="vcode_quick_fix_add_required_attr">Add required attribute</string>
+    <string name="vcode_quick_fix_replace_deprecated_tag">Replace deprecated element</string>
+    <string name="vcode_quick_fix_remove_deprecated_attr">Remove deprecated attribute</string>
+    <string name="vcode_quick_fix_remove_duplicate_attr">Remove duplicate attribute</string>
+    <string name="vcode_quick_fix_make_id_unique">Make ID unique</string>
+    <string name="vcode_quick_fix_close_tag">Close tag</string>
+    <string name="vcode_quick_fix_remove_void_closing">Remove closing void tag</string>
+    <string name="vcode_quick_fix_remove_stray_closing">Remove stray closing tag</string>
+    <string name="vcode_quick_fix_remove_inline_style">Remove inline style</string>
+    <string name="vcode_quick_fix_remove_inline_event">Remove inline event handler</string>
+    <string name="vcode_quick_fix_wrap_parent">Wrap with required parent</string>
+    <string name="vcode_quick_fix_nested_anchor_to_span">Change nested &lt;a&gt; to &lt;span&gt;</string>
+    <string name="vcode_quick_fix_remove_redundant_type">Remove redundant type attribute</string>
+    <string name="vcode_quick_fix_add_defer">Add \'defer\' attribute</string>
+    <string name="vcode_quick_fix_add_rel_noopener">Add rel=\"noopener noreferrer\"</string>
+    <string name="vcode_quick_fix_anchor_to_button">Replace with &lt;button type=\"button\"&gt;</string>
+    <string name="vcode_quick_fix_replace_with_semantic_tag">Replace &lt;div&gt; with semantic tag</string>
+    <string name="vcode_quick_fix_remove_empty_tag">Remove empty element</string>
+    <string name="vcode_quick_fix_add_lazy_loading">Add loading=\"lazy\" attribute</string>
+    <string name="vcode_quick_fix_add_thead">Add &lt;thead&gt; header row</string>
+    <string name="vcode_quick_fix_remove_unknown_css_prop">Remove unknown property</string>
+    <string name="vcode_quick_fix_replace_deprecated_css_prop">Replace deprecated property</string>
+    <string name="vcode_quick_fix_remove_duplicate_css_prop">Remove duplicate property</string>
+    <string name="vcode_quick_fix_remove_important">Remove \'!important\'</string>
+    <string name="vcode_quick_fix_replace_zero_px">Replace \'0px\' with \'0\'</string>
+    <string name="vcode_quick_fix_convert_pt_to_px">Convert \'pt\' to \'px\'</string>
+    <string name="vcode_quick_fix_add_var_fallback">Add fallback to var()</string>
+    <string name="vcode_quick_fix_remove_unused_css_var">Remove unused CSS variable</string>
+    <string name="vcode_quick_fix_shorten_hex">Shorten hex color</string>
+    <string name="vcode_quick_fix_remove_empty_css_rule">Remove empty CSS rule</string>
+    <string name="vcode_quick_fix_add_vendor_prefix">Add vendor prefix</string>
+    <string name="vcode_quick_fix_add_missing_color_or_bg">Add missing background/color declaration</string>
+    <string name="vcode_quick_fix_add_gap">Add gap property</string>
+    <string name="vcode_quick_fix_margin_auto_shorthand">Use \'margin: 0 auto\' shorthand</string>
+    <string name="vcode_quick_fix_id_to_class_selector">Convert \'#id\' to \'.id\' class selector</string>
+    <string name="vcode_quick_fix_declare_undefined_var">Declare variable with \'let\'</string>
+    <string name="vcode_quick_fix_rename_duplicate_decl">Rename duplicate declaration</string>
+    <string name="vcode_quick_fix_remove_console">Remove console statement</string>
+    <string name="vcode_quick_fix_division_by_zero">Replace \'0\' with \'1\'</string>
+    <string name="vcode_quick_fix_typeof_string">Compare to \'undefined\' string</string>
+    <string name="vcode_quick_fix_update_type_mismatch">Update type annotation</string>
+    <string name="vcode_quick_fix_replace_any_return">Replace \'any\' with \'unknown\'</string>
+    <string name="vcode_quick_fix_add_void_return_type">Add \': void\' return type annotation</string>
+    <string name="vcode_quick_fix_replace_any_type">Replace \'any\' with \'unknown\'</string>
+    <string name="vcode_quick_fix_remove_redundant_type_ann">Remove redundant type annotation</string>
+    <string name="vcode_quick_fix_convert_optional_param">Convert to optional parameter syntax</string>
+    <string name="vcode_quick_fix_add_readonly">Add \'readonly\' modifier</string>
+    <string name="vcode_quick_fix_replace_broad_function_type">Replace with \'() =&gt; void\'</string>
+    <string name="vcode_quick_fix_replace_non_null_with_optional">Replace \'!\' with optional chaining \'?.\'</string>
+    <string name="vcode_quick_fix_fix_json_syntax">Fix JSON syntax error</string>
+    <string name="vcode_quick_fix_remove_duplicate_json_key">Remove duplicate object key</string>
+    <string name="vcode_quick_fix_adjust_md_heading">Adjust heading level</string>
+    <string name="vcode_quick_fix_remove_empty_blockquote">Remove empty blockquote</string>
+    <string name="vcode_quick_fix_standardize_list_marker">Standardize list marker</string>
+    <string name="vcode_quick_fix_add_link_text">Add link text</string>
+    <string name="vcode_quick_fix_add_image_alt">Add alt text</string>
+    <string name="vcode_quick_fix_replace_useless_alt">Replace with descriptive alt text</string>
+    <string name="vcode_quick_fix_enclose_raw_url">Enclose URL in &lt; &gt;</string>
+    <string name="vcode_quick_fix_remove_trailing_whitespace">Remove trailing whitespace</string>
+    <string name="vcode_quick_fix_convert_tabs_to_spaces">Convert tabs to spaces</string>
+    <string name="vcode_quick_fix_fix_bracket_mismatch">Insert matching bracket</string>
+    <string name="vcode_quick_fix_clean_syntax_error">Clean up syntax error</string>
     <string name="vcode_console_clear">Clear Console</string>
     <string name="vcode_console_empty">No console logs</string>
     <string name="vcode_console_empty_desc">Console output from preview and scripts will appear here</string>
@@ -729,9 +799,11 @@
     <string name="vcode_copied">Copied to clipboard</string>
     <string name="vcode_action_hover_doc">Documentation</string>
 
-    <!-- Indexing Status Card -->
+    <!-- Indexing Status Card / Pill -->
     <string name="vcode_indexing_workspace">Indexing workspace…</string>
     <string name="vcode_indexing_scanning_files">Scanning project files…</string>
     <string name="vcode_indexing_complete">Indexing complete</string>
     <string name="vcode_indexing_status_format">%1$s (%2$d/%3$d)</string>
+    <string name="vcode_indexing_in_progress">Indexing...</string>
+    <string name="vcode_indexing_percent_format">%1$d%%</string>
 </resources>

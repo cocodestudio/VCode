@@ -3,73 +3,71 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/card_indexing_container"
-    android:layout_width="230dp"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:clickable="false"
     android:focusable="false"
     app:cardBackgroundColor="@color/vcode_bg_card"
-    app:cardCornerRadius="12dp"
+    app:cardCornerRadius="999dp"
     app:cardElevation="6dp"
+    app:cardPreventCornerOverlap="false"
+    app:cardUseCompatPadding="true"
     app:strokeColor="@color/vcode_outline"
     app:strokeWidth="1dp">
 
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="6dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:id="@+id/iv_indexing_icon"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:importantForAccessibility="no"
-                android:src="@drawable/ic_arrows_rotate"
-                app:tint="@color/vcode_accent_primary" />
-
-            <TextView
-                android:id="@+id/tv_indexing_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:text="@string/vcode_indexing_workspace"
-                android:textColor="@color/vcode_text_primary"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-        </LinearLayout>
+        <ImageView
+            android:id="@+id/iv_indexing_icon"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_arrows_rotate"
+            app:tint="@color/vcode_accent_primary" />
 
         <TextView
-            android:id="@+id/tv_indexing_status"
-            android:layout_width="match_parent"
+            android:id="@+id/tv_indexing_title"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginStart="8dp"
             android:ellipsize="end"
             android:singleLine="true"
-            android:text="@string/vcode_indexing_scanning_files"
-            android:textColor="@color/vcode_text_secondary"
-            android:textSize="11sp"
-            tools:text="styles.css (5/20)" />
+            android:text="@string/vcode_indexing_in_progress"
+            android:textColor="@color/vcode_text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_indexing_percentage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:singleLine="true"
+            android:textColor="@color/vcode_accent_primary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            tools:text="0%" />
+
+        <!-- Kept for ViewBinding backwards compatibility; hidden in pill mode -->
+        <TextView
+            android:id="@+id/tv_indexing_status"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
         <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/progress_indexing_linear"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:indeterminate="true"
-            app:indicatorColor="@color/vcode_accent_primary"
-            app:trackColor="@color/vcode_surface_variant"
-            app:trackCornerRadius="2dp"
-            app:trackThickness="3dp" />
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
     </LinearLayout>
 

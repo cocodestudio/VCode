@@ -27,7 +27,7 @@
             android:background="@drawable/vcode_bg_symbol_key_interactive"
             android:contentDescription="@string/vcode_quick_fix"
             android:padding="5dp"
-            android:src="@drawable/vcode_ic_lightbulb"
+            android:src="@drawable/ic_lightbulb"
             android:visibility="gone"
             app:tint="@color/vcode_accent_warning" />
 

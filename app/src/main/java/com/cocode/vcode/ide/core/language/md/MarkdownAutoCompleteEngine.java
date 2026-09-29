@@ -44,6 +44,11 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return "[(#*`!|<->:";
+    }
+
+    @Override
     public void setCurrentFile(File file) {
         super.setCurrentFile(file);
         if (pathEngine != null) {

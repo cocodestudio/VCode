@@ -56,8 +56,20 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     private final List<CompletionItem> colorItems = new ArrayList<>();
     private final List<CompletionItem> globalValueItems = new ArrayList<>();
     private final List<CompletionItem> cachedCustomProps = new ArrayList<>();
+    private final List<CompletionItem> cachedDocClasses = new ArrayList<>();
+    private final List<CompletionItem> cachedDocIds = new ArrayList<>();
     private final FastTrie propertyTrie = new FastTrie();
     private int lastTextHash = 0;
+    private int lastDocClassTextHash = 0;
+
+    @Override
+    public String getTriggerCharacters() {
+        return ".#:@-(!&/\"'";
+    }
+
+    public CssAutoCompleteEngine() {
+        this(null);
+    }
 
     public CssAutoCompleteEngine(Context context) {
         super(context);
@@ -66,11 +78,9 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         loadColors();
     }
 
+    @Override
     public void setCurrentFile(File file) {
-        File projectRoot = ProjectSymbolIndex.getProjectRoot(file);
-        if (projectRoot != null) {
-            ProjectSymbolIndex.getInstance().buildIndex(projectRoot);
-        }
+        super.setCurrentFile(file);
     }
 
     // Asset loading
@@ -180,6 +190,71 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
+    // Document class and ID scanning for real-time current buffer suggestions
+    private void ensureDocumentClassesAndIdsIndexed(String text) {
+        int hash = text.hashCode();
+        if (hash == lastDocClassTextHash) return;
+        lastDocClassTextHash = hash;
+        cachedDocClasses.clear();
+        cachedDocIds.clear();
+
+        int len = Math.min(text.length(), 200_000);
+        java.util.Set<String> seenClasses = new java.util.HashSet<>();
+        java.util.Set<String> seenIds = new java.util.HashSet<>();
+        int i = 0;
+        while (i < len) {
+            char c = text.charAt(i);
+            if (c == '/' && i + 1 < len) {
+                if (text.charAt(i + 1) == '*') {
+                    i += 2;
+                    while (i + 1 < len && !(text.charAt(i) == '*' && text.charAt(i + 1) == '/')) i++;
+                    i = Math.min(len, i + 2);
+                    continue;
+                } else if (text.charAt(i + 1) == '/') {
+                    while (i < len && text.charAt(i) != '\n') i++;
+                    continue;
+                }
+            } else if (c == '"' || c == '\'') {
+                char q = c;
+                i++;
+                while (i < len && text.charAt(i) != q) {
+                    if (text.charAt(i) == '\\') i++;
+                    i++;
+                }
+                if (i < len) i++;
+                continue;
+            }
+
+            if (c == '.' || c == '#') {
+                boolean isClass = (c == '.');
+                i++;
+                int start = i;
+                while (i < len) {
+                    char ch = text.charAt(i);
+                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                if (i > start) {
+                    String name = text.substring(start, i);
+                    if (isClass) {
+                        if (seenClasses.add(name)) {
+                            cachedDocClasses.add(new CompletionItem("." + name, "." + name, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+                        }
+                    } else {
+                        if (seenIds.add(name)) {
+                            cachedDocIds.add(new CompletionItem("#" + name, "#" + name, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+                        }
+                    }
+                }
+                continue;
+            }
+            i++;
+        }
+    }
+
     // Main entry points
     @Override
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
@@ -195,6 +270,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         ensureCustomPropsIndexed(fullText);
+        ensureDocumentClassesAndIdsIndexed(fullText);
 
         String line = getLineBeforeCursor(fullText, cursorPos);
         String trimmed = line.trim();
@@ -232,6 +308,22 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             return fuzzyFilter(CssDefinitions.AT_RULE_ITEMS, atWord);
         }
 
+        int wordStartPos = cursorPos - word.length();
+        boolean directlyAfterColon = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == ':';
+        boolean cursorRightAfterColon = word.isEmpty() && cursorPos > 0
+                && fullText.charAt(cursorPos - 1) == ':';
+        boolean isPseudo = directlyAfterColon || cursorRightAfterColon || word.startsWith(":");
+
+        boolean directlyAfterDot = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == '.';
+        boolean cursorRightAfterDot = word.isEmpty() && cursorPos > 0
+                && fullText.charAt(cursorPos - 1) == '.';
+        boolean isClassSelector = directlyAfterDot || cursorRightAfterDot || word.startsWith(".");
+
+        boolean directlyAfterHash = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == '#';
+        boolean cursorRightAfterHash = word.isEmpty() && cursorPos > 0
+                && fullText.charAt(cursorPos - 1) == '#';
+        boolean isIdSelector = directlyAfterHash || cursorRightAfterHash || word.startsWith("#");
+
         // Context-aware property, selector, and value completions based on AST position
         CssStaticCompletionDispatcher.Position pos =
                 CssStaticCompletionDispatcher.detectPosition(fullText, null, null, cursorPos);
@@ -245,22 +337,39 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         if (pos == CssStaticCompletionDispatcher.Position.PROPERTY_NAME) {
-            // If user explicitly typed a nested selector prefix (e.g. &, ., #, :)
-            if (word.startsWith("&") || word.startsWith(".") || word.startsWith("#") || word.startsWith(":")) {
+            // If user explicitly typed a nested selector prefix (e.g. ., #, :, &)
+            if (isClassSelector) {
+                String classQuery = word.startsWith(".") ? word : ("." + word);
+                return filterClassSelectors(classQuery);
+            }
+            if (isIdSelector) {
+                String idQuery = word.startsWith("#") ? word : ("#" + word);
+                return filterIdSelectors(idQuery);
+            }
+            if (isPseudo) {
+                String pseudoQuery = word.startsWith(":") ? word.substring(1) : word;
+                return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, pseudoQuery);
+            }
+            if (word.startsWith("&")) {
                 return getNestedSuggestions(word, trimmed, fullText, cursorPos);
             }
             return getPropertySuggestions(word, fullText, cursorPos);
         }
 
         // pos == NONE: We are in selector position (outside any declaration block)
-        int wordStartPos = cursorPos - word.length();
-        boolean directlyAfterColon = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == ':';
-        boolean cursorRightAfterColon = word.isEmpty() && cursorPos > 0
-                && fullText.charAt(cursorPos - 1) == ':';
-
-        if (directlyAfterColon || cursorRightAfterColon || word.startsWith(":")) {
+        if (isPseudo) {
             String pseudoQuery = word.startsWith(":") ? word.substring(1) : word;
             return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, pseudoQuery);
+        }
+
+        if (isClassSelector) {
+            String classQuery = word.startsWith(".") ? word : ("." + word);
+            return filterClassSelectors(classQuery);
+        }
+
+        if (isIdSelector) {
+            String idQuery = word.startsWith("#") ? word : ("#" + word);
+            return filterIdSelectors(idQuery);
         }
 
         return getSelectorSuggestions(word, trimmed);
@@ -526,15 +635,75 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         return fuzzyFilter(all, word);
     }
 
-    private void addCrossFileSelectors(List<CompletionItem> list) {
+    private List<CompletionItem> filterClassSelectors(String query) {
+        List<CompletionItem> list = getClassSelectorItems();
+        List<CompletionItem> filtered = fuzzyFilter(list, query);
+        int replaceLen = query != null ? query.length() : 0;
+        for (CompletionItem ci : filtered) {
+            ci.setReplaceLength(replaceLen);
+        }
+        return filtered;
+    }
+
+    private List<CompletionItem> filterIdSelectors(String query) {
+        List<CompletionItem> list = getIdSelectorItems();
+        List<CompletionItem> filtered = fuzzyFilter(list, query);
+        int replaceLen = query != null ? query.length() : 0;
+        for (CompletionItem ci : filtered) {
+            ci.setReplaceLength(replaceLen);
+        }
+        return filtered;
+    }
+
+    private List<CompletionItem> getClassSelectorItems() {
+        List<CompletionItem> list = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (CompletionItem ci : cachedDocClasses) {
+            if (seen.add(ci.getLabel())) {
+                list.add(ci);
+            }
+        }
         List<CompletionItem> classes = ProjectSymbolIndex.getInstance().getCssClassItems();
         for (CompletionItem ci : classes) {
-            list.add(new CompletionItem("." + ci.getLabel(), "." + ci.getEffectiveInsertText(), "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+            String label = ci.getLabel().startsWith(".") ? ci.getLabel() : ("." + ci.getLabel());
+            String insert = ci.getEffectiveInsertText().startsWith(".") ? ci.getEffectiveInsertText() : ("." + ci.getEffectiveInsertText());
+            if (seen.add(label)) {
+                list.add(new CompletionItem(label, insert, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+            }
+        }
+        return list;
+    }
+
+    private List<CompletionItem> getIdSelectorItems() {
+        List<CompletionItem> list = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (CompletionItem ci : cachedDocIds) {
+            if (seen.add(ci.getLabel())) {
+                list.add(ci);
+            }
+        }
+        List<CompletionItem> cssIds = ProjectSymbolIndex.getInstance().getCssIdItems();
+        for (CompletionItem ci : cssIds) {
+            String label = ci.getLabel().startsWith("#") ? ci.getLabel() : ("#" + ci.getLabel());
+            String insert = ci.getEffectiveInsertText().startsWith("#") ? ci.getEffectiveInsertText() : ("#" + ci.getEffectiveInsertText());
+            if (seen.add(label)) {
+                list.add(new CompletionItem(label, insert, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+            }
         }
         List<CompletionItem> htmlIds = ProjectSymbolIndex.getInstance().getHtmlIdItems();
         for (CompletionItem ci : htmlIds) {
-            list.add(new CompletionItem("#" + ci.getLabel(), "#" + ci.getEffectiveInsertText(), "ID", CompletionItem.Type.CSS_VALUE, 0));
+            String label = ci.getLabel().startsWith("#") ? ci.getLabel() : ("#" + ci.getLabel());
+            String insert = ci.getEffectiveInsertText().startsWith("#") ? ci.getEffectiveInsertText() : ("#" + ci.getEffectiveInsertText());
+            if (seen.add(label)) {
+                list.add(new CompletionItem(label, insert, "HTML ID", CompletionItem.Type.CSS_VALUE, 0));
+            }
         }
+        return list;
+    }
+
+    private void addCrossFileSelectors(List<CompletionItem> list) {
+        list.addAll(getClassSelectorItems());
+        list.addAll(getIdSelectorItems());
     }
 
     private List<CompletionItem> getSelectorSuggestions(String word, String trimmed) {
@@ -542,9 +711,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, word.substring(1));
         }
         List<CompletionItem> all = new ArrayList<>(htmlTagItems);
-        if (word.startsWith(".") || word.startsWith("#") || word.isEmpty()) {
-            addCrossFileSelectors(all);
-        }
+        addCrossFileSelectors(all);
         return fuzzyFilter(all, word);
     }
 

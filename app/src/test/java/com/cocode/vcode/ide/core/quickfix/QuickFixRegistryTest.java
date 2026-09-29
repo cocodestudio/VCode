@@ -14,7 +14,17 @@ public class QuickFixRegistryTest {
     private final File mockFile = new File("test.html");
 
     @Test
-    public void testHasFixesForKnownCodes() {
+    public void testHasFixesForAllProblemCodes() {
+        // Enforce that EVERY single problem code defined in the enum has quick fix support
+        for (ProblemCode code : ProblemCode.values()) {
+            Problem p = new Problem(mockFile, 1, 1, 1, "Diagnostic message for " + code.name(), Problem.Severity.WARNING, code);
+            assertTrue("Every ProblemCode must have registered quick fixes: " + code.name(),
+                    QuickFixRegistry.hasFixes(p));
+        }
+    }
+
+    @Test
+    public void testHasFixesForCommonProblemCodes() {
         Problem pAlt = new Problem(mockFile, 1, 1, 1, "Element 'img' is missing 'alt' attribute", Problem.Severity.WARNING, ProblemCode.HTML_MISSING_ALT);
         assertTrue(QuickFixRegistry.hasFixes(pAlt));
 
@@ -35,13 +45,16 @@ public class QuickFixRegistryTest {
 
         Problem pUnused = new Problem(mockFile, 1, 1, 1, "Variable 'unusedVar' is defined but never used", Problem.Severity.WARNING, ProblemCode.JS_UNUSED_VARIABLE);
         assertTrue(QuickFixRegistry.hasFixes(pUnused));
+
+        Problem pSyntax = new Problem(mockFile, 1, 1, 1, "Generic syntax error", Problem.Severity.ERROR, ProblemCode.SYNTAX_ERROR);
+        assertTrue("Syntax errors now have quick fixes", QuickFixRegistry.hasFixes(pSyntax));
+
+        Problem pBracket = new Problem(mockFile, 1, 1, 1, "Unclosed brace '{'", Problem.Severity.ERROR, ProblemCode.BRACKET_MISMATCH);
+        assertTrue("Bracket mismatches have quick fixes", QuickFixRegistry.hasFixes(pBracket));
     }
 
     @Test
-    public void testHasFixesForUnknownCodes() {
-        Problem pUnknown = new Problem(mockFile, 1, 1, 1, "Generic syntax error", Problem.Severity.ERROR, ProblemCode.SYNTAX_ERROR);
-        assertFalse(QuickFixRegistry.hasFixes(pUnknown));
-
+    public void testNullProblemHandled() {
         assertFalse(QuickFixRegistry.hasFixes(null));
     }
 }

@@ -44,7 +44,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/vcode_quick_fix"
             android:padding="4dp"
-            android:src="@drawable/vcode_ic_lightbulb"
+            android:src="@drawable/ic_lightbulb"
             android:visibility="gone"
             app:tint="@color/vcode_accent_warning"
             tools:visibility="visible" />

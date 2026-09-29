@@ -40,4 +40,9 @@ public interface LanguageBackend {
 
     /** Parses the source text into a neutral DOM representation */
     DomNode parseToDom(CharSequence text);
+
+    /** Returns characters that trigger autocomplete in this language */
+    default String getTriggerCharacters() {
+        return AutoCompleteEngine.getTriggerCharacters(getFileType());
+    }
 }

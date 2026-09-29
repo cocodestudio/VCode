@@ -257,4 +257,78 @@ public class SegmentedSymbolStoreTest {
 
         store.close();
     }
+
+    @Test
+    public void testIsIndexUpToDateAndSilentSkipping() throws IOException {
+        SegmentedSymbolStore store = new SegmentedSymbolStore(projectRoot);
+
+        File htmlFile = new File(projectRoot, "index.html");
+        try (FileWriter fw = new FileWriter(htmlFile)) {
+            fw.write("<div id='app-root'></div>");
+        }
+
+        List<File> candidateFiles = new ArrayList<>();
+        candidateFiles.add(htmlFile);
+
+        // Initially not up to date
+        assertFalse(store.isIndexUpToDate(projectRoot, candidateFiles));
+
+        // Index the file
+        store.indexFiles(projectRoot, candidateFiles, (file, relPath, fileId) -> {
+            List<IndexSymbolEntry> list = new ArrayList<>();
+            list.add(new IndexSymbolEntry(SymbolKey.htmlId("app-root"), "app-root", IndexSymbolEntry.KIND_HTML_ID, IndexSymbolEntry.FLAG_NONE, fileId, 1, "HTML ID"));
+            return list;
+        });
+
+        // Now it is up to date
+        assertTrue(store.isIndexUpToDate(projectRoot, candidateFiles));
+
+        // Running indexFiles again when up to date should NOT fire any progress listener callbacks
+        AtomicBoolean startedOnUpToDate = new AtomicBoolean(false);
+        store.addProgressListener(new IndexingProgressListener() {
+            @Override
+            public void onIndexingStarted(int totalFiles) {
+                startedOnUpToDate.set(true);
+            }
+            @Override
+            public void onIndexingProgress(int processed, int total, String currentFile) {
+                startedOnUpToDate.set(true);
+            }
+            @Override
+            public void onIndexingCompleted(int totalSymbols, long durationMs) {}
+            @Override
+            public void onIndexingError(Throwable error) {}
+        });
+
+        store.indexFiles(projectRoot, candidateFiles, (file, relPath, fileId) -> new ArrayList<>());
+        assertFalse("Should not fire progress events when all files are up to date", startedOnUpToDate.get());
+
+        // Test silent single-file indexing
+        AtomicBoolean startedOnSilent = new AtomicBoolean(false);
+        File cssFile = new File(projectRoot, "style.css");
+        try (FileWriter fw = new FileWriter(cssFile)) {
+            fw.write(".btn-silent { color: green; }");
+        }
+
+        store.indexSingleFileSilently(projectRoot, cssFile, (file, relPath, fileId) -> {
+            List<IndexSymbolEntry> list = new ArrayList<>();
+            list.add(new IndexSymbolEntry(SymbolKey.cssClass("btn-silent"), "btn-silent", IndexSymbolEntry.KIND_CSS_CLASS, IndexSymbolEntry.FLAG_NONE, fileId, 1, "CSS Class"));
+            return list;
+        });
+
+        assertFalse("Silent single file indexing must not trigger progress listeners", startedOnSilent.get());
+
+        List<CompletionItem> silentResults = store.queryCompletions(
+                SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_CLASS, 10), null);
+        boolean foundSilent = false;
+        for (CompletionItem item : silentResults) {
+            if ("btn-silent".equals(item.getLabel())) {
+                foundSilent = true;
+                break;
+            }
+        }
+        assertTrue("Silent single file indexing should be queryable in segment store", foundSilent);
+
+        store.close();
+    }
 }

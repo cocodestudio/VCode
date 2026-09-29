@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.ts;
 
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.language.js.JsLexer;
@@ -75,11 +76,13 @@ public class TsLinter {
                     if (valTok < stream.length && stream.tokenStart[valTok] < endOffset) {
                         String valueType = inferLiteralTypeFromToken(text, stream, valTok, endOffset);
                         if (valueType != null && !valueType.equals(declType)) {
-                            int line = LinterUtils.getLine(text, startOffset);
-                            int col = LinterUtils.getColumn(text, startOffset);
+                            int targetOffset = findIdentifierOffset(text, startOffset, endOffset, name);
+                            int line = LinterUtils.getLine(text, targetOffset);
+                            int col = LinterUtils.getColumn(text, targetOffset);
                             out.add(new Problem(file, line, col, name.length(),
                                     "Type mismatch: cannot assign '" + valueType + "' to '" + declType + "' for '" + name + "'",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    ProblemCode.TS_TYPE_MISMATCH));
                         }
                     }
                 }
@@ -97,11 +100,14 @@ public class TsLinter {
                     String name = tree.nodeName[i];
                     if (name == null || name.isEmpty()) name = "anonymous";
                     int start = tree.nodeStart[i];
-                    int line = LinterUtils.getLine(text, start);
-                    int col = LinterUtils.getColumn(text, start);
+                    int end = tree.nodeEnd[i];
+                    int targetOffset = "anonymous".equals(name) ? start : findIdentifierOffset(text, start, end, name);
+                    int line = LinterUtils.getLine(text, targetOffset);
+                    int col = LinterUtils.getColumn(text, targetOffset);
                     out.add(new Problem(file, line, col, name.length(),
                             "Function '" + name + "' returns 'any': specify an explicit return type instead",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.TS_RETURN_ANY));
                 }
             }
         }
@@ -119,11 +125,14 @@ public class TsLinter {
                             String name = tree.nodeName[child];
                             if (name != null && !name.isEmpty()) {
                                 int start = tree.nodeStart[child];
-                                int line = LinterUtils.getLine(text, start);
-                                int col = LinterUtils.getColumn(text, start);
+                                int end = tree.nodeEnd[child];
+                                int targetOffset = findIdentifierOffset(text, start, end, name);
+                                int line = LinterUtils.getLine(text, targetOffset);
+                                int col = LinterUtils.getColumn(text, targetOffset);
                                 out.add(new Problem(file, line, col, name.length(),
                                         "Exported function '" + name + "' is missing a return type annotation",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.TS_MISSING_RETURN_TYPE));
                             }
                         }
                     }
@@ -148,11 +157,14 @@ public class TsLinter {
                             boolean isRest = (tree.nodeExtra[child] & JsSyntaxTree.FLAG_REST) != 0;
                             if (!isOpt && !isRest && lastOptional != null) {
                                 int start = tree.nodeStart[child];
-                                int line = LinterUtils.getLine(text, start);
-                                int col = LinterUtils.getColumn(text, start);
+                                int end = tree.nodeEnd[child];
+                                int targetOffset = findIdentifierOffset(text, start, end, pName);
+                                int line = LinterUtils.getLine(text, targetOffset);
+                                int col = LinterUtils.getColumn(text, targetOffset);
                                 out.add(new Problem(file, line, col, pName.length(),
                                         "Optional parameter '" + lastOptional + "?' before required parameter '" + pName + "': required params must come first",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.SYNTAX_ERROR));
                             }
                             if (isOpt) {
                                 lastOptional = pName;
@@ -177,11 +189,14 @@ public class TsLinter {
                     String name = tree.nodeName[i];
                     if (name != null && !name.isEmpty() && !"{destructure}".equals(name)) {
                         int start = tree.nodeStart[i];
-                        int line = LinterUtils.getLine(text, start);
-                        int col = LinterUtils.getColumn(text, start);
+                        int end = tree.nodeEnd[i];
+                        int targetOffset = findIdentifierOffset(text, start, end, name);
+                        int line = LinterUtils.getLine(text, targetOffset);
+                        int col = LinterUtils.getColumn(text, targetOffset);
                         out.add(new Problem(file, line, col, name.length(),
                                 "Explicit 'any' type for '" + name + "': weakens type safety — use 'unknown' or a specific type",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.WARNING,
+                                ProblemCode.TS_EXPLICIT_ANY));
                     }
                 }
             }
@@ -195,11 +210,14 @@ public class TsLinter {
                 String name = tree.nodeName[i];
                 if (name != null && !name.isEmpty()) {
                     int start = tree.nodeStart[i];
-                    int line = LinterUtils.getLine(text, start);
-                    int col = LinterUtils.getColumn(text, start);
+                    int end = tree.nodeEnd[i];
+                    int targetOffset = findIdentifierOffset(text, start, end, name);
+                    int line = LinterUtils.getLine(text, targetOffset);
+                    int col = LinterUtils.getColumn(text, targetOffset);
                     out.add(new Problem(file, line, col, name.length(),
                             "Enums add runtime overhead: consider 'const' object with 'as const' for better tree-shaking",
-                            Problem.Severity.INFO));
+                            Problem.Severity.INFO,
+                            ProblemCode.SYNTAX_ERROR));
                 }
             }
         }
@@ -226,11 +244,13 @@ public class TsLinter {
                     if (valTok < stream.length && stream.tokenStart[valTok] < endOffset) {
                         String inferred = inferLiteralTypeFromToken(text, stream, valTok, endOffset);
                         if (declType.equals(inferred)) {
-                            int line = LinterUtils.getLine(text, startOffset);
-                            int col = LinterUtils.getColumn(text, startOffset);
+                            int targetOffset = findIdentifierOffset(text, startOffset, endOffset, name);
+                            int line = LinterUtils.getLine(text, targetOffset);
+                            int col = LinterUtils.getColumn(text, targetOffset);
                             out.add(new Problem(file, line, col, name.length(),
                                     "Type '" + declType + "' is inferred: remove the explicit annotation ':" + declType + "' for '" + name + "'",
-                                    Problem.Severity.INFO));
+                                    Problem.Severity.INFO,
+                                    ProblemCode.TS_REDUNDANT_TYPE));
                         }
                     }
                 }
@@ -248,11 +268,14 @@ public class TsLinter {
                     if (pName != null && !pName.isEmpty() && !"{destructure}".equals(pName)) {
                         String baseType = typeAnn.replace("| undefined", "").replace("|undefined", "").trim();
                         int start = tree.nodeStart[i];
-                        int line = LinterUtils.getLine(text, start);
-                        int col = LinterUtils.getColumn(text, start);
-                        out.add(new Problem(file, line, col, pName.length() + 2 + typeAnn.length(),
+                        int end = tree.nodeEnd[i];
+                        int targetOffset = findIdentifierOffset(text, start, end, pName);
+                        int line = LinterUtils.getLine(text, targetOffset);
+                        int col = LinterUtils.getColumn(text, targetOffset);
+                        out.add(new Problem(file, line, col, pName.length(),
                                 "'Type | undefined' in parameter can be written as '" + pName + "?: " + baseType + "'",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.TS_UNION_UNDEFINED));
                     }
                 }
             }
@@ -273,11 +296,14 @@ public class TsLinter {
                             if (propName != null && !propName.isEmpty()) {
                                 String elemType = typeAnn.substring(0, typeAnn.length() - 2).trim();
                                 int start = tree.nodeStart[child];
-                                int line = LinterUtils.getLine(text, start);
-                                int col = LinterUtils.getColumn(text, start);
+                                int end = tree.nodeEnd[child];
+                                int targetOffset = findIdentifierOffset(text, start, end, propName);
+                                int line = LinterUtils.getLine(text, targetOffset);
+                                int col = LinterUtils.getColumn(text, targetOffset);
                                 out.add(new Problem(file, line, col, propName.length(),
                                         "Consider 'readonly " + propName + ": " + elemType + "[]' to prevent accidental mutation",
-                                        Problem.Severity.INFO));
+                                        Problem.Severity.INFO,
+                                        ProblemCode.TS_READONLY_ARRAY));
                             }
                         }
                     }
@@ -306,11 +332,15 @@ public class TsLinter {
                 }
                 if (propCount > 2) {
                     int start = tree.nodeStart[i];
-                    int line = LinterUtils.getLine(text, start);
-                    int col = LinterUtils.getColumn(text, start);
+                    int end = tree.nodeEnd[i];
+                    int braceIdx = text.indexOf('{', start);
+                    int targetOffset = (braceIdx != -1 && braceIdx < end) ? braceIdx : start;
+                    int line = LinterUtils.getLine(text, targetOffset);
+                    int col = LinterUtils.getColumn(text, targetOffset);
                     out.add(new Problem(file, line, col, typeAnn.length(),
                             "Inline object type with " + propCount + " properties: consider extracting to a named interface",
-                            Problem.Severity.INFO));
+                            Problem.Severity.INFO,
+                            ProblemCode.SYNTAX_ERROR));
                 }
             }
         }
@@ -350,7 +380,8 @@ public class TsLinter {
                         int col = LinterUtils.getColumn(text, start);
                         out.add(new Problem(file, line, col, 9,
                                 "'namespace' is discouraged in modern TypeScript: use ES modules (import/export) instead",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.WARNING,
+                                ProblemCode.SYNTAX_ERROR));
                     }
                 }
             }
@@ -364,11 +395,15 @@ public class TsLinter {
             String typeAnn = tree.nodeTypeAnn[i];
             if (typeAnn != null && hasFunctionType(typeAnn)) {
                 int start = tree.nodeStart[i];
-                int line = LinterUtils.getLine(text, start);
-                int col = LinterUtils.getColumn(text, start);
+                int end = tree.nodeEnd[i];
+                int fnIdx = text.indexOf("Function", start);
+                int targetOffset = (fnIdx != -1 && fnIdx < end) ? fnIdx : start;
+                int line = LinterUtils.getLine(text, targetOffset);
+                int col = LinterUtils.getColumn(text, targetOffset);
                 out.add(new Problem(file, line, col, 8,
                         "'Function' type is too broad: specify the exact signature, e.g. '(x: T) => R'",
-                        Problem.Severity.WARNING));
+                        Problem.Severity.WARNING,
+                        ProblemCode.TS_BROAD_FUNCTION_TYPE));
             }
         }
     }
@@ -443,7 +478,8 @@ public class TsLinter {
                                 int col = LinterUtils.getColumn(text, start);
                                 out.add(new Problem(file, line, col, targetName.length(),
                                         "Type assertion 'as " + targetName + "': make sure the cast is safe",
-                                        Problem.Severity.INFO));
+                                        Problem.Severity.INFO,
+                                        ProblemCode.SYNTAX_ERROR));
                             }
                         }
                     }
@@ -503,7 +539,8 @@ public class TsLinter {
                                 int len = skipToken(stream, t) - start;
                                 out.add(new Problem(file, line, col, len,
                                         "Non-null assertion '!' used on a possibly-null value: ensure this cannot be null",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.TS_NON_NULL_ASSERTION));
                             }
                         }
                     }
@@ -515,7 +552,8 @@ public class TsLinter {
         if (nonNullCount > 3) {
             out.add(new Problem(file, 1, 1, 1,
                     "High use of '!' non-null assertion (" + nonNullCount + " occurrences): consider stricter null handling",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.WARNING,
+                    ProblemCode.SYNTAX_ERROR));
         }
     }
 
@@ -587,5 +625,20 @@ public class TsLinter {
                 || "delete".equals(word) || "void".equals(word) || "typeof".equals(word)
                 || "instanceof".equals(word) || "in".equals(word) || "await".equals(word)
                 || "yield".equals(word) || "default".equals(word);
+    }
+
+    public static int findIdentifierOffset(String text, int start, int end, String name) {
+        if (text == null || name == null || name.isEmpty() || start < 0) return Math.max(0, start);
+        int limit = Math.min(text.length(), Math.max(start, end));
+        int idx = text.indexOf(name, start);
+        while (idx != -1 && idx < limit) {
+            boolean leftOk = (idx == 0) || !Character.isJavaIdentifierPart(text.charAt(idx - 1));
+            boolean rightOk = (idx + name.length() >= text.length()) || !Character.isJavaIdentifierPart(text.charAt(idx + name.length()));
+            if (leftOk && rightOk) {
+                return idx;
+            }
+            idx = text.indexOf(name, idx + 1);
+        }
+        return start;
     }
 }

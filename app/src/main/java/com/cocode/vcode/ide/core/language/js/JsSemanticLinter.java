@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.js;
 
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
@@ -37,10 +38,26 @@ public class JsSemanticLinter {
         // Undefined symbol detection against active scope, standard library, and project index
         checkUndefined(file, text, mask, scopeTree, tree, problems);
 
-        // AST structural rules and syntax checks
+        // AST syntax errors and structural rules
+        checkSyntaxErrors(file, text, tree, problems);
         try {
             checkAdditionalAstRules(file, text, mask, tree, problems);
         } catch (Exception ignored) {
+        }
+    }
+
+    private static void checkSyntaxErrors(File file, String text, JsSyntaxTree tree, List<Problem> problems) {
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_ERROR) {
+                int start = tree.nodeStart[i];
+                int end = tree.nodeEnd[i];
+                int len = Math.max(1, end - start);
+                int line = LinterUtils.getLine(text, start);
+                int col = LinterUtils.getColumn(text, start);
+                String msg = tree.nodeName[i];
+                if (msg == null || msg.isEmpty()) msg = "JavaScript syntax error";
+                problems.add(new Problem(file, line, col, len, msg, Problem.Severity.ERROR, ProblemCode.SYNTAX_ERROR));
+            }
         }
     }
 
@@ -76,7 +93,8 @@ public class JsSemanticLinter {
                             int col = LinterUtils.getColumn(text, tree.nodeStart[nodeId]);
                             problems.add(new Problem(file, line, col, name.length(),
                                     "Identifier '" + name + "' has already been declared",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    ProblemCode.JS_DUPLICATE_DECLARATION));
                         }
                     }
                 }
@@ -240,9 +258,7 @@ public class JsSemanticLinter {
                         int declNodeId = resolved[1];
 
                         if ((tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_CONST || tree.nodeExtra[declNodeId] == JsSyntaxTree.FLAG_CONST) {
-                            int targetOffset = (opTokenIdx != -1 && opTokenIdx < mask.tokenStart.length)
-                                    ? mask.tokenStart[opTokenIdx]
-                                    : tree.nodeStart[i];
+                            int targetOffset = tree.nodeStart[i];
                             int line = LinterUtils.getLine(text, targetOffset);
                             int col = LinterUtils.getColumn(text, targetOffset);
                             problems.add(new Problem(file, line, col, baseIdentifier.length(),
@@ -825,13 +841,15 @@ public class JsSemanticLinter {
                     String expectedStr = (minParams == totalParams) ? String.valueOf(totalParams) : "at least " + minParams;
                     problems.add(new Problem(file, line, col, identifier.length(),
                             "Too few arguments: '" + identifier + "' expects " + expectedStr + " argument(s), but got " + actualArgs,
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.SYNTAX_ERROR));
                 } else if (actualArgs > totalParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, identifier.length(),
                             "Too many arguments: '" + identifier + "' expects " + totalParams + " argument(s), but got " + actualArgs,
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.SYNTAX_ERROR));
                 }
             }
         }
@@ -1122,7 +1140,8 @@ public class JsSemanticLinter {
                 int col = LinterUtils.getColumn(text, offset);
                 problems.add(new Problem(file, line, col, id.length(),
                         "'" + id + "' is not defined",
-                        Problem.Severity.ERROR));
+                        Problem.Severity.ERROR,
+                        ProblemCode.JS_UNDEFINED_VARIABLE));
             }
         }
     }
@@ -1167,7 +1186,8 @@ public class JsSemanticLinter {
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, tree.nodeName[i].length(),
                             "Unexpected console statement",
-                            Problem.Severity.INFO));
+                            Problem.Severity.INFO,
+                            ProblemCode.JS_CONSOLE_STATEMENT));
                 }
             }
         }
@@ -1201,7 +1221,7 @@ public class JsSemanticLinter {
                     if ("0".equals(numStr)) {
                         int line = LinterUtils.getLine(text, opStart);
                         int col = LinterUtils.getColumn(text, opStart);
-                        problems.add(new Problem(file, line, col, 1, "Division by zero", Problem.Severity.WARNING));
+                        problems.add(new Problem(file, line, col, 1, "Division by zero", Problem.Severity.WARNING, ProblemCode.JS_DIVISION_BY_ZERO));
                     }
                 }
             }
@@ -1273,7 +1293,8 @@ public class JsSemanticLinter {
                     int col = LinterUtils.getColumn(text, opStart);
                     problems.add(new Problem(file, line, col, op.length(),
                             "Comparing typeof to undefined directly; typeof always returns a string (e.g. 'undefined')",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.JS_TYPEOF_UNDEFINED_COMPARISON));
                 }
             }
         }

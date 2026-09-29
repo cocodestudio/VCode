@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.html;
 
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.language.js.ParseResult;
@@ -41,6 +42,8 @@ public class HtmlLinter {
         boolean hasTitle = false;
         boolean hasMetaDescription = false;
         boolean isFullDocument = false;
+        int headStart = -1;
+        int headHighlightLen = 6;
         int headingLevel = 0;
 
         int nodeCount = tree.nodeCount;
@@ -60,16 +63,21 @@ public class HtmlLinter {
                 int line = LinterUtils.getLine(text, start);
                 int col = LinterUtils.getColumn(text, start);
                 String msg;
+                ProblemCode pCode;
                 if ("Unclosed".equals(tree.nodeValue[i])) {
                     msg = "Unclosed tag '<" + (errorName != null ? errorName : "") + ">'";
+                    pCode = ProblemCode.HTML_UNCLOSED_TAG;
                 } else if (errorName != null && KnownElements.VOID_ELEMENTS.contains(errorName.toLowerCase())) {
                     msg = "'" + errorName + "' is a void element and cannot have a closing tag";
+                    pCode = ProblemCode.HTML_VOID_ELEMENT_CLOSING;
                 } else if (errorName != null) {
                     msg = "Stray closing tag '</" + errorName + ">' with no opening tag";
+                    pCode = ProblemCode.HTML_STRAY_CLOSING_TAG;
                 } else {
                     msg = "Malformed HTML syntax near '" + extractSnippet(text, start, Math.min(start + 10, end)) + "'";
+                    pCode = ProblemCode.SYNTAX_ERROR;
                 }
-                problems.add(new Problem(file, line, col, length, msg, Problem.Severity.ERROR));
+                problems.add(new Problem(file, line, col, length, msg, Problem.Severity.ERROR, pCode));
                 continue;
             }
 
@@ -77,8 +85,13 @@ public class HtmlLinter {
                 String tagName = tree.nodeName[i];
                 if (tagName == null) continue;
                 tagName = tagName.toLowerCase();
+                int tagHighlightLen = getTagHighlightLength(text, start, tagName);
                 if ("html".equals(tagName) || "head".equals(tagName)) {
                     isFullDocument = true;
+                    if ("head".equals(tagName)) {
+                        headStart = start;
+                        headHighlightLen = tagHighlightLen;
+                    }
                 }
 
                 int tagLine = LinterUtils.getLine(text, start);
@@ -87,6 +100,7 @@ public class HtmlLinter {
                 // Collect element attributes
                 Map<String, String> attrs = new HashMap<>();
                 Map<String, Integer> attrStarts = new HashMap<>();
+                Map<String, Integer> attrLengths = new HashMap<>();
                 int child = tree.nodeChild[i];
                 int textChildrenCount = 0;
                 boolean hasNonWhitespaceText = false;
@@ -106,10 +120,12 @@ public class HtmlLinter {
                                 int aCol = LinterUtils.getColumn(text, aStart);
                                 problems.add(new Problem(file, aLine, aCol, aName.length(),
                                         "Duplicate attribute '" + aName + "' on '<" + tagName + ">'",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.HTML_DUPLICATE_ATTR));
                             } else {
                                 attrs.put(lowerName, aVal != null ? aVal : "");
                                 attrStarts.put(lowerName, tree.nodeStart[child]);
+                                attrLengths.put(lowerName, Math.max(1, tree.nodeEnd[child] - tree.nodeStart[child]));
                             }
                         }
                     } else {
@@ -134,15 +150,17 @@ public class HtmlLinter {
                         || KnownElements.DEPRECATED_ELEMENTS.containsKey(tagName)
                         || tagName.contains("-");
                 if (!isKnown) {
-                    problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
+                    problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                             "'<" + tagName + ">' is not a valid HTML5 element",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.SYNTAX_ERROR));
                 }
 
                 if (KnownElements.DEPRECATED_ELEMENTS.containsKey(tagName)) {
-                    problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
+                    problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                             "'<" + tagName + ">' is deprecated — use " + KnownElements.DEPRECATED_ELEMENTS.get(tagName) + " instead",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.HTML_DEPRECATED_TAG));
                 }
 
                 // RULE: Deprecated Attributes
@@ -162,7 +180,8 @@ public class HtmlLinter {
                         int aCol = LinterUtils.getColumn(text, attrStart);
                         problems.add(new Problem(file, aLine, aCol, ak.length(),
                                 "'" + ak + "' attribute on '<" + tagName + ">' is deprecated — use " + suggestion + " instead",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.WARNING,
+                                ProblemCode.HTML_DEPRECATED_ATTR));
                     }
                 }
 
@@ -176,11 +195,13 @@ public class HtmlLinter {
                         }
                         if (!idVal.isEmpty() && !seenIds.add(idVal)) {
                             int attrStart = attrStarts.getOrDefault("id", start);
+                            int attrLen = attrLengths.getOrDefault("id", idVal.length() + 4);
                             int aLine = LinterUtils.getLine(text, attrStart);
                             int aCol = LinterUtils.getColumn(text, attrStart);
-                            problems.add(new Problem(file, aLine, aCol, idVal.length() + 4,
+                            problems.add(new Problem(file, aLine, aCol, attrLen,
                                     "Duplicate id='" + idVal + "': IDs must be unique in a document",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    ProblemCode.HTML_DUPLICATE_ID));
                         }
                     }
                 }
@@ -192,7 +213,8 @@ public class HtmlLinter {
                     int aCol = LinterUtils.getColumn(text, attrStart);
                     problems.add(new Problem(file, aLine, aCol, 5,
                             "Avoid inline styles on '<" + tagName + ">': prefer CSS classes",
-                            Problem.Severity.INFO));
+                            Problem.Severity.INFO,
+                            ProblemCode.HTML_INLINE_STYLE));
                 }
 
                 // RULE: Event Handler Attributes
@@ -203,7 +225,8 @@ public class HtmlLinter {
                         int aCol = LinterUtils.getColumn(text, attrStart);
                         problems.add(new Problem(file, aLine, aCol, ak.length(),
                                 "'" + ak + "' inline handler on '<" + tagName + ">': prefer addEventListener() in external JS",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.HTML_INLINE_EVENT));
                     }
                 }
 
@@ -225,9 +248,10 @@ public class HtmlLinter {
                             sb.append("'<").append(rp).append(">'");
                             pCount++;
                         }
-                        problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
+                        problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                 "'<" + tagName + ">' must be a child of " + sb,
-                                Problem.Severity.ERROR));
+                                Problem.Severity.ERROR,
+                                ProblemCode.HTML_REQUIRED_PARENT));
                     }
                 }
 
@@ -236,9 +260,10 @@ public class HtmlLinter {
                     int pId = tree.nodeParent[i];
                     while (pId > 0) {
                         if (tree.nodeType[pId] == HtmlSyntaxTree.N_ELEMENT && "a".equalsIgnoreCase(tree.nodeName[pId])) {
-                            problems.add(new Problem(file, tagLine, tagCol, 3,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<a>' cannot be nested inside another '<a>'",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    ProblemCode.HTML_NESTED_ANCHOR));
                             break;
                         }
                         pId = tree.nodeParent[pId];
@@ -249,9 +274,10 @@ public class HtmlLinter {
                 switch (tagName) {
                     case "html":
                         if (!attrs.containsKey("lang")) {
-                            problems.add(new Problem(file, tagLine, tagCol, 6,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<html>' is missing 'lang' attribute: required for screen readers",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    ProblemCode.HTML_MISSING_LANG));
                         }
                         break;
                     case "meta":
@@ -264,15 +290,16 @@ public class HtmlLinter {
                         if ("viewport".equalsIgnoreCase(nameAttr)) hasViewport = true;
                         if ("description".equalsIgnoreCase(nameAttr)) hasMetaDescription = true;
                         if ((nameAttr != null || httpEquiv != null) && !attrs.containsKey("content")) {
-                            problems.add(new Problem(file, tagLine, tagCol, 6,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<meta>' with '" + (nameAttr != null ? "name" : "http-equiv") + "' is missing 'content' attribute",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    ProblemCode.HTML_MISSING_CONTENT));
                         }
                         break;
                     case "title":
                         hasTitle = true;
                         if (!hasNonWhitespaceText) {
-                            problems.add(new Problem(file, tagLine, tagCol, 7,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "Empty '<title>' element: page title is required for accessibility and SEO",
                                     Problem.Severity.WARNING,
                                     com.cocode.vcode.ide.core.diagnostic.ProblemCode.HTML_EMPTY_TITLE));
@@ -282,20 +309,22 @@ public class HtmlLinter {
                         boolean hasSrc = attrs.containsKey("src");
                         boolean hasAlt = attrs.containsKey("alt");
                         if (!hasSrc) {
-                            problems.add(new Problem(file, tagLine, tagCol, 5,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<img>' is missing required attribute 'src'",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    ProblemCode.HTML_MISSING_SRC));
                         }
                         if (!hasAlt) {
-                            problems.add(new Problem(file, tagLine, tagCol, 5,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<img>' is missing 'alt' attribute: required for accessibility",
                                     Problem.Severity.WARNING,
                                     com.cocode.vcode.ide.core.diagnostic.ProblemCode.HTML_MISSING_ALT));
                         }
                         if (!attrs.containsKey("loading")) {
-                            problems.add(new Problem(file, tagLine, tagCol, 5,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "Consider adding 'loading=\"lazy\"' on '<img>' for performance",
-                                    Problem.Severity.INFO));
+                                    Problem.Severity.INFO,
+                                    ProblemCode.HTML_LAZY_LOADING));
                         }
                         break;
                     case "script":
@@ -304,27 +333,30 @@ public class HtmlLinter {
                         String scriptType = cleanAttrVal(attrs.get("type"));
                         boolean isModule = "module".equalsIgnoreCase(scriptType);
                         if (attrs.containsKey("src") && !hasDefer && !hasAsync && !isModule) {
-                            problems.add(new Problem(file, tagLine, tagCol, 8,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<script>' without 'defer' or 'async': may block page rendering",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    ProblemCode.HTML_SCRIPT_MISSING_DEFER));
                         }
                         if ("text/javascript".equalsIgnoreCase(scriptType)) {
-                            problems.add(new Problem(file, tagLine, tagCol, 8,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'type=\"text/javascript\"' is redundant in HTML5 — remove it",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    ProblemCode.HTML_REDUNDANT_TYPE_ATTR));
                         }
                         break;
                     case "link":
                         String linkType = cleanAttrVal(attrs.get("type"));
                         if ("text/css".equalsIgnoreCase(linkType)) {
-                            problems.add(new Problem(file, tagLine, tagCol, 6,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'type=\"text/css\"' on '<link>' is redundant in HTML5 — remove it",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    ProblemCode.HTML_REDUNDANT_TYPE_ATTR));
                         }
                         break;
                     case "button":
                         if (!attrs.containsKey("type")) {
-                            problems.add(new Problem(file, tagLine, tagCol, 8,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<button>' is missing 'type' attribute (defaults to 'submit', which can cause bugs)",
                                     Problem.Severity.WARNING,
                                     com.cocode.vcode.ide.core.diagnostic.ProblemCode.HTML_BUTTON_MISSING_TYPE));
@@ -345,9 +377,10 @@ public class HtmlLinter {
                                 labelChild = tree.nodeSibling[labelChild];
                             }
                             if (!hasControlChild) {
-                                problems.add(new Problem(file, tagLine, tagCol, 7,
+                                problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                         "'<label>' is missing 'for' attribute and does not wrap a form control",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.HTML_MISSING_FOR));
                             }
                         }
                         break;
@@ -357,22 +390,25 @@ public class HtmlLinter {
                         String href = cleanAttrVal(attrs.get("href"));
                         if ("_blank".equalsIgnoreCase(target)) {
                             if (rel == null || (!rel.toLowerCase().contains("noopener") && !rel.toLowerCase().contains("noreferrer"))) {
-                                problems.add(new Problem(file, tagLine, tagCol, 3,
+                                problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                         "Using target=\"_blank\" without rel=\"noopener\" or rel=\"noreferrer\" is a security risk",
-                                        Problem.Severity.WARNING));
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.HTML_TARGET_BLANK_SECURITY));
                             }
                         }
                         if ("#".equals(href)) {
-                            problems.add(new Problem(file, tagLine, tagCol, 3,
-                                    "'<a href=\"#\">' used as button — use '<button>' for semantic correctness",
-                                    Problem.Severity.WARNING));
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
+                                        "'<a href=\"#\">' used as button — use '<button>' for semantic correctness",
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.HTML_ANCHOR_AS_BUTTON));
                         }
                         break;
                     case "table":
                         if (!hasTableHeader(tree, i)) {
-                            problems.add(new Problem(file, tagLine, tagCol, 7,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "'<table>' has no header row: add '<thead>' and '<th>' for accessibility",
-                                    Problem.Severity.INFO));
+                                    Problem.Severity.INFO,
+                                    ProblemCode.HTML_MISSING_THEAD));
                         }
                         break;
                     case "div":
@@ -381,9 +417,10 @@ public class HtmlLinter {
                             for (String cls : classAttr.split("\\s+")) {
                                 String suggestion = KnownElements.SEMANTIC_SUGGESTIONS.get(cls.toLowerCase());
                                 if (suggestion != null) {
-                                    problems.add(new Problem(file, tagLine, tagCol, 5,
+                                    problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                             "'<div class=\"" + cls + "\">' could be replaced with '" + suggestion + "'",
-                                            Problem.Severity.INFO));
+                                            Problem.Severity.INFO,
+                                            ProblemCode.HTML_SEMANTIC_SUGGESTION));
                                 }
                             }
                         }
@@ -395,9 +432,10 @@ public class HtmlLinter {
                     int level = tagName.charAt(1) - '0';
                     if (level >= 1 && level <= 6) {
                         if (headingLevel > 0 && level > headingLevel + 1) {
-                            problems.add(new Problem(file, tagLine, tagCol, 4,
+                            problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                     "Heading level skipped: '<h" + level + ">' after '<h" + headingLevel + ">'",
-                                    Problem.Severity.WARNING));
+                                    Problem.Severity.WARNING,
+                                    ProblemCode.SYNTAX_ERROR));
                         }
                         headingLevel = level;
                     }
@@ -424,9 +462,10 @@ public class HtmlLinter {
                             for (String reqAttr : req) {
                                 if (!attrs.containsKey(reqAttr)) {
                                     if (tagName.equals("a") && reqAttr.equals("href")) continue;
-                                    problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
+                                    problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                             "'<" + tagName + ">' is missing required attribute '" + reqAttr + "'",
-                                            Problem.Severity.WARNING));
+                                            Problem.Severity.WARNING,
+                                            ProblemCode.HTML_MISSING_REQ_ATTR));
                                 }
                             }
                         }
@@ -438,9 +477,10 @@ public class HtmlLinter {
                     boolean hasEssentialAttrs = attrs.containsKey("id") || attrs.containsKey("class")
                             || attrs.containsKey("role") || attrs.containsKey("aria-label");
                     if (!hasEssentialAttrs && (nonAttrChildCount == 0 || (textChildrenCount == nonAttrChildCount && !hasNonWhitespaceText))) {
-                        problems.add(new Problem(file, tagLine, tagCol, tagName.length() + 2,
+                        problems.add(new Problem(file, tagLine, tagCol, tagHighlightLen,
                                 "Empty '<" + tagName + ">': likely unintentional",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.HTML_EMPTY_TAG));
                     }
                 }
             }
@@ -451,22 +491,29 @@ public class HtmlLinter {
             if (!hasCharset) {
                 problems.add(new Problem(file, 1, 1, 1,
                         "Missing '<meta charset=\"...\">' in <head>: may cause encoding issues",
-                        Problem.Severity.WARNING));
+                        Problem.Severity.WARNING,
+                        ProblemCode.HTML_MISSING_CHARSET));
             }
             if (!hasViewport) {
                 problems.add(new Problem(file, 1, 1, 1,
                         "Missing viewport meta tag: page may not be mobile-responsive",
-                        Problem.Severity.WARNING));
+                        Problem.Severity.WARNING,
+                        ProblemCode.HTML_MISSING_VIEWPORT));
             }
             if (!hasTitle) {
-                problems.add(new Problem(file, 1, 1, 1,
+                int line = headStart >= 0 ? LinterUtils.getLine(text, headStart) : 1;
+                int col = headStart >= 0 ? LinterUtils.getColumn(text, headStart) : 1;
+                int len = headStart >= 0 ? headHighlightLen : 1;
+                problems.add(new Problem(file, line, col, len,
                         "Missing '<title>' in <head>",
-                        Problem.Severity.WARNING));
+                        Problem.Severity.WARNING,
+                        ProblemCode.HTML_MISSING_TITLE));
             }
             if (!hasMetaDescription) {
                 problems.add(new Problem(file, 1, 1, 1,
                         "Consider adding '<meta name=\"description\">' for SEO",
-                        Problem.Severity.INFO));
+                        Problem.Severity.INFO,
+                        ProblemCode.HTML_MISSING_META_DESCRIPTION));
             }
         }
 
@@ -502,6 +549,18 @@ public class HtmlLinter {
             return val.substring(1, val.length() - 1);
         }
         return val;
+    }
+
+    public static int getTagHighlightLength(String text, int start, String tagName) {
+        if (tagName == null || start < 0 || start >= text.length()) return 1;
+        int tagLen = tagName.length();
+        if (start + 1 + tagLen < text.length() && text.charAt(start + 1 + tagLen) == '>') {
+            return tagLen + 2;
+        }
+        if (start + 2 + tagLen < text.length() && text.charAt(start + 1 + tagLen) == '/' && text.charAt(start + 2 + tagLen) == '>') {
+            return tagLen + 3;
+        }
+        return tagLen + 1;
     }
 
     private static String extractSnippet(String text, int start, int end) {

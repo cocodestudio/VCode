@@ -68,6 +68,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         loadKeywords();
     }
 
+    @Override
+    public String getTriggerCharacters() {
+        return ".'\"`/@({*";
+    }
+
     /**
      * Loads JavaScript/TypeScript built-in member-to-type mappings dynamically from assets/types/builtin_types.json.
      * Supports both hierarchical/grouped definitions (e.g. "@STRING": { "split": "@ARRAY" }) and
@@ -179,13 +184,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
     public void setCurrentFile(File file) {
         this.currentFile = file;
-        File projectRoot = ProjectSymbolIndex.getProjectRoot(file);
-        if (projectRoot != null) {
-            ProjectSymbolIndex.getInstance().buildIndex(projectRoot);
-            com.cocode.vcode.ide.utils.ExecutorProvider.getInstance().runOnIo(() -> {
-                com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
-            });
-        }
     }
 
     // Keyword loading

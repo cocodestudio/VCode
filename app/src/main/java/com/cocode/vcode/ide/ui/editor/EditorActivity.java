@@ -105,6 +105,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 .withEndAction(() -> {
                     if (binding != null && binding.cardIndexingStatus != null) {
                         binding.cardIndexingStatus.getRoot().setVisibility(View.GONE);
+                        binding.cardIndexingStatus.ivIndexingIcon.animate().cancel();
+                        binding.cardIndexingStatus.ivIndexingIcon.setRotation(0f);
                         binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_arrows_rotate);
                         binding.cardIndexingStatus.ivIndexingIcon.setColorFilter(
                                 ContextCompat.getColor(EditorActivity.this, R.color.vcode_accent_primary));
@@ -1525,7 +1527,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private void setupIndexingProgressCard() {
         if (binding == null || binding.cardIndexingStatus == null) return;
         binding.cardIndexingStatus.tvIndexingTitle.setTypeface(FontManager.getInstance().getUiSemiBold(this));
-        binding.cardIndexingStatus.tvIndexingStatus.setTypeface(FontManager.getInstance().getUiMedium(this));
+        if (binding.cardIndexingStatus.tvIndexingPercentage != null) {
+            binding.cardIndexingStatus.tvIndexingPercentage.setTypeface(FontManager.getInstance().getUiSemiBold(this));
+        }
 
         indexingProgressListener = new com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener() {
             @Override
@@ -1533,17 +1537,21 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
                     binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+                    binding.cardIndexingStatus.ivIndexingIcon.animate().cancel();
+                    binding.cardIndexingStatus.ivIndexingIcon.setRotation(0f);
                     binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_arrows_rotate);
                     binding.cardIndexingStatus.ivIndexingIcon.setColorFilter(
                             ContextCompat.getColor(EditorActivity.this, R.color.vcode_accent_primary));
-                    binding.cardIndexingStatus.tvIndexingStatus.setText(R.string.vcode_indexing_scanning_files);
+                    binding.cardIndexingStatus.ivIndexingIcon.animate()
+                            .rotationBy(360f * 1000f)
+                            .setDuration(1000L * 1000L)
+                            .setInterpolator(new android.view.animation.LinearInterpolator())
+                            .start();
 
-                    if (totalFiles > 0) {
-                        binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(false);
-                        binding.cardIndexingStatus.progressIndexingLinear.setMax(totalFiles);
-                        binding.cardIndexingStatus.progressIndexingLinear.setProgressCompat(0, false);
-                    } else {
-                        binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(true);
+                    binding.cardIndexingStatus.tvIndexingTitle.setText(R.string.vcode_indexing_in_progress);
+                    if (binding.cardIndexingStatus.tvIndexingPercentage != null) {
+                        binding.cardIndexingStatus.tvIndexingPercentage.setText(
+                                String.format(getString(R.string.vcode_indexing_percent_format), 0));
                     }
 
                     if (binding.cardIndexingStatus.getRoot().getVisibility() != View.VISIBLE) {
@@ -1563,15 +1571,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             public void onIndexingProgress(int processedFiles, int totalFiles, String currentFileName) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
-                    if (totalFiles > 0) {
-                        binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(false);
-                        binding.cardIndexingStatus.progressIndexingLinear.setMax(totalFiles);
-                        binding.cardIndexingStatus.progressIndexingLinear.setProgressCompat(processedFiles, true);
+                    int percent = totalFiles > 0 ? Math.min(99, Math.max(0, (int) ((processedFiles * 100f) / totalFiles))) : 0;
+                    if (binding.cardIndexingStatus.tvIndexingPercentage != null) {
+                        binding.cardIndexingStatus.tvIndexingPercentage.setText(
+                                String.format(getString(R.string.vcode_indexing_percent_format), percent));
                     }
-                    String display = (currentFileName != null && !currentFileName.isEmpty())
-                            ? String.format(getString(R.string.vcode_indexing_status_format), currentFileName, processedFiles, totalFiles)
-                            : getString(R.string.vcode_indexing_scanning_files);
-                    binding.cardIndexingStatus.tvIndexingStatus.setText(display);
                 });
             }
 
@@ -1579,13 +1583,15 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             public void onIndexingCompleted(int totalIndexedSymbols, long durationMs) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
-                    binding.cardIndexingStatus.progressIndexingLinear.setIndeterminate(false);
-                    binding.cardIndexingStatus.progressIndexingLinear.setProgressCompat(
-                            binding.cardIndexingStatus.progressIndexingLinear.getMax(), true);
-                    binding.cardIndexingStatus.tvIndexingStatus.setText(R.string.vcode_indexing_complete);
+                    binding.cardIndexingStatus.ivIndexingIcon.animate().cancel();
+                    binding.cardIndexingStatus.ivIndexingIcon.setRotation(0f);
                     binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_check);
                     binding.cardIndexingStatus.ivIndexingIcon.setColorFilter(
                             ContextCompat.getColor(EditorActivity.this, R.color.vcode_accent_success));
+                    if (binding.cardIndexingStatus.tvIndexingPercentage != null) {
+                        binding.cardIndexingStatus.tvIndexingPercentage.setText(
+                                String.format(getString(R.string.vcode_indexing_percent_format), 100));
+                    }
 
                     binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
                     binding.cardIndexingStatus.getRoot().postDelayed(hideIndexingCardRunnable, 1000L);
@@ -1596,6 +1602,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             public void onIndexingError(Throwable error) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
+                    binding.cardIndexingStatus.ivIndexingIcon.animate().cancel();
+                    binding.cardIndexingStatus.ivIndexingIcon.setRotation(0f);
                     binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
                     binding.cardIndexingStatus.getRoot().postDelayed(hideIndexingCardRunnable, 1500L);
                 });

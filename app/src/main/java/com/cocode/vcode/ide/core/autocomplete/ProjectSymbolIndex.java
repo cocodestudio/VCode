@@ -173,10 +173,16 @@ public class ProjectSymbolIndex {
                     }
                 };
 
-                segmentedStore.addProgressListener(forwarder);
-
                 List<File> candidateFiles = new ArrayList<>();
                 collectCandidateFiles(rootDir, candidateFiles);
+
+                // If project is already indexed and all files are fresh, populate in-memory symbols silently without UI
+                if (segmentedStore.isIndexUpToDate(rootDir, candidateFiles)) {
+                    loadCachedSymbolsIntoMemory();
+                    return;
+                }
+
+                segmentedStore.addProgressListener(forwarder);
 
                 Set<String> classNames = new HashSet<>();
                 Set<String> cssIds = new HashSet<>();
@@ -197,36 +203,8 @@ public class ProjectSymbolIndex {
 
                 segmentedStore.removeProgressListener(forwarder);
 
-                // If candidate files were all cached, populate in-memory sets from segmented store
-                if (classNames.isEmpty()) {
-                    List<IndexSymbolEntry> cachedClasses = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_CLASS, 0));
-                    for (IndexSymbolEntry e : cachedClasses) {
-                        classNames.add(e.getName());
-                    }
-                    List<IndexSymbolEntry> cachedCssIds = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_ID, 0));
-                    for (IndexSymbolEntry e : cachedCssIds) {
-                        cssIds.add(e.getName());
-                    }
-                    List<IndexSymbolEntry> cachedHtmlIds = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_HTML_ID, 0));
-                    for (IndexSymbolEntry e : cachedHtmlIds) {
-                        htmlIds.add(e.getName());
-                    }
-                }
-
-                synchronized (this) {
-                    cssClassItems.clear();
-                    for (String c : classNames) {
-                        cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
-                    }
-                    cssIdItems.clear();
-                    for (String id : cssIds) {
-                        cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
-                    }
-                    htmlIdItems.clear();
-                    for (String id : htmlIds) {
-                        htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
-                    }
-                }
+                // Populate in-memory sets from segmented store for all project symbols
+                loadCachedSymbolsIntoMemory();
             } catch (Throwable t) {
                 for (IndexingProgressListener l : progressListeners) {
                     try { l.onIndexingError(t); } catch (Exception ignored) {}
@@ -711,24 +689,138 @@ public class ProjectSymbolIndex {
         }
     }
 
+    private void loadCachedSymbolsIntoMemory() {
+        if (segmentedStore == null) return;
+        Set<String> classNames = new HashSet<>();
+        Set<String> cssIds = new HashSet<>();
+        Set<String> htmlIds = new HashSet<>();
+
+        List<IndexSymbolEntry> cachedClasses = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_CLASS, 0));
+        for (IndexSymbolEntry e : cachedClasses) {
+            classNames.add(e.getName());
+        }
+        List<IndexSymbolEntry> cachedCssIds = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_ID, 0));
+        for (IndexSymbolEntry e : cachedCssIds) {
+            cssIds.add(e.getName());
+        }
+        List<IndexSymbolEntry> cachedHtmlIds = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_HTML_ID, 0));
+        for (IndexSymbolEntry e : cachedHtmlIds) {
+            htmlIds.add(e.getName());
+        }
+
+        synchronized (this) {
+            cssClassItems.clear();
+            for (String c : classNames) {
+                cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+            }
+            cssIdItems.clear();
+            for (String id : cssIds) {
+                cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+            }
+            htmlIdItems.clear();
+            for (String id : htmlIds) {
+                htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
+            }
+        }
+    }
+
     /**
-     * Re-indexes a single JS/TS file's exports using the latest in-memory snapshot
-     * from {@link com.cocode.vcode.ide.core.lsp.ProjectIndex}. This ensures the
-     * export cache stays current even when auto-save is off, by reading from the live
-     * editor buffer rather than disk.
+     * Silently re-indexes a single modified file in the background without showing any UI or progress card.
+     * Extracts updated symbols and reflects them in in-memory completion lists and the disk segment cache.
      *
-     * <p>Called from {@link com.cocode.vcode.ide.core.lsp.LspEditorBridge#setFile(java.io.File)}
-     * whenever the user switches away from a file.
-     *
-     * @param file the file to re-index (no-op if not a JS/TS variant)
+     * @param file the modified file
      */
-    public void updateFileFromIndex(File file) {
+    public void updateFileSilently(File file) {
         if (file == null) return;
         String name = file.getName().toLowerCase();
-        if (!name.endsWith(".js") && !name.endsWith(".ts") && !name.endsWith(".jsx")
-                && !name.endsWith(".tsx") && !name.endsWith(".mjs")) return;
-        // Re-index on the IO thread. indexJsFile() atomically puts results into jsFileExports,
-        // replacing any stale entry only when new data is ready. No eager invalidation needed.
-        ExecutorProvider.getInstance().runOnIo(() -> indexJsFile(file));
+        boolean isCss = name.endsWith(".css") || name.endsWith(".scss");
+        boolean isHtml = name.endsWith(".html") || name.endsWith(".htm");
+        boolean isJs = name.endsWith(".js") || name.endsWith(".ts") || name.endsWith(".jsx")
+                || name.endsWith(".tsx") || name.endsWith(".mjs");
+        if (!isCss && !isHtml && !isJs) return;
+
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                if (isJs) {
+                    indexJsFile(file);
+                }
+
+                if (isCss || isHtml) {
+                    Set<String> classNames = new HashSet<>();
+                    Set<String> ids = new HashSet<>();
+                    if (isCss) {
+                        indexCssFile(file, classNames, ids);
+                        synchronized (this) {
+                            for (String c : classNames) {
+                                boolean exists = false;
+                                for (CompletionItem ci : cssClassItems) {
+                                    if (c.equals(ci.getLabel())) { exists = true; break; }
+                                }
+                                if (!exists) {
+                                    cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+                                }
+                            }
+                            for (String id : ids) {
+                                boolean exists = false;
+                                for (CompletionItem ci : cssIdItems) {
+                                    if (id.equals(ci.getLabel())) { exists = true; break; }
+                                }
+                                if (!exists) {
+                                    cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+                                }
+                            }
+                        }
+                    } else {
+                        indexHtmlFile(file, classNames, ids);
+                        synchronized (this) {
+                            for (String c : classNames) {
+                                boolean exists = false;
+                                for (CompletionItem ci : cssClassItems) {
+                                    if (c.equals(ci.getLabel())) { exists = true; break; }
+                                }
+                                if (!exists) {
+                                    cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+                                }
+                            }
+                            for (String id : ids) {
+                                boolean exists = false;
+                                for (CompletionItem ci : htmlIdItems) {
+                                    if (id.equals(ci.getLabel())) { exists = true; break; }
+                                }
+                                if (!exists) {
+                                    htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (segmentedStore != null && projectRoot != null) {
+                    File rootDir = new File(projectRoot);
+                    segmentedStore.indexSingleFileSilently(rootDir, file, (f, relPath, fileId) -> {
+                        List<IndexSymbolEntry> entries = new ArrayList<>();
+                        Set<String> dummyCls = new HashSet<>();
+                        Set<String> dummyIds = new HashSet<>();
+                        if (isCss) {
+                            indexCssFile(f, dummyCls, dummyIds, entries, fileId);
+                        } else if (isHtml) {
+                            indexHtmlFile(f, dummyCls, dummyIds, entries, fileId);
+                        } else if (isJs) {
+                            indexJsFile(f, relPath, entries, fileId);
+                        }
+                        return entries;
+                    });
+                }
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    /**
+     * Re-indexes a single JS/TS file's exports using the latest in-memory snapshot
+     * from {@link com.cocode.vcode.ide.core.lsp.ProjectIndex}.
+     */
+    public void updateFileFromIndex(File file) {
+        updateFileSilently(file);
     }
 }

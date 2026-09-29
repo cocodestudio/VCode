@@ -111,26 +111,72 @@ public class SegmentedSymbolStore {
     }
 
     /**
+     * Checks if the index for candidate files is already completely up-to-date.
+     * Returns true only if the project was already indexed and no files were modified, added, or deleted.
+     */
+    public boolean isIndexUpToDate(File projectRoot, List<File> candidateFiles) {
+        synchronized (indexLock) {
+            if (candidateFiles == null || candidateFiles.isEmpty()) {
+                return true;
+            }
+            if (segmentReaders.isEmpty() || catalog.getTrackedFiles().isEmpty()) {
+                return false; // Not indexed yet
+            }
+            if (catalog.getTrackedFiles().size() != candidateFiles.size()) {
+                return false; // Files added or deleted
+            }
+            for (File file : candidateFiles) {
+                String relPath = getRelativePath(projectRoot, file);
+                if (!catalog.isFileUpToDate(file, relPath)) {
+                    return false; // File modified or new
+                }
+            }
+            return true;
+        }
+    }
+
+    /**
      * Incrementally indexes candidate files using the provided symbol extractor.
      */
     public void indexFiles(File projectRoot, List<File> candidateFiles, SymbolExtractor extractor) {
+        indexFiles(projectRoot, candidateFiles, extractor, false);
+    }
+
+    /**
+     * Incrementally indexes candidate files using the provided symbol extractor, optionally suppressing UI progress notifications.
+     */
+    public void indexFiles(File projectRoot, List<File> candidateFiles, SymbolExtractor extractor, boolean silent) {
         if (candidateFiles == null || extractor == null) return;
         long startTime = System.currentTimeMillis();
-        int totalFiles = candidateFiles.size();
-        notifyIndexingStarted(totalFiles);
+
+        List<File> dirtyFiles = new ArrayList<>();
+        for (File file : candidateFiles) {
+            String relPath = getRelativePath(projectRoot, file);
+            if (!catalog.isFileUpToDate(file, relPath)) {
+                dirtyFiles.add(file);
+            }
+        }
+
+        // If no files are dirty, the index is already completely up to date. Do not show progress.
+        if (dirtyFiles.isEmpty()) {
+            return;
+        }
+
+        int totalDirty = dirtyFiles.size();
+        if (!silent) {
+            notifyIndexingStarted(totalDirty);
+        }
 
         List<IndexSymbolEntry> dirtyEntries = new ArrayList<>();
         Map<String, File> processedDirtyFiles = new HashMap<>();
         int processedCount = 0;
 
         try {
-            for (File file : candidateFiles) {
+            for (File file : dirtyFiles) {
                 processedCount++;
                 String relPath = getRelativePath(projectRoot, file);
-                notifyIndexingProgress(processedCount, totalFiles, file.getName());
-
-                if (catalog.isFileUpToDate(file, relPath)) {
-                    continue;
+                if (!silent) {
+                    notifyIndexingProgress(processedCount, totalDirty, file.getName());
                 }
 
                 int fileId = catalog.getOrAssignFileId(relPath);
@@ -163,11 +209,42 @@ public class SegmentedSymbolStore {
                 }
             }
 
-            int totalSymbols = getTotalIndexedSymbolsCount();
-            long duration = System.currentTimeMillis() - startTime;
-            notifyIndexingCompleted(totalSymbols, duration);
+            if (!silent) {
+                int totalSymbols = getTotalIndexedSymbolsCount();
+                long duration = System.currentTimeMillis() - startTime;
+                notifyIndexingCompleted(totalSymbols, duration);
+            }
         } catch (Throwable t) {
-            notifyIndexingError(t);
+            if (!silent) {
+                notifyIndexingError(t);
+            }
+        }
+    }
+
+    /**
+     * Silently indexes a single modified file in the background without firing any progress events.
+     */
+    public void indexSingleFileSilently(File projectRoot, File file, SymbolExtractor extractor) {
+        if (projectRoot == null || file == null || extractor == null) return;
+        String relPath = getRelativePath(projectRoot, file);
+        int fileId = catalog.getOrAssignFileId(relPath);
+        List<IndexSymbolEntry> symbols = extractor.extractSymbols(file, relPath, fileId);
+        if (symbols == null) symbols = Collections.emptyList();
+
+        synchronized (indexLock) {
+            int segId = catalog.allocateNextSegmentId();
+            File segFile = new File(cacheDir, String.format(Locale.US, "seg_%04d.bin", segId));
+            try {
+                SegmentWriter.writeSegment(segFile, segId, symbols);
+                SegmentReader newReader = new SegmentReader(segFile, blockCache);
+                segmentReaders.put(segId, newReader);
+                catalog.recordFile(relPath, file, segId);
+                catalog.save(catalogFile);
+                if (segmentReaders.size() > 8) {
+                    compactSegments();
+                }
+            } catch (IOException ignored) {
+            }
         }
     }
 

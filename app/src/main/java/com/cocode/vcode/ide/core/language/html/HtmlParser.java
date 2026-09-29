@@ -111,8 +111,9 @@ public class HtmlParser {
                             for (int i = depth - 1; i > matchDepth; i--) {
                                 int unclosedId = parentStack[i];
                                 String unclosedName = tagStack[i];
-                                tree.nodeEnd[unclosedId] = start;
-                                tree.addNode(HtmlSyntaxTree.N_ERROR, tree.nodeStart[unclosedId], tree.nodeStart[unclosedId] + (unclosedName != null ? unclosedName.length() + 2 : 1), unclosedId, unclosedName, "Unclosed");
+                                int uStart = tree.nodeStart[unclosedId];
+                                int uEnd = getUnclosedTagEnd(source, uStart, unclosedName);
+                                tree.addNode(HtmlSyntaxTree.N_ERROR, uStart, uEnd, unclosedId, unclosedName, "Unclosed");
                             }
                             tree.nodeEnd[parentStack[matchDepth]] = closeTagEndOffset;
                             depth = matchDepth;
@@ -217,7 +218,9 @@ public class HtmlParser {
             int unclosedId = parentStack[i];
             String unclosedName = tagStack[i];
             tree.nodeEnd[unclosedId] = source.length();
-            tree.addNode(HtmlSyntaxTree.N_ERROR, tree.nodeStart[unclosedId], tree.nodeStart[unclosedId] + (unclosedName != null ? unclosedName.length() + 2 : 1), unclosedId, unclosedName, "Unclosed");
+            int uStart = tree.nodeStart[unclosedId];
+            int uEnd = getUnclosedTagEnd(source, uStart, unclosedName);
+            tree.addNode(HtmlSyntaxTree.N_ERROR, uStart, uEnd, unclosedId, unclosedName, "Unclosed");
         }
 
         tree.buildNodesByOffset();
@@ -355,6 +358,17 @@ public class HtmlParser {
             end++;
         }
         return end;
+    }
+
+    static int getUnclosedTagEnd(String source, int tagStart, String tagName) {
+        if (tagName == null || tagStart < 0 || tagStart >= source.length()) {
+            return tagStart + 1;
+        }
+        int expectedClose = tagStart + 1 + tagName.length();
+        if (expectedClose < source.length() && source.charAt(expectedClose) == '>') {
+            return expectedClose + 1;
+        }
+        return Math.min(expectedClose, source.length());
     }
 
     private static boolean isVoidElement(String tag) {

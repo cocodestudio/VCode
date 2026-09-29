@@ -2286,11 +2286,13 @@ public class JsParser {
                 tree.nodeEnd[declNode] = getOffset(stream, source, i);
 
             } else {
-
-                i = skipToken(stream, i);
-
+                int errStart = stream.tokenStart[i];
+                int next = skipToken(stream, i);
+                int errEnd = getOffset(stream, source, next);
+                String tokStr = (source != null && errStart >= 0 && errEnd <= source.length()) ? source.substring(errStart, errEnd) : "";
+                tree.addNode(JsSyntaxTree.N_ERROR, errStart, errEnd, parent, "Syntax error: unexpected token '" + tokStr + "' in declaration");
+                i = next;
                 continue;
-
             }
 
 

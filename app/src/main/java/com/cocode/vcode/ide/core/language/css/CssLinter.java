@@ -1,6 +1,7 @@
 package com.cocode.vcode.ide.core.language.css;
 
 import com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader;
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -225,7 +226,7 @@ public class CssLinter {
                 int line = LinterUtils.getLine(text, start);
                 int col = LinterUtils.getColumn(text, start);
                 String msg = tree.nodeName[i] != null ? tree.nodeName[i] : "Syntax error in CSS";
-                problems.add(new Problem(file, line, col, length, msg, Problem.Severity.ERROR));
+                problems.add(new Problem(file, line, col, length, msg, Problem.Severity.ERROR, ProblemCode.SYNTAX_ERROR));
                 continue;
             }
 
@@ -260,21 +261,24 @@ public class CssLinter {
                     if (selector.startsWith("@media") && hasPixelValue(selector)) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "'@media' breakpoint in 'px': consider 'em' or 'rem' for accessibility scaling",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.SYNTAX_ERROR));
                     }
 
                     // ID selector check
                     if (selector.contains("#") && !selector.startsWith("@") && !isInsideSpecialAtRule(tree, i)) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "Avoid using ID selectors ('#id') for styling: prefer class selectors",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.CSS_ID_SELECTOR));
                     }
 
                     // Overly specific selector
                     if (selectorSpecificityTooHigh(selector)) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "Overly specific selector '" + selector + "': hard to override, prefer simpler class selectors",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.WARNING,
+                                ProblemCode.SYNTAX_ERROR));
                     }
 
                     // @import order
@@ -282,7 +286,8 @@ public class CssLinter {
                         if (pastFirstRule) {
                             problems.add(new Problem(file, selLine, selCol, selLen,
                                     "'@import' must appear before all other rules",
-                                    Problem.Severity.ERROR));
+                                    Problem.Severity.ERROR,
+                                    ProblemCode.SYNTAX_ERROR));
                         }
                     } else if (!selector.startsWith("@") && !selector.isEmpty()) {
                         pastFirstRule = true;
@@ -292,7 +297,8 @@ public class CssLinter {
                     if (type == CssSyntaxTree.N_RULE && declCount == 0 && nestedRuleCount == 0 && !selector.isEmpty() && !selector.startsWith("@")) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "Empty rule for selector '" + selector + "': remove or add declarations",
-                                Problem.Severity.WARNING));
+                                Problem.Severity.WARNING,
+                                ProblemCode.CSS_EMPTY_RULE));
                     }
                 }
 
@@ -334,7 +340,11 @@ public class CssLinter {
                             int propCol = LinterUtils.getColumn(text, propStart);
                             int propLen = Math.max(1, tree.nodeEnd[propNode] - propStart);
 
-                            processDeclaration(file, prop, value, propLine, propCol, propLen,
+                            int vStart = valNode != 0 ? tree.nodeStart[valNode] : -1;
+                            int vEnd = valNode != 0 ? tree.nodeEnd[valNode] : -1;
+
+                            processDeclaration(file, text, prop, value, propLine, propCol, propLen,
+                                    vStart, vEnd,
                                     propsInBlock, propLineInBlock, vendorPropsInBlock,
                                     declaredVars, usedVars, problems);
 
@@ -367,7 +377,8 @@ public class CssLinter {
                         int pline = propsInBlock.get(prop);
                         problems.add(new Problem(file, pline, 1, prop.length(),
                                 "'" + prop + "' may need '" + vendor + "' for broader browser support",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.CSS_VENDOR_PREFIX_NEEDED));
                     }
                 }
 
@@ -376,12 +387,14 @@ public class CssLinter {
                     if (blockHasColor && !blockHasBgColor) {
                         problems.add(new Problem(file, ruleLine, 1, 5,
                                 "'color' is set without 'background-color': may cause readability issues on some themes",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.CSS_MISSING_BG_OR_COLOR));
                     }
                     if (blockHasBgColor && !blockHasColor) {
                         problems.add(new Problem(file, ruleLine, 1, 16,
                                 "'background-color' is set without 'color': may cause readability issues on some themes",
-                                Problem.Severity.INFO));
+                                Problem.Severity.INFO,
+                                ProblemCode.CSS_MISSING_BG_OR_COLOR));
                     }
                 }
 
@@ -389,14 +402,16 @@ public class CssLinter {
                 if ((blockHasFlex || blockHasGrid) && !blockHasGap) {
                     problems.add(new Problem(file, ruleLine, 1, 7,
                             "No 'gap' property in flex/grid rule: consider 'gap' instead of margin-based spacing",
-                            Problem.Severity.INFO));
+                            Problem.Severity.INFO,
+                            ProblemCode.CSS_MISSING_GAP));
                 }
 
                 // Margin auto without shorthand
                 if (blockHasMarginLeftAuto && blockHasMarginRightAuto) {
                     problems.add(new Problem(file, ruleLine, 1, 6,
                             "Consider 'margin: 0 auto' or flexbox centering instead of separate margin declarations",
-                            Problem.Severity.INFO));
+                            Problem.Severity.INFO,
+                            ProblemCode.CSS_MARGIN_AUTO_SHORTHAND));
                 }
             }
         }
@@ -408,7 +423,8 @@ public class CssLinter {
                 int[] loc = entry.getValue();
                 problems.add(new Problem(file, loc[0], loc[1], varName.length(),
                         "CSS variable '" + varName + "' is declared but never used in this file",
-                        Problem.Severity.INFO));
+                        Problem.Severity.INFO,
+                        ProblemCode.CSS_VAR_UNUSED));
             }
         }
 
@@ -418,8 +434,9 @@ public class CssLinter {
         return problems;
     }
 
-    private static void processDeclaration(File file, String prop, String value,
+    private static void processDeclaration(File file, String text, String prop, String value,
                                            int propLine, int propCol, int propLen,
+                                           int valStart, int valEnd,
                                            Map<String, Integer> propsInBlock, Map<String, Integer> propLineInBlock,
                                            Set<String> vendorPropsInBlock,
                                            Map<String, int[]> declaredVars, Set<String> usedVars,
@@ -434,11 +451,13 @@ public class CssLinter {
                 if ("clip".equals(pLo)) {
                     problems.add(new Problem(file, propLine, propCol, propLen,
                             "'clip' is deprecated — use 'clip-path' instead",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.CSS_DEPRECATED_PROPERTY));
                 } else if ("zoom".equals(pLo)) {
                     problems.add(new Problem(file, propLine, propCol, propLen,
                             "'zoom' is deprecated — use 'transform: scale()' instead",
-                            Problem.Severity.WARNING));
+                            Problem.Severity.WARNING,
+                            ProblemCode.CSS_DEPRECATED_PROPERTY));
                 } else {
                     problems.add(new Problem(file, propLine, propCol, propLen,
                             "Unknown CSS property '" + prop + "': not a standard CSS property",
@@ -455,7 +474,8 @@ public class CssLinter {
             int firstLine = propsInBlock.get(prop);
             problems.add(new Problem(file, propLine, propCol, propLen,
                     "Duplicate property '" + prop + "' in same rule (also on line " + firstLine + ")",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.WARNING,
+                    ProblemCode.CSS_DUPLICATE_PROPERTY));
         } else {
             propsInBlock.put(prop, propLine);
             propLineInBlock.put(prop, propLine);
@@ -463,6 +483,17 @@ public class CssLinter {
 
         if (value == null) return;
         String valTrimmed = value.trim();
+
+        // Calculate value coordinates
+        int valActualStart = valStart >= 0 ? valStart : 0;
+        if (valStart >= 0 && valEnd > valStart && text != null) {
+            while (valActualStart < valEnd && Character.isWhitespace(text.charAt(valActualStart))) {
+                valActualStart++;
+            }
+        }
+        int valLen = !valTrimmed.isEmpty() ? valTrimmed.length() : Math.max(1, valEnd - valStart);
+        int valLine = (text != null && valStart >= 0) ? LinterUtils.getLine(text, valActualStart) : propLine;
+        int valCol = (text != null && valStart >= 0) ? LinterUtils.getColumn(text, valActualStart) : propCol;
 
         // Track CSS variables
         if (prop.startsWith("--")) {
@@ -476,30 +507,55 @@ public class CssLinter {
 
         // !important warning
         if (valTrimmed.contains("!important")) {
-            problems.add(new Problem(file, propLine, propCol, propLen,
+            int impIdx = (text != null && valStart >= 0) ? text.indexOf("!important", valStart) : -1;
+            int impLine = impIdx != -1 ? LinterUtils.getLine(text, impIdx) : valLine;
+            int impCol = impIdx != -1 ? LinterUtils.getColumn(text, impIdx) : valCol;
+            problems.add(new Problem(file, impLine, impCol, 10,
                     "'!important' on '" + prop + "': overrides cascade, makes maintenance difficult",
-                    Problem.Severity.WARNING));
+                    Problem.Severity.WARNING,
+                    ProblemCode.CSS_IMPORTANT_USAGE));
         }
 
         // 0px warning
         if (hasZeroPx(valTrimmed)) {
-            problems.add(new Problem(file, propLine, propCol, propLen,
+            int zIdx = (text != null && valStart >= 0) ? findZeroPxOffset(text, valStart, valEnd) : -1;
+            int zLine = zIdx != -1 ? LinterUtils.getLine(text, zIdx) : valLine;
+            int zCol = zIdx != -1 ? LinterUtils.getColumn(text, zIdx) : valCol;
+            problems.add(new Problem(file, zLine, zCol, 3,
                     "'0px' — units are unnecessary on zero values, use '0'",
-                    Problem.Severity.INFO));
+                    Problem.Severity.INFO,
+                    ProblemCode.CSS_ZERO_UNIT));
         }
 
         // pt unit warning
         if (hasPtUnit(valTrimmed)) {
-            problems.add(new Problem(file, propLine, propCol, propLen,
+            int ptIdx = (text != null && valStart >= 0) ? text.indexOf("pt", valStart) : -1;
+            int numStart = ptIdx;
+            if (text != null && ptIdx > 0) {
+                while (numStart > valStart && (Character.isDigit(text.charAt(numStart - 1)) || text.charAt(numStart - 1) == '.')) {
+                    numStart--;
+                }
+            }
+            int ptLine = ptIdx != -1 ? LinterUtils.getLine(text, numStart) : valLine;
+            int ptCol = ptIdx != -1 ? LinterUtils.getColumn(text, numStart) : valCol;
+            int ptLen = ptIdx != -1 ? (ptIdx + 2 - numStart) : valLen;
+            problems.add(new Problem(file, ptLine, ptCol, ptLen,
                     "Avoid using 'pt' units for screen layouts: prefer 'px', 'em', or 'rem'",
-                    Problem.Severity.INFO));
+                    Problem.Severity.INFO,
+                    ProblemCode.CSS_PT_UNIT));
         }
 
         // var() without fallback warning (only for variables not declared in stylesheet)
         if (hasVarWithoutFallback(valTrimmed, declaredVars.keySet())) {
-            problems.add(new Problem(file, propLine, propCol, propLen,
+            int varIdx = (text != null && valStart >= 0) ? text.indexOf("var(", valStart) : -1;
+            int varEnd = (text != null && varIdx != -1) ? text.indexOf(")", varIdx) : -1;
+            int varLine = varIdx != -1 ? LinterUtils.getLine(text, varIdx) : valLine;
+            int varCol = varIdx != -1 ? LinterUtils.getColumn(text, varIdx) : valCol;
+            int varLen = (varIdx != -1 && varEnd != -1) ? (varEnd + 1 - varIdx) : valLen;
+            problems.add(new Problem(file, varLine, varCol, varLen,
                     "CSS variable in '" + prop + "' used without a fallback value",
-                    Problem.Severity.INFO));
+                    Problem.Severity.INFO,
+                    ProblemCode.CSS_VAR_NO_FALLBACK));
         }
 
         // Color & Shorthand validation
@@ -507,15 +563,17 @@ public class CssLinter {
         if (!valWithoutImportant.isEmpty()) {
             if (KnownElements.isPureColorProperty(pLo) || KnownElements.isMultiColorProperty(pLo)) {
                 if (!isValidColor(valWithoutImportant, pLo)) {
-                    problems.add(new Problem(file, propLine, propCol, propLen,
+                    problems.add(new Problem(file, valLine, valCol, valWithoutImportant.length(),
                             "Invalid color value '" + valWithoutImportant + "' for '" + prop + "'",
-                            Problem.Severity.ERROR));
+                            Problem.Severity.ERROR,
+                            ProblemCode.SYNTAX_ERROR));
                 }
             } else if (KnownElements.isBorderShorthandProperty(pLo)) {
                 if (!isBorderShorthandValid(valWithoutImportant, pLo)) {
-                    problems.add(new Problem(file, propLine, propCol, propLen,
+                    problems.add(new Problem(file, valLine, valCol, valWithoutImportant.length(),
                             "Invalid border value '" + valWithoutImportant + "' for '" + prop + "'",
-                            Problem.Severity.ERROR));
+                            Problem.Severity.ERROR,
+                            ProblemCode.SYNTAX_ERROR));
                 }
             }
         }
@@ -530,7 +588,8 @@ public class CssLinter {
                         int lhLine = propLineInBlock.get(lh);
                         problems.add(new Problem(file, propLine, propCol, propLen,
                                 "'" + shorthand + "' overrides previously set '" + lh + "' on line " + lhLine,
-                                Problem.Severity.WARNING));
+                                Problem.Severity.WARNING,
+                                ProblemCode.SYNTAX_ERROR));
                     }
                 }
             }
@@ -561,6 +620,21 @@ public class CssLinter {
             idx = s.indexOf("0px", idx + 3);
         }
         return false;
+    }
+
+    private static int findZeroPxOffset(String text, int start, int end) {
+        if (text == null || start < 0) return -1;
+        int limit = Math.min(text.length(), Math.max(start, end));
+        int idx = text.indexOf("0px", start);
+        while (idx >= 0 && idx < limit) {
+            boolean startBound = (idx == 0) || !Character.isLetterOrDigit(text.charAt(idx - 1));
+            boolean endBound = (idx + 3 >= text.length()) || !Character.isLetterOrDigit(text.charAt(idx + 3));
+            if (startBound && endBound && !isInsideMathFunction(text, idx)) {
+                return idx;
+            }
+            idx = text.indexOf("0px", idx + 3);
+        }
+        return -1;
     }
 
     private static boolean isInsideMathFunction(String s, int pos) {
@@ -731,7 +805,8 @@ public class CssLinter {
                                 int col = LinterUtils.getColumn(text, absOffset);
                                 problems.add(new Problem(file, line, col, full.length(),
                                         "Color '" + full + "' can be shortened to '" + shortHex + "'",
-                                        Problem.Severity.INFO));
+                                        Problem.Severity.INFO,
+                                        ProblemCode.CSS_HEX_SHORTENABLE));
                             }
                         }
                         hexIdx = val.indexOf('#', hexIdx + 7);

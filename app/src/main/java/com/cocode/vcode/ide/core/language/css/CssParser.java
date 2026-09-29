@@ -108,7 +108,10 @@ public class CssParser {
 
         while (currentParent != root) {
             tree.nodeEnd[currentParent] = stream.length;
-            tree.addNode(CssSyntaxTree.N_ERROR, tree.nodeStart[currentParent], Math.min(tree.nodeStart[currentParent] + 1, stream.length), currentParent, "Unclosed CSS block '{'", null);
+            int braceOffset = (source != null) ? source.indexOf('{', tree.nodeStart[currentParent]) : -1;
+            int errStart = (braceOffset != -1 && braceOffset < stream.length) ? braceOffset : tree.nodeStart[currentParent];
+            int errEnd = Math.min(errStart + 1, stream.length);
+            tree.addNode(CssSyntaxTree.N_ERROR, errStart, errEnd, currentParent, "Unclosed CSS block '{'", null);
             if (depth > 0) {
                 depth--;
                 currentParent = parentStack[depth];

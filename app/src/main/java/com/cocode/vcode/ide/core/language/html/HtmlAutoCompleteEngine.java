@@ -61,13 +61,14 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         this.jsEngine = new JsAutoCompleteEngine(context);
     }
 
+    @Override
+    public String getTriggerCharacters() {
+        return "<'/\"!=:@-.*+^[]{}()#>&";
+    }
+
     public void setCurrentFile(File file) {
         this.currentFile = file;
         jsEngine.setCurrentFile(file);
-        File projectRoot = getProjectRoot(file);
-        if (projectRoot != null) {
-            ProjectSymbolIndex.getInstance().buildIndex(projectRoot);
-        }
     }
 
     // Tag loading
