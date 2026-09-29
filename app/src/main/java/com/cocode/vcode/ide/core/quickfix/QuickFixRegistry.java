@@ -1,6 +1,5 @@
 package com.cocode.vcode.ide.core.quickfix;
 
-import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.views.CodeEditText;
@@ -27,6 +26,10 @@ public final class QuickFixRegistry {
      * @return non-null list of available quick fixes
      */
     public static List<QuickFix> getFixesForProblem(Problem problem, CodeEditText editor) {
+        return getFixesForProblem(problem, (CodeEditorTarget) editor);
+    }
+
+    public static List<QuickFix> getFixesForProblem(Problem problem, CodeEditorTarget editor) {
         if (problem == null || editor == null) return Collections.emptyList();
 
         List<QuickFix> fixes = new ArrayList<>();
@@ -58,17 +61,17 @@ public final class QuickFixRegistry {
     // ==========================================
     // 1. HTML Quick Fixes
     // ==========================================
-    private static void buildHtmlFixes(List<QuickFix> fixes, Problem problem, CodeEditText editor, ProblemCode code, String msg) {
+    private static void buildHtmlFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
         // HTML: Missing alt on <img>
         if (code == ProblemCode.HTML_MISSING_ALT || msg.contains("missing 'alt' attribute")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_alt, "Add alt=\"\" attribute");
+                    return "Add alt=\"\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<img", " alt=\"\"");
                 }
             });
@@ -79,11 +82,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_button_type, "Add type=\"button\" attribute");
+                    return "Add type=\"button\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<button", " type=\"button\"");
                 }
             });
@@ -94,11 +97,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_title, "Add title text");
+                    return "Add title text";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lineText = ed.getLineText(pLine);
@@ -122,11 +125,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_lang, "Add lang=\"en\" attribute");
+                    return "Add lang=\"en\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<html", " lang=\"en\"");
                 }
             });
@@ -137,20 +140,22 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_src, "Add src=\"\" attribute");
+                    return "Add src=\"\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
                         int tagIdx = lt.indexOf('<');
                         if (tagIdx >= 0) {
-                            int spaceOrClose = lt.indexOf('>', tagIdx);
-                            int ws = lt.indexOf(' ', tagIdx);
-                            int insertAt = (ws > 0 && ws < spaceOrClose) ? ws : spaceOrClose;
-                            if (insertAt > 0) {
+                            int closeTag = lt.indexOf('>', tagIdx);
+                            if (closeTag >= 0) {
+                                int insertAt = closeTag;
+                                if (closeTag > 0 && lt.charAt(closeTag - 1) == '/') {
+                                    insertAt = closeTag - 1;
+                                }
                                 ed.beginAtomicGroup();
                                 try {
                                     ed.replaceRange(pLine, insertAt, pLine, insertAt, " src=\"\"");
@@ -169,11 +174,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_content, "Add content=\"\" attribute");
+                    return "Add content=\"\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<meta", " content=\"\"");
                 }
             });
@@ -184,11 +189,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_for, "Add for=\"\" attribute");
+                    return "Add for=\"\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<label", " for=\"\"");
                 }
             });
@@ -199,12 +204,12 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_charset, "Insert <meta charset=\"UTF-8\">");
+                    return "Insert <meta charset=\"UTF-8\">";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    insertInHeadOrTop(ed, "    <meta charset=\"UTF-8\">\n");
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    insertInHeadOrTop(ed, "<meta charset=\"UTF-8\">");
                 }
             });
         }
@@ -214,12 +219,12 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_viewport, "Insert viewport meta tag");
+                    return "Insert viewport meta tag";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    insertInHeadOrTop(ed, "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    insertInHeadOrTop(ed, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
                 }
             });
         }
@@ -229,12 +234,12 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_insert_title_tag, "Insert <title> tag");
+                    return "Insert <title> tag";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    insertInHeadOrTop(ed, "    <title>Document Title</title>\n");
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    insertInHeadOrTop(ed, "<title>Document Title</title>");
                 }
             });
         }
@@ -244,12 +249,12 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_meta_desc, "Add meta description");
+                    return "Add meta description";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    insertInHeadOrTop(ed, "    <meta name=\"description\" content=\"\">\n");
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    insertInHeadOrTop(ed, "<meta name=\"description\" content=\"\">");
                 }
             });
         }
@@ -259,11 +264,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_required_attr, "Add required attribute");
+                    return "Add required attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String attr = extractQuotedName(prob.getMessage());
                     if (attr.isEmpty()) attr = "required";
                     int pLine = Math.max(0, prob.getLine() - 1);
@@ -285,25 +290,25 @@ public final class QuickFixRegistry {
         }
 
         // HTML: Deprecated tag
-        if (code == ProblemCode.HTML_DEPRECATED_TAG || (msg.contains("is deprecated — use") && msg.contains("<"))) {
+        if (code == ProblemCode.HTML_DEPRECATED_TAG || (msg.contains("is deprecated — use") && msg.contains("<") && !msg.contains("attribute"))) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_deprecated_tag, "Replace deprecated element");
+                    return "Replace deprecated element";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
-                        String repl = lt.replaceAll("(?i)<center>", "<div>")
+                        String repl = lt.replaceAll("(?i)<center(\\b[^>]*)?>", "<div$1>")
                                 .replaceAll("(?i)</center>", "</div>")
-                                .replaceAll("(?i)<font[^>]*>", "<span>")
+                                .replaceAll("(?i)<font(\\b[^>]*)?>", "<span$1>")
                                 .replaceAll("(?i)</font>", "</span>")
-                                .replaceAll("(?i)<strike>", "<del>")
+                                .replaceAll("(?i)<strike(\\b[^>]*)?>", "<del$1>")
                                 .replaceAll("(?i)</strike>", "</del>")
-                                .replaceAll("(?i)<tt>", "<code>")
+                                .replaceAll("(?i)<tt(\\b[^>]*)?>", "<code$1>")
                                 .replaceAll("(?i)</tt>", "</code>");
                         ed.beginAtomicGroup();
                         try {
@@ -321,11 +326,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_deprecated_attr, "Remove deprecated attribute");
+                    return "Remove deprecated attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     removeWordAt(ed, prob, extractQuotedName(prob.getMessage()));
                 }
             });
@@ -336,11 +341,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_duplicate_attr, "Remove duplicate attribute");
+                    return "Remove duplicate attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     removeWordAt(ed, prob, extractQuotedName(prob.getMessage()));
                 }
             });
@@ -351,11 +356,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_make_id_unique, "Make ID unique");
+                    return "Make ID unique";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -385,11 +390,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_close_tag, "Close tag");
+                    return "Close tag";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String tagName = extractQuotedName(prob.getMessage()).replace("<", "").replace(">", "");
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
@@ -411,11 +416,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_stray_closing, "Remove stray closing tag");
+                    return "Remove stray closing tag";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -441,11 +446,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_inline_style, "Remove inline style");
+                    return "Remove inline style";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     removeAttributeByPrefix(ed, prob, "style=");
                 }
             });
@@ -456,11 +461,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_inline_event, "Remove inline event handler");
+                    return "Remove inline event handler";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String handler = extractQuotedName(prob.getMessage());
                     if (!handler.isEmpty()) {
                         removeAttributeByPrefix(ed, prob, handler + "=");
@@ -474,11 +479,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_wrap_parent, "Wrap with required parent");
+                    return "Wrap with required parent";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -488,9 +493,15 @@ public final class QuickFixRegistry {
                         else if (lt.contains("<dt") || lt.contains("<dd")) parent = "dl";
                         else if (lt.contains("<option")) parent = "select";
 
+                        String lineIndent = getLineIndentation(lt);
+                        String unitIndent = detectIndentUnit(ed);
+                        String repl = lineIndent + "<" + parent + ">\n"
+                                + lineIndent + unitIndent + lt.trim() + "\n"
+                                + lineIndent + "</" + parent + ">";
+
                         ed.beginAtomicGroup();
                         try {
-                            ed.replaceRange(pLine, 0, pLine, lt.length(), "<" + parent + ">\n  " + lt.trim() + "\n</" + parent + ">");
+                            ed.replaceRange(pLine, 0, pLine, lt.length(), repl);
                         } finally {
                             ed.endAtomicGroup();
                         }
@@ -504,11 +515,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_nested_anchor_to_span, "Change nested <a> to <span>");
+                    return "Change nested <a> to <span>";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -529,11 +540,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_redundant_type, "Remove redundant type attribute");
+                    return "Remove redundant type attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     removeAttributeByPrefix(ed, prob, "type=");
                 }
             });
@@ -544,11 +555,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_defer, "Add 'defer' attribute");
+                    return "Add 'defer' attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<script", " defer");
                 }
             });
@@ -559,11 +570,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_rel_noopener, "Add rel=\"noopener noreferrer\"");
+                    return "Add rel=\"noopener noreferrer\"";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<a", " rel=\"noopener noreferrer\"");
                 }
             });
@@ -574,11 +585,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_anchor_to_button, "Replace with <button type=\"button\">");
+                    return "Replace with <button type=\"button\">";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -600,12 +611,15 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_with_semantic_tag, "Replace <div> with semantic tag");
+                    return "Replace <div> with semantic tag";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    String semantic = extractQuotedName(prob.getMessage()).replace("<", "").replace(">", "");
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    String semantic = extractQuotedNameAfter(prob.getMessage(), "with").replace("<", "").replace(">", "");
+                    if (semantic.isEmpty()) {
+                        semantic = extractLastQuotedName(prob.getMessage()).replace("<", "").replace(">", "");
+                    }
                     if (semantic.isEmpty()) semantic = "section";
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
@@ -627,11 +641,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_empty_tag, "Remove empty element");
+                    return "Remove empty element";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -642,11 +656,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_lazy_loading, "Add loading=\"lazy\" attribute");
+                    return "Add loading=\"lazy\" attribute";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     insertAttribute(ed, prob, "<img", " loading=\"lazy\"");
                 }
             });
@@ -657,11 +671,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_thead, "Add <thead> header row");
+                    return "Add <thead> header row";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -669,9 +683,14 @@ public final class QuickFixRegistry {
                         if (tblIdx >= 0) {
                             int gt = lt.indexOf('>', tblIdx);
                             if (gt >= 0) {
+                                String lineIndent = getLineIndentation(lt);
+                                String unitIndent = detectIndentUnit(ed);
+                                String snippet = "\n" + lineIndent + unitIndent + "<thead>\n"
+                                        + lineIndent + unitIndent + unitIndent + "<tr><th>Heading</th></tr>\n"
+                                        + lineIndent + unitIndent + "</thead>";
                                 ed.beginAtomicGroup();
                                 try {
-                                    ed.replaceRange(pLine, gt + 1, pLine, gt + 1, "\n  <thead>\n    <tr><th>Heading</th></tr>\n  </thead>");
+                                    ed.replaceRange(pLine, gt + 1, pLine, gt + 1, snippet);
                                 } finally {
                                     ed.endAtomicGroup();
                                 }
@@ -686,17 +705,17 @@ public final class QuickFixRegistry {
     // ==========================================
     // 2. CSS Quick Fixes
     // ==========================================
-    private static void buildCssFixes(List<QuickFix> fixes, Problem problem, CodeEditText editor, ProblemCode code, String msg) {
+    private static void buildCssFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
         // CSS: Unknown property
         if (code == ProblemCode.CSS_UNKNOWN_PROPERTY || msg.contains("Unknown CSS property")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_unknown_css_prop, "Remove unknown property");
+                    return "Remove unknown property";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -707,11 +726,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_deprecated_css_prop, "Replace deprecated property");
+                    return "Replace deprecated property";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -733,11 +752,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_duplicate_css_prop, "Remove duplicate property");
+                    return "Remove duplicate property";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -748,11 +767,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_important, "Remove '!important'");
+                    return "Remove '!important'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -773,11 +792,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_zero_px, "Replace '0px' with '0'");
+                    return "Replace '0px' with '0'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -798,11 +817,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_convert_pt_to_px, "Convert 'pt' to 'px'");
+                    return "Convert 'pt' to 'px'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -823,11 +842,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_var_fallback, "Add fallback to var()");
+                    return "Add fallback to var()";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -848,11 +867,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_unused_css_var, "Remove unused CSS variable");
+                    return "Remove unused CSS variable";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -863,11 +882,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_shorten_hex, "Shorten hex color");
+                    return "Shorten hex color";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -888,11 +907,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_empty_css_rule, "Remove empty CSS rule");
+                    return "Remove empty CSS rule";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -903,17 +922,23 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_vendor_prefix, "Add vendor prefix");
+                    return "Add vendor prefix";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
-                        String vendor = extractQuotedName(prob.getMessage());
-                        if (vendor.isEmpty()) vendor = "-webkit-" + lt.trim().split(":")[0];
-                        String prefix = "    " + vendor + ":" + lt.substring(lt.indexOf(':') + 1) + "\n";
+                        String vendor = extractQuotedNameAfter(prob.getMessage(), "need");
+                        if (vendor.isEmpty()) {
+                            vendor = extractLastQuotedName(prob.getMessage());
+                        }
+                        if (vendor.isEmpty() || vendor.equals(extractQuotedName(prob.getMessage()))) {
+                            vendor = "-webkit-" + lt.trim().split(":")[0];
+                        }
+                        String lineIndent = getLineIndentation(lt);
+                        String prefix = lineIndent + vendor + ":" + lt.substring(lt.indexOf(':') + 1) + "\n";
                         ed.beginAtomicGroup();
                         try {
                             ed.replaceRange(pLine, 0, pLine, 0, prefix);
@@ -930,15 +955,24 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_missing_color_or_bg, "Add missing background/color declaration");
+                    return "Add missing background/color declaration";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
-                        String decl = prob.getMessage().contains("background-color")
-                                ? "    background-color: transparent;\n" : "    color: inherit;\n";
+                        String currentLine = ed.getLineText(pLine);
+                        String indent;
+                        if (currentLine.contains(":")) {
+                            indent = getLineIndentation(currentLine);
+                        } else if (pLine + 1 < ed.getLineCount() && !ed.getLineText(pLine + 1).trim().isEmpty() && !ed.getLineText(pLine + 1).trim().equals("}")) {
+                            indent = getLineIndentation(ed.getLineText(pLine + 1));
+                        } else {
+                            indent = getLineIndentation(currentLine) + detectIndentUnit(ed);
+                        }
+                        String decl = prob.getMessage().contains("without 'color'")
+                                ? indent + "color: inherit;\n" : indent + "background-color: transparent;\n";
                         ed.beginAtomicGroup();
                         try {
                             ed.replaceRange(pLine + 1, 0, pLine + 1, 0, decl);
@@ -955,16 +989,25 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_gap, "Add gap property");
+                    return "Add gap property";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
+                        String currentLine = ed.getLineText(pLine);
+                        String indent;
+                        if (currentLine.contains(":")) {
+                            indent = getLineIndentation(currentLine);
+                        } else if (pLine + 1 < ed.getLineCount() && !ed.getLineText(pLine + 1).trim().isEmpty() && !ed.getLineText(pLine + 1).trim().equals("}")) {
+                            indent = getLineIndentation(ed.getLineText(pLine + 1));
+                        } else {
+                            indent = getLineIndentation(currentLine) + detectIndentUnit(ed);
+                        }
                         ed.beginAtomicGroup();
                         try {
-                            ed.replaceRange(pLine + 1, 0, pLine + 1, 0, "    gap: 1rem;\n");
+                            ed.replaceRange(pLine + 1, 0, pLine + 1, 0, indent + "gap: 1rem;\n");
                         } finally {
                             ed.endAtomicGroup();
                         }
@@ -978,17 +1021,18 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_margin_auto_shorthand, "Use 'margin: 0 auto' shorthand");
+                    return "Use 'margin: 0 auto' shorthand";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
+                        String lineIndent = getLineIndentation(lt);
                         ed.beginAtomicGroup();
                         try {
-                            ed.replaceRange(pLine, 0, pLine, lt.length(), "    margin: 0 auto;");
+                            ed.replaceRange(pLine, 0, pLine, lt.length(), lineIndent + "margin: 0 auto;");
                         } finally {
                             ed.endAtomicGroup();
                         }
@@ -1002,11 +1046,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_id_to_class_selector, "Convert '#id' to '.id' class selector");
+                    return "Convert '#id' to '.id' class selector";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1028,17 +1072,17 @@ public final class QuickFixRegistry {
     // ==========================================
     // 3. JavaScript & TypeScript Quick Fixes
     // ==========================================
-    private static void buildJsTsFixes(List<QuickFix> fixes, Problem problem, CodeEditText editor, ProblemCode code, String msg) {
+    private static void buildJsTsFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
         // JS: Const reassignment
         if (code == ProblemCode.JS_CONST_REASSIGNMENT || msg.contains("reassign 'const' variable")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_const_to_let, "Convert 'const' declaration to 'let'");
+                    return "Convert 'const' declaration to 'let'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String varName = extractQuotedName(prob.getMessage());
                     if (varName.isEmpty()) return;
                     int curLine = Math.max(0, prob.getLine() - 1);
@@ -1064,16 +1108,18 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_insert_semicolon, "Insert missing ';'");
+                    return "Insert missing ';'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
-                        int col = prob.getColumn() - 1;
-                        int insertCol = (col >= 0 && col <= lt.length()) ? col : lt.length();
+                        int insertCol = lt.length();
+                        while (insertCol > 0 && Character.isWhitespace(lt.charAt(insertCol - 1))) {
+                            insertCol--;
+                        }
                         ed.beginAtomicGroup();
                         try {
                             ed.replaceRange(pLine, insertCol, pLine, insertCol, ";");
@@ -1090,11 +1136,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_prefix_unused, "Prefix unused identifier with '_'");
+                    return "Prefix unused identifier with '_'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String varName = extractQuotedName(prob.getMessage());
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
@@ -1121,17 +1167,18 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_declare_undefined_var, "Declare variable with 'let'");
+                    return "Declare variable with 'let'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String id = extractQuotedName(prob.getMessage());
                     if (!id.isEmpty()) {
                         int pLine = Math.max(0, prob.getLine() - 1);
+                        String lineIndent = pLine < ed.getLineCount() ? getLineIndentation(ed.getLineText(pLine)) : "";
                         ed.beginAtomicGroup();
                         try {
-                            ed.replaceRange(pLine, 0, pLine, 0, "let " + id + ";\n");
+                            ed.replaceRange(pLine, 0, pLine, 0, lineIndent + "let " + id + ";\n");
                         } finally {
                             ed.endAtomicGroup();
                         }
@@ -1145,11 +1192,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_rename_duplicate_decl, "Rename duplicate declaration");
+                    return "Rename duplicate declaration";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     String id = extractQuotedName(prob.getMessage());
                     if (!id.isEmpty()) {
                         int pLine = Math.max(0, prob.getLine() - 1);
@@ -1175,11 +1222,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_console, "Remove console statement");
+                    return "Remove console statement";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -1190,11 +1237,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_division_by_zero, "Replace '0' with '1'");
+                    return "Replace '0' with '1'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1215,11 +1262,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_typeof_string, "Compare to 'undefined' string");
+                    return "Compare to 'undefined' string";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1240,12 +1287,24 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_update_type_mismatch, "Update type annotation");
+                    return "Update type annotation";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    deleteProblemLine(ed, prob);
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    int pLine = Math.max(0, prob.getLine() - 1);
+                    if (pLine < ed.getLineCount()) {
+                        String lt = ed.getLineText(pLine);
+                        String assignedType = extractQuotedName(prob.getMessage());
+                        if (assignedType.isEmpty()) assignedType = "any";
+                        String repl = lt.replaceFirst(":\\s*\\w+", ": " + assignedType);
+                        ed.beginAtomicGroup();
+                        try {
+                            ed.replaceRange(pLine, 0, pLine, lt.length(), repl);
+                        } finally {
+                            ed.endAtomicGroup();
+                        }
+                    }
                 }
             });
         }
@@ -1255,11 +1314,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_any_return, "Replace 'any' with 'unknown'");
+                    return "Replace 'any' with 'unknown'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1280,19 +1339,19 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_void_return_type, "Add ': void' return type annotation");
+                    return "Add ': void' return type annotation";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
-                        int brace = lt.indexOf('{');
-                        if (brace > 0) {
+                        int closeParen = lt.lastIndexOf(')');
+                        if (closeParen > 0) {
                             ed.beginAtomicGroup();
                             try {
-                                ed.replaceRange(pLine, brace, pLine, brace, ": void ");
+                                ed.replaceRange(pLine, closeParen + 1, pLine, closeParen + 1, ": void");
                             } finally {
                                 ed.endAtomicGroup();
                             }
@@ -1307,11 +1366,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_any_type, "Replace 'any' with 'unknown'");
+                    return "Replace 'any' with 'unknown'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1332,11 +1391,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_redundant_type_ann, "Remove redundant type annotation");
+                    return "Remove redundant type annotation";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1357,11 +1416,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_convert_optional_param, "Convert to optional parameter syntax");
+                    return "Convert to optional parameter syntax";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1382,19 +1441,21 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_readonly, "Add 'readonly' modifier");
+                    return "Add 'readonly' modifier";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
-                        int startWs = 0;
-                        while (startWs < lt.length() && Character.isWhitespace(lt.charAt(startWs))) startWs++;
+                        String repl = lt.replaceAll(":\\s*([A-Za-z0-9_]+\\[\\])", ": readonly $1");
+                        if (repl.equals(lt)) {
+                            repl = lt.replaceAll("(\\b[A-Za-z0-9_]+\\[\\])", "readonly $1");
+                        }
                         ed.beginAtomicGroup();
                         try {
-                            ed.replaceRange(pLine, startWs, pLine, startWs, "readonly ");
+                            ed.replaceRange(pLine, 0, pLine, lt.length(), repl);
                         } finally {
                             ed.endAtomicGroup();
                         }
@@ -1408,11 +1469,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_broad_function_type, "Replace with '() => void'");
+                    return "Replace with '() => void'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1433,11 +1494,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_non_null_with_optional, "Replace '!' with optional chaining '?.'");
+                    return "Replace '!' with optional chaining '?.'";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1457,18 +1518,39 @@ public final class QuickFixRegistry {
     // ==========================================
     // 4. JSON Quick Fixes
     // ==========================================
-    private static void buildJsonFixes(List<QuickFix> fixes, Problem problem, CodeEditText editor, ProblemCode code, String msg) {
+    private static void buildJsonFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
         // JSON: Disallowed comment
         if (code == ProblemCode.JSON_COMMENTS_DISALLOWED || msg.contains("Comments are not permitted in standard JSON")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_json_comment, "Remove disallowed comment");
+                    return "Remove disallowed comment";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
-                    deleteProblemLine(ed, prob);
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    int pLine = Math.max(0, prob.getLine() - 1);
+                    if (pLine < ed.getLineCount()) {
+                        String lt = ed.getLineText(pLine);
+                        int slashIdx = lt.indexOf("//");
+                        if (slashIdx >= 0) {
+                            String before = lt.substring(0, slashIdx);
+                            if (before.trim().isEmpty()) {
+                                deleteProblemLine(ed, prob);
+                            } else {
+                                int end = before.length();
+                                while (end > 0 && Character.isWhitespace(before.charAt(end - 1))) end--;
+                                ed.beginAtomicGroup();
+                                try {
+                                    ed.replaceRange(pLine, 0, pLine, lt.length(), before.substring(0, end));
+                                } finally {
+                                    ed.endAtomicGroup();
+                                }
+                            }
+                        } else {
+                            deleteProblemLine(ed, prob);
+                        }
+                    }
                 }
             });
         }
@@ -1478,16 +1560,17 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_fix_json_syntax, "Fix JSON syntax error");
+                    return "Fix JSON syntax error";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
                         // Fix trailing comma or single quotes
                         String repl = lt.replaceAll(",\\s*([}\\]])", "$1")
+                                .replaceAll(",\\s*$", "")
                                 .replaceAll("'([^']*)'", "\"$1\"");
                         ed.beginAtomicGroup();
                         try {
@@ -1505,11 +1588,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_duplicate_json_key, "Remove duplicate object key");
+                    return "Remove duplicate object key";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -1519,17 +1602,17 @@ public final class QuickFixRegistry {
     // ==========================================
     // 5. Markdown Quick Fixes
     // ==========================================
-    private static void buildMarkdownFixes(List<QuickFix> fixes, Problem problem, CodeEditText editor, ProblemCode code, String msg) {
+    private static void buildMarkdownFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
         // MD: Heading level increment
         if (code == ProblemCode.MD_HEADING_INCREMENT || msg.contains("Heading levels should only increment")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_adjust_md_heading, "Adjust heading level");
+                    return "Adjust heading level";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1551,11 +1634,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_empty_blockquote, "Remove empty blockquote");
+                    return "Remove empty blockquote";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     deleteProblemLine(ed, prob);
                 }
             });
@@ -1566,11 +1649,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_standardize_list_marker, "Standardize list marker");
+                    return "Standardize list marker";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1591,11 +1674,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_link_text, "Add link text");
+                    return "Add link text";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1616,11 +1699,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_add_image_alt, "Add alt text");
+                    return "Add alt text";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1641,11 +1724,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_replace_useless_alt, "Replace with descriptive alt text");
+                    return "Replace with descriptive alt text";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1666,11 +1749,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_enclose_raw_url, "Enclose URL in < >");
+                    return "Enclose URL in < >";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1691,11 +1774,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_remove_trailing_whitespace, "Remove trailing whitespace");
+                    return "Remove trailing whitespace";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1716,11 +1799,11 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_convert_tabs_to_spaces, "Convert tabs to spaces");
+                    return "Convert tabs to spaces";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1740,18 +1823,18 @@ public final class QuickFixRegistry {
     // ==========================================
     // 6. Bracket & General Syntax Quick Fixes
     // ==========================================
-    private static void buildBracketSyntaxFixes(List<QuickFix> fixes, Problem problem, CodeEditText editor, ProblemCode code, String msg) {
+    private static void buildBracketSyntaxFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
         // Bracket Mismatch
         if (code == ProblemCode.BRACKET_MISMATCH || msg.contains("Unclosed") || msg.contains("bracket")
                 || msg.contains("brace") || msg.contains("parenthesis") || msg.contains("Mismatched closing")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_fix_bracket_mismatch, "Insert matching bracket");
+                    return "Insert matching bracket";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
@@ -1760,6 +1843,19 @@ public final class QuickFixRegistry {
                             missing = ')';
                         } else if (prob.getMessage().contains("bracket") || prob.getMessage().contains("'['") || prob.getMessage().contains("']'")) {
                             missing = ']';
+                        }
+
+                        if (prob.getMessage().contains("Mismatched closing")) {
+                            int col = Math.max(0, prob.getColumn() - 1);
+                            if (col < lt.length()) {
+                                ed.beginAtomicGroup();
+                                try {
+                                    ed.replaceRange(pLine, col, pLine, col + 1, String.valueOf(missing));
+                                } finally {
+                                    ed.endAtomicGroup();
+                                }
+                                return;
+                            }
                         }
 
                         if (prob.getMessage().contains("Unmatched closing")) {
@@ -1792,16 +1888,16 @@ public final class QuickFixRegistry {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
-                    return getFixTitle(editor, R.string.vcode_quick_fix_clean_syntax_error, "Clean up syntax error");
+                    return "Clean up syntax error";
                 }
 
                 @Override
-                public void apply(CodeEditText ed, Problem prob) {
+                public void apply(CodeEditorTarget ed, Problem prob) {
                     int pLine = Math.max(0, prob.getLine() - 1);
                     if (pLine < ed.getLineCount()) {
                         String lt = ed.getLineText(pLine);
                         // Clean up trailing commas or unbalanced unclosed quotes
-                        String repl = lt.replaceAll(",\\s*([}\\]\\)])", "$1");
+                        String repl = lt.replaceAll(",(?=\\s*[}\\]\\)])", "");
                         ed.beginAtomicGroup();
                         try {
                             ed.replaceRange(pLine, 0, pLine, lt.length(), repl);
@@ -1818,7 +1914,7 @@ public final class QuickFixRegistry {
     // Helper Methods
     // ==========================================
 
-    private static void insertAttribute(CodeEditText ed, Problem prob, String tagPrefix, String attributeToInsert) {
+    private static void insertAttribute(CodeEditorTarget ed, Problem prob, String tagPrefix, String attributeToInsert) {
         int pLine = Math.max(0, prob.getLine() - 1);
         if (pLine >= ed.getLineCount()) return;
         String lineText = ed.getLineText(pLine);
@@ -1840,25 +1936,122 @@ public final class QuickFixRegistry {
         }
     }
 
-    private static void insertInHeadOrTop(CodeEditText ed, String snippet) {
-        int targetLine = 0;
+    private static void insertInHeadOrTop(CodeEditorTarget ed, String tag) {
+        int headLine = -1;
         int lineCount = ed.getLineCount();
         for (int l = 0; l < lineCount; l++) {
             String lt = ed.getLineText(l).toLowerCase();
-            if (lt.contains("<head>")) {
-                targetLine = l + 1;
+            if (lt.contains("<head>") || lt.contains("<head ") || lt.startsWith("<head>")) {
+                headLine = l;
                 break;
             }
         }
+
         ed.beginAtomicGroup();
         try {
-            ed.replaceRange(targetLine, 0, targetLine, 0, snippet);
+            if (headLine >= 0) {
+                String rawLine = ed.getLineText(headLine);
+                String lower = rawLine.toLowerCase();
+                int headIdx = lower.indexOf("<head");
+                int headTagEnd = headIdx >= 0 ? rawLine.indexOf('>', headIdx) + 1 : -1;
+                int headCloseIdx = lower.indexOf("</head>");
+
+                if (headCloseIdx > headTagEnd && headTagEnd > 0) {
+                    // Both <head> and </head> are on the same line (e.g. <head></head>)
+                    String headIndent = getLineIndentation(rawLine);
+                    String unitIndent = detectIndentUnit(ed);
+                    String toInsert = "\n" + headIndent + unitIndent + tag + "\n" + headIndent;
+                    ed.replaceRange(headLine, headTagEnd, headLine, headTagEnd, toInsert);
+                    return;
+                }
+
+                int targetLine = headLine + 1;
+                String targetIndent;
+                // Check if targetLine has an existing child element inside <head>
+                if (targetLine < lineCount) {
+                    String nextLine = ed.getLineText(targetLine);
+                    String trimmedNext = nextLine.trim().toLowerCase();
+                    if (!trimmedNext.isEmpty() && !trimmedNext.startsWith("</head>")) {
+                        targetIndent = getLineIndentation(nextLine);
+                    } else {
+                        targetIndent = getLineIndentation(rawLine) + detectIndentUnit(ed);
+                    }
+                } else {
+                    targetIndent = getLineIndentation(rawLine) + detectIndentUnit(ed);
+                }
+
+                ed.replaceRange(targetLine, 0, targetLine, 0, targetIndent + tag + "\n");
+            } else {
+                // No <head> tag found; insert at the very top of the file without extra indentation
+                ed.replaceRange(0, 0, 0, 0, tag + "\n");
+            }
         } finally {
             ed.endAtomicGroup();
         }
     }
 
-    private static void deleteProblemLine(CodeEditText ed, Problem prob) {
+    public static String getLineIndentation(String line) {
+        if (line == null) return "";
+        int i = 0;
+        int len = line.length();
+        while (i < len) {
+            char c = line.charAt(i);
+            if (c == ' ' || c == '\t') {
+                i++;
+            } else {
+                break;
+            }
+        }
+        return line.substring(0, i);
+    }
+
+    public static String detectIndentUnit(CodeEditorTarget ed) {
+        if (ed == null) return "    ";
+        int lineCount = Math.min(ed.getLineCount(), 120);
+        int tabCount = 0;
+        int twoSpaceDiffCount = 0;
+        int fourSpaceDiffCount = 0;
+        int prevIndentLen = -1;
+
+        for (int l = 0; l < lineCount; l++) {
+            String line = ed.getLineText(l);
+            if (line == null || line.trim().isEmpty()) {
+                continue;
+            }
+            int i = 0;
+            int len = line.length();
+            while (i < len && (line.charAt(i) == ' ' || line.charAt(i) == '\t')) {
+                i++;
+            }
+            if (i > 0 && line.charAt(0) == '\t') {
+                tabCount++;
+            } else if (i > 0 && line.charAt(0) == ' ') {
+                if (prevIndentLen >= 0 && i != prevIndentLen) {
+                    int diff = Math.abs(i - prevIndentLen);
+                    if (diff == 2) twoSpaceDiffCount++;
+                    if (diff == 4) fourSpaceDiffCount++;
+                }
+                if (i % 4 == 0) {
+                    fourSpaceDiffCount++;
+                } else if (i % 2 == 0) {
+                    twoSpaceDiffCount++;
+                }
+                prevIndentLen = i;
+            } else {
+                prevIndentLen = 0;
+            }
+        }
+
+        if (tabCount > twoSpaceDiffCount && tabCount > fourSpaceDiffCount) {
+            return "\t";
+        }
+        if (twoSpaceDiffCount > fourSpaceDiffCount) {
+            return "  ";
+        }
+        return "    ";
+    }
+
+    private static void deleteProblemLine(CodeEditorTarget ed, Problem prob) {
         int pLine = Math.max(0, prob.getLine() - 1);
         if (pLine >= 0 && pLine < ed.getLineCount()) {
             String lt = ed.getLineText(pLine);
@@ -1875,12 +2068,19 @@ public final class QuickFixRegistry {
         }
     }
 
-    private static void removeWordAt(CodeEditText ed, Problem prob, String word) {
+    private static void removeWordAt(CodeEditorTarget ed, Problem prob, String word) {
         if (word == null || word.isEmpty()) return;
         int pLine = Math.max(0, prob.getLine() - 1);
         if (pLine >= ed.getLineCount()) return;
         String lt = ed.getLineText(pLine);
-        int idx = lt.indexOf(word);
+        int startSearch = 0;
+        if (prob != null && prob.getColumn() > 1 && prob.getColumn() <= lt.length()) {
+            startSearch = Math.max(0, prob.getColumn() - 2);
+        }
+        int idx = lt.indexOf(word, startSearch);
+        if (idx < 0) {
+            idx = lt.indexOf(word);
+        }
         if (idx >= 0) {
             int endIdx = idx + word.length();
             if (endIdx < lt.length() && lt.charAt(endIdx) == '=') {
@@ -1893,6 +2093,11 @@ public final class QuickFixRegistry {
                 }
             }
             while (endIdx < lt.length() && Character.isWhitespace(lt.charAt(endIdx))) endIdx++;
+            if (endIdx < lt.length() && (lt.charAt(endIdx) == '>' || lt.charAt(endIdx) == '/')) {
+                while (idx > 0 && Character.isWhitespace(lt.charAt(idx - 1))) {
+                    idx--;
+                }
+            }
             ed.beginAtomicGroup();
             try {
                 ed.replaceRange(pLine, idx, pLine, Math.min(lt.length(), endIdx), "");
@@ -1902,11 +2107,18 @@ public final class QuickFixRegistry {
         }
     }
 
-    private static void removeAttributeByPrefix(CodeEditText ed, Problem prob, String prefix) {
+    private static void removeAttributeByPrefix(CodeEditorTarget ed, Problem prob, String prefix) {
         int pLine = Math.max(0, prob.getLine() - 1);
         if (pLine >= ed.getLineCount()) return;
         String lt = ed.getLineText(pLine);
-        int idx = lt.indexOf(prefix);
+        int startSearch = 0;
+        if (prob != null && prob.getColumn() > 1 && prob.getColumn() <= lt.length()) {
+            startSearch = Math.max(0, prob.getColumn() - 2);
+        }
+        int idx = lt.indexOf(prefix, startSearch);
+        if (idx < 0) {
+            idx = lt.indexOf(prefix);
+        }
         if (idx >= 0) {
             int end = idx + prefix.length();
             if (end < lt.length() && (lt.charAt(end) == '"' || lt.charAt(end) == '\'')) {
@@ -1915,6 +2127,11 @@ public final class QuickFixRegistry {
                 end = (q2 > 0) ? q2 + 1 : lt.length();
             }
             while (end < lt.length() && Character.isWhitespace(lt.charAt(end))) end++;
+            if (end < lt.length() && (lt.charAt(end) == '>' || lt.charAt(end) == '/')) {
+                while (idx > 0 && Character.isWhitespace(lt.charAt(idx - 1))) {
+                    idx--;
+                }
+            }
             ed.beginAtomicGroup();
             try {
                 ed.replaceRange(pLine, idx, pLine, end, "");
@@ -1934,6 +2151,29 @@ public final class QuickFixRegistry {
         return "";
     }
 
+    private static String extractQuotedNameAfter(String msg, String afterWord) {
+        if (msg == null) return "";
+        int pos = msg.indexOf(afterWord);
+        if (pos >= 0) {
+            int q1 = msg.indexOf('\'', pos);
+            if (q1 >= 0) {
+                int q2 = msg.indexOf('\'', q1 + 1);
+                if (q2 > q1) return msg.substring(q1 + 1, q2);
+            }
+        }
+        return "";
+    }
+
+    private static String extractLastQuotedName(String msg) {
+        if (msg == null) return "";
+        int q2 = msg.lastIndexOf('\'');
+        if (q2 > 0) {
+            int q1 = msg.lastIndexOf('\'', q2 - 1);
+            if (q1 >= 0) return msg.substring(q1 + 1, q2);
+        }
+        return "";
+    }
+
     private static boolean probBelongsToJson(Problem problem) {
         if (problem.getFile() != null) {
             String name = problem.getFile().getName().toLowerCase();
@@ -1942,13 +2182,4 @@ public final class QuickFixRegistry {
         return false;
     }
 
-    private static String getFixTitle(CodeEditText ed, int resId, String defaultTitle) {
-        if (ed != null && ed.getContext() != null) {
-            try {
-                return ed.getContext().getString(resId);
-            } catch (Throwable ignored) {
-            }
-        }
-        return defaultTitle;
-    }
 }

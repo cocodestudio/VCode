@@ -92,6 +92,11 @@ public class CodeFileViewer implements IFileViewer {
                     viewModel.setEditorLoading(isLoading);
                 }
             });
+            codeEditText.setOnProblemRemovedListener(p -> {
+                if (viewModel != null) {
+                    viewModel.removeProblem(p);
+                }
+            });
 
             if (context instanceof IEditorCallback) {
                 editorCallback = (IEditorCallback) context;
@@ -323,7 +328,7 @@ public class CodeFileViewer implements IFileViewer {
             editorLayout.getLspNavigationToolbar().setNavigationListener(null);
         }
         if (codeEditText != null) {
-            // Nothing to remove for lambdas since we just clear the reference
+            codeEditText.setOnProblemRemovedListener(null);
         }
         editorLayout = null;
         codeEditText = null;

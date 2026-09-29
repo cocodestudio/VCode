@@ -188,6 +188,82 @@ public class EditorViewModel extends ViewModel {
         }
     }
 
+    public void removeProblem(Problem problem) {
+        if (problem == null) return;
+        String path = problem.getFile() != null ? problem.getFile().getAbsolutePath() : null;
+        if (path != null) {
+            List<Problem> list = fileProblemsMap.get(path);
+            if (list != null) {
+                List<Problem> mutableList = new ArrayList<>(list);
+                boolean removed = mutableList.remove(problem);
+                if (!removed) {
+                    for (int i = 0; i < mutableList.size(); i++) {
+                        Problem p = mutableList.get(i);
+                        if (p.getLine() == problem.getLine() &&
+                                ((problem.getCode() != null && problem.getCode().equals(p.getCode()))
+                                || (problem.getMessage() != null && problem.getMessage().equals(p.getMessage())))) {
+                            mutableList.remove(i);
+                            removed = true;
+                            break;
+                        }
+                    }
+                }
+                if (removed) {
+                    if (mutableList.isEmpty()) {
+                        fileProblemsMap.remove(path);
+                    } else {
+                        fileProblemsMap.put(path, mutableList);
+                    }
+                    List<Problem> allProblems = new ArrayList<>();
+                    for (List<Problem> l : fileProblemsMap.values()) {
+                        allProblems.addAll(l);
+                    }
+                    if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                        problemsLiveData.setValue(allProblems);
+                    } else {
+                        problemsLiveData.postValue(allProblems);
+                    }
+                    recalculateActiveDiagnostics(path);
+                }
+            }
+        } else {
+            for (Map.Entry<String, List<Problem>> entry : new ArrayList<>(fileProblemsMap.entrySet())) {
+                List<Problem> mutableList = new ArrayList<>(entry.getValue());
+                boolean removed = mutableList.remove(problem);
+                if (!removed) {
+                    for (int i = 0; i < mutableList.size(); i++) {
+                        Problem p = mutableList.get(i);
+                        if (p.getLine() == problem.getLine() &&
+                                ((problem.getCode() != null && problem.getCode().equals(p.getCode()))
+                                || (problem.getMessage() != null && problem.getMessage().equals(p.getMessage())))) {
+                            mutableList.remove(i);
+                            removed = true;
+                            break;
+                        }
+                    }
+                }
+                if (removed) {
+                    if (mutableList.isEmpty()) {
+                        fileProblemsMap.remove(entry.getKey());
+                    } else {
+                        fileProblemsMap.put(entry.getKey(), mutableList);
+                    }
+                    List<Problem> allProblems = new ArrayList<>();
+                    for (List<Problem> l : fileProblemsMap.values()) {
+                        allProblems.addAll(l);
+                    }
+                    if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                        problemsLiveData.setValue(allProblems);
+                    } else {
+                        problemsLiveData.postValue(allProblems);
+                    }
+                    recalculateActiveDiagnostics(entry.getKey());
+                    break;
+                }
+            }
+        }
+    }
+
     private void recalculateActiveDiagnostics(String path) {
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
         List<Problem> problems = fileProblemsMap.get(path);

@@ -93,6 +93,9 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
     public interface ProblemListener {
         void onProblemSelected(Problem problem);
         default void onQuickFixSelected(Problem problem) {}
+        default void onQuickFixSelected(Problem problem, View anchorView) {
+            onQuickFixSelected(problem);
+        }
     }
 
     private class ProblemsAdapter extends RecyclerView.Adapter<ProblemsAdapter.ViewHolder> {
@@ -156,9 +159,8 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
             if (hasFix) {
                 holder.binding.btnQuickFix.setOnClickListener(v -> {
                     if (listener != null) {
-                        listener.onQuickFixSelected(item);
+                        listener.onQuickFixSelected(item, v);
                     }
-                    dismiss();
                 });
             } else {
                 holder.binding.btnQuickFix.setOnClickListener(null);

@@ -78,7 +78,7 @@ import java.util.List;
  * Rendering in {@link #onDraw(Canvas)} uses viewport culling to draw only the visible lines for smooth 60fps
  * scrolling on large files.
  */
-public class CodeEditText extends View {
+public class CodeEditText extends View implements com.cocode.vcode.ide.core.quickfix.CodeEditorTarget {
 
     // Editor settings
     public static final int LARGE_FILE_LINE_THRESHOLD = 10000;
@@ -3405,9 +3405,73 @@ public class CodeEditText extends View {
         this.scrollChangeListener = listener;
     }
 
+    private final List<Runnable> diagnosticsChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addDiagnosticsChangeListener(Runnable listener) {
+        if (listener != null && !diagnosticsChangeListeners.contains(listener)) {
+            diagnosticsChangeListeners.add(listener);
+        }
+    }
+
+    public void removeDiagnosticsChangeListener(Runnable listener) {
+        if (listener != null) {
+            diagnosticsChangeListeners.remove(listener);
+        }
+    }
+
+    private void notifyDiagnosticsChanged() {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            for (Runnable listener : diagnosticsChangeListeners) {
+                listener.run();
+            }
+        } else {
+            post(() -> {
+                for (Runnable listener : diagnosticsChangeListeners) {
+                    listener.run();
+                }
+            });
+        }
+    }
+
     public void applyDiagnostics(List<Problem> problems) {
-        this.currentProblems = problems != null ? problems : new ArrayList<>();
+        this.currentProblems = problems != null ? new ArrayList<>(problems) : new ArrayList<>();
         invalidate();
+        notifyDiagnosticsChanged();
+    }
+
+    public interface OnProblemRemovedListener {
+        void onProblemRemoved(Problem problem);
+    }
+
+    private OnProblemRemovedListener onProblemRemovedListener;
+
+    public void setOnProblemRemovedListener(OnProblemRemovedListener listener) {
+        this.onProblemRemovedListener = listener;
+    }
+
+    public void removeProblem(Problem problem) {
+        if (currentProblems != null && problem != null) {
+            boolean removed = currentProblems.remove(problem);
+            if (!removed) {
+                for (int i = 0; i < currentProblems.size(); i++) {
+                    Problem p = currentProblems.get(i);
+                    if (p.getLine() == problem.getLine() &&
+                            ((problem.getCode() != null && problem.getCode().equals(p.getCode()))
+                            || (problem.getMessage() != null && problem.getMessage().equals(p.getMessage())))) {
+                        currentProblems.remove(i);
+                        removed = true;
+                        break;
+                    }
+                }
+            }
+            if (removed) {
+                invalidate();
+                notifyDiagnosticsChanged();
+                if (onProblemRemovedListener != null) {
+                    onProblemRemovedListener.onProblemRemoved(problem);
+                }
+            }
+        }
     }
 
     public List<Problem> getProblemsAtCursor() {

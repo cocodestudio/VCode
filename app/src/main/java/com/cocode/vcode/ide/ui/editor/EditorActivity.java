@@ -1230,20 +1230,50 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             }
 
             @Override
-            public void onQuickFixSelected(Problem problem) {
+            public void onQuickFixSelected(Problem problem, View anchorView) {
                 if (problem != null) {
                     jumpToPosition(problem.getFile(), problem.getLine(), problem.getColumn());
                     CodeEditText editor = getActiveCodeEditor();
                     if (editor != null) {
                         List<com.cocode.vcode.ide.core.quickfix.QuickFix> fixes =
                                 com.cocode.vcode.ide.core.quickfix.QuickFixRegistry.getFixesForProblem(problem, editor);
-                        if (!fixes.isEmpty()) {
+                        if (fixes.size() == 1) {
                             fixes.get(0).apply(editor, problem);
-                            Toast.makeText(EditorActivity.this, fixes.get(0).getTitle(), Toast.LENGTH_SHORT).show();
+                            editor.removeProblem(problem);
+                            if (viewModel != null) {
+                                viewModel.removeProblem(problem);
+                            }
                             binding.quickSymbolBar.checkQuickFixAvailable();
+                        } else if (fixes.size() > 1) {
+                            View anchor = anchorView != null ? anchorView : binding.quickSymbolBar;
+                            androidx.appcompat.widget.PopupMenu popup =
+                                    new androidx.appcompat.widget.PopupMenu(anchor.getContext(), anchor);
+                            for (int i = 0; i < fixes.size(); i++) {
+                                popup.getMenu().add(0, i, i, fixes.get(i).getTitle());
+                            }
+                            final List<com.cocode.vcode.ide.core.quickfix.QuickFix> finalFixes = fixes;
+                            popup.setOnMenuItemClickListener(menuItem -> {
+                                int id = menuItem.getItemId();
+                                if (id >= 0 && id < finalFixes.size()) {
+                                    finalFixes.get(id).apply(editor, problem);
+                                    editor.removeProblem(problem);
+                                    if (viewModel != null) {
+                                        viewModel.removeProblem(problem);
+                                    }
+                                    binding.quickSymbolBar.checkQuickFixAvailable();
+                                    return true;
+                                }
+                                return false;
+                            });
+                            popup.show();
                         }
                     }
                 }
+            }
+
+            @Override
+            public void onQuickFixSelected(Problem problem) {
+                onQuickFixSelected(problem, null);
             }
         });
         Integer activeIndex = viewModel.getActiveTabIndex().getValue();

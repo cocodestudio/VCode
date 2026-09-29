@@ -10,7 +10,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -41,6 +40,7 @@ public class QuickSymbolBar extends LinearLayout {
     private LinearLayout layoutKeysContainer;
     private WeakReference<CodeEditText> activeEditorRef;
     private final Runnable cursorChangeListener = this::checkQuickFixAvailable;
+    private final Runnable diagnosticsChangeListener = this::checkQuickFixAvailable;
 
     public QuickSymbolBar(@NonNull Context context) {
         this(context, null);
@@ -105,17 +105,19 @@ public class QuickSymbolBar extends LinearLayout {
     }
 
     /**
-     * Binds an active CodeEditText instance to this bar and attaches a cursor listener.
+     * Binds an active CodeEditText instance to this bar and attaches cursor and diagnostic listeners.
      */
     public void bindEditor(@Nullable CodeEditText editor) {
         CodeEditText oldEditor = activeEditorRef != null ? activeEditorRef.get() : null;
         if (oldEditor != null) {
-            // Note: listeners don't leak since editor lifecycle cleans up
+            oldEditor.removeCursorChangeListener(cursorChangeListener);
+            oldEditor.removeDiagnosticsChangeListener(diagnosticsChangeListener);
         }
 
         activeEditorRef = editor != null ? new WeakReference<>(editor) : null;
         if (editor != null) {
             editor.addCursorChangeListener(cursorChangeListener);
+            editor.addDiagnosticsChangeListener(diagnosticsChangeListener);
             checkQuickFixAvailable();
         } else {
             setQuickFixVisible(false);
@@ -171,7 +173,6 @@ public class QuickSymbolBar extends LinearLayout {
         }
 
         if (targetProblem == null || fixes == null || fixes.isEmpty()) {
-            Toast.makeText(getContext(), R.string.vcode_no_quick_fixes, Toast.LENGTH_SHORT).show();
             setQuickFixVisible(false);
             return;
         }
@@ -179,7 +180,7 @@ public class QuickSymbolBar extends LinearLayout {
         if (fixes.size() == 1) {
             QuickFix fix = fixes.get(0);
             fix.apply(editor, targetProblem);
-            Toast.makeText(getContext(), fix.getTitle(), Toast.LENGTH_SHORT).show();
+            editor.removeProblem(targetProblem);
             checkQuickFixAvailable();
         } else {
             PopupMenu popup = new PopupMenu(getContext(), btnQuickFix);
@@ -192,7 +193,7 @@ public class QuickSymbolBar extends LinearLayout {
                 int id = item.getItemId();
                 if (id >= 0 && id < finalFixes.size()) {
                     finalFixes.get(id).apply(editor, finalProb);
-                    Toast.makeText(getContext(), finalFixes.get(id).getTitle(), Toast.LENGTH_SHORT).show();
+                    editor.removeProblem(finalProb);
                     checkQuickFixAvailable();
                     return true;
                 }
@@ -200,6 +201,12 @@ public class QuickSymbolBar extends LinearLayout {
             });
             popup.show();
         }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        bindEditor(null);
     }
 
     private void onSymbolClicked(String sym) {

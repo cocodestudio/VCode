@@ -82,6 +82,32 @@ public class Problem {
         this.cachedPath = cachedPath;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Problem problem = (Problem) o;
+        if (line != problem.line) return false;
+        if (column != problem.column) return false;
+        if (length != problem.length) return false;
+        if (severity != problem.severity) return false;
+        if (file != null ? !file.equals(problem.file) : problem.file != null) return false;
+        if (message != null ? !message.equals(problem.message) : problem.message != null) return false;
+        return code != null ? code.equals(problem.code) : problem.code == null;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = file != null ? file.hashCode() : 0;
+        result = 31 * result + line;
+        result = 31 * result + column;
+        result = 31 * result + length;
+        result = 31 * result + (message != null ? message.hashCode() : 0);
+        result = 31 * result + (severity != null ? severity.hashCode() : 0);
+        result = 31 * result + (code != null ? code.hashCode() : 0);
+        return result;
+    }
+
     public enum Severity {
         ERROR, WARNING, INFO
     }
