@@ -123,6 +123,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         setContentView(binding.getRoot());
 
         UiUtils.applySystemBarInsets(binding.drawerLayout, binding.mainContent, binding.drawerContainer);
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+                | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         String projectPath = getIntent().getStringExtra(EXTRA_PROJECT_PATH);
         String projectId = getIntent().getStringExtra(EXTRA_PROJECT_ID);
@@ -704,6 +706,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 binding.quickSymbolBar.setVisibility(View.VISIBLE);
                                 binding.quickSymbolBar.bindEditor(editor);
                             }
+                            UiUtils.hideKeyboard(EditorActivity.this);
                         });
                     }
                 } else {

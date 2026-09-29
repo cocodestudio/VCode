@@ -10,6 +10,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -22,7 +23,7 @@ import java.util.Set;
 public class IndexCatalog {
 
     public static final int MAGIC = 0x56434458; // 'VCDX'
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     public static final class FileFingerprint {
         public final int fileId;
@@ -47,7 +48,9 @@ public class IndexCatalog {
         if (file == null || !file.exists() || relativePath == null) return false;
         FileFingerprint fp = fileToFingerprint.get(relativePath);
         if (fp == null) return false;
-        return fp.lastModified == file.lastModified() && fp.fileLength == file.length();
+        long lastMod = file.lastModified();
+        long len = file.length();
+        return fp.fileLength == len && (fp.lastModified == lastMod || Math.abs(fp.lastModified - lastMod) <= 1000);
     }
 
     public synchronized int getOrAssignFileId(String relativePath) {
@@ -82,6 +85,16 @@ public class IndexCatalog {
 
     public synchronized Set<String> getTrackedFiles() {
         return Collections.unmodifiableSet(fileToFingerprint.keySet());
+    }
+
+    public synchronized Set<Integer> getTrackedSegmentIds() {
+        Set<Integer> segIds = new HashSet<>();
+        for (FileFingerprint fp : fileToFingerprint.values()) {
+            if (fp != null && fp.segmentId > 0) {
+                segIds.add(fp.segmentId);
+            }
+        }
+        return segIds;
     }
 
     public synchronized FileFingerprint getFingerprint(String relativePath) {

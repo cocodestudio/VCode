@@ -7,11 +7,19 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
+import com.cocode.vcode.ide.core.lsp.LspDocument;
+import com.cocode.vcode.ide.core.lsp.SymbolEntry;
+import com.cocode.vcode.ide.core.lsp.SymbolExtractor;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -330,5 +338,319 @@ public class SegmentedSymbolStoreTest {
         assertTrue("Silent single file indexing should be queryable in segment store", foundSilent);
 
         store.close();
+    }
+
+    @Test
+    public void testMultiProjectSwitchingMaintainsCacheIntegrity() throws IOException {
+        File projectA = tempFolder.newFolder("ProjectA");
+        File projectB = tempFolder.newFolder("ProjectB");
+
+        File fileA = new File(projectA, "appA.js");
+        try (FileWriter fw = new FileWriter(fileA)) {
+            fw.write("export function runA() {}");
+        }
+
+        File fileB = new File(projectB, "appB.js");
+        try (FileWriter fw = new FileWriter(fileB)) {
+            fw.write("export function runB() {}");
+        }
+
+        // Index Project A
+        SegmentedSymbolStore storeA = new SegmentedSymbolStore(projectA);
+        assertEquals(projectA, storeA.getProjectRoot());
+        storeA.indexFiles(projectA, Collections.singletonList(fileA), (file, relPath, fileId) -> {
+            List<IndexSymbolEntry> list = new ArrayList<>();
+            list.add(new IndexSymbolEntry(SymbolKey.jsExport("appA.js", "runA"), "runA", IndexSymbolEntry.KIND_JS_EXPORT, IndexSymbolEntry.FLAG_EXPORTED, fileId, 1, "() => void"));
+            return list;
+        });
+        assertTrue(storeA.isIndexUpToDate(projectA, Collections.singletonList(fileA)));
+        storeA.close();
+
+        // Index Project B
+        SegmentedSymbolStore storeB = new SegmentedSymbolStore(projectB);
+        assertEquals(projectB, storeB.getProjectRoot());
+        storeB.indexFiles(projectB, Collections.singletonList(fileB), (file, relPath, fileId) -> {
+            List<IndexSymbolEntry> list = new ArrayList<>();
+            list.add(new IndexSymbolEntry(SymbolKey.jsExport("appB.js", "runB"), "runB", IndexSymbolEntry.KIND_JS_EXPORT, IndexSymbolEntry.FLAG_EXPORTED, fileId, 1, "() => void"));
+            return list;
+        });
+        assertTrue(storeB.isIndexUpToDate(projectB, Collections.singletonList(fileB)));
+        storeB.close();
+
+        // Reopen Project A - must still be up-to-date and have its symbols intact
+        SegmentedSymbolStore reopenedStoreA = new SegmentedSymbolStore(projectA);
+        assertTrue("Project A should remain up to date without re-indexing",
+                reopenedStoreA.isIndexUpToDate(projectA, Collections.singletonList(fileA)));
+        List<IndexSymbolEntry> resultsA = reopenedStoreA.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_JS_EXPORT, 10));
+        assertEquals(1, resultsA.size());
+        assertEquals("runA", resultsA.get(0).getName());
+        reopenedStoreA.close();
+
+        // Reopen Project B - must still be up-to-date and have its symbols intact
+        SegmentedSymbolStore reopenedStoreB = new SegmentedSymbolStore(projectB);
+        assertTrue("Project B should remain up to date without re-indexing",
+                reopenedStoreB.isIndexUpToDate(projectB, Collections.singletonList(fileB)));
+        List<IndexSymbolEntry> resultsB = reopenedStoreB.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_JS_EXPORT, 10));
+        assertEquals(1, resultsB.size());
+        assertEquals("runB", resultsB.get(0).getName());
+        reopenedStoreB.close();
+    }
+
+    @Test
+    public void testDeletedFileCatalogPruningAndConsistency() throws IOException {
+        SegmentedSymbolStore store = new SegmentedSymbolStore(projectRoot);
+
+        File file1 = new File(projectRoot, "file1.js");
+        try (FileWriter fw = new FileWriter(file1)) {
+            fw.write("export const one = 1;");
+        }
+        File file2 = new File(projectRoot, "file2.js");
+        try (FileWriter fw = new FileWriter(file2)) {
+            fw.write("export const two = 2;");
+        }
+
+        List<File> candidates = new ArrayList<>();
+        candidates.add(file1);
+        candidates.add(file2);
+
+        store.indexFiles(projectRoot, candidates, (file, relPath, fileId) -> {
+            List<IndexSymbolEntry> list = new ArrayList<>();
+            list.add(new IndexSymbolEntry(SymbolKey.jsExport(relPath, file.getName()), file.getName(), IndexSymbolEntry.KIND_JS_EXPORT, IndexSymbolEntry.FLAG_EXPORTED, fileId, 1, ""));
+            return list;
+        });
+
+        assertTrue(store.isIndexUpToDate(projectRoot, candidates));
+
+        // Delete file2
+        file2.delete();
+        List<File> updatedCandidates = Collections.singletonList(file1);
+
+        // Initially not up to date because candidate count (1) != catalog count (2)
+        assertFalse(store.isIndexUpToDate(projectRoot, updatedCandidates));
+
+        // Re-run indexing with updated candidates; it should prune deleted file2
+        store.indexFiles(projectRoot, updatedCandidates, (file, relPath, fileId) -> new ArrayList<>());
+
+        // Now catalog should be pruned and up to date
+        assertTrue("Store must be up to date after pruning deleted file from catalog",
+                store.isIndexUpToDate(projectRoot, updatedCandidates));
+
+        store.close();
+    }
+
+    @Test
+    public void testCssSelectorValidationAndFiltering() {
+        Set<String> classNames = new HashSet<>();
+        Set<String> cssIds = new HashSet<>();
+
+        // Test normal class and ID selectors
+        ProjectSymbolIndex.extractCssClassesAndIds(".btn.btn-primary #main-nav:hover", classNames, cssIds);
+        assertTrue(classNames.contains("btn"));
+        assertTrue(classNames.contains("btn-primary"));
+        assertTrue(cssIds.contains("main-nav"));
+
+        classNames.clear();
+        cssIds.clear();
+
+        // Test hex colors rejection (e.g. #fff, #ffffff, #1a2b3c)
+        ProjectSymbolIndex.extractCssClassesAndIds("color: #fff; background: #1a2b3c; border-color: #ffffff; #000", classNames, cssIds);
+        assertFalse(cssIds.contains("fff"));
+        assertFalse(cssIds.contains("1a2b3c"));
+        assertFalse(cssIds.contains("ffffff"));
+        assertFalse(cssIds.contains("000"));
+
+        classNames.clear();
+        cssIds.clear();
+
+        // Test units, decimals and numbers rejection (.5rem, .25em, .5px, .2s)
+        ProjectSymbolIndex.extractCssClassesAndIds("margin: .5rem; padding: 0.25rem; font-size: 1.5rem; transition: .2s;", classNames, cssIds);
+        assertFalse(classNames.contains("5rem"));
+        assertFalse(classNames.contains("25rem"));
+        assertFalse(classNames.contains("2s"));
+        assertTrue(classNames.isEmpty());
+
+        classNames.clear();
+        cssIds.clear();
+
+        // Test attribute selector contents skipping [href$=".png"] [fill="#ffffff"]
+        ProjectSymbolIndex.extractCssClassesAndIds("a[href$='.png'] svg[fill='#ffffff']", classNames, cssIds);
+        assertFalse(classNames.contains("png"));
+        assertFalse(cssIds.contains("ffffff"));
+
+        classNames.clear();
+        cssIds.clear();
+
+        // Test Tailwind classes with arbitrary units
+        ProjectSymbolIndex.extractCssClassesAndIds(".w-[2.5rem] .p-[10px] .text-[#3b82f6]", classNames, cssIds);
+        assertTrue(classNames.contains("w"));
+        assertTrue(classNames.contains("p"));
+        assertTrue(classNames.contains("text"));
+        assertFalse(classNames.contains("5rem"));
+        assertFalse(cssIds.contains("3b82f6"));
+
+        classNames.clear();
+        cssIds.clear();
+
+        // Test at-rule skipping
+        ProjectSymbolIndex.extractCssClassesAndIds("@media (max-width: 768.5px)", classNames, cssIds);
+        assertTrue(classNames.isEmpty());
+        assertTrue(cssIds.isEmpty());
+    }
+
+    @Test
+    public void testJsIdentifierValidation() {
+        // Valid identifiers
+        assertTrue(ProjectSymbolIndex.isValidJsIdentifier("foo"));
+        assertTrue(ProjectSymbolIndex.isValidJsIdentifier("_bar"));
+        assertTrue(ProjectSymbolIndex.isValidJsIdentifier("$baz"));
+        assertTrue(ProjectSymbolIndex.isValidJsIdentifier("camelCase"));
+        assertTrue(ProjectSymbolIndex.isValidJsIdentifier("PascalCase"));
+        assertTrue(ProjectSymbolIndex.isValidJsIdentifier("func1"));
+
+        // Invalid: digits at start, operators, hyphens, dots
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("123"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("1foo"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("foo-bar"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("foo.bar"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("foo()"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("foo,bar"));
+
+        // Invalid: JS reserved keywords
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("default"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("export"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("import"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("class"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("function"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("const"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("let"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("var"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("null"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("true"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("false"));
+        assertFalse(ProjectSymbolIndex.isValidJsIdentifier("this"));
+    }
+
+    @Test
+    public void testSymbolExtractorValidation() {
+        // CSS extraction test
+        String css = ".btn { color: #fff; margin: .5rem; font-size: 14px; }\n" +
+                "svg[fill=\"#ffffff\"] { background: #1a2b3c; }\n" +
+                "@media (max-width: 600px) { .responsive-nav { display: block; } }\n" +
+                "#nav-bar { border-color: #000; }";
+        LspDocument cssDoc = new LspDocument("file:///test.css", css, "css", 1);
+        List<SymbolEntry> cssSymbols = SymbolExtractor.extractSymbols(cssDoc);
+
+        Set<String> cssNames = new HashSet<>();
+        for (SymbolEntry s : cssSymbols) {
+            cssNames.add(s.name);
+        }
+
+        assertTrue(cssNames.contains(".btn"));
+        assertTrue(cssNames.contains(".responsive-nav"));
+        assertTrue(cssNames.contains("#nav-bar"));
+        // Make sure no hex colors or units leaked
+        assertFalse(cssNames.contains("#fff"));
+        assertFalse(cssNames.contains("#ffffff"));
+        assertFalse(cssNames.contains("#1a2b3c"));
+        assertFalse(cssNames.contains("#000"));
+        assertFalse(cssNames.contains(".5rem"));
+        assertFalse(cssNames.contains("5rem"));
+        assertFalse(cssNames.contains("14px"));
+
+        // HTML extraction test
+        String html = "<div id=\"main-card\" class=\"card active 5rem .invalid\">\n" +
+                "  <span id=\"#fff\" class=\"btn\"></span>\n" +
+                "</div>";
+        LspDocument htmlDoc = new LspDocument("file:///test.html", html, "html", 1);
+        List<SymbolEntry> htmlSymbols = SymbolExtractor.extractSymbols(htmlDoc);
+
+        Set<String> htmlIds = new HashSet<>();
+        Set<String> htmlClasses = new HashSet<>();
+        for (SymbolEntry s : htmlSymbols) {
+            if (s.kind == SymbolEntry.KIND_HTML_ID) {
+                htmlIds.add(s.name);
+            } else if (s.kind == SymbolEntry.KIND_CSS_CLASS) {
+                htmlClasses.add(s.name);
+            }
+        }
+
+        assertTrue(htmlIds.contains("main-card"));
+        assertFalse(htmlIds.contains("fff"));
+        assertFalse(htmlIds.contains("#fff"));
+
+        assertTrue(htmlClasses.contains("card"));
+        assertTrue(htmlClasses.contains("active"));
+        assertTrue(htmlClasses.contains("btn"));
+        assertFalse(htmlClasses.contains("5rem"));
+        assertFalse(htmlClasses.contains(".invalid"));
+
+        // JS extraction test
+        String js = "function calculateTotal(price) { return price; }\n" +
+                "class ShoppingCart {}\n" +
+                "const tax = 0.05;";
+        LspDocument jsDoc = new LspDocument("file:///test.js", js, "javascript", 1);
+        List<SymbolEntry> jsSymbols = SymbolExtractor.extractSymbols(jsDoc);
+
+        Set<String> jsNames = new HashSet<>();
+        for (SymbolEntry s : jsSymbols) {
+            jsNames.add(s.name);
+        }
+
+        assertTrue(jsNames.contains("calculateTotal"));
+        assertTrue(jsNames.contains("ShoppingCart"));
+        assertTrue(jsNames.contains("tax"));
+    }
+
+    @Test
+    public void testOrphanSegmentAndTmpFilePurge() throws IOException {
+        SegmentedSymbolStore store = new SegmentedSymbolStore(projectRoot);
+
+        File cssFile = new File(projectRoot, "styles.css");
+        try (FileWriter fw = new FileWriter(cssFile)) {
+            fw.write(".btn-primary { color: red; }");
+        }
+
+        List<File> files = Collections.singletonList(cssFile);
+        store.indexFiles(projectRoot, files, (file, relPath, fileId) -> {
+            List<IndexSymbolEntry> entries = new ArrayList<>();
+            entries.add(new IndexSymbolEntry(
+                    SymbolKey.cssClass("btn-primary"),
+                    "btn-primary",
+                    IndexSymbolEntry.KIND_CSS_CLASS,
+                    IndexSymbolEntry.FLAG_NONE,
+                    fileId,
+                    1,
+                    "CSS Class"
+            ));
+            return entries;
+        });
+
+        // Confirm active segment was written and catalog.bin exists
+        File catalogFile = new File(cacheDir, "catalog.bin");
+        assertTrue(catalogFile.exists());
+        store.close();
+
+        // Inject an orphan segment and a stray .tmp file into .vcode/cache/symbols/
+        File orphanSeg = new File(cacheDir, "seg_9999.bin");
+        try (FileWriter fw = new FileWriter(orphanSeg)) {
+            fw.write("corrupted or orphaned segment data");
+        }
+        File strayTmp = new File(cacheDir, "catalog.bin.12345.tmp");
+        try (FileWriter fw = new FileWriter(strayTmp)) {
+            fw.write("abandoned tmp data");
+        }
+        assertTrue(orphanSeg.exists());
+        assertTrue(strayTmp.exists());
+
+        // Re-open store: openExistingSegments() must purge orphan and tmp files
+        SegmentedSymbolStore reopened = new SegmentedSymbolStore(projectRoot);
+        assertFalse("Orphan segment should be deleted", orphanSeg.exists());
+        assertFalse("Stray tmp file should be deleted", strayTmp.exists());
+
+        // Valid tracked segment should still be loaded and queried
+        List<IndexSymbolEntry> results = reopened.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_CSS_CLASS, 0));
+        assertEquals(1, results.size());
+        assertEquals("btn-primary", results.get(0).getName());
+        reopened.close();
     }
 }

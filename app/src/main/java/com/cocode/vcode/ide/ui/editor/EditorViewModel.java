@@ -20,6 +20,7 @@ import com.cocode.vcode.ide.data.repository.ProjectStateRepository;
 import com.cocode.vcode.ide.data.repository.SettingsRepository;
 import com.cocode.vcode.ide.git.model.FileStatus;
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.refactor.FileReferenceUpdater;
@@ -1124,6 +1125,9 @@ public class EditorViewModel extends ViewModel {
 
                     // Update Git status as the file change is now committed to the filesystem
                     refreshGitStatuses();
+
+                    // Update symbol index silently so catalog timestamp remains in sync with disk
+                    ProjectSymbolIndex.getInstance().updateFileSilently(ef.getFile());
 
                     if (onComplete != null) onComplete.run();
                 }

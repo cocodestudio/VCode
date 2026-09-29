@@ -538,6 +538,7 @@ public class ProjectsActivity extends BaseActivity {
      * Transitions to the EditorActivity for the selected project.
      */
     private void openProject(String absolutePath, String projectId, String projectName) {
+        UiUtils.hideKeyboard(this);
         viewModel.saveLastProjectId(projectId);
         Intent intent = new Intent(this, EditorActivity.class);
         intent.putExtra(EditorActivity.EXTRA_PROJECT_PATH, absolutePath);

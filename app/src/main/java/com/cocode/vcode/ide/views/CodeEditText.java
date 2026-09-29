@@ -1086,7 +1086,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
         if (focused) {
             scheduleBlink();
-            showKeyboard();
         } else {
             mainHandler.removeCallbacks(blinkRunnable);
             cursorVisible = true;

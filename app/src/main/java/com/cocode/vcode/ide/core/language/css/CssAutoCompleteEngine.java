@@ -16,8 +16,10 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Contextual suggestion engine for CSS — mirrors VS Code's CSS language server.
@@ -192,66 +194,22 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
     // Document class and ID scanning for real-time current buffer suggestions
     private void ensureDocumentClassesAndIdsIndexed(String text) {
+        if (text == null) return;
         int hash = text.hashCode();
         if (hash == lastDocClassTextHash) return;
         lastDocClassTextHash = hash;
         cachedDocClasses.clear();
         cachedDocIds.clear();
 
-        int len = Math.min(text.length(), 200_000);
-        java.util.Set<String> seenClasses = new java.util.HashSet<>();
-        java.util.Set<String> seenIds = new java.util.HashSet<>();
-        int i = 0;
-        while (i < len) {
-            char c = text.charAt(i);
-            if (c == '/' && i + 1 < len) {
-                if (text.charAt(i + 1) == '*') {
-                    i += 2;
-                    while (i + 1 < len && !(text.charAt(i) == '*' && text.charAt(i + 1) == '/')) i++;
-                    i = Math.min(len, i + 2);
-                    continue;
-                } else if (text.charAt(i + 1) == '/') {
-                    while (i < len && text.charAt(i) != '\n') i++;
-                    continue;
-                }
-            } else if (c == '"' || c == '\'') {
-                char q = c;
-                i++;
-                while (i < len && text.charAt(i) != q) {
-                    if (text.charAt(i) == '\\') i++;
-                    i++;
-                }
-                if (i < len) i++;
-                continue;
-            }
+        Set<String> classNames = new HashSet<>();
+        Set<String> cssIds = new HashSet<>();
+        ProjectSymbolIndex.extractCssClassesAndIds(text, classNames, cssIds);
 
-            if (c == '.' || c == '#') {
-                boolean isClass = (c == '.');
-                i++;
-                int start = i;
-                while (i < len) {
-                    char ch = text.charAt(i);
-                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
-                        i++;
-                    } else {
-                        break;
-                    }
-                }
-                if (i > start) {
-                    String name = text.substring(start, i);
-                    if (isClass) {
-                        if (seenClasses.add(name)) {
-                            cachedDocClasses.add(new CompletionItem("." + name, "." + name, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
-                        }
-                    } else {
-                        if (seenIds.add(name)) {
-                            cachedDocIds.add(new CompletionItem("#" + name, "#" + name, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
-                        }
-                    }
-                }
-                continue;
-            }
-            i++;
+        for (String c : classNames) {
+            cachedDocClasses.add(new CompletionItem("." + c, "." + c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+        }
+        for (String id : cssIds) {
+            cachedDocIds.add(new CompletionItem("#" + id, "#" + id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
         }
     }
 

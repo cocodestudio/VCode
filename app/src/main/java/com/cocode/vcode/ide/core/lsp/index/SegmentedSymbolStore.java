@@ -21,6 +21,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class SegmentedSymbolStore {
 
+    private final File projectRoot;
     private final File cacheDir;
     private final File catalogFile;
     private final BoundedBlockCache blockCache;
@@ -38,6 +39,7 @@ public class SegmentedSymbolStore {
     }
 
     public SegmentedSymbolStore(File projectRoot, BoundedBlockCache blockCache) {
+        this.projectRoot = projectRoot;
         this.cacheDir = new File(projectRoot, ".vcode/cache/symbols");
         if (!cacheDir.exists()) {
             cacheDir.mkdirs();
@@ -48,17 +50,74 @@ public class SegmentedSymbolStore {
         openExistingSegments();
     }
 
+    public File getProjectRoot() {
+        return projectRoot;
+    }
+
     private void openExistingSegments() {
         synchronized (indexLock) {
+            // 1. Clean up stray temporary files (.tmp) left behind by aborted writes or crashes
+            File[] tmpFiles = cacheDir.listFiles((dir, name) -> name.endsWith(".tmp"));
+            if (tmpFiles != null) {
+                for (File tmp : tmpFiles) {
+                    tmp.delete();
+                }
+            }
+
             File[] files = cacheDir.listFiles((dir, name) -> name.startsWith("seg_") && name.endsWith(".bin"));
             if (files == null) return;
+
+            Set<Integer> activeSegmentIds = catalog.getTrackedSegmentIds();
+
+            // 2. If the catalog tracks no files (e.g. empty or reset catalog), any existing seg_*.bin is an orphan
+            if (activeSegmentIds.isEmpty()) {
+                for (File f : files) {
+                    f.delete();
+                }
+                return;
+            }
+
+            // 3. Purge orphan segments not referenced by the catalog, and open active segments
             for (File f : files) {
+                int segId = parseSegmentId(f.getName());
+                if (segId <= 0 || !activeSegmentIds.contains(segId)) {
+                    f.delete(); // Delete orphan segment dumped or abandoned by prior compaction/crash
+                    continue;
+                }
                 try {
                     SegmentReader reader = new SegmentReader(f, blockCache);
                     segmentReaders.put(reader.getSegmentId(), reader);
+                } catch (IOException e) {
+                    // Segment corrupted on disk; delete corrupt file
+                    f.delete();
+                }
+            }
+
+            // 4. If any tracked files in catalog reference missing/corrupt segments, prune them from catalog
+            boolean catalogModified = false;
+            for (String tracked : new ArrayList<>(catalog.getTrackedFiles())) {
+                IndexCatalog.FileFingerprint fp = catalog.getFingerprint(tracked);
+                if (fp != null && !segmentReaders.containsKey(fp.segmentId)) {
+                    catalog.removeFile(tracked);
+                    catalogModified = true;
+                }
+            }
+            if (catalogModified) {
+                try {
+                    catalog.save(catalogFile);
                 } catch (IOException ignored) {
                 }
             }
+        }
+    }
+
+    private static int parseSegmentId(String name) {
+        if (name == null || !name.startsWith("seg_") || !name.endsWith(".bin")) return -1;
+        try {
+            String numStr = name.substring(4, name.length() - 4);
+            return Integer.parseInt(numStr);
+        } catch (Exception e) {
+            return -1;
         }
     }
 
@@ -150,10 +209,29 @@ public class SegmentedSymbolStore {
         long startTime = System.currentTimeMillis();
 
         List<File> dirtyFiles = new ArrayList<>();
+        Set<String> currentRelPaths = new HashSet<>();
         for (File file : candidateFiles) {
             String relPath = getRelativePath(projectRoot, file);
+            currentRelPaths.add(relPath);
             if (!catalog.isFileUpToDate(file, relPath)) {
                 dirtyFiles.add(file);
+            }
+        }
+
+        // Prune deleted files from the catalog if candidates have changed
+        boolean catalogPruned = false;
+        synchronized (indexLock) {
+            for (String tracked : new ArrayList<>(catalog.getTrackedFiles())) {
+                if (!currentRelPaths.contains(tracked)) {
+                    catalog.removeFile(tracked);
+                    catalogPruned = true;
+                }
+            }
+            if (catalogPruned && dirtyFiles.isEmpty()) {
+                try {
+                    catalog.save(catalogFile);
+                } catch (IOException ignored) {
+                }
             }
         }
 
@@ -292,7 +370,7 @@ public class SegmentedSymbolStore {
 
                 // Update catalog segment IDs
                 for (String path : catalog.getTrackedFiles()) {
-                    File file = new File(cacheDir.getParentFile().getParentFile(), path);
+                    File file = new File(projectRoot, path);
                     if (file.exists()) {
                         catalog.recordFile(path, file, consolidatedSegId);
                     }
@@ -373,12 +451,27 @@ public class SegmentedSymbolStore {
         if (base == null || file == null) return file != null ? file.getName() : "";
         String basePath = base.getAbsolutePath().replace('\\', '/');
         String filePath = file.getAbsolutePath().replace('\\', '/');
-        if (filePath.startsWith(basePath)) {
+        if (filePath.equalsIgnoreCase(basePath)) {
+            return "";
+        }
+        if (filePath.toLowerCase(Locale.US).startsWith(basePath.toLowerCase(Locale.US))) {
             String rel = filePath.substring(basePath.length());
             while (rel.startsWith("/")) {
                 rel = rel.substring(1);
             }
             return rel;
+        }
+        try {
+            String canonBase = base.getCanonicalPath().replace('\\', '/');
+            String canonFile = file.getCanonicalPath().replace('\\', '/');
+            if (canonFile.toLowerCase(Locale.US).startsWith(canonBase.toLowerCase(Locale.US))) {
+                String rel = canonFile.substring(canonBase.length());
+                while (rel.startsWith("/")) {
+                    rel = rel.substring(1);
+                }
+                return rel;
+            }
+        } catch (Exception ignored) {
         }
         return file.getName();
     }

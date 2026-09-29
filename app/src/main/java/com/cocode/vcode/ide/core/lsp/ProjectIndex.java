@@ -7,8 +7,10 @@ import com.cocode.vcode.ide.utils.ExecutorProvider;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import com.cocode.vcode.ide.core.lsp.index.PersistentSymbolStore;
 import com.cocode.vcode.ide.core.lsp.index.PersistentSymbolStore.FileSymbolRecord;
@@ -191,6 +193,8 @@ public final class ProjectIndex {
                 persistentRecords.putAll(loaded);
             }
             indexDirectory(root);
+            pruneDeletedFiles(persistentRecords, fileSymbols);
+            cleanStrayTmpFiles(cacheFile != null ? cacheFile.getParentFile() : null);
             PersistentSymbolStore.saveIndex(cacheFile, projectRoot, persistentRecords);
             if (onComplete != null) {
                 ExecutorProvider.getInstance().runOnMain(onComplete);
@@ -223,6 +227,8 @@ public final class ProjectIndex {
                     }
                 }
                 indexDirectoryIncremental(root);
+                pruneDeletedFiles(persistentRecords, fileSymbols);
+                cleanStrayTmpFiles(cacheFile != null ? cacheFile.getParentFile() : null);
                 PersistentSymbolStore.saveIndex(cacheFile, projectRoot, persistentRecords);
             } finally {
                 isIncrementalScanRunning.set(false);
@@ -459,6 +465,22 @@ public final class ProjectIndex {
         if (doc == null) {
             doc = documents.get(canonicalize(uri));
         }
+        if (doc == null) {
+            File f = new File(uri);
+            if (f.exists() && f.isFile() && isSupportedFile(f)) {
+                try {
+                    String text = readFile(f);
+                    String lang = getLanguageId(f.getName());
+                    doc = new LspDocument(f.getAbsolutePath(), text, lang, 0);
+                    documents.put(f.getAbsolutePath(), doc);
+                    String canon = canonicalize(f.getAbsolutePath());
+                    if (canon != null && !canon.equals(f.getAbsolutePath())) {
+                        documents.put(canon, doc);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
         return doc;
     }
 
@@ -554,7 +576,16 @@ public final class ProjectIndex {
      * Returns all URIs currently tracked in the index.
      */
     public List<String> getAllUris() {
-        return new ArrayList<>(documents.keySet());
+        Set<String> set = new HashSet<>();
+        for (String uri : documents.keySet()) {
+            String canon = canonicalize(uri);
+            if (canon != null) set.add(canon);
+        }
+        for (String uri : fileSymbols.keySet()) {
+            String canon = canonicalize(uri);
+            if (canon != null) set.add(canon);
+        }
+        return new ArrayList<>(set);
     }
 
     /**
@@ -570,7 +601,7 @@ public final class ProjectIndex {
         if (record == null) {
             record = persistentRecords.get(canonicalize(uri));
         }
-        if (record != null && record.lastModified == file.lastModified() && record.fileLength == file.length()) {
+        if (record != null && (record.lastModified == file.lastModified() || Math.abs(record.lastModified - file.lastModified()) <= 1000) && record.fileLength == file.length()) {
             fileSymbols.put(uri, record.symbols);
             String canon = canonicalize(uri);
             if (canon != null && !canon.equals(uri)) {
@@ -665,6 +696,34 @@ public final class ProjectIndex {
         public ExportRef(String name, String sourceUri) {
             this.name = name;
             this.sourceUri = sourceUri;
+        }
+    }
+
+    private static void pruneDeletedFiles(ConcurrentHashMap<String, FileSymbolRecord> persistentRecords,
+                                         ConcurrentHashMap<String, List<SymbolEntry>> fileSymbols) {
+        if (persistentRecords != null) {
+            for (String uri : new ArrayList<>(persistentRecords.keySet())) {
+                if (!new File(uri).exists()) {
+                    persistentRecords.remove(uri);
+                }
+            }
+        }
+        if (fileSymbols != null) {
+            for (String uri : new ArrayList<>(fileSymbols.keySet())) {
+                if (!new File(uri).exists()) {
+                    fileSymbols.remove(uri);
+                }
+            }
+        }
+    }
+
+    private static void cleanStrayTmpFiles(File cacheDir) {
+        if (cacheDir == null || !cacheDir.exists() || !cacheDir.isDirectory()) return;
+        File[] tmpFiles = cacheDir.listFiles((dir, name) -> name.endsWith(".tmp"));
+        if (tmpFiles != null) {
+            for (File tmp : tmpFiles) {
+                tmp.delete();
+            }
         }
     }
 }

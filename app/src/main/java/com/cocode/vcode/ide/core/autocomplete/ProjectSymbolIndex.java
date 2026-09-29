@@ -87,18 +87,310 @@ public class ProjectSymbolIndex {
         return segmentedStore;
     }
 
-    private static void extractCssClassesAndIds(String selector, Set<String> classNames, Set<String> cssIds) {
+    public synchronized void clearInMemorySymbols() {
+        classMembers.clear();
+        fileClassMembers.clear();
+        cssClassItems.clear();
+        cssIdItems.clear();
+        htmlIdItems.clear();
+        jsFileExports.clear();
+    }
+
+    public static boolean isValidCssClassName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        char first = name.charAt(0);
+        // In CSS syntax, an identifier cannot start with a digit
+        if (Character.isDigit(first)) return false;
+        if (first == '-') {
+            if (name.length() == 1 || Character.isDigit(name.charAt(1))) return false;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (ch != '_' && ch != '-' && !Character.isLetterOrDigit(ch) && ch < 128) {
+                return false;
+            }
+        }
+        if (isKnownUnitOrExtension(name)) {
+            return false;
+        }
+        return true;
+    }
+
+    public static boolean isValidCssId(String name) {
+        if (name == null || name.isEmpty()) return false;
+        char first = name.charAt(0);
+        if (Character.isDigit(first)) return false;
+        if (first == '-') {
+            if (name.length() == 1 || Character.isDigit(name.charAt(1))) return false;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (ch != '_' && ch != '-' && !Character.isLetterOrDigit(ch) && ch < 128) {
+                return false;
+            }
+        }
+        int len = name.length();
+        if (len == 3 || len == 4 || len == 6 || len == 8) {
+            boolean allHex = true;
+            for (int i = 0; i < len; i++) {
+                char ch = name.charAt(i);
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
+                    allHex = false;
+                    break;
+                }
+            }
+            if (allHex) return false;
+        }
+        if (isKnownUnitOrExtension(name)) {
+            return false;
+        }
+        return true;
+    }
+
+    public static boolean isValidHtmlId(String name) {
+        if (name == null || name.isEmpty()) return false;
+        if (name.startsWith("#")) {
+            name = name.substring(1).trim();
+            if (name.isEmpty()) return false;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (Character.isWhitespace(ch)) return false;
+        }
+        int len = name.length();
+        if (len == 3 || len == 4 || len == 6 || len == 8) {
+            boolean allHex = true;
+            for (int i = 0; i < len; i++) {
+                char ch = name.charAt(i);
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
+                    allHex = false;
+                    break;
+                }
+            }
+            if (allHex) return false;
+        }
+        return true;
+    }
+
+    public static boolean isValidJsIdentifier(String name) {
+        if (name == null || name.isEmpty()) return false;
+        char first = name.charAt(0);
+        if (!Character.isJavaIdentifierStart(first) && first != '$') return false;
+        for (int i = 1; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (!Character.isJavaIdentifierPart(ch) && ch != '$') return false;
+        }
+        return !isJsReservedWord(name);
+    }
+
+    public static boolean isJsReservedWord(String word) {
+        if (word == null) return false;
+        switch (word) {
+            case "break":
+            case "case":
+            case "catch":
+            case "class":
+            case "const":
+            case "continue":
+            case "debugger":
+            case "default":
+            case "delete":
+            case "do":
+            case "else":
+            case "export":
+            case "extends":
+            case "finally":
+            case "for":
+            case "function":
+            case "if":
+            case "import":
+            case "in":
+            case "instanceof":
+            case "new":
+            case "return":
+            case "super":
+            case "switch":
+            case "this":
+            case "throw":
+            case "try":
+            case "typeof":
+            case "var":
+            case "void":
+            case "while":
+            case "with":
+            case "yield":
+            case "let":
+            case "static":
+            case "enum":
+            case "await":
+            case "null":
+            case "true":
+            case "false":
+            case "undefined":
+            case "NaN":
+            case "Infinity":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static boolean isKnownUnitOrExtension(String name) {
+        if (name == null || name.length() > 5) return false;
+        String lower = name.toLowerCase(java.util.Locale.US);
+        switch (lower) {
+            // Absolute length units
+            case "px":
+            case "cm":
+            case "mm":
+            case "q":
+            case "in":
+            case "pt":
+            case "pc":
+            // Relative length units
+            case "em":
+            case "rem":
+            case "ex":
+            case "ch":
+            case "cap":
+            case "ic":
+            case "lh":
+            case "rlh":
+            // Viewport units
+            case "vh":
+            case "vw":
+            case "vi":
+            case "vb":
+            case "vmin":
+            case "vmax":
+            case "dvh":
+            case "dvw":
+            case "dvi":
+            case "dvb":
+            case "lvh":
+            case "lvw":
+            case "lvi":
+            case "lvb":
+            case "svh":
+            case "svw":
+            case "svi":
+            case "svb":
+            // Container query units
+            case "cqw":
+            case "cqh":
+            case "cqi":
+            case "cqb":
+            case "cqmin":
+            case "cqmax":
+            // Angle units
+            case "deg":
+            case "grad":
+            case "rad":
+            case "turn":
+            // Time units
+            case "s":
+            case "ms":
+            // Frequency units
+            case "hz":
+            case "khz":
+            // Resolution units
+            case "dpi":
+            case "dpcm":
+            case "dppx":
+            // Grid units
+            case "fr":
+            // Common file extensions
+            case "png":
+            case "jpg":
+            case "jpeg":
+            case "gif":
+            case "svg":
+            case "webp":
+            case "css":
+            case "scss":
+            case "less":
+            case "html":
+            case "htm":
+            case "js":
+            case "jsx":
+            case "ts":
+            case "tsx":
+            case "mjs":
+            case "cjs":
+            case "json":
+            case "woff":
+            case "woff2":
+            case "ttf":
+            case "otf":
+            case "eot":
+            case "mp4":
+            case "webm":
+            case "ogg":
+            case "mp3":
+            case "wav":
+            case "pdf":
+            case "xml":
+            case "txt":
+            case "map":
+            case "com":
+            case "org":
+            case "net":
+            case "io":
+            case "dev":
+            case "app":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static void extractCssClassesAndIds(String selector, Set<String> classNames, Set<String> cssIds) {
+        if (selector == null || selector.isEmpty()) return;
+        String trimmed = selector.trim();
+        if (trimmed.startsWith("@")) return;
+
         int len = selector.length();
         int i = 0;
+        int bracketDepth = 0;
+
         while (i < len) {
             char c = selector.charAt(i);
+
+            // Skip string literals (e.g. [data-attr="foo.bar#baz"])
+            if (c == '"' || c == '\'') {
+                char quote = c;
+                i++;
+                while (i < len && selector.charAt(i) != quote) {
+                    if (selector.charAt(i) == '\\') i++;
+                    i++;
+                }
+                if (i < len) i++;
+                continue;
+            }
+
+            // Skip attribute selectors [ ... ]
+            if (c == '[') {
+                bracketDepth++;
+                i++;
+                continue;
+            } else if (c == ']') {
+                if (bracketDepth > 0) bracketDepth--;
+                i++;
+                continue;
+            }
+
+            if (bracketDepth > 0) {
+                i++;
+                continue;
+            }
+
             if (c == '.' || c == '#') {
                 boolean isClass = (c == '.');
                 i++;
                 int start = i;
                 while (i < len) {
                     char ch = selector.charAt(i);
-                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
+                    if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch) || ch >= 128) {
                         i++;
                     } else {
                         break;
@@ -106,10 +398,17 @@ public class ProjectSymbolIndex {
                 }
                 if (i > start) {
                     String name = selector.substring(start, i);
+                    if (i < len && selector.charAt(i) == '[' && name.endsWith("-")) {
+                        name = name.substring(0, name.length() - 1);
+                    }
                     if (isClass) {
-                        classNames.add(name);
+                        if (isValidCssClassName(name)) {
+                            classNames.add(name);
+                        }
                     } else {
-                        cssIds.add(name);
+                        if (isValidCssId(name)) {
+                            cssIds.add(name);
+                        }
                     }
                 }
             } else {
@@ -136,10 +435,16 @@ public class ProjectSymbolIndex {
         if (rootDir == null) return;
         if (!isBuilding.compareAndSet(false, true)) return;
 
-        projectRoot = rootDir.getAbsolutePath();
+        String newRootPath = rootDir.getAbsolutePath();
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
-                if (segmentedStore == null || !rootDir.getAbsolutePath().equals(projectRoot)) {
+                boolean projectChanged = (segmentedStore == null || projectRoot == null || !projectRoot.equals(newRootPath));
+                if (projectChanged) {
+                    if (segmentedStore != null) {
+                        segmentedStore.close();
+                    }
+                    clearInMemorySymbols();
+                    projectRoot = newRootPath;
                     segmentedStore = new SegmentedSymbolStore(rootDir);
                 }
 
@@ -279,8 +584,12 @@ public class ProjectSymbolIndex {
         Set<String> fileIds = new HashSet<>();
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
+                int parent = tree.nodeParent[i];
+                if (parent > 0 && tree.nodeType[parent] == CssSyntaxTree.N_AT_RULE) {
+                    continue; // Skip at-rules (@media, @keyframes, etc.)
+                }
                 String sel = tree.nodeName[i];
-                if (sel != null && !sel.isEmpty()) {
+                if (sel != null && !sel.isEmpty() && !sel.startsWith("@")) {
                     extractCssClassesAndIds(sel, fileClasses, fileIds);
                 }
             }
@@ -320,7 +629,10 @@ public class ProjectSymbolIndex {
                 if (attrName == null || attrValue == null) continue;
                 if ("id".equalsIgnoreCase(attrName)) {
                     String id = stripQuotes(attrValue).trim();
-                    if (!id.isEmpty()) {
+                    if (id.startsWith("#")) {
+                        id = id.substring(1).trim();
+                    }
+                    if (!id.isEmpty() && isValidHtmlId(id)) {
                         fileHtmlIds.add(id);
                     }
                 } else if ("class".equalsIgnoreCase(attrName)) {
@@ -330,7 +642,10 @@ public class ProjectSymbolIndex {
                     for (int j = 0; j <= vLen; j++) {
                         if (j == vLen || Character.isWhitespace(unquoted.charAt(j))) {
                             if (j > start) {
-                                fileClasses.add(unquoted.substring(start, j));
+                                String cls = unquoted.substring(start, j).trim();
+                                if (!cls.isEmpty() && isValidCssClassName(cls)) {
+                                    fileClasses.add(cls);
+                                }
                             }
                             start = j + 1;
                         }
@@ -396,7 +711,7 @@ public class ProjectSymbolIndex {
             int type = tree.nodeType[i];
             if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC) {
                 String name = tree.nodeName[i];
-                if (name != null && !name.isEmpty()) {
+                if (name != null && !name.isEmpty() && isValidJsIdentifier(name)) {
                     StringBuilder sig = new StringBuilder("(");
                     boolean first = true;
                     int child = tree.nodeChild[i];
@@ -419,7 +734,7 @@ public class ProjectSymbolIndex {
         JsExportTable exportTable = JsExportTable.build(tree, file.getAbsolutePath());
         for (int e = 0; e < exportTable.count; e++) {
             String name = exportTable.exportName[e];
-            if (name != null && !name.isEmpty() && seenExports.add(name)) {
+            if (name != null && !name.isEmpty() && isValidJsIdentifier(name) && seenExports.add(name)) {
                 String sig = signatures.getOrDefault(name, "");
                 exports.add(new CompletionItem(name + sig, name, "Export", CompletionItem.Type.VALUE, 0));
             }
@@ -433,7 +748,7 @@ public class ProjectSymbolIndex {
                 if (child != 0 && tree.nodeName[child] != null) {
                     defName = tree.nodeName[child];
                 }
-                if (defName != null && !defName.isEmpty() && !"default".equals(defName)) {
+                if (defName != null && !defName.isEmpty() && !"default".equals(defName) && isValidJsIdentifier(defName)) {
                     if (seenExports.add(defName)) {
                         String sig = signatures.getOrDefault(defName, "");
                         exports.add(new CompletionItem(defName + sig, defName, "Default Export", CompletionItem.Type.VALUE, 0));
@@ -442,7 +757,7 @@ public class ProjectSymbolIndex {
                     String fileName = file.getName();
                     int dotIdx = fileName.lastIndexOf('.');
                     if (dotIdx > 0) fileName = fileName.substring(0, dotIdx);
-                    if (seenExports.add(fileName)) {
+                    if (isValidJsIdentifier(fileName) && seenExports.add(fileName)) {
                         exports.add(new CompletionItem(fileName, fileName, "Default Export", CompletionItem.Type.VALUE, 0));
                     }
                 }
@@ -477,9 +792,19 @@ public class ProjectSymbolIndex {
                 String inner = content.substring(p + 1, close);
                 for (String part : inner.split(",")) {
                     String name = part.trim();
+                    int commentIdx = name.indexOf("//");
+                    if (commentIdx >= 0) name = name.substring(0, commentIdx).trim();
+                    if (name.isEmpty()) continue;
+
                     int colon = name.indexOf(':');
-                    if (colon > 0) name = name.substring(0, colon).trim();
-                    if (!name.isEmpty() && seen.add(name)) {
+                    int paren = name.indexOf('(');
+                    if (colon > 0 && (paren < 0 || colon < paren)) {
+                        name = name.substring(0, colon).trim();
+                    } else if (paren > 0) {
+                        name = name.substring(0, paren).trim();
+                    }
+                    name = stripQuotes(name).trim();
+                    if (isValidJsIdentifier(name) && seen.add(name)) {
                         String sig = signatures.getOrDefault(name, "");
                         exports.add(new CompletionItem(name + sig, name, "module.exports", CompletionItem.Type.VALUE, 0));
                     }
@@ -496,7 +821,7 @@ public class ProjectSymbolIndex {
                 int dot = fileName.lastIndexOf('.');
                 name = (dot > 0) ? fileName.substring(0, dot) : fileName;
             }
-            if (!name.isEmpty() && seen.add(name)) {
+            if (!name.isEmpty() && isValidJsIdentifier(name) && seen.add(name)) {
                 exports.add(new CompletionItem(name, name, "module.exports", CompletionItem.Type.VALUE, 0));
             }
         }
@@ -519,7 +844,8 @@ public class ProjectSymbolIndex {
                 while (child != 0) {
                     int cType = tree.nodeType[child];
                     String name = tree.nodeName[child];
-                    if (name != null && !name.isEmpty() && !seen.contains(name) && !isIgnoredProp(name)) {
+                    if (name != null && !name.isEmpty() && !seen.contains(name) && !isIgnoredProp(name)
+                            && (isValidJsIdentifier(name) || "constructor".equals(name))) {
                         if (cType == JsSyntaxTree.N_METHOD || cType == JsSyntaxTree.N_GETTER || cType == JsSyntaxTree.N_SETTER) {
                             seen.add(name);
                             members.add(new CompletionItem(name, name + "(|)", className + " method", CompletionItem.Type.FUNCTION, 0));
@@ -537,7 +863,7 @@ public class ProjectSymbolIndex {
                     for (Map.Entry<String, String> entry : propMap.entrySet()) {
                         String pName = entry.getKey();
                         String pType = entry.getValue();
-                        if (pName != null && !pName.isEmpty() && seen.add(pName)) {
+                        if (pName != null && !pName.isEmpty() && isValidJsIdentifier(pName) && seen.add(pName)) {
                             boolean isMethod = pType.startsWith("(") || pType.contains("=>");
                             String insert = isMethod ? pName + "(|)" : pName;
                             CompletionItem.Type type = isMethod ? CompletionItem.Type.FUNCTION : CompletionItem.Type.VALUE;
@@ -550,7 +876,8 @@ public class ProjectSymbolIndex {
                 String[] shapes = tree.shapeTable.get(i);
                 if (shapes != null) {
                     for (String key : shapes) {
-                        if (key != null && !key.isEmpty() && !seen.contains(key) && !isIgnoredProp(key)) {
+                        if (key != null && !key.isEmpty() && !seen.contains(key) && !isIgnoredProp(key)
+                                && isValidJsIdentifier(key)) {
                             seen.add(key);
                             members.add(new CompletionItem(key, key, className + " property", CompletionItem.Type.VALUE, 0));
                         }
@@ -708,6 +1035,51 @@ public class ProjectSymbolIndex {
             htmlIds.add(e.getName());
         }
 
+        List<IndexSymbolEntry> cachedExports = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_JS_EXPORT, 0));
+        Map<String, List<CompletionItem>> exportsMap = new HashMap<>();
+        for (IndexSymbolEntry e : cachedExports) {
+            String key = e.getKey();
+            if (key != null && key.startsWith(SymbolKey.PREFIX_JS_EXPORT)) {
+                int hashIdx = key.indexOf('#');
+                if (hashIdx > SymbolKey.PREFIX_JS_EXPORT.length()) {
+                    String relPath = key.substring(SymbolKey.PREFIX_JS_EXPORT.length(), hashIdx);
+                    File file = new File(projectRoot != null ? projectRoot : "", relPath);
+                    String absPath = file.getAbsolutePath();
+                    String name = e.getName();
+                    CompletionItem item = new CompletionItem(name, name, e.getDetail(), CompletionItem.Type.VALUE, 0);
+                    List<CompletionItem> list = exportsMap.computeIfAbsent(absPath, k -> new ArrayList<>());
+                    list.add(item);
+                    try {
+                        String canonPath = file.getCanonicalPath();
+                        if (!canonPath.equals(absPath)) {
+                            List<CompletionItem> cList = exportsMap.computeIfAbsent(canonPath, k -> new ArrayList<>());
+                            cList.add(item);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+
+        List<IndexSymbolEntry> cachedMembers = segmentedStore.query(SegmentSearchQuery.prefix(SymbolKey.PREFIX_JS_CLASS, 0));
+        Map<String, List<CompletionItem>> classMembersMap = new HashMap<>();
+        for (IndexSymbolEntry e : cachedMembers) {
+            String key = e.getKey();
+            if (key != null && key.startsWith(SymbolKey.PREFIX_JS_CLASS)) {
+                int dotIdx = key.indexOf('.');
+                if (dotIdx > SymbolKey.PREFIX_JS_CLASS.length()) {
+                    String className = key.substring(SymbolKey.PREFIX_JS_CLASS.length(), dotIdx);
+                    String memberName = e.getName();
+                    boolean isMethod = e.getDetail() != null && e.getDetail().contains("method");
+                    String insert = isMethod ? memberName + "(|)" : memberName;
+                    CompletionItem.Type type = isMethod ? CompletionItem.Type.FUNCTION : CompletionItem.Type.VALUE;
+                    CompletionItem item = new CompletionItem(memberName, insert, e.getDetail(), type, 0);
+                    List<CompletionItem> list = classMembersMap.computeIfAbsent(className, k -> new ArrayList<>());
+                    list.add(item);
+                }
+            }
+        }
+
         synchronized (this) {
             cssClassItems.clear();
             for (String c : classNames) {
@@ -721,6 +1093,10 @@ public class ProjectSymbolIndex {
             for (String id : htmlIds) {
                 htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
             }
+            jsFileExports.clear();
+            jsFileExports.putAll(exportsMap);
+            classMembers.clear();
+            classMembers.putAll(classMembersMap);
         }
     }
 

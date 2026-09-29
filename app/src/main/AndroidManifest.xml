@@ -54,7 +54,7 @@
         <activity
             android:name=".ui.editor.EditorActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
             android:name=".ui.preview.PreviewActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"

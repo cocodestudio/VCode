@@ -50,7 +50,7 @@ public final class SymbolExtractor {
      * @param doc the document to analyse
      * @return list of extracted symbols, never null
      */
-    static List<SymbolEntry> extractSymbols(LspDocument doc) {
+    public static List<SymbolEntry> extractSymbols(LspDocument doc) {
         if (doc == null || doc.text == null || doc.text.isEmpty()) {
             return new ArrayList<>();
         }
@@ -91,6 +91,8 @@ public final class SymbolExtractor {
             int type = tree.nodeType[i];
             String name = tree.nodeName[i];
             if (name == null || name.isEmpty() || "{destructure}".equals(name)) continue;
+            if (!com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.isValidJsIdentifier(name)
+                    && !"constructor".equals(name)) continue;
 
             int kind = -1;
             if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC) {
@@ -195,13 +197,47 @@ public final class SymbolExtractor {
 
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
+                int parent = tree.nodeParent[i];
+                if (parent > 0 && tree.nodeType[parent] == CssSyntaxTree.N_AT_RULE) {
+                    continue; // Skip at-rules (@media, @keyframes, etc.)
+                }
                 String sel = tree.nodeName[i];
                 int selStart = tree.nodeStart[i];
-                if (sel == null || sel.isEmpty()) continue;
+                if (sel == null || sel.isEmpty() || sel.trim().startsWith("@")) continue;
                 int len = sel.length();
                 int j = 0;
+                int bracketDepth = 0;
                 while (j < len) {
                     char c = sel.charAt(j);
+
+                    // Skip string literals (e.g. [data-attr="foo.bar#baz"])
+                    if (c == '"' || c == '\'') {
+                        char quote = c;
+                        j++;
+                        while (j < len && sel.charAt(j) != quote) {
+                            if (sel.charAt(j) == '\\') j++;
+                            j++;
+                        }
+                        if (j < len) j++;
+                        continue;
+                    }
+
+                    // Skip attribute selectors [ ... ]
+                    if (c == '[') {
+                        bracketDepth++;
+                        j++;
+                        continue;
+                    } else if (c == ']') {
+                        if (bracketDepth > 0) bracketDepth--;
+                        j++;
+                        continue;
+                    }
+
+                    if (bracketDepth > 0) {
+                        j++;
+                        continue;
+                    }
+
                     if (c == '.' || c == '#') {
                         boolean isClass = (c == '.');
                         int symStartInSel = j;
@@ -209,18 +245,27 @@ public final class SymbolExtractor {
                         int nameStartInSel = j;
                         while (j < len) {
                             char ch = sel.charAt(j);
-                            if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch)) {
+                            if (ch == '_' || ch == '-' || Character.isLetterOrDigit(ch) || ch >= 128) {
                                 j++;
                             } else {
                                 break;
                             }
                         }
                         if (j > nameStartInSel) {
-                            String name = sel.substring(symStartInSel, j);
-                            int absStart = selStart + symStartInSel;
-                            LspPosition pos = offsetToPosition(text, absStart);
-                            LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
-                            results.add(new SymbolEntry(name, doc.uri, range, isClass ? SymbolEntry.KIND_CSS_CLASS : SymbolEntry.KIND_CSS_ID));
+                            String nameWithoutPrefix = sel.substring(nameStartInSel, j);
+                            if (j < len && sel.charAt(j) == '[' && nameWithoutPrefix.endsWith("-")) {
+                                nameWithoutPrefix = nameWithoutPrefix.substring(0, nameWithoutPrefix.length() - 1);
+                            }
+                            boolean valid = isClass
+                                    ? com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.isValidCssClassName(nameWithoutPrefix)
+                                    : com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.isValidCssId(nameWithoutPrefix);
+                            if (valid) {
+                                String name = sel.substring(symStartInSel, symStartInSel + 1 + nameWithoutPrefix.length());
+                                int absStart = selStart + symStartInSel;
+                                LspPosition pos = offsetToPosition(text, absStart);
+                                LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + name.length()));
+                                results.add(new SymbolEntry(name, doc.uri, range, isClass ? SymbolEntry.KIND_CSS_CLASS : SymbolEntry.KIND_CSS_ID));
+                            }
                         }
                     } else {
                         j++;
@@ -258,7 +303,10 @@ public final class SymbolExtractor {
 
                 if ("id".equalsIgnoreCase(attrName)) {
                     String id = stripQuotes(rawVal).trim();
-                    if (!id.isEmpty()) {
+                    if (id.startsWith("#")) {
+                        id = id.substring(1).trim();
+                    }
+                    if (!id.isEmpty() && com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.isValidHtmlId(id)) {
                         int valOffset = text.indexOf(id, equalsIdx);
                         if (valOffset != -1 && valOffset < attrEnd) {
                             LspPosition pos = offsetToPosition(text, valOffset);
@@ -276,11 +324,13 @@ public final class SymbolExtractor {
                     for (int j = 0; j <= vLen; j++) {
                         if (j == vLen || Character.isWhitespace(unquoted.charAt(j))) {
                             if (j > start) {
-                                String cls = unquoted.substring(start, j);
-                                int clsOffset = quoteOffset + start;
-                                LspPosition pos = offsetToPosition(text, clsOffset);
-                                LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + cls.length()));
-                                results.add(new SymbolEntry(cls, doc.uri, range, SymbolEntry.KIND_CSS_CLASS));
+                                String cls = unquoted.substring(start, j).trim();
+                                if (!cls.isEmpty() && com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.isValidCssClassName(cls)) {
+                                    int clsOffset = quoteOffset + start;
+                                    LspPosition pos = offsetToPosition(text, clsOffset);
+                                    LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + cls.length()));
+                                    results.add(new SymbolEntry(cls, doc.uri, range, SymbolEntry.KIND_CSS_CLASS));
+                                }
                             }
                             start = j + 1;
                         }

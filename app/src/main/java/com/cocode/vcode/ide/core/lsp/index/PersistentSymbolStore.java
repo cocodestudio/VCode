@@ -34,7 +34,7 @@ public final class PersistentSymbolStore {
     /**
      * Binary format version.
      */
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
 
     private PersistentSymbolStore() {
     }

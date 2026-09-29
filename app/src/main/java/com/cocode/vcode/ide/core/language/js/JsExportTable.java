@@ -85,7 +85,8 @@ public final class JsExportTable {
             while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                 int cType = tree.nodeType[child];
                 String cName = tree.nodeName[child];
-                if (isNamedExportChild(cType) && cName != null && !cName.isEmpty()) {
+                if (isNamedExportChild(cType) && cName != null && !cName.isEmpty()
+                        && com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.isValidJsIdentifier(cName)) {
                     // De-duplicate within a file: a parser bug could
                     // emit the same export name twice. Keep the first
                     // occurrence and discard the rest.
