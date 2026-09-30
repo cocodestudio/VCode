@@ -300,6 +300,10 @@ public final class JsLspServer implements LspServer {
             String word = doc.text.substring(s, Math.min(e, doc.text.length())).trim();
 
             if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_KEYWORD) {
+                String kwDoc = com.cocode.vcode.ide.core.language.js.JsDocumentationProvider.resolveIdentifierDoc(word, doc.languageId != null ? doc.languageId : "javascript");
+                if (kwDoc != null) {
+                    return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), kwDoc);
+                }
                 for (com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item : com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getJsKeywords()) {
                     if (word.equals(item.label)) {
                         String detail = item.detail != null ? item.detail : "JavaScript Keyword";
@@ -333,7 +337,7 @@ public final class JsLspServer implements LspServer {
                             }
                             DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
                             String md = (docInfo != null && !docInfo.isEmpty())
-                                    ? docInfo.toMarkdown(sig, "javascript")
+                                    ? docInfo.toMarkdown(sig, doc.languageId != null ? doc.languageId : "javascript")
                                     : "```javascript\n" + sig + "\n```";
                             return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
                         } else if (nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_CLASS_DECL) {
@@ -342,7 +346,7 @@ public final class JsLspServer implements LspServer {
                             if (superName != null && !superName.isEmpty()) sig += " extends " + superName;
                             DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
                             String md = (docInfo != null && !docInfo.isEmpty())
-                                    ? docInfo.toMarkdown(sig, "javascript")
+                                    ? docInfo.toMarkdown(sig, doc.languageId != null ? doc.languageId : "javascript")
                                     : "```javascript\n" + sig + "\n```";
                             return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
                         } else if (nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_VAR_DECL) {
@@ -351,7 +355,7 @@ public final class JsLspServer implements LspServer {
                             if (typeAnn != null && !typeAnn.isEmpty() && !typeAnn.startsWith("@")) sig += ": " + typeAnn;
                             DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
                             String md = (docInfo != null && !docInfo.isEmpty())
-                                    ? docInfo.toMarkdown(sig, "javascript")
+                                    ? docInfo.toMarkdown(sig, doc.languageId != null ? doc.languageId : "javascript")
                                     : "```javascript\n" + sig + "\n```";
                             return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
                         }
@@ -359,8 +363,8 @@ public final class JsLspServer implements LspServer {
                 }
             }
 
-            // Built-in standard library function / method
-            com.cocode.vcode.ide.core.language.js.JsStandardLibrary.SignatureInfo builtin = null;
+            // Extract receiver if part of dot property access
+            String receiver = null;
             if (s > 0) {
                 int dotPos = s - 1;
                 while (dotPos >= 0 && Character.isWhitespace(doc.text.charAt(dotPos))) {
@@ -376,10 +380,26 @@ public final class JsLspServer implements LspServer {
                         recStart--;
                     }
                     if (recStart < recEnd) {
-                        String receiver = doc.text.substring(recStart, recEnd);
-                        builtin = com.cocode.vcode.ide.core.language.js.JsStandardLibrary.getBuiltinSignature(receiver + "." + word, null);
+                        receiver = doc.text.substring(recStart, recEnd);
                     }
                 }
+            }
+
+            // Check comprehensive JsDocumentationProvider first
+            String richDoc = null;
+            if (receiver != null) {
+                richDoc = com.cocode.vcode.ide.core.language.js.JsDocumentationProvider.resolveMemberDoc(receiver, word, doc.languageId != null ? doc.languageId : "javascript");
+            } else {
+                richDoc = com.cocode.vcode.ide.core.language.js.JsDocumentationProvider.resolveIdentifierDoc(word, doc.languageId != null ? doc.languageId : "javascript");
+            }
+            if (richDoc != null) {
+                return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), richDoc);
+            }
+
+            // Built-in standard library function / method fallback
+            com.cocode.vcode.ide.core.language.js.JsStandardLibrary.SignatureInfo builtin = null;
+            if (receiver != null) {
+                builtin = com.cocode.vcode.ide.core.language.js.JsStandardLibrary.getBuiltinSignature(receiver + "." + word, null);
             }
             if (builtin == null) {
                 builtin = com.cocode.vcode.ide.core.language.js.JsStandardLibrary.getBuiltinSignature(word, null);

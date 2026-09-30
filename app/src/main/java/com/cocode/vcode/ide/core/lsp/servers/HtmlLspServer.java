@@ -400,28 +400,59 @@ public final class HtmlLspServer implements LspServer {
                 if (tree.nodeType[i] == HtmlSyntaxTree.N_ELEMENT) {
                     String tagName = tree.nodeName[i];
                     if (tagName != null) {
-                        for (com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item : com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTags()) {
-                            if (tagName.equalsIgnoreCase(item.label)) {
-                                String detail = item.detail != null ? item.detail : "HTML Element";
-                                StringBuilder md = new StringBuilder("### `<").append(item.label).append(">`\n\n").append(detail);
-                                if (item.attributes != null && item.attributes.length > 0) {
-                                    md.append("\n\n**Common Attributes:** `").append(android.text.TextUtils.join("`, `", item.attributes)).append("`");
-                                }
+                        int tagOpenStart = tree.nodeStart[i];
+                        int tagOpenEnd = tagOpenStart + tagName.length() + 1;
+                        boolean onOpeningTag = offset >= tagOpenStart && offset <= tagOpenEnd;
+
+                        boolean onClosingTag = false;
+                        int closeTagStart = -1;
+                        if (tree.nodeEnd[i] > tagOpenEnd + tagName.length() + 2) {
+                            int potentialClose = tree.nodeEnd[i] - tagName.length() - 3;
+                            if (potentialClose >= 0 && potentialClose + 1 < doc.text.length()
+                                    && doc.text.charAt(potentialClose) == '<'
+                                    && doc.text.charAt(potentialClose + 1) == '/') {
+                                onClosingTag = offset >= potentialClose && offset <= tree.nodeEnd[i];
+                                closeTagStart = potentialClose;
+                            }
+                        }
+
+                        if (onOpeningTag || onClosingTag) {
+                            String md = com.cocode.vcode.ide.core.language.html.HtmlDocumentationProvider.getElementMarkdown(tagName);
+                            if (md != null) {
                                 com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(
-                                        doc.toPosition(tree.nodeStart[i]),
-                                        doc.toPosition(tree.nodeStart[i] + tagName.length() + 1));
-                                return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md.toString());
+                                        doc.toPosition(onOpeningTag ? tagOpenStart : closeTagStart),
+                                        doc.toPosition(onOpeningTag ? tagOpenEnd : tree.nodeEnd[i]));
+                                return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md);
                             }
                         }
                     }
                 } else if (tree.nodeType[i] == HtmlSyntaxTree.N_ATTRIBUTE) {
                     String attrName = tree.nodeName[i];
                     if (attrName != null) {
-                        String detail = "HTML Attribute";
-                        if (com.cocode.vcode.ide.core.diagnostic.util.KnownElements.DEPRECATED_ATTRIBUTES.containsKey(attrName.toLowerCase())) {
-                            detail = "Deprecated attribute: " + com.cocode.vcode.ide.core.diagnostic.util.KnownElements.DEPRECATED_ATTRIBUTES.get(attrName.toLowerCase());
+                        String parentTag = null;
+                        int parent = tree.nodeParent[i];
+                        if (parent > 0 && tree.nodeType[parent] == HtmlSyntaxTree.N_ELEMENT) {
+                            parentTag = tree.nodeName[parent];
                         }
-                        String md = "### `" + attrName + "`\n\n" + detail;
+                        int valStart = tree.nodeExtra[i];
+                        String attrVal = tree.nodeValue[i];
+
+                        // If cursor is on attribute value
+                        if (attrVal != null && valStart > 0 && offset >= valStart) {
+                            String valMd = com.cocode.vcode.ide.core.language.html.HtmlDocumentationProvider.getAttributeValueMarkdown(parentTag, attrName, attrVal);
+                            if (valMd != null) {
+                                com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(
+                                        doc.toPosition(valStart),
+                                        doc.toPosition(tree.nodeEnd[i]));
+                                return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, valMd);
+                            }
+                        }
+
+                        // Cursor is on attribute name
+                        String md = com.cocode.vcode.ide.core.language.html.HtmlDocumentationProvider.getAttributeMarkdown(parentTag, attrName);
+                        if (com.cocode.vcode.ide.core.diagnostic.util.KnownElements.DEPRECATED_ATTRIBUTES.containsKey(attrName.toLowerCase())) {
+                            md += "\n\n⚠️ **Deprecated attribute:** " + com.cocode.vcode.ide.core.diagnostic.util.KnownElements.DEPRECATED_ATTRIBUTES.get(attrName.toLowerCase());
+                        }
                         com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(
                                 doc.toPosition(tree.nodeStart[i]),
                                 doc.toPosition(tree.nodeStart[i] + attrName.length()));

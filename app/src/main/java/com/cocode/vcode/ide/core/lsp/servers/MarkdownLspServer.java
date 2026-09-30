@@ -201,4 +201,18 @@ public final class MarkdownLspServer implements LspServer {
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
         return java.util.Collections.emptyList();
     }
+
+    @Override
+    public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return null;
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
+
+        String md = com.cocode.vcode.ide.core.language.md.MarkdownDocumentationProvider.getMarkdownDoc(doc.text, offset);
+        if (md != null) {
+            LspRange range = new LspRange(pos, pos);
+            return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md);
+        }
+        return null;
+    }
 }

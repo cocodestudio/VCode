@@ -195,4 +195,33 @@ public final class JsonLspServer implements LspServer {
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
         return java.util.Collections.emptyList();
     }
+
+    @Override
+    public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {
+        if (doc == null || doc.text == null || pos == null) return null;
+        int offset = doc.toOffset(pos);
+        if (offset < 0 || offset > doc.text.length()) return null;
+
+        // Walk backward to find opening quote
+        int start = offset;
+        while (start > 0 && doc.text.charAt(start - 1) != '"' && doc.text.charAt(start - 1) != '\n') {
+            start--;
+        }
+        if (start <= 0 || doc.text.charAt(start - 1) != '"') return null;
+
+        // Walk forward to find closing quote
+        int end = offset;
+        while (end < doc.text.length() && doc.text.charAt(end) != '"' && doc.text.charAt(end) != '\n') {
+            end++;
+        }
+        if (end >= doc.text.length() || doc.text.charAt(end) != '"') return null;
+
+        String key = doc.text.substring(start, end);
+        String md = com.cocode.vcode.ide.core.language.json.JsonDocumentationProvider.getPropertyDoc(doc.uri, key);
+        if (md != null) {
+            LspRange range = new LspRange(doc.toPosition(start - 1), doc.toPosition(end + 1));
+            return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md);
+        }
+        return null;
+    }
 }

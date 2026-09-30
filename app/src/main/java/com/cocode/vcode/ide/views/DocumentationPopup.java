@@ -116,6 +116,7 @@ public class DocumentationPopup {
         tvContent.setTypeface(FontManager.getInstance().getUiFont(context));
         tvContent.setTextSize(12f);
         tvContent.setLineSpacing(UiUtils.dpToPx(context, 2), 1.1f);
+        tvContent.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
         contentContainer.addView(tvContent, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -535,6 +536,7 @@ public class DocumentationPopup {
                 .replaceAll("### `([^`]+)`", "<b><font color=\"" + accentHex + "\">$1</font></b><br/>")
                 .replaceAll("### ([^\n]+)", "<b><font color=\"" + accentHex + "\">$1</font></b><br/>")
                 .replaceAll("```[a-z]*\n([\\s\\S]*?)\n```", "<tt><font color=\"" + accentHex + "\">$1</font></tt><br/>")
+                .replaceAll("\\[([^\\]]+)\\]\\(([^)]+)\\)", "<a href=\"$2\"><font color=\"" + accentHex + "\">$1</font></a>")
                 .replaceAll("\\*\\*([^*]+)\\*\\*", "<b>$1</b>")
                 .replaceAll("`([^`]+)`", "<tt><font color=\"" + secondaryHex + "\">$1</font></tt>")
                 .replace("\n\n", "<br/><br/>")

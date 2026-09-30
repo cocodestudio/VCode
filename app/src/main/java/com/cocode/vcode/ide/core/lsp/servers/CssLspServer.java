@@ -307,26 +307,92 @@ public final class CssLspServer implements LspServer {
         int offset = doc.toOffset(pos);
         if (offset < 0 || offset > doc.text.length()) return null;
 
-        com.cocode.vcode.ide.core.language.css.CssTokenStream stream = com.cocode.vcode.ide.core.language.css.CssLexer.tokenize(doc.text);
-        if (offset < stream.length && stream.types[offset] == com.cocode.vcode.ide.core.language.css.CssTokenStream.TK_PROPERTY) {
-            int s = stream.tokenStart[offset];
-            int e = s;
-            while (e < stream.length && stream.tokenStart[e] == s && stream.types[e] == com.cocode.vcode.ide.core.language.css.CssTokenStream.TK_PROPERTY) {
-                e++;
+        String text = doc.text;
+        int len = text.length();
+        if (offset >= len && offset > 0) offset = len - 1;
+        if (len == 0) return null;
+
+        // 1. Identify symbol boundaries around cursor
+        int s = offset;
+        while (s > 0 && isCssNameChar(text.charAt(s - 1))) {
+            s--;
+        }
+        int e = offset;
+        while (e < len && isCssNameChar(text.charAt(e))) {
+            e++;
+        }
+
+        // Check prefixes immediately preceding s
+        if (s >= 2 && text.charAt(s - 1) == ':' && text.charAt(s - 2) == ':') {
+            s -= 2;
+        } else if (s >= 1 && text.charAt(s - 1) == ':') {
+            s -= 1;
+        } else if (s >= 1 && text.charAt(s - 1) == '@') {
+            s -= 1;
+        } else if (s >= 1 && text.charAt(s - 1) == '.') {
+            s -= 1;
+        } else if (s >= 1 && text.charAt(s - 1) == '#') {
+            s -= 1;
+        }
+
+        if (s >= e) return null;
+        String word = text.substring(s, e).trim();
+        if (word.isEmpty()) return null;
+
+        String md = null;
+
+        // 2. If starts with @, it's an at-rule (e.g. @media, @keyframes)
+        if (word.startsWith("@")) {
+            md = com.cocode.vcode.ide.core.language.css.CssDocumentationProvider.getAtRuleMarkdown(word);
+        } else if (word.startsWith("::")) {
+            // 3. Pseudo-element (e.g. ::before, ::after)
+            md = com.cocode.vcode.ide.core.language.css.CssDocumentationProvider.getPseudoElementMarkdown(word);
+        } else if (word.startsWith(":")) {
+            // 4. Pseudo-class (e.g. :hover, :focus)
+            md = com.cocode.vcode.ide.core.language.css.CssDocumentationProvider.getPseudoClassMarkdown(word);
+        } else {
+            // Check if function call (e.g. calc(, var()
+            boolean isFunction = false;
+            int next = e;
+            while (next < len && Character.isWhitespace(text.charAt(next))) next++;
+            if (next < len && text.charAt(next) == '(') {
+                isFunction = true;
             }
-            String propName = doc.text.substring(s, Math.min(e, doc.text.length())).trim();
-            com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item =
-                    com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssProperty(propName);
-            if (item != null) {
-                String detail = item.detail != null ? item.detail : "CSS Property";
-                StringBuilder md = new StringBuilder("### `").append(item.label).append("`\n\n").append(detail);
-                if (item.values != null && item.values.length > 0) {
-                    md.append("\n\n**Common Values:** `").append(String.join("`, `", item.values)).append("`");
+
+            if (isFunction) {
+                md = com.cocode.vcode.ide.core.language.css.CssDocumentationProvider.getFunctionMarkdown(word);
+            }
+            if (md == null) {
+                md = com.cocode.vcode.ide.core.language.css.CssDocumentationProvider.getDocForToken(word);
+            }
+            if (md == null) {
+                // Check HTML element doc for selectors like div, a, p
+                md = com.cocode.vcode.ide.core.language.html.HtmlDocumentationProvider.getElementMarkdown(word);
+            }
+            if (md == null) {
+                // Fallback to static completion item
+                com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionItem item =
+                        com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssProperty(word);
+                if (item != null) {
+                    String detail = item.detail != null ? item.detail : "CSS Property";
+                    StringBuilder sb = new StringBuilder("### `").append(item.label).append("`\n\n").append(detail);
+                    if (item.values != null && item.values.length > 0) {
+                        sb.append("\n\n**Common Values:** `").append(String.join("`, `", item.values)).append("`");
+                    }
+                    md = sb.toString();
                 }
-                com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(doc.toPosition(s), doc.toPosition(e));
-                return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md.toString());
             }
         }
+
+        if (md != null) {
+            com.cocode.vcode.ide.core.lsp.LspRange range = new com.cocode.vcode.ide.core.lsp.LspRange(doc.toPosition(s), doc.toPosition(e));
+            return new com.cocode.vcode.ide.core.lsp.HoverInfo(range, md);
+        }
+
         return null;
+    }
+
+    private static boolean isCssNameChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '-' || c == '_';
     }
 }
