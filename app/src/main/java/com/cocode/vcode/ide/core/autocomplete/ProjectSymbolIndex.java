@@ -32,10 +32,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Global project indexer that extracts CSS classes, IDs, HTML IDs, and JS/TS exports
@@ -53,6 +57,8 @@ public class ProjectSymbolIndex {
     // Maps absolute/canonical file path → CSS classes and IDs defined in that file (CSS files or HTML <style> tags)
     private final Map<String, Set<String>> fileCssClasses = new HashMap<>();
     private final Map<String, Set<String>> fileCssIds = new HashMap<>();
+    // Maps absolute/canonical file path → top-level JS symbols defined in that file (JS files or HTML <script> tags)
+    private final Map<String, Map<String, CompletionItem>> fileJsSymbols = new HashMap<>();
     // Maps absolute file path to its exported CompletionItems
     private final Map<String, List<CompletionItem>> jsFileExports = new HashMap<>();
     // Guards against multiple concurrent buildIndex() calls for the same root.
@@ -96,6 +102,7 @@ public class ProjectSymbolIndex {
         fileClassMembers.clear();
         fileCssClasses.clear();
         fileCssIds.clear();
+        fileJsSymbols.clear();
         cssClassItems.clear();
         cssIdItems.clear();
         htmlIdItems.clear();
@@ -704,6 +711,19 @@ public class ProjectSymbolIndex {
         fileClasses.addAll(styleClasses);
         fileHtmlIds.addAll(styleIds);
 
+        // Also index JS symbols from embedded <script> tags in this HTML file
+        Map<String, CompletionItem> scriptSymbols = new LinkedHashMap<>();
+        if (result != null && result.embeddedResults != null) {
+            for (ParseResult.EmbeddedResult emb : result.embeddedResults) {
+                if (emb.result != null && emb.result.tree != null) {
+                    extractSymbolsFromJsTree(emb.result.tree, scriptSymbols, "<script>");
+                }
+            }
+        }
+        if (scriptSymbols.isEmpty() && content != null && content.contains("<script")) {
+            extractEmbeddedScriptSymbolsFromText(content, scriptSymbols, "<script>");
+        }
+
         synchronized (this) {
             String pathKey = file.getAbsolutePath();
             try {
@@ -712,6 +732,7 @@ public class ProjectSymbolIndex {
             }
             fileCssClasses.put(pathKey, new HashSet<>(styleClasses));
             fileCssIds.put(pathKey, new HashSet<>(styleIds));
+            fileJsSymbols.put(pathKey, scriptSymbols);
         }
 
         classNames.addAll(fileClasses);
@@ -759,6 +780,9 @@ public class ProjectSymbolIndex {
     private void indexJsFile(File file) {
         String content = readFile(file);
         if (content == null) return;
+
+        Map<String, CompletionItem> fileSymbols = new LinkedHashMap<>();
+        extractSymbolsFromJsText(content, fileSymbols, file.getName());
 
         TokenStream stream = JsLexer.tokenize(content);
         JsSyntaxTree tree = JsParser.parseTopLevel(content, stream);
@@ -828,6 +852,12 @@ public class ProjectSymbolIndex {
         scanModuleExports(content, exports, signatures, seenExports, file);
 
         synchronized (this) {
+            String pathKey = file.getAbsolutePath();
+            try {
+                pathKey = file.getCanonicalPath();
+            } catch (Exception ignored) {
+            }
+            fileJsSymbols.put(pathKey, fileSymbols);
             try {
                 jsFileExports.put(file.getCanonicalPath(), exports);
             } catch (Exception e) {
@@ -1067,6 +1097,7 @@ public class ProjectSymbolIndex {
             fileClassMembers.remove(canonical);
             fileCssClasses.remove(canonical);
             fileCssIds.remove(canonical);
+            fileJsSymbols.remove(canonical);
         } catch (Exception e) {
             // fall back to absolute
         }
@@ -1074,6 +1105,7 @@ public class ProjectSymbolIndex {
         fileClassMembers.remove(absolutePath);
         fileCssClasses.remove(absolutePath);
         fileCssIds.remove(absolutePath);
+        fileJsSymbols.remove(absolutePath);
         if (segmentedStore != null && projectRoot != null) {
             String rel = SegmentedSymbolStore.getRelativePath(new File(projectRoot), new File(absolutePath));
             segmentedStore.invalidateFile(rel);
@@ -1203,6 +1235,262 @@ public class ProjectSymbolIndex {
             p = endIdx + 1;
         }
         return result;
+    }
+
+    public synchronized Map<String, CompletionItem> getJsSymbolsForFile(File file) {
+        if (file == null) return Collections.emptyMap();
+        String pathKey = file.getAbsolutePath();
+        try {
+            pathKey = file.getCanonicalPath();
+        } catch (Exception ignored) {
+        }
+        Map<String, CompletionItem> map = fileJsSymbols.get(pathKey);
+        if (map == null) {
+            boolean canRead = file.exists() || hasDocument(file);
+            if (canRead) {
+                indexJsFile(file);
+                map = fileJsSymbols.get(pathKey);
+            }
+        }
+        return map != null ? new LinkedHashMap<>(map) : Collections.emptyMap();
+    }
+
+    public synchronized void collectJsSymbolsRecursively(File file, Map<String, CompletionItem> result, Set<String> visited) {
+        if (file == null) return;
+        String pathKey = file.getAbsolutePath();
+        try {
+            pathKey = file.getCanonicalPath();
+        } catch (Exception ignored) {
+        }
+        if (visited != null && !visited.add(pathKey)) return;
+
+        Map<String, CompletionItem> symbols = getJsSymbolsForFile(file);
+        for (Map.Entry<String, CompletionItem> entry : symbols.entrySet()) {
+            CompletionItem item = entry.getValue();
+            addOrMergeJsSymbol(result, entry.getKey(), item.getLabel(), item.getEffectiveInsertText(), item.getDetail(), item.getType());
+        }
+
+        String content = readFile(file);
+        if (content != null && (content.contains("import") || content.contains("require"))) {
+            List<File> importedFiles = extractJsImports(content, file);
+            for (File imp : importedFiles) {
+                collectJsSymbolsRecursively(imp, result, visited);
+            }
+        }
+    }
+
+    public static List<File> extractJsImports(String jsContent, File baseFile) {
+        if (jsContent == null || jsContent.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<File> result = new ArrayList<>();
+        File parentDir = baseFile != null ? baseFile.getParentFile() : null;
+        if (parentDir == null) return Collections.emptyList();
+
+        Pattern importPattern = Pattern.compile("(?:import\\s+(?:.*?from\\s+)?|require\\s*\\(\\s*)['\"]([^'\"]+)['\"]");
+        Matcher m = importPattern.matcher(jsContent);
+        while (m.find()) {
+            String path = m.group(1);
+            if (path == null || path.trim().isEmpty()) continue;
+            path = path.trim();
+            if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("//")
+                    || path.startsWith("data:") || path.startsWith("#")) {
+                continue;
+            }
+
+            File resolved = null;
+            if (path.startsWith("/")) {
+                File root = getProjectRoot(baseFile);
+                resolved = resolveJsCandidate(root != null ? root : parentDir, path.substring(1));
+            } else if (path.startsWith("./") || path.startsWith("../")) {
+                resolved = resolveJsCandidate(parentDir, path);
+            }
+            if (resolved != null) {
+                try {
+                    resolved = resolved.getCanonicalFile();
+                } catch (Exception e) {
+                    resolved = resolved.getAbsoluteFile();
+                }
+                if (resolved.exists() || (baseFile != null && hasDocument(resolved))) {
+                    result.add(resolved);
+                }
+            }
+        }
+        return result;
+    }
+
+    private static File resolveJsCandidate(File baseDir, String relPath) {
+        File f = new File(baseDir, relPath);
+        if (f.exists() || hasDocument(f)) return f;
+        File fJs = new File(baseDir, relPath + ".js");
+        if (fJs.exists() || hasDocument(fJs)) return fJs;
+        File fTs = new File(baseDir, relPath + ".ts");
+        if (fTs.exists() || hasDocument(fTs)) return fTs;
+        return f;
+    }
+
+    public static void extractSymbolsFromJsTree(JsSyntaxTree tree, Map<String, CompletionItem> result, String origin) {
+        if (tree == null) return;
+        Map<String, String> signatures = new HashMap<>();
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int type = tree.nodeType[i];
+            if (type == JsSyntaxTree.N_FUNC_DECL || type == JsSyntaxTree.N_ARROW_FUNC) {
+                String name = tree.nodeName[i];
+                if (name != null && !name.isEmpty() && isValidJsIdentifier(name)) {
+                    StringBuilder sig = new StringBuilder("(");
+                    boolean first = true;
+                    int child = tree.nodeChild[i];
+                    while (child != 0) {
+                        if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
+                            if (!first) sig.append(", ");
+                            sig.append(tree.nodeName[child] != null ? tree.nodeName[child] : "arg");
+                            first = false;
+                        }
+                        child = tree.nodeSibling[child];
+                    }
+                    sig.append(")");
+                    signatures.put(name, sig.toString());
+                }
+            }
+        }
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            int parent = tree.nodeParent[i];
+            if (parent != 0 && tree.nodeType[parent] != JsSyntaxTree.N_EXPORT) {
+                continue;
+            }
+            int type = tree.nodeType[i];
+            String name = tree.nodeName[i];
+            if (name == null || name.isEmpty() || !isValidJsIdentifier(name)) {
+                continue;
+            }
+
+            if (type == JsSyntaxTree.N_FUNC_DECL) {
+                addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.FUNCTION);
+            } else if (type == JsSyntaxTree.N_VAR_DECL) {
+                if (signatures.containsKey(name)) {
+                    addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.FUNCTION);
+                } else {
+                    addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.VALUE);
+                }
+            } else if (type == JsSyntaxTree.N_CLASS_DECL) {
+                addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.KEYWORD);
+            }
+        }
+
+        try {
+            JsExportTable exportTable = JsExportTable.build(tree, origin);
+            for (int e = 0; e < exportTable.count; e++) {
+                String expName = exportTable.exportName[e];
+                if (expName != null && isValidJsIdentifier(expName)) {
+                    if (signatures.containsKey(expName)) {
+                        addOrMergeJsSymbol(result, expName, expName, expName, origin, CompletionItem.Type.FUNCTION);
+                    } else {
+                        addOrMergeJsSymbol(result, expName, expName, expName, origin, CompletionItem.Type.VALUE);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void extractSymbolsFromJsText(String jsContent, Map<String, CompletionItem> result, String origin) {
+        if (jsContent == null || jsContent.trim().isEmpty()) return;
+
+        try {
+            TokenStream stream = JsLexer.tokenize(jsContent);
+            JsSyntaxTree tree = JsParser.parseTopLevel(jsContent, stream);
+            if (tree != null) {
+                extractSymbolsFromJsTree(tree, result, origin);
+            }
+        } catch (Exception ignored) {
+        }
+
+        // Resilient regex fallbacks
+        try {
+            Matcher fnMatcher = Pattern.compile("(?:async\\s+)?function\\s*\\*?\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\(").matcher(jsContent);
+            while (fnMatcher.find()) {
+                String name = fnMatcher.group(1);
+                if (isValidJsIdentifier(name)) {
+                    addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.FUNCTION);
+                }
+            }
+
+            Matcher arrowMatcher = Pattern.compile("(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\\s*=>").matcher(jsContent);
+            while (arrowMatcher.find()) {
+                String name = arrowMatcher.group(1);
+                if (isValidJsIdentifier(name)) {
+                    addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.FUNCTION);
+                }
+            }
+
+            Matcher varMatcher = Pattern.compile("(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)").matcher(jsContent);
+            while (varMatcher.find()) {
+                String name = varMatcher.group(1);
+                if (isValidJsIdentifier(name)) {
+                    addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.VALUE);
+                }
+            }
+
+            Matcher classMatcher = Pattern.compile("class\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)").matcher(jsContent);
+            while (classMatcher.find()) {
+                String name = classMatcher.group(1);
+                if (isValidJsIdentifier(name)) {
+                    addOrMergeJsSymbol(result, name, name, name, origin, CompletionItem.Type.KEYWORD);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void extractEmbeddedScriptSymbolsFromText(String html, Map<String, CompletionItem> targetSymbols, String origin) {
+        if (html == null || !html.contains("<script")) return;
+        int len = html.length();
+        int p = 0;
+        while (p < len) {
+            if (html.startsWith("<!--", p)) {
+                int end = html.indexOf("-->", p + 4);
+                p = (end == -1) ? len : end + 3;
+                continue;
+            }
+            if (p + 7 < len && html.charAt(p) == '<' &&
+                    (html.charAt(p + 1) == 's' || html.charAt(p + 1) == 'S') &&
+                    (html.charAt(p + 2) == 'c' || html.charAt(p + 2) == 'C') &&
+                    (html.charAt(p + 3) == 'r' || html.charAt(p + 3) == 'R') &&
+                    (html.charAt(p + 4) == 'i' || html.charAt(p + 4) == 'I') &&
+                    (html.charAt(p + 5) == 'p' || html.charAt(p + 5) == 'P') &&
+                    (html.charAt(p + 6) == 't' || html.charAt(p + 6) == 'T') &&
+                    (Character.isWhitespace(html.charAt(p + 7)) || html.charAt(p + 7) == '/' || html.charAt(p + 7) == '>')) {
+
+                int tagEnd = html.indexOf('>', p + 7);
+                if (tagEnd == -1) break;
+                String tag = html.substring(p, tagEnd);
+                if (!tag.toLowerCase().contains("src=")) {
+                    int contentStart = tagEnd + 1;
+                    int closeIdx = indexOfIgnoreCaseStatic(html, "</script", contentStart);
+                    if (closeIdx > contentStart) {
+                        String js = html.substring(contentStart, closeIdx);
+                        extractSymbolsFromJsText(js, targetSymbols, origin);
+                    }
+                }
+                p = tagEnd + 1;
+                continue;
+            }
+            p++;
+        }
+    }
+
+    public static void addOrMergeJsSymbol(Map<String, CompletionItem> result, String key, String label, String insertText, String origin, CompletionItem.Type type) {
+        if (key == null || key.isEmpty() || !isValidJsIdentifier(key)) return;
+        CompletionItem existing = result.get(key);
+        if (existing != null) {
+            String existingOrigin = existing.getDetail();
+            if (existingOrigin != null && origin != null && !existingOrigin.contains(origin)) {
+                existing.setDetail(existingOrigin + ", " + origin);
+            }
+        } else {
+            result.put(key, new CompletionItem(label, insertText, origin != null ? origin : "JavaScript", type, 0));
+        }
     }
 
     public static int indexOfIgnoreCaseStatic(String haystack, String needle, int from) {

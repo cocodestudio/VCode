@@ -60,6 +60,19 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     private JsSyntaxTree cachedTree;
     private com.cocode.vcode.ide.core.diagnostic.util.TokenStream cachedTokens;
     private ScopeTree cachedScopeTree;
+
+    private List<CompletionItem> scopedHtmlSymbols;
+    private List<CompletionItem> scopedHtmlIds;
+    private List<CompletionItem> scopedHtmlClasses;
+
+    public void setScopedHtmlSymbols(List<CompletionItem> symbols) {
+        this.scopedHtmlSymbols = symbols;
+    }
+
+    public void setScopedHtmlIdsAndClasses(List<CompletionItem> ids, List<CompletionItem> classes) {
+        this.scopedHtmlIds = ids;
+        this.scopedHtmlClasses = classes;
+    }
     public JsAutoCompleteEngine(Context context) {
         super(context);
         if (BuiltinTypeTable.isEmpty()) {
@@ -264,7 +277,9 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     return fuzzyFilter(eventItems, typedEvent);
                 } else if (callee.endsWith("getElementById")) {
                     String typedId = lineBefore.substring(lastQuote + 1);
-                    List<CompletionItem> ids = ProjectSymbolIndex.getInstance().getHtmlIdItems();
+                    List<CompletionItem> ids = (scopedHtmlIds != null && !scopedHtmlIds.isEmpty())
+                            ? scopedHtmlIds
+                            : ProjectSymbolIndex.getInstance().getHtmlIdItems();
                     for (CompletionItem ci : ids) ci.setReplaceLength(typedId.length());
                     return fuzzyFilter(ids, typedId);
                 } else if (callee.endsWith("querySelector") || callee.endsWith("querySelectorAll")) {
@@ -356,7 +371,32 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        return fuzzyFilter(all, word);
+        if (scopedHtmlSymbols != null) {
+            for (CompletionItem item : scopedHtmlSymbols) {
+                if (added.add(item.getLabel())) {
+                    all.add(item);
+                } else {
+                    for (CompletionItem existing : all) {
+                        if (item.getLabel().equals(existing.getLabel())) {
+                            String d = existing.getDetail();
+                            String o = item.getDetail();
+                            if (d != null && o != null && !d.contains(o)) {
+                                existing.setDetail(d + ", " + o);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        List<CompletionItem> res = fuzzyFilter(all, word);
+        for (CompletionItem ci : res) {
+            if (ci.getReplaceLength() <= 0) {
+                ci.setReplaceLength(word.length());
+            }
+        }
+        return res;
     }
 
     private CompletionItem.Type mapKindToCompletionType(int kind) {
@@ -390,13 +430,19 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     @NonNull
     private List<CompletionItem> getCompletionItems(String typedQuery) {
         List<CompletionItem> prefixed = new ArrayList<>();
+        List<CompletionItem> classes = (scopedHtmlClasses != null && !scopedHtmlClasses.isEmpty())
+                ? scopedHtmlClasses
+                : ProjectSymbolIndex.getInstance().getCssClassItems();
+        List<CompletionItem> ids = (scopedHtmlIds != null && !scopedHtmlIds.isEmpty())
+                ? scopedHtmlIds
+                : ProjectSymbolIndex.getInstance().getHtmlIdItems();
 
-        for (CompletionItem ci : ProjectSymbolIndex.getInstance().getCssClassItems()) {
+        for (CompletionItem ci : classes) {
             CompletionItem prefixedItem = new CompletionItem("." + ci.getLabel(), "." + ci.getEffectiveInsertText(), ci.getDetail(), ci.getType(), ci.getCursorOffset());
             prefixedItem.setReplaceLength(Objects.requireNonNull(typedQuery).length());
             prefixed.add(prefixedItem);
         }
-        for (CompletionItem ci : ProjectSymbolIndex.getInstance().getHtmlIdItems()) {
+        for (CompletionItem ci : ids) {
             CompletionItem prefixedItem = new CompletionItem("#" + ci.getLabel(), "#" + ci.getEffectiveInsertText(), ci.getDetail(), ci.getType(), ci.getCursorOffset());
             prefixedItem.setReplaceLength(Objects.requireNonNull(typedQuery).length());
             prefixed.add(prefixedItem);

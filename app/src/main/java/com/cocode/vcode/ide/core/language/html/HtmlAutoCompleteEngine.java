@@ -74,6 +74,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     public void setCurrentFile(File file) {
         super.setCurrentFile(file);
         this.currentFile = file;
+        this.lastHtmlSelectorsHash = 0;
+        this.lastHtmlJsHash = 0;
         jsEngine.setCurrentFile(file);
         cssEngine.setCurrentFile(file);
     }
@@ -209,6 +211,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                         String embeddedContent = fullText.substring(emb.startOffset, Math.min(emb.endOffset, fullText.length()));
                         int embeddedCursor = cursorPos - emb.startOffset;
                         if (emb.result.tree != null) {
+                            ensureHtmlSelectorsResolved(fullText);
+                            ensureHtmlJsSymbolsResolved(fullText);
                             return jsEngine.getSuggestions(embeddedContent, embeddedCursor);
                         } else if (emb.result.cssTree != null) {
                             return cssEngine.getSuggestions(embeddedContent, embeddedCursor);
@@ -234,6 +238,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             if (scriptEnd == -1 || cursorPos <= scriptEnd) {
                 String embeddedContent = fullText.substring(scriptStart, scriptEnd == -1 ? fullText.length() : scriptEnd);
                 int embeddedCursor = cursorPos - scriptStart;
+                ensureHtmlSelectorsResolved(fullText);
+                ensureHtmlJsSymbolsResolved(fullText);
                 return jsEngine.getSuggestions(embeddedContent, embeddedCursor);
             }
         }
@@ -324,6 +330,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
                 // Embedded JavaScript completions inside inline event handler attributes
                 if (attrName.startsWith("on")) {
+                    ensureHtmlSelectorsResolved(fullText);
+                    ensureHtmlJsSymbolsResolved(fullText);
                     return jsEngine.getSuggestions(typedValue, typedValue.length());
                 }
 
@@ -824,11 +832,13 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return true;
     }
 
-    // CSS Selector completions for HTML class and id attributes
-
+    // CSS and JS symbol completions for HTML
     private final List<CompletionItem> cachedHtmlClassItems = new ArrayList<>();
     private final List<CompletionItem> cachedHtmlIdItems = new ArrayList<>();
     private int lastHtmlSelectorsHash = 0;
+
+    private final List<CompletionItem> cachedHtmlJsSymbols = new ArrayList<>();
+    private int lastHtmlJsHash = 0;
 
     private void ensureHtmlSelectorsResolved(String fullText) {
         if (fullText == null) return;
@@ -885,11 +895,47 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
+        // 3. HTML element id="..." attributes declared in fullText
+        extractHtmlDocumentIds(fullText, idOrigins);
+
         for (Map.Entry<String, String> entry : classOrigins.entrySet()) {
             cachedHtmlClassItems.add(new CompletionItem(entry.getKey(), entry.getKey(), entry.getValue(), CompletionItem.Type.CSS_VALUE, 0));
         }
         for (Map.Entry<String, String> entry : idOrigins.entrySet()) {
             cachedHtmlIdItems.add(new CompletionItem(entry.getKey(), entry.getKey(), entry.getValue(), CompletionItem.Type.CSS_VALUE, 0));
+        }
+    }
+
+    public static void extractHtmlDocumentIds(String html, Map<String, String> idOrigins) {
+        if (html == null || !html.contains("id")) return;
+        int len = html.length();
+        int p = 0;
+        while (p < len) {
+            if (html.startsWith("<!--", p)) {
+                int end = html.indexOf("-->", p + 4);
+                p = (end == -1) ? len : end + 3;
+                continue;
+            }
+            if (html.charAt(p) == '<') {
+                int tagEnd = html.indexOf('>', p + 1);
+                if (tagEnd == -1) break;
+                String tag = html.substring(p, tagEnd);
+                String idVal = extractAttributeValue(tag, "id");
+                if (idVal != null && !idVal.trim().isEmpty() && ProjectSymbolIndex.isValidHtmlId(idVal.trim())) {
+                    String cleanId = idVal.trim();
+                    String prev = idOrigins.get(cleanId);
+                    if (prev != null) {
+                        if (!prev.contains("HTML")) {
+                            idOrigins.put(cleanId, prev + ", HTML");
+                        }
+                    } else {
+                        idOrigins.put(cleanId, "HTML");
+                    }
+                }
+                p = tagEnd + 1;
+                continue;
+            }
+            p++;
         }
     }
 
@@ -1082,5 +1128,162 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             if (match) return i;
         }
         return -1;
+    }
+
+    private void ensureHtmlJsSymbolsResolved(String fullText) {
+        if (fullText == null) return;
+        int docHash = fullText.hashCode();
+        if (docHash == lastHtmlJsHash) {
+            return;
+        }
+        lastHtmlJsHash = docHash;
+        cachedHtmlJsSymbols.clear();
+
+        Map<String, CompletionItem> combinedSymbols = new LinkedHashMap<>();
+        Set<String> visitedFiles = new HashSet<>();
+
+        // 1. Linked JS files (<script src="...">)
+        List<File> linkedFiles = extractLinkedJsFiles(fullText, currentFile);
+        for (File linkedFile : linkedFiles) {
+            ProjectSymbolIndex.getInstance().collectJsSymbolsRecursively(linkedFile, combinedSymbols, visitedFiles);
+        }
+
+        // 2. Embedded <script> tags in fullText
+        extractEmbeddedScriptSymbols(fullText, combinedSymbols, currentFile);
+
+        cachedHtmlJsSymbols.addAll(combinedSymbols.values());
+        jsEngine.setScopedHtmlSymbols(cachedHtmlJsSymbols);
+        jsEngine.setScopedHtmlIdsAndClasses(cachedHtmlIdItems, cachedHtmlClassItems);
+    }
+
+    public static List<File> extractLinkedJsFiles(String html, File currentHtmlFile) {
+        if (html == null || html.isEmpty()) return Collections.emptyList();
+        List<File> files = new ArrayList<>();
+        Set<String> seenPaths = new HashSet<>();
+        File parentDir = currentHtmlFile != null ? currentHtmlFile.getParentFile() : null;
+
+        int len = html.length();
+        int p = 0;
+        while (p < len) {
+            // Skip HTML comments
+            if (html.startsWith("<!--", p)) {
+                int end = html.indexOf("-->", p + 4);
+                p = (end == -1) ? len : end + 3;
+                continue;
+            }
+
+            // Check for <script
+            if (p + 7 < len && html.charAt(p) == '<' &&
+                    (html.charAt(p + 1) == 's' || html.charAt(p + 1) == 'S') &&
+                    (html.charAt(p + 2) == 'c' || html.charAt(p + 2) == 'C') &&
+                    (html.charAt(p + 3) == 'r' || html.charAt(p + 3) == 'R') &&
+                    (html.charAt(p + 4) == 'i' || html.charAt(p + 4) == 'I') &&
+                    (html.charAt(p + 5) == 'p' || html.charAt(p + 5) == 'P') &&
+                    (html.charAt(p + 6) == 't' || html.charAt(p + 6) == 'T') &&
+                    (Character.isWhitespace(html.charAt(p + 7)) || html.charAt(p + 7) == '/' || html.charAt(p + 7) == '>')) {
+
+                int tagEnd = html.indexOf('>', p + 7);
+                if (tagEnd == -1) tagEnd = len;
+                String tagContent = html.substring(p, tagEnd);
+
+                String src = extractAttributeValue(tagContent, "src");
+                if (src != null && !src.trim().isEmpty()) {
+                    String type = extractAttributeValue(tagContent, "type");
+                    boolean isJs = isJavaScriptType(type);
+                    if (isJs) {
+                        int q = src.indexOf('?');
+                        if (q != -1) src = src.substring(0, q);
+                        int h = src.indexOf('#');
+                        if (h != -1) src = src.substring(0, h);
+                        src = src.trim();
+
+                        if (!src.startsWith("http://") && !src.startsWith("https://")
+                                && !src.startsWith("//") && !src.startsWith("data:")
+                                && !src.startsWith("javascript:") && !src.startsWith("#")) {
+
+                            File resolved = null;
+                            if (src.startsWith("/")) {
+                                File root = currentHtmlFile != null ? ProjectSymbolIndex.getProjectRoot(currentHtmlFile) : null;
+                                resolved = new File(root != null ? root : parentDir, src.substring(1));
+                            } else if (parentDir != null) {
+                                resolved = new File(parentDir, src);
+                            }
+
+                            if (resolved != null) {
+                                boolean exists = resolved.exists();
+                                if (!exists) {
+                                    exists = ProjectSymbolIndex.hasDocument(resolved);
+                                }
+                                if (exists) {
+                                    try {
+                                        resolved = resolved.getCanonicalFile();
+                                    } catch (Exception e) {
+                                        resolved = resolved.getAbsoluteFile();
+                                    }
+                                    String canonical = resolved.getAbsolutePath();
+                                    if (seenPaths.add(canonical)) {
+                                        files.add(resolved);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                p = (tagEnd < len) ? tagEnd + 1 : len;
+                continue;
+            }
+            p++;
+        }
+        return files;
+    }
+
+    public static boolean isJavaScriptType(String type) {
+        if (type == null || type.trim().isEmpty()) return true;
+        String t = type.trim().toLowerCase();
+        return t.equals("text/javascript") || t.equals("application/javascript")
+                || t.equals("module") || t.equals("text/ecmascript")
+                || t.equals("application/ecmascript") || t.equals("javascript");
+    }
+
+    private void extractEmbeddedScriptSymbols(String html, Map<String, CompletionItem> targetSymbols, File currentHtmlFile) {
+        if (html == null || !html.contains("<script")) return;
+        int len = html.length();
+        int p = 0;
+        while (p < len) {
+            if (html.startsWith("<!--", p)) {
+                int end = html.indexOf("-->", p + 4);
+                p = (end == -1) ? len : end + 3;
+                continue;
+            }
+
+            if (p + 7 < len && html.charAt(p) == '<' &&
+                    (html.charAt(p + 1) == 's' || html.charAt(p + 1) == 'S') &&
+                    (html.charAt(p + 2) == 'c' || html.charAt(p + 2) == 'C') &&
+                    (html.charAt(p + 3) == 'r' || html.charAt(p + 3) == 'R') &&
+                    (html.charAt(p + 4) == 'i' || html.charAt(p + 4) == 'I') &&
+                    (html.charAt(p + 5) == 'p' || html.charAt(p + 5) == 'P') &&
+                    (html.charAt(p + 6) == 't' || html.charAt(p + 6) == 'T') &&
+                    (Character.isWhitespace(html.charAt(p + 7)) || html.charAt(p + 7) == '/' || html.charAt(p + 7) == '>')) {
+
+                int tagEnd = html.indexOf('>', p + 7);
+                if (tagEnd == -1) break;
+                String tagContent = html.substring(p, tagEnd);
+                String src = extractAttributeValue(tagContent, "src");
+                if (src == null || src.trim().isEmpty()) {
+                    String type = extractAttributeValue(tagContent, "type");
+                    if (isJavaScriptType(type)) {
+                        int contentStart = tagEnd + 1;
+                        int closeIdx = indexOfIgnoreCase(html, "</script", contentStart);
+                        if (closeIdx > contentStart) {
+                            String js = html.substring(contentStart, closeIdx);
+                            ProjectSymbolIndex.extractSymbolsFromJsText(js, targetSymbols, "<script>");
+                        }
+                    }
+                }
+                p = tagEnd + 1;
+                continue;
+            }
+            p++;
+        }
     }
 }
