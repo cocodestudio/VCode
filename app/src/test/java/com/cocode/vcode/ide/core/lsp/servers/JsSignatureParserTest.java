@@ -590,5 +590,31 @@ public class JsSignatureParserTest {
         assertFalse("Popup MUST dismiss when cursor moves outside the parameter list",
                 JsSignatureParser.shouldTriggerSignatureHelp(code, openParen, cursorInsideBody, true, true));
     }
+
+    @Test
+    public void testUserWrittenFunction_JsDocDocumentationInSignatureHelp() {
+        String code = "/**\n" +
+                " * Computes tax amount for an order.\n" +
+                " * @param amount Total order amount in cents\n" +
+                " * @param rate Percentage tax rate\n" +
+                " */\n" +
+                "function calculateTax(amount, rate) {\n" +
+                "    return amount * rate;\n" +
+                "}\n" +
+                "calculateTax(100, ";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(8, "calculateTax(100, ".length());
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull(help);
+        assertFalse(help.signatures.isEmpty());
+        LspSignatureHelp.LspSignatureInformation sig = help.signatures.get(0);
+        assertTrue(sig.label.startsWith("calculateTax("));
+        assertEquals("Computes tax amount for an order.", sig.documentation);
+        assertEquals(2, sig.parameters.size());
+        assertEquals("Total order amount in cents", sig.parameters.get(0).documentation);
+        assertEquals("Percentage tax rate", sig.parameters.get(1).documentation);
+        assertEquals(1, help.activeParameter);
+    }
 }
 

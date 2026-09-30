@@ -122,6 +122,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     private final List<OnContentChangeListener> contentChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<Runnable> cursorChangeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final AutoCompletePopup autoCompletePopup;
+    private final DocumentationPopup documentationPopup;
     private final SignatureHintPopup signatureHintPopup;
     private final HoverDocPopup hoverDocPopup;
     private LspNavigationToolbar lspNavigationToolbar;
@@ -244,24 +245,27 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     public CodeEditText(Context context) {
         super(context);
         autoCompletePopup = new AutoCompletePopup(context);
-        signatureHintPopup = new SignatureHintPopup(context);
-        hoverDocPopup = new HoverDocPopup(context);
+        documentationPopup = new DocumentationPopup(context);
+        signatureHintPopup = new SignatureHintPopup(documentationPopup);
+        hoverDocPopup = new HoverDocPopup(documentationPopup);
         init(context);
     }
 
     public CodeEditText(Context context, AttributeSet attrs) {
         super(context, attrs);
         autoCompletePopup = new AutoCompletePopup(context);
-        signatureHintPopup = new SignatureHintPopup(context);
-        hoverDocPopup = new HoverDocPopup(context);
+        documentationPopup = new DocumentationPopup(context);
+        signatureHintPopup = new SignatureHintPopup(documentationPopup);
+        hoverDocPopup = new HoverDocPopup(documentationPopup);
         init(context);
     }
 
     public CodeEditText(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         autoCompletePopup = new AutoCompletePopup(context);
-        signatureHintPopup = new SignatureHintPopup(context);
-        hoverDocPopup = new HoverDocPopup(context);
+        documentationPopup = new DocumentationPopup(context);
+        signatureHintPopup = new SignatureHintPopup(documentationPopup);
+        hoverDocPopup = new HoverDocPopup(documentationPopup);
         init(context);
     }
 
@@ -439,6 +443,9 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                 mainHandler.postDelayed(bracketMatchRunnable, 80);
                 if (autoCompletePopup != null && !isTypingText) {
                     autoCompletePopup.dismiss();
+                }
+                if (documentationPopup != null && documentationPopup.isHoverMode()) {
+                    documentationPopup.dismiss();
                 }
                 // Always notify the IME of the new cursor position so it syncs
                 // its internal state regardless of whether there was a selection.
@@ -1076,6 +1083,9 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     @Override
     protected void onScrollChanged(int horiz, int vert, int oldHoriz, int oldVert) {
         super.onScrollChanged(horiz, vert, oldHoriz, oldVert);
+        if (documentationPopup != null && documentationPopup.isHoverMode()) {
+            documentationPopup.dismiss();
+        }
         if (scrollChangeListener != null) scrollChangeListener.onScrollChanged(horiz, vert);
         scheduleHighlight();
     }
@@ -1090,6 +1100,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             mainHandler.removeCallbacks(blinkRunnable);
             cursorVisible = true;
             if (autoCompletePopup != null) autoCompletePopup.dismiss();
+            if (documentationPopup != null) documentationPopup.dismiss();
         }
     }
 
@@ -2555,6 +2566,10 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
     public boolean isHoverDocVisible() {
         return hoverDocPopup != null && hoverDocPopup.isShowing();
+    }
+
+    public DocumentationPopup getDocumentationPopup() {
+        return documentationPopup;
     }
 
     public boolean isAutoCompleteVisible() {

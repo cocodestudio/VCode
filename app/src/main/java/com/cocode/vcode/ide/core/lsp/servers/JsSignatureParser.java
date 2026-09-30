@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.lsp.servers;
 
+import com.cocode.vcode.ide.core.language.js.DocCommentParser;
 import com.cocode.vcode.ide.core.language.js.JsStandardLibrary;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -112,6 +113,7 @@ public class JsSignatureParser {
         String signature = null;
         String sourceLabel = "Local function";
         List<String> parsedParamNames = null;
+        DocCommentParser.DocCommentInfo docInfo = null;
 
         // Special case: super(...) call inside derived class constructor or method
         if ("super".equals(baseIdentifier) || "super".equals(funcName)) {
@@ -123,6 +125,7 @@ public class JsSignatureParser {
                     parsedParamNames = extractClassConstructorParams(tree, superResolved[1], scopeTree, scopeId);
                     signature = String.join(", ", parsedParamNames);
                     sourceLabel = "Super constructor (" + superName + ")";
+                    docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[superResolved[1]]);
                 } else {
                     JsStandardLibrary.SignatureInfo builtinSuper = JsStandardLibrary.getBuiltinSignature(superName, null);
                     if (builtinSuper != null && builtinSuper.parameters != null) {
@@ -143,10 +146,12 @@ public class JsSignatureParser {
                 parsedParamNames = extractParamNames(tree, declNodeId);
                 signature = String.join(", ", parsedParamNames);
                 sourceLabel = (declType == JsSyntaxTree.N_METHOD) ? "Method" : "Local function";
+                docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[declNodeId]);
             } else if (declType == JsSyntaxTree.N_CLASS_DECL) {
                 parsedParamNames = extractClassConstructorParams(tree, declNodeId, scopeTree, scopeId);
                 signature = String.join(", ", parsedParamNames);
                 sourceLabel = "Class constructor";
+                docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[declNodeId]);
             } else if (declType == JsSyntaxTree.N_VAR_DECL) {
                 String typeAnn = tree.nodeTypeAnn[declNodeId];
                 if (typeAnn != null && (typeAnn.startsWith("@IMPORT:") || typeAnn.startsWith("@REQUIRE:") || typeAnn.startsWith("@REQUIRE_PROP:"))) {
@@ -186,10 +191,12 @@ public class JsSignatureParser {
                                         parsedParamNames = extractClassConstructorParams(targetPr.tree, expNode, targetPr.scopeTree, 0);
                                         signature = String.join(", ", parsedParamNames);
                                         sourceLabel = "Cross-file class";
+                                        docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[expNode]);
                                     } else if (eType == JsSyntaxTree.N_FUNC_DECL || eType == JsSyntaxTree.N_ARROW_FUNC) {
                                         parsedParamNames = extractParamNames(targetPr.tree, expNode);
                                         signature = String.join(", ", parsedParamNames);
                                         sourceLabel = "Cross-file function";
+                                        docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[expNode]);
                                     } else if (eType == JsSyntaxTree.N_VAR_DECL) {
                                         int c = targetPr.tree.nodeChild[expNode];
                                         if (c > 0 && c < targetPr.tree.nodeCount) {
@@ -198,11 +205,16 @@ public class JsSignatureParser {
                                                 parsedParamNames = extractClassConstructorParams(targetPr.tree, c, targetPr.scopeTree, 0);
                                                 signature = String.join(", ", parsedParamNames);
                                                 sourceLabel = "Cross-file class";
+                                                docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[c]);
                                             } else if (ct == JsSyntaxTree.N_FUNC_DECL || ct == JsSyntaxTree.N_ARROW_FUNC) {
                                                 parsedParamNames = extractParamNames(targetPr.tree, c);
                                                 signature = String.join(", ", parsedParamNames);
                                                 sourceLabel = "Cross-file function";
+                                                docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[c]);
                                             }
+                                        }
+                                        if (docInfo == null) {
+                                            docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[expNode]);
                                         }
                                     }
                                 }
@@ -217,11 +229,16 @@ public class JsSignatureParser {
                             parsedParamNames = extractParamNames(tree, child);
                             signature = String.join(", ", parsedParamNames);
                             sourceLabel = "Function";
+                            docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[child]);
                         } else if (cType == JsSyntaxTree.N_CLASS_DECL) {
                             parsedParamNames = extractClassConstructorParams(tree, child, scopeTree, scopeId);
                             signature = String.join(", ", parsedParamNames);
                             sourceLabel = "Class constructor";
+                            docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[child]);
                         }
+                    }
+                    if (docInfo == null) {
+                        docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[declNodeId]);
                     }
                 }
             }
@@ -236,6 +253,7 @@ public class JsSignatureParser {
                     parsedParamNames = extractParamNames(tree, methodNode);
                     signature = String.join(", ", parsedParamNames);
                     sourceLabel = "Method";
+                    docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[methodNode]);
                 } else {
                     String superName = tree.nodeTypeAnn[enclosingClass];
                     if (superName != null && !superName.isEmpty()) {
@@ -248,6 +266,7 @@ public class JsSignatureParser {
                                     parsedParamNames = extractParamNames(tree, sMethod);
                                     signature = String.join(", ", parsedParamNames);
                                     sourceLabel = "Method";
+                                    docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[sMethod]);
                                 }
                             }
                         }
@@ -274,6 +293,7 @@ public class JsSignatureParser {
                                 parsedParamNames = extractParamNames(tree, mChild);
                                 signature = String.join(", ", parsedParamNames);
                                 sourceLabel = "Method";
+                                docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[mChild]);
                                 break;
                             } else if (mType == JsSyntaxTree.N_PROPERTY) {
                                 int propVal = tree.nodeChild[mChild];
@@ -283,6 +303,7 @@ public class JsSignatureParser {
                                         parsedParamNames = extractParamNames(tree, propVal);
                                         signature = String.join(", ", parsedParamNames);
                                         sourceLabel = "Method";
+                                        docInfo = DocCommentParser.extractDoc(text, tree.nodeStart[mChild]);
                                         break;
                                     }
                                 }
@@ -383,6 +404,20 @@ public class JsSignatureParser {
                         sourceLabel = "Cross-file function";
                     }
                 }
+                if (docInfo == null && targetEntry.uri != null) {
+                    com.cocode.vcode.ide.core.lsp.ProjectIndex pIndex = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance();
+                    if (pIndex != null) {
+                        com.cocode.vcode.ide.core.language.js.ParseResult defPr = pIndex.getOrParseJsFile(new java.io.File(targetEntry.uri));
+                        if (defPr != null && defPr.tree != null && defPr.source != null) {
+                            for (int k = 1; k < defPr.tree.nodeCount; k++) {
+                                if (baseIdentifier.equals(defPr.tree.nodeName[k])) {
+                                    docInfo = DocCommentParser.extractDoc(defPr.source, defPr.tree.nodeStart[k]);
+                                    if (docInfo != null) break;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -390,20 +425,33 @@ public class JsSignatureParser {
             return null;
         }
 
+        String docText = (docInfo != null && !docInfo.description.isEmpty())
+                ? docInfo.description
+                : sourceLabel;
+
         LspSignatureHelp.LspSignatureInformation sig = new LspSignatureHelp.LspSignatureInformation(
                 baseIdentifier + "(" + signature.trim().replaceAll("\\s+", " ") + ")",
-                sourceLabel,
+                docText,
                 new ArrayList<>()
         );
 
         if (parsedParamNames != null) {
             for (String arg : parsedParamNames) {
-                sig.parameters.add(new LspSignatureHelp.LspParameterInformation(arg, null));
+                String pDoc = (docInfo != null) ? docInfo.paramDocs.get(arg) : null;
+                if (pDoc == null && docInfo != null && docInfo.paramTypes.containsKey(arg)) {
+                    pDoc = "Type: " + docInfo.paramTypes.get(arg);
+                }
+                sig.parameters.add(new LspSignatureHelp.LspParameterInformation(arg, pDoc));
             }
         } else if (!signature.trim().isEmpty()) {
             String[] args = signature.split(",");
             for (String arg : args) {
-                sig.parameters.add(new LspSignatureHelp.LspParameterInformation(arg.trim(), null));
+                String trimmedArg = arg.trim();
+                String pDoc = (docInfo != null) ? docInfo.paramDocs.get(trimmedArg) : null;
+                if (pDoc == null && docInfo != null && docInfo.paramTypes.containsKey(trimmedArg)) {
+                    pDoc = "Type: " + docInfo.paramTypes.get(trimmedArg);
+                }
+                sig.parameters.add(new LspSignatureHelp.LspParameterInformation(trimmedArg, pDoc));
             }
         }
 

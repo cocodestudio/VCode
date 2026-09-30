@@ -231,6 +231,13 @@ public final class TsLspServer implements LspServer {
         return JsSignatureParser.parse(doc, pos);
     }
 
+    private final JsLspServer jsLspServer = new JsLspServer();
+
+    @Override
+    public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {
+        return jsLspServer.hover(doc, pos);
+    }
+
     @Override
     public java.util.List<LspLocation> rename(LspDocument doc, LspPosition pos) {
         return JsSymbolRenamer.rename(doc, pos);

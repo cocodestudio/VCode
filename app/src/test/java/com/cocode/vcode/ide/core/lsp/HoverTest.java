@@ -57,4 +57,43 @@ public class HoverTest {
         HoverInfo info = server.hover(doc, pos);
         assertNull(info);
     }
+
+    @Test
+    public void testUserWrittenFunctionHoverWithJsDoc() {
+        JsLspServer server = new JsLspServer();
+        String text = "/**\n"
+                + " * Multiplies two numbers.\n"
+                + " * @param x Factor 1\n"
+                + " * @param y Factor 2\n"
+                + " * @returns Product\n"
+                + " */\n"
+                + "function multiply(x, y) {\n"
+                + "    return x * y;\n"
+                + "}\n"
+                + "multiply(2, 3);";
+        LspDocument doc = new LspDocument("/script.js", text, "javascript", 1);
+        // Position on 'multiply' call: line 9, char 2
+        LspPosition pos = new LspPosition(9, 2);
+
+        HoverInfo info = server.hover(doc, pos);
+        assertNotNull(info);
+        assertTrue(info.getMarkdownContent().contains("function multiply(x, y)"));
+        assertTrue(info.getMarkdownContent().contains("Multiplies two numbers."));
+        assertTrue(info.getMarkdownContent().contains("• `x` — Factor 1"));
+        assertTrue(info.getMarkdownContent().contains("• `y` — Factor 2"));
+        assertTrue(info.getMarkdownContent().contains("**Returns:**\nProduct"));
+    }
+
+    @Test
+    public void testBuiltinMethodHover() {
+        JsLspServer server = new JsLspServer();
+        String text = "document.getElementById('test');";
+        LspDocument doc = new LspDocument("/script.js", text, "javascript", 1);
+        // Position on 'getElementById': line 0, char 12
+        LspPosition pos = new LspPosition(0, 12);
+
+        HoverInfo info = server.hover(doc, pos);
+        assertNotNull(info);
+        assertTrue(info.getMarkdownContent().contains("getElementById"));
+    }
 }

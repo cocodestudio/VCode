@@ -2,6 +2,7 @@ package com.cocode.vcode.ide.core.lsp.servers;
 
 import android.content.Context;
 
+import com.cocode.vcode.ide.core.language.js.DocCommentParser;
 import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsLinter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
@@ -312,16 +313,139 @@ public final class JsLspServer implements LspServer {
             com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree = com.cocode.vcode.ide.core.language.js.JsParser.parseFull(doc.text, tokens);
             if (tree != null) {
                 for (int i = 1; i < tree.nodeCount; i++) {
-                    if (tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_FUNC_DECL
-                            || tree.nodeType[i] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_METHOD) {
-                        if (word.equals(tree.nodeName[i])) {
+                    if (word.equals(tree.nodeName[i])) {
+                        int nType = tree.nodeType[i];
+                        if (nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_FUNC_DECL
+                                || nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_METHOD
+                                || nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_ARROW_FUNC) {
+                            java.util.List<String> params = new java.util.ArrayList<>();
+                            int pChild = tree.nodeChild[i];
+                            while (pChild > 0 && pChild < tree.nodeCount) {
+                                if (tree.nodeType[pChild] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
+                                    params.add(tree.nodeName[pChild] != null ? tree.nodeName[pChild] : "arg");
+                                }
+                                pChild = tree.nodeSibling[pChild];
+                            }
                             String typeAnn = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[i] : null;
-                            String sig = "function " + word + "(...)";
+                            String sig = "function " + word + "(" + String.join(", ", params) + ")";
                             if (typeAnn != null && !typeAnn.isEmpty()) {
                                 sig += ": " + typeAnn;
                             }
-                            String md = "```javascript\n" + sig + "\n```";
+                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
+                            String md = (docInfo != null && !docInfo.isEmpty())
+                                    ? docInfo.toMarkdown(sig, "javascript")
+                                    : "```javascript\n" + sig + "\n```";
                             return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
+                        } else if (nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_CLASS_DECL) {
+                            String sig = "class " + word;
+                            String superName = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[i] : null;
+                            if (superName != null && !superName.isEmpty()) sig += " extends " + superName;
+                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
+                            String md = (docInfo != null && !docInfo.isEmpty())
+                                    ? docInfo.toMarkdown(sig, "javascript")
+                                    : "```javascript\n" + sig + "\n```";
+                            return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
+                        } else if (nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_VAR_DECL) {
+                            String typeAnn = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[i] : null;
+                            String sig = "let " + word;
+                            if (typeAnn != null && !typeAnn.isEmpty() && !typeAnn.startsWith("@")) sig += ": " + typeAnn;
+                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
+                            String md = (docInfo != null && !docInfo.isEmpty())
+                                    ? docInfo.toMarkdown(sig, "javascript")
+                                    : "```javascript\n" + sig + "\n```";
+                            return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
+                        }
+                    }
+                }
+            }
+
+            // Built-in standard library function / method
+            com.cocode.vcode.ide.core.language.js.JsStandardLibrary.SignatureInfo builtin = null;
+            if (s > 0) {
+                int dotPos = s - 1;
+                while (dotPos >= 0 && Character.isWhitespace(doc.text.charAt(dotPos))) {
+                    dotPos--;
+                }
+                if (dotPos >= 0 && doc.text.charAt(dotPos) == '.') {
+                    int recEnd = dotPos;
+                    while (recEnd > 0 && Character.isWhitespace(doc.text.charAt(recEnd - 1))) {
+                        recEnd--;
+                    }
+                    int recStart = recEnd;
+                    while (recStart > 0 && (Character.isJavaIdentifierPart(doc.text.charAt(recStart - 1)) || doc.text.charAt(recStart - 1) == '$')) {
+                        recStart--;
+                    }
+                    if (recStart < recEnd) {
+                        String receiver = doc.text.substring(recStart, recEnd);
+                        builtin = com.cocode.vcode.ide.core.language.js.JsStandardLibrary.getBuiltinSignature(receiver + "." + word, null);
+                    }
+                }
+            }
+            if (builtin == null) {
+                builtin = com.cocode.vcode.ide.core.language.js.JsStandardLibrary.getBuiltinSignature(word, null);
+            }
+            if (builtin == null) {
+                for (java.util.Map<String, com.cocode.vcode.ide.core.language.js.JsStandardLibrary.SignatureInfo> cMap : com.cocode.vcode.ide.core.language.js.JsStandardLibrary.SIGNATURES_BY_CONTAINER.values()) {
+                    if (cMap != null && cMap.containsKey(word)) {
+                        builtin = cMap.get(word);
+                        break;
+                    }
+                }
+            }
+            if (builtin != null) {
+                String sig = "(method) " + word + "(" + String.join(", ", builtin.parameters) + ")";
+                StringBuilder sb = new StringBuilder();
+                sb.append("```javascript\n").append(sig).append("\n```\n\n");
+                if (builtin.doc != null && !builtin.doc.isEmpty()) {
+                    sb.append(builtin.doc).append("\n\n");
+                }
+                if (builtin.parameters != null && !builtin.parameters.isEmpty()) {
+                    sb.append("**Parameters:** `").append(String.join("`, `", builtin.parameters)).append("`\n\n");
+                }
+                return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), sb.toString().trim());
+            }
+
+            // Cross-file symbol definition
+            com.cocode.vcode.ide.core.lsp.ProjectIndex pIndex = com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance();
+            if (pIndex != null) {
+                java.util.List<com.cocode.vcode.ide.core.lsp.LspLocation> defs = pIndex.findDefinitions(word);
+                if (defs != null && !defs.isEmpty()) {
+                    for (com.cocode.vcode.ide.core.lsp.LspLocation loc : defs) {
+                        if (loc.uri != null) {
+                            com.cocode.vcode.ide.core.language.js.ParseResult targetPr =
+                                    pIndex.getOrParseJsFile(new java.io.File(loc.uri));
+                            if (targetPr != null && targetPr.tree != null && targetPr.source != null) {
+                                for (int k = 1; k < targetPr.tree.nodeCount; k++) {
+                                    if (word.equals(targetPr.tree.nodeName[k])) {
+                                        int kType = targetPr.tree.nodeType[k];
+                                        String sig = null;
+                                        if (kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_FUNC_DECL
+                                                || kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_METHOD
+                                                || kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_ARROW_FUNC) {
+                                            java.util.List<String> params = new java.util.ArrayList<>();
+                                            int pChild = targetPr.tree.nodeChild[k];
+                                            while (pChild > 0 && pChild < targetPr.tree.nodeCount) {
+                                                if (targetPr.tree.nodeType[pChild] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_PARAM) {
+                                                    params.add(targetPr.tree.nodeName[pChild] != null ? targetPr.tree.nodeName[pChild] : "arg");
+                                                }
+                                                pChild = targetPr.tree.nodeSibling[pChild];
+                                            }
+                                            sig = "function " + word + "(" + String.join(", ", params) + ")";
+                                        } else if (kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_CLASS_DECL) {
+                                            sig = "class " + word;
+                                        } else if (kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_VAR_DECL) {
+                                            sig = "let " + word;
+                                        }
+                                        if (sig != null) {
+                                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[k]);
+                                            String md = (docInfo != null && !docInfo.isEmpty())
+                                                    ? docInfo.toMarkdown(sig, "javascript")
+                                                    : "```javascript\n" + sig + "\n```";
+                                            return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
