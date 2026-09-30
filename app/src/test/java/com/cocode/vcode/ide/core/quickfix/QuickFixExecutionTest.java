@@ -567,12 +567,88 @@ public class QuickFixExecutionTest {
     }
 
     @Test
+    public void testCssMarginAutoShorthandPreservesSelector() {
+        editor.setText(".hero p {\n    margin-left: auto;\n    margin-right: auto;\n}");
+        Problem p = new Problem(cssFile, 2, 5, 18,
+                "Consider 'margin: 0 auto' or flexbox centering instead of separate margin declarations",
+                Problem.Severity.INFO, ProblemCode.CSS_MARGIN_AUTO_SHORTHAND);
+        applyFirstFix(p);
+        String result = editor.getText().toString();
+        assertTrue("Selector line must be preserved", result.contains(".hero p {"));
+        assertTrue("Margin shorthand must be present", result.contains("    margin: 0 auto;"));
+        assertFalse("Separate margin-right must be removed", result.contains("margin-right"));
+        assertFalse("Separate margin-left must be removed", result.contains("margin-left"));
+    }
+
+    @Test
+    public void testCssMarginAutoShorthandFromSelectorLine() {
+        editor.setText(".hero p {\n    margin-left: auto;\n    margin-right: auto;\n}");
+        Problem p = new Problem(cssFile, 1, 1, 7,
+                "Consider 'margin: 0 auto' or flexbox centering instead of separate margin declarations",
+                Problem.Severity.INFO, ProblemCode.CSS_MARGIN_AUTO_SHORTHAND);
+        applyFirstFix(p);
+        String result = editor.getText().toString();
+        assertTrue("Selector line must be preserved", result.contains(".hero p {"));
+        assertTrue("Margin shorthand must be present", result.contains("    margin: 0 auto;"));
+        assertFalse("Separate margin-right must be removed", result.contains("margin-right"));
+    }
+
+    @Test
     public void testCssIdSelector() {
         editor.setText("#nav {\n    background: black;\n}");
         Problem p = new Problem(cssFile, 1, 1, 4, "Avoid using ID selectors ('#id') in CSS rules: use classes instead",
                 Problem.Severity.INFO, ProblemCode.CSS_ID_SELECTOR);
         applyFirstFix(p);
         assertTrue(editor.getText().toString().startsWith(".nav"));
+    }
+
+    @Test
+    public void testCssMediaPxBreakpointToEm() {
+        editor.setText("@media (min-width: 768px) {\n    .container { padding: 20px; }\n}");
+        Problem p = new Problem(cssFile, 1, 1, 26,
+                "'@media' breakpoint in 'px': consider 'em' or 'rem' for accessibility scaling",
+                Problem.Severity.INFO, ProblemCode.CSS_MEDIA_PX_UNIT);
+        List<QuickFix> fixes = QuickFixRegistry.getFixesForProblem(p, editor);
+        assertEquals(2, fixes.size());
+        assertEquals("Convert '@media' breakpoint to 'em'", fixes.get(0).getTitle());
+        assertEquals("Convert '@media' breakpoint to 'rem'", fixes.get(1).getTitle());
+
+        // Apply 'em' fix
+        fixes.get(0).apply(editor, p);
+        String result = editor.getText().toString();
+        assertTrue("Breakpoint must be converted to 48em", result.contains("@media (min-width: 48em) {"));
+        assertTrue("Inner property padding: 20px must NOT be converted", result.contains("padding: 20px;"));
+    }
+
+    @Test
+    public void testCssMediaPxBreakpointToRem() {
+        editor.setText("@media (min-width: 600px) and (max-width: 960px) {\n    body { font-size: 16px; }\n}");
+        Problem p = new Problem(cssFile, 1, 1, 50,
+                "'@media' breakpoint in 'px': consider 'em' or 'rem' for accessibility scaling",
+                Problem.Severity.INFO, ProblemCode.CSS_MEDIA_PX_UNIT);
+        List<QuickFix> fixes = QuickFixRegistry.getFixesForProblem(p, editor);
+        assertEquals(2, fixes.size());
+
+        // Apply 'rem' fix
+        fixes.get(1).apply(editor, p);
+        String result = editor.getText().toString();
+        assertTrue("Breakpoint min-width must be converted to 37.5rem", result.contains("min-width: 37.5rem"));
+        assertTrue("Breakpoint max-width must be converted to 60rem", result.contains("max-width: 60rem"));
+        assertTrue("Inner property font-size: 16px must NOT be converted", result.contains("font-size: 16px;"));
+    }
+
+    @Test
+    public void testCssMediaPxBreakpointMultiLine() {
+        editor.setText("@media screen\n  and (min-width: 768px)\n  and (max-width: 1024px) {\n    .box { width: 100px; }\n}");
+        Problem p = new Problem(cssFile, 1, 1, 13,
+                "'@media' breakpoint in 'px': consider 'em' or 'rem' for accessibility scaling",
+                Problem.Severity.INFO, ProblemCode.CSS_MEDIA_PX_UNIT);
+        List<QuickFix> fixes = QuickFixRegistry.getFixesForProblem(p, editor);
+        fixes.get(0).apply(editor, p);
+        String result = editor.getText().toString();
+        assertTrue("First breakpoint converted to 48em", result.contains("min-width: 48em"));
+        assertTrue("Second breakpoint converted to 64em", result.contains("max-width: 64em"));
+        assertTrue("Inner property width: 100px preserved", result.contains("width: 100px;"));
     }
 
     // ==========================================

@@ -7,6 +7,8 @@ import com.cocode.vcode.ide.views.CodeEditText;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Universal registry resolving actionable QuickFix intentions for ALL diagnostic issues
@@ -1026,17 +1028,33 @@ public final class QuickFixRegistry {
 
                 @Override
                 public void apply(CodeEditorTarget ed, Problem prob) {
-                    int pLine = Math.max(0, prob.getLine() - 1);
-                    if (pLine < ed.getLineCount()) {
-                        String lt = ed.getLineText(pLine);
-                        String lineIndent = getLineIndentation(lt);
-                        ed.beginAtomicGroup();
-                        try {
-                            ed.replaceRange(pLine, 0, pLine, lt.length(), lineIndent + "margin: 0 auto;");
-                        } finally {
-                            ed.endAtomicGroup();
-                        }
-                    }
+                    applyMarginAutoShorthandFix(ed, prob);
+                }
+            });
+        }
+
+        // CSS: Media query px breakpoint
+        if (code == ProblemCode.CSS_MEDIA_PX_UNIT || (msg.contains("@media") && msg.contains("accessibility scaling"))) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return "Convert '@media' breakpoint to 'em'";
+                }
+
+                @Override
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    applyMediaPxToUnitFix(ed, prob, "em");
+                }
+            });
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return "Convert '@media' breakpoint to 'rem'";
+                }
+
+                @Override
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    applyMediaPxToUnitFix(ed, prob, "rem");
                 }
             });
         }
@@ -2051,21 +2069,228 @@ public final class QuickFixRegistry {
         return "    ";
     }
 
+    private static void deleteLineAt(CodeEditorTarget ed, int line) {
+        if (line >= 0 && line < ed.getLineCount()) {
+            String lt = ed.getLineText(line);
+            if (line + 1 < ed.getLineCount()) {
+                ed.replaceRange(line, 0, line + 1, 0, "");
+            } else if (line > 0) {
+                int prevLen = ed.getLineText(line - 1).length();
+                ed.replaceRange(line - 1, prevLen, line, lt.length(), "");
+            } else {
+                ed.replaceRange(line, 0, line, lt.length(), "");
+            }
+        }
+    }
+
     private static void deleteProblemLine(CodeEditorTarget ed, Problem prob) {
         int pLine = Math.max(0, prob.getLine() - 1);
         if (pLine >= 0 && pLine < ed.getLineCount()) {
-            String lt = ed.getLineText(pLine);
             ed.beginAtomicGroup();
             try {
-                if (pLine + 1 < ed.getLineCount()) {
-                    ed.replaceRange(pLine, 0, pLine + 1, 0, "");
-                } else {
-                    ed.replaceRange(pLine, 0, pLine, lt.length(), "");
-                }
+                deleteLineAt(ed, pLine);
             } finally {
                 ed.endAtomicGroup();
             }
         }
+    }
+
+    private static void applyMarginAutoShorthandFix(CodeEditorTarget ed, Problem prob) {
+        int pLine = Math.max(0, prob.getLine() - 1);
+        if (pLine >= ed.getLineCount()) return;
+
+        int blockStart = -1;
+        int blockEnd = -1;
+
+        for (int l = pLine; l >= 0; l--) {
+            String lt = ed.getLineText(l);
+            if (lt.contains("{")) {
+                blockStart = l;
+                break;
+            }
+            if (l < pLine && lt.contains("}")) {
+                break;
+            }
+        }
+
+        if (blockStart == -1) {
+            for (int l = pLine; l < Math.min(ed.getLineCount(), pLine + 5); l++) {
+                String lt = ed.getLineText(l);
+                if (lt.contains("{")) {
+                    blockStart = l;
+                    break;
+                }
+            }
+        }
+
+        if (blockStart != -1) {
+            int depth = 0;
+            for (int l = blockStart; l < Math.min(ed.getLineCount(), blockStart + 100); l++) {
+                String lt = ed.getLineText(l);
+                for (int c = 0; c < lt.length(); c++) {
+                    char ch = lt.charAt(c);
+                    if (ch == '{') depth++;
+                    else if (ch == '}') {
+                        depth--;
+                        if (depth == 0) {
+                            blockEnd = l;
+                            break;
+                        }
+                    }
+                }
+                if (blockEnd != -1) break;
+            }
+        }
+
+        if (blockStart == -1) blockStart = pLine;
+        if (blockEnd == -1) blockEnd = Math.min(ed.getLineCount() - 1, blockStart + 20);
+
+        Pattern mlPattern = Pattern.compile("(?i)margin-left\\s*:\\s*auto\\s*;?");
+        Pattern mrPattern = Pattern.compile("(?i)margin-right\\s*:\\s*auto\\s*;?");
+
+        int mlLine = -1;
+        int mrLine = -1;
+        for (int l = blockStart; l <= blockEnd && l < ed.getLineCount(); l++) {
+            String lt = ed.getLineText(l);
+            if (mlLine == -1 && mlPattern.matcher(lt).find()) {
+                mlLine = l;
+            }
+            if (mrLine == -1 && mrPattern.matcher(lt).find()) {
+                mrLine = l;
+            }
+        }
+
+        ed.beginAtomicGroup();
+        try {
+            if (mlLine != -1 && mrLine != -1) {
+                if (mlLine == mrLine) {
+                    String lt = ed.getLineText(mlLine);
+                    String updated = lt.replaceFirst("(?i)margin-(?:left|right)\\s*:\\s*auto\\s*;?\\s*margin-(?:right|left)\\s*:\\s*auto\\s*;?", "margin: 0 auto;");
+                    if (updated.equals(lt)) {
+                        Matcher m1 = mlPattern.matcher(lt);
+                        Matcher m2 = mrPattern.matcher(lt);
+                        if (m1.find() && m2.find()) {
+                            int firstStart = Math.min(m1.start(), m2.start());
+                            int firstEnd = (firstStart == m1.start()) ? m1.end() : m2.end();
+                            int secondStart = Math.max(m1.start(), m2.start());
+                            int secondEnd = (secondStart == m1.start()) ? m1.end() : m2.end();
+
+                            StringBuilder sb = new StringBuilder();
+                            sb.append(lt, 0, firstStart);
+                            sb.append("margin: 0 auto;");
+                            sb.append(lt, firstEnd, secondStart);
+                            sb.append(lt.substring(secondEnd));
+                            updated = sb.toString();
+                        }
+                    }
+                    ed.replaceRange(mlLine, 0, mlLine, lt.length(), updated);
+                } else {
+                    int firstLine = Math.min(mlLine, mrLine);
+                    int secondLine = Math.max(mlLine, mrLine);
+
+                    String firstText = ed.getLineText(firstLine);
+                    String firstIndent = getLineIndentation(firstText);
+                    if (firstText.trim().matches("(?i)^margin-(?:left|right)\\s*:\\s*auto\\s*;?$")) {
+                        ed.replaceRange(firstLine, 0, firstLine, firstText.length(), firstIndent + "margin: 0 auto;");
+                    } else {
+                        String replaced = firstText.replaceFirst("(?i)margin-(?:left|right)\\s*:\\s*auto\\s*;?", "margin: 0 auto;");
+                        ed.replaceRange(firstLine, 0, firstLine, firstText.length(), replaced);
+                    }
+
+                    String secondText = ed.getLineText(secondLine);
+                    if (secondText.trim().matches("(?i)^margin-(?:left|right)\\s*:\\s*auto\\s*;?$")) {
+                        deleteLineAt(ed, secondLine);
+                    } else {
+                        String replaced = secondText.replaceFirst("(?i)margin-(?:left|right)\\s*:\\s*auto\\s*;?\\s*", "");
+                        ed.replaceRange(secondLine, 0, secondLine, secondText.length(), replaced);
+                    }
+                }
+            } else if (mlLine != -1 || mrLine != -1) {
+                int targetL = (mlLine != -1) ? mlLine : mrLine;
+                String lt = ed.getLineText(targetL);
+                String indent = getLineIndentation(lt);
+                if (lt.trim().matches("(?i)^margin-(?:left|right)\\s*:\\s*auto\\s*;?$")) {
+                    ed.replaceRange(targetL, 0, targetL, lt.length(), indent + "margin: 0 auto;");
+                } else {
+                    String replaced = lt.replaceFirst("(?i)margin-(?:left|right)\\s*:\\s*auto\\s*;?", "margin: 0 auto;");
+                    ed.replaceRange(targetL, 0, targetL, lt.length(), replaced);
+                }
+            } else {
+                int insertLine = (blockStart >= 0) ? blockStart + 1 : pLine;
+                if (insertLine < ed.getLineCount()) {
+                    String indent = getLineIndentation(ed.getLineText(insertLine));
+                    if (indent.isEmpty()) indent = "    ";
+                    ed.replaceRange(insertLine, 0, insertLine, 0, indent + "margin: 0 auto;\n");
+                }
+            }
+        } finally {
+            ed.endAtomicGroup();
+        }
+    }
+
+    private static void applyMediaPxToUnitFix(CodeEditorTarget ed, Problem prob, String targetUnit) {
+        int pLine = Math.max(0, prob.getLine() - 1);
+        if (pLine >= ed.getLineCount()) return;
+
+        int endLine = pLine;
+        for (int l = pLine; l < Math.min(ed.getLineCount(), pLine + 15); l++) {
+            String lt = ed.getLineText(l);
+            if (lt.contains("{")) {
+                endLine = l;
+                break;
+            }
+        }
+
+        ed.beginAtomicGroup();
+        try {
+            for (int l = pLine; l <= endLine && l < ed.getLineCount(); l++) {
+                String lt = ed.getLineText(l);
+                if (l == endLine && lt.contains("{")) {
+                    int braceIdx = lt.indexOf('{');
+                    String beforeBrace = lt.substring(0, braceIdx);
+                    String afterBrace = lt.substring(braceIdx);
+                    String converted = convertPxToUnit(beforeBrace, targetUnit);
+                    if (!converted.equals(beforeBrace)) {
+                        ed.replaceRange(l, 0, l, lt.length(), converted + afterBrace);
+                    }
+                } else {
+                    String converted = convertPxToUnit(lt, targetUnit);
+                    if (!converted.equals(lt)) {
+                        ed.replaceRange(l, 0, l, lt.length(), converted);
+                    }
+                }
+            }
+        } finally {
+            ed.endAtomicGroup();
+        }
+    }
+
+    static String convertPxToUnit(String text, String targetUnit) {
+        if (text == null || !text.contains("px")) return text;
+        Matcher m = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*px\\b").matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            double pxVal = Double.parseDouble(m.group(1));
+            double unitVal = pxVal / 16.0;
+            m.appendReplacement(sb, Matcher.quoteReplacement(formatMediaUnitValue(unitVal) + targetUnit));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    static String formatMediaUnitValue(double val) {
+        if (Math.abs(val - Math.round(val)) < 0.00001) {
+            return String.valueOf((long) Math.round(val));
+        }
+        String s = String.format(java.util.Locale.US, "%.4f", val);
+        while (s.contains(".") && (s.endsWith("0") || s.endsWith("."))) {
+            if (s.endsWith(".")) {
+                s = s.substring(0, s.length() - 1);
+                break;
+            }
+            s = s.substring(0, s.length() - 1);
+        }
+        return s;
     }
 
     private static void removeWordAt(CodeEditorTarget ed, Problem prob, String word) {

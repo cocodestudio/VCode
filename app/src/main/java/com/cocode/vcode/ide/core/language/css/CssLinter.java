@@ -262,7 +262,7 @@ public class CssLinter {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "'@media' breakpoint in 'px': consider 'em' or 'rem' for accessibility scaling",
                                 Problem.Severity.INFO,
-                                ProblemCode.SYNTAX_ERROR));
+                                ProblemCode.CSS_MEDIA_PX_UNIT));
                     }
 
                     // ID selector check
@@ -408,7 +408,10 @@ public class CssLinter {
 
                 // Margin auto without shorthand
                 if (blockHasMarginLeftAuto && blockHasMarginRightAuto) {
-                    problems.add(new Problem(file, ruleLine, 1, 6,
+                    int targetLine = propLineInBlock.containsKey("margin-left")
+                            ? propLineInBlock.get("margin-left")
+                            : ruleLine;
+                    problems.add(new Problem(file, targetLine, 1, 11,
                             "Consider 'margin: 0 auto' or flexbox centering instead of separate margin declarations",
                             Problem.Severity.INFO,
                             ProblemCode.CSS_MARGIN_AUTO_SHORTHAND));
