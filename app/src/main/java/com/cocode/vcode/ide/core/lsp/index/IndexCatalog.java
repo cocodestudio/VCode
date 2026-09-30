@@ -23,7 +23,7 @@ import java.util.Set;
 public class IndexCatalog {
 
     public static final int MAGIC = 0x56434458; // 'VCDX'
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
 
     public static final class FileFingerprint {
         public final int fileId;

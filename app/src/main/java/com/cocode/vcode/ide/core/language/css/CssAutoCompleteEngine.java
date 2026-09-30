@@ -60,9 +60,16 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     private final List<CompletionItem> cachedCustomProps = new ArrayList<>();
     private final List<CompletionItem> cachedDocClasses = new ArrayList<>();
     private final List<CompletionItem> cachedDocIds = new ArrayList<>();
+    private List<CompletionItem> scopedHtmlClasses = null;
+    private List<CompletionItem> scopedHtmlIds = null;
     private final FastTrie propertyTrie = new FastTrie();
     private int lastTextHash = 0;
     private int lastDocClassTextHash = 0;
+
+    public void setScopedHtmlSelectors(List<CompletionItem> scopedClasses, List<CompletionItem> scopedIds) {
+        this.scopedHtmlClasses = scopedClasses != null ? new ArrayList<>(scopedClasses) : null;
+        this.scopedHtmlIds = scopedIds != null ? new ArrayList<>(scopedIds) : null;
+    }
 
     @Override
     public String getTriggerCharacters() {
@@ -203,7 +210,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
         Set<String> classNames = new HashSet<>();
         Set<String> cssIds = new HashSet<>();
-        ProjectSymbolIndex.extractCssClassesAndIds(text, classNames, cssIds);
+        ProjectSymbolIndex.extractSelectorsFromCssText(text, classNames, cssIds);
 
         for (String c : classNames) {
             cachedDocClasses.add(new CompletionItem("." + c, "." + c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
@@ -597,23 +604,42 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         List<CompletionItem> list = getClassSelectorItems();
         List<CompletionItem> filtered = fuzzyFilter(list, query);
         int replaceLen = query != null ? query.length() : 0;
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
         for (CompletionItem ci : filtered) {
-            ci.setReplaceLength(replaceLen);
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(replaceLen);
+            out.add(copy);
         }
-        return filtered;
+        return out;
     }
 
     private List<CompletionItem> filterIdSelectors(String query) {
         List<CompletionItem> list = getIdSelectorItems();
         List<CompletionItem> filtered = fuzzyFilter(list, query);
         int replaceLen = query != null ? query.length() : 0;
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
         for (CompletionItem ci : filtered) {
-            ci.setReplaceLength(replaceLen);
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(replaceLen);
+            out.add(copy);
         }
-        return filtered;
+        return out;
     }
 
     private List<CompletionItem> getClassSelectorItems() {
+        if (scopedHtmlClasses != null) {
+            List<CompletionItem> list = new ArrayList<>();
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (CompletionItem ci : scopedHtmlClasses) {
+                String label = ci.getLabel().startsWith(".") ? ci.getLabel() : ("." + ci.getLabel());
+                String insert = ci.getEffectiveInsertText().startsWith(".") ? ci.getEffectiveInsertText() : ("." + ci.getEffectiveInsertText());
+                if (seen.add(label)) {
+                    list.add(new CompletionItem(label, insert, ci.getDetail() != null ? ci.getDetail() : "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+                }
+            }
+            return list;
+        }
+
         List<CompletionItem> list = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (CompletionItem ci : cachedDocClasses) {
@@ -633,6 +659,19 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private List<CompletionItem> getIdSelectorItems() {
+        if (scopedHtmlIds != null) {
+            List<CompletionItem> list = new ArrayList<>();
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (CompletionItem ci : scopedHtmlIds) {
+                String label = ci.getLabel().startsWith("#") ? ci.getLabel() : ("#" + ci.getLabel());
+                String insert = ci.getEffectiveInsertText().startsWith("#") ? ci.getEffectiveInsertText() : ("#" + ci.getEffectiveInsertText());
+                if (seen.add(label)) {
+                    list.add(new CompletionItem(label, insert, ci.getDetail() != null ? ci.getDetail() : "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+                }
+            }
+            return list;
+        }
+
         List<CompletionItem> list = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (CompletionItem ci : cachedDocIds) {

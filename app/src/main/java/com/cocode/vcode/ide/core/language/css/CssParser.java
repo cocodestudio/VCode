@@ -73,10 +73,8 @@ public class CssParser {
                         p = nextP + 1;
                     }
                 } else {
-                    // EOF
-                    int nodeType = isAtRule ? CssSyntaxTree.N_AT_RULE : CssSyntaxTree.N_RULE;
-                    int ruleNode = tree.addNode(nodeType, startP, endP, currentParent, null, null);
-                    tree.addNode(CssSyntaxTree.N_SELECTOR, startP, endP, ruleNode, selectorText, null);
+                    // Incomplete selector at EOF or not followed by punct { or ;
+                    tree.addNode(CssSyntaxTree.N_ERROR, startP, endP, currentParent, "Incomplete selector — expected '{'", null);
                     p = nextP;
                 }
             } else if (type == CssTokenStream.TK_PROPERTY) {

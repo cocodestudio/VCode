@@ -4149,16 +4149,22 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             String linePrefix = content.getSubstring(lineStartFlat, flatCursor);
 
             // Compute wordStart
+            int identCol = cursor.column;
+            while (identCol > 0) {
+                char c = linePrefix.charAt(identCol - 1);
+                if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '$' || c == '@') {
+                    identCol--;
+                } else break;
+            }
+
             int col = cursor.column;
             if (item.getReplaceLength() >= 0) {
                 col = Math.max(0, cursor.column - item.getReplaceLength());
-            } else {
-                while (col > 0) {
-                    char c = linePrefix.charAt(col - 1);
-                    if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '$' || c == '@') {
-                        col--;
-                    } else break;
+                if (col > identCol) {
+                    col = identCol;
                 }
+            } else {
+                col = identCol;
                 if (col > 0 && linePrefix.charAt(col - 1) == '<' && insertText.startsWith("<")) {
                     col--;
                 }

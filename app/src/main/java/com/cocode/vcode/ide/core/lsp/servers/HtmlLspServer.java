@@ -171,19 +171,6 @@ public final class HtmlLspServer implements LspServer {
         List<CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
         List<LspCompletionItem> lspItems = new ArrayList<>(convertCompletions(legacy));
 
-        // Enrich with cross-file completions when inside class="" or id=""
-        HtmlTagParser tagParser = new HtmlTagParser();
-        HtmlTagParser.HtmlContext ctx = HtmlTagParser.parseContext(doc.text, flatOffset);
-        if (ctx.isInsideAttributeValue && ctx.currentAttributeName != null
-                && projectIndex != null) {
-            String prefix = ctx.currentAttributeValue != null ? ctx.currentAttributeValue : "";
-            if ("class".equals(ctx.currentAttributeName)) {
-                lspItems.addAll(getCssClassCompletions(prefix));
-            } else if ("id".equals(ctx.currentAttributeName)) {
-                lspItems.addAll(getIdCompletions(prefix));
-            }
-        }
-
         // Deduplicate completions
         List<LspCompletionItem> uniqueItems = new ArrayList<>();
         Set<String> seenLabels = new HashSet<>();
@@ -395,53 +382,7 @@ public final class HtmlLspServer implements LspServer {
         return result;
     }
 
-    /**
-     * Scans all indexed CSS files for {@code .className} selectors and returns them
-     * as value completions. Used to power class="" attribute IntelliSense.
-     */
-    private List<LspCompletionItem> getCssClassCompletions(String prefix) {
-        List<LspCompletionItem> result = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String uri : projectIndex.getAllUris()) {
-            if (!uri.endsWith(".css") && !uri.endsWith(".scss")) continue;
-            for (SymbolEntry sym : projectIndex.getFileSymbols(uri)) {
-                if (sym.kind == SymbolEntry.KIND_CSS_CLASS) {
-                    String cls = sym.name.substring(1);
-                    if (seen.contains(cls)) continue;
-                    if (prefix.isEmpty() || cls.startsWith(prefix)) {
-                        seen.add(cls);
-                        result.add(new LspCompletionItem(
-                                cls, cls, LspCompletionItem.KIND_VALUE, "CSS class", null));
-                    }
-                }
-            }
-        }
-        return result;
-    }
 
-    /**
-     * Scans all indexed HTML files for {@code id="..."} attributes and returns them
-     * as value completions. Used to power id="" attribute IntelliSense.
-     */
-    private List<LspCompletionItem> getIdCompletions(String prefix) {
-        List<LspCompletionItem> result = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String uri : projectIndex.getAllUris()) {
-            if (!uri.endsWith(".html") && !uri.endsWith(".htm")) continue;
-            for (SymbolEntry sym : projectIndex.getFileSymbols(uri)) {
-                if (sym.kind == SymbolEntry.KIND_HTML_ID) {
-                    String id = sym.name;
-                    if (seen.contains(id)) continue;
-                    if (prefix.isEmpty() || id.startsWith(prefix)) {
-                        seen.add(id);
-                        result.add(new LspCompletionItem(
-                                id, id, LspCompletionItem.KIND_VALUE, "HTML id", null));
-                    }
-                }
-            }
-        }
-        return result;
-    }
 
     @Override
     public com.cocode.vcode.ide.core.lsp.HoverInfo hover(LspDocument doc, LspPosition pos) {

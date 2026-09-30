@@ -78,6 +78,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         this.lastHtmlJsHash = 0;
         jsEngine.setCurrentFile(file);
         cssEngine.setCurrentFile(file);
+        cssEngine.setScopedHtmlSelectors(null, null);
     }
 
     // Tag loading
@@ -215,6 +216,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                             ensureHtmlJsSymbolsResolved(fullText);
                             return jsEngine.getSuggestions(embeddedContent, embeddedCursor);
                         } else if (emb.result.cssTree != null) {
+                            ensureHtmlSelectorsResolved(fullText);
+                            cssEngine.setScopedHtmlSelectors(cachedHtmlClassItems, cachedHtmlIdItems);
                             return cssEngine.getSuggestions(embeddedContent, embeddedCursor);
                         }
                     }
@@ -229,6 +232,8 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             if (styleEnd == -1 || cursorPos <= styleEnd) {
                 String embeddedContent = fullText.substring(styleStart, styleEnd == -1 ? fullText.length() : styleEnd);
                 int embeddedCursor = cursorPos - styleStart;
+                ensureHtmlSelectorsResolved(fullText);
+                cssEngine.setScopedHtmlSelectors(cachedHtmlClassItems, cachedHtmlIdItems);
                 return cssEngine.getSuggestions(embeddedContent, embeddedCursor);
             }
         }

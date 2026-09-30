@@ -147,4 +147,46 @@ public class AutoCompleteTriggerAndInsertionTest {
             }
         }
     }
+
+    @Test
+    public void testJsAutoCompleteSequentialKeystrokesReplaceLength() {
+        com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine engine =
+                new com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine(null);
+
+        // Step 1: user types 'c'
+        List<CompletionItem> itemsC = engine.getSuggestions("c", 1);
+        CompletionItem logC = null;
+        for (CompletionItem item : itemsC) {
+            if ("console.log".equals(item.getLabel())) {
+                logC = item;
+                break;
+            }
+        }
+        assertNotNull("Should contain console.log when typing 'c'", logC);
+        assertEquals("Replace length for 'c' must be 1", 1, logC.getReplaceLength());
+
+        // Step 2: user types 'co'
+        List<CompletionItem> itemsCo = engine.getSuggestions("co", 2);
+        CompletionItem logCo = null;
+        for (CompletionItem item : itemsCo) {
+            if ("console.log".equals(item.getLabel())) {
+                logCo = item;
+                break;
+            }
+        }
+        assertNotNull("Should contain console.log when typing 'co'", logCo);
+        assertEquals("Replace length for 'co' must be 2", 2, logCo.getReplaceLength());
+
+        // Step 3: user types 'con'
+        List<CompletionItem> itemsCon = engine.getSuggestions("con", 3);
+        CompletionItem logCon = null;
+        for (CompletionItem item : itemsCon) {
+            if ("console.log".equals(item.getLabel())) {
+                logCon = item;
+                break;
+            }
+        }
+        assertNotNull("Should contain console.log when typing 'con'", logCon);
+        assertEquals("Replace length for 'con' must be 3", 3, logCon.getReplaceLength());
+    }
 }

@@ -280,8 +280,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     List<CompletionItem> ids = (scopedHtmlIds != null && !scopedHtmlIds.isEmpty())
                             ? scopedHtmlIds
                             : ProjectSymbolIndex.getInstance().getHtmlIdItems();
-                    for (CompletionItem ci : ids) ci.setReplaceLength(typedId.length());
-                    return fuzzyFilter(ids, typedId);
+                    List<CompletionItem> filtered = fuzzyFilter(ids, typedId);
+                    List<CompletionItem> out = new ArrayList<>(filtered.size());
+                    for (CompletionItem ci : filtered) {
+                        CompletionItem copy = new CompletionItem(ci);
+                        copy.setReplaceLength(typedId.length());
+                        out.add(copy);
+                    }
+                    return out;
                 } else if (callee.endsWith("querySelector") || callee.endsWith("querySelectorAll")) {
                     String typedQuery = lineBefore.substring(lastQuote + 1);
                     List<CompletionItem> prefixed = getCompletionItems(typedQuery);
@@ -391,12 +397,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         List<CompletionItem> res = fuzzyFilter(all, word);
+        List<CompletionItem> out = new ArrayList<>(res.size());
+        int replaceLen = word != null ? word.length() : 0;
         for (CompletionItem ci : res) {
-            if (ci.getReplaceLength() <= 0) {
-                ci.setReplaceLength(word.length());
-            }
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(replaceLen);
+            out.add(copy);
         }
-        return res;
+        return out;
     }
 
     private CompletionItem.Type mapKindToCompletionType(int kind) {
@@ -723,10 +731,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         List<CompletionItem> filtered = new ArrayList<>();
+        int exportReplaceLen = word != null ? word.length() : 0;
         for (CompletionItem e : exports) {
             if (!used.contains(e.getEffectiveInsertText())) {
-                e.setReplaceLength(word != null ? word.length() : 0);
-                filtered.add(e);
+                CompletionItem copy = new CompletionItem(e);
+                copy.setReplaceLength(exportReplaceLen);
+                filtered.add(copy);
             }
         }
         return fuzzyFilter(filtered, word);

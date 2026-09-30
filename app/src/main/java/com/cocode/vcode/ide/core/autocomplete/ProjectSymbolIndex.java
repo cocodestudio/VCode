@@ -57,6 +57,7 @@ public class ProjectSymbolIndex {
     // Maps absolute/canonical file path → CSS classes and IDs defined in that file (CSS files or HTML <style> tags)
     private final Map<String, Set<String>> fileCssClasses = new HashMap<>();
     private final Map<String, Set<String>> fileCssIds = new HashMap<>();
+    private final Map<String, Set<String>> fileHtmlIds = new HashMap<>();
     // Maps absolute/canonical file path → top-level JS symbols defined in that file (JS files or HTML <script> tags)
     private final Map<String, Map<String, CompletionItem>> fileJsSymbols = new HashMap<>();
     // Maps absolute file path to its exported CompletionItems
@@ -102,6 +103,7 @@ public class ProjectSymbolIndex {
         fileClassMembers.clear();
         fileCssClasses.clear();
         fileCssIds.clear();
+        fileHtmlIds.clear();
         fileJsSymbols.clear();
         cssClassItems.clear();
         cssIdItems.clear();
@@ -116,6 +118,9 @@ public class ProjectSymbolIndex {
         if (Character.isDigit(first)) return false;
         if (first == '-') {
             if (name.length() == 1 || Character.isDigit(name.charAt(1))) return false;
+        }
+        if (name.endsWith("-")) {
+            return false;
         }
         for (int i = 0; i < name.length(); i++) {
             char ch = name.charAt(i);
@@ -135,6 +140,9 @@ public class ProjectSymbolIndex {
         if (Character.isDigit(first)) return false;
         if (first == '-') {
             if (name.length() == 1 || Character.isDigit(name.charAt(1))) return false;
+        }
+        if (name.endsWith("-")) {
+            return false;
         }
         for (int i = 0; i < name.length(); i++) {
             char ch = name.charAt(i);
@@ -458,7 +466,6 @@ public class ProjectSymbolIndex {
                 }
             }
         } catch (Exception ignored) {
-            extractCssClassesAndIds(cssContent, classNames, cssIds);
         }
     }
 
@@ -653,7 +660,7 @@ public class ProjectSymbolIndex {
         if (tree == null) return;
 
         Set<String> fileClasses = new HashSet<>();
-        Set<String> fileHtmlIds = new HashSet<>();
+        Set<String> extractedHtmlIds = new HashSet<>();
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == HtmlSyntaxTree.N_ATTRIBUTE) {
                 String attrName = tree.nodeName[i];
@@ -665,7 +672,7 @@ public class ProjectSymbolIndex {
                         id = id.substring(1).trim();
                     }
                     if (!id.isEmpty() && isValidHtmlId(id)) {
-                        fileHtmlIds.add(id);
+                        extractedHtmlIds.add(id);
                     }
                 } else if ("class".equalsIgnoreCase(attrName)) {
                     String unquoted = stripQuotes(attrValue);
@@ -709,7 +716,7 @@ public class ProjectSymbolIndex {
             }
         }
         fileClasses.addAll(styleClasses);
-        fileHtmlIds.addAll(styleIds);
+        extractedHtmlIds.addAll(styleIds);
 
         // Also index JS symbols from embedded <script> tags in this HTML file
         Map<String, CompletionItem> scriptSymbols = new LinkedHashMap<>();
@@ -732,16 +739,17 @@ public class ProjectSymbolIndex {
             }
             fileCssClasses.put(pathKey, new HashSet<>(styleClasses));
             fileCssIds.put(pathKey, new HashSet<>(styleIds));
+            this.fileHtmlIds.put(pathKey, new HashSet<>(extractedHtmlIds));
             fileJsSymbols.put(pathKey, scriptSymbols);
         }
 
         classNames.addAll(fileClasses);
-        htmlIds.addAll(fileHtmlIds);
+        htmlIds.addAll(extractedHtmlIds);
         if (entries != null) {
             for (String c : fileClasses) {
                 entries.add(new IndexSymbolEntry(SymbolKey.cssClass(c), c, IndexSymbolEntry.KIND_CSS_CLASS, IndexSymbolEntry.FLAG_NONE, fileId, 1, "CSS Class"));
             }
-            for (String id : fileHtmlIds) {
+            for (String id : extractedHtmlIds) {
                 entries.add(new IndexSymbolEntry(SymbolKey.htmlId(id), id, IndexSymbolEntry.KIND_HTML_ID, IndexSymbolEntry.FLAG_NONE, fileId, 1, "HTML ID"));
             }
         }
@@ -1097,6 +1105,7 @@ public class ProjectSymbolIndex {
             fileClassMembers.remove(canonical);
             fileCssClasses.remove(canonical);
             fileCssIds.remove(canonical);
+            fileHtmlIds.remove(canonical);
             fileJsSymbols.remove(canonical);
         } catch (Exception e) {
             // fall back to absolute
@@ -1105,10 +1114,41 @@ public class ProjectSymbolIndex {
         fileClassMembers.remove(absolutePath);
         fileCssClasses.remove(absolutePath);
         fileCssIds.remove(absolutePath);
+        fileHtmlIds.remove(absolutePath);
         fileJsSymbols.remove(absolutePath);
+        rebuildInMemorySelectorLists();
         if (segmentedStore != null && projectRoot != null) {
             String rel = SegmentedSymbolStore.getRelativePath(new File(projectRoot), new File(absolutePath));
             segmentedStore.invalidateFile(rel);
+        }
+    }
+
+    private synchronized void rebuildInMemorySelectorLists() {
+        cssClassItems.clear();
+        Set<String> allClasses = new LinkedHashSet<>();
+        for (Set<String> set : fileCssClasses.values()) {
+            allClasses.addAll(set);
+        }
+        for (String c : allClasses) {
+            cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
+        }
+
+        cssIdItems.clear();
+        Set<String> allCssIds = new LinkedHashSet<>();
+        for (Set<String> set : fileCssIds.values()) {
+            allCssIds.addAll(set);
+        }
+        for (String id : allCssIds) {
+            cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
+        }
+
+        htmlIdItems.clear();
+        Set<String> allHtmlIds = new LinkedHashSet<>();
+        for (Set<String> set : fileHtmlIds.values()) {
+            allHtmlIds.addAll(set);
+        }
+        for (String id : allHtmlIds) {
+            htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
         }
     }
 
@@ -1621,49 +1661,10 @@ public class ProjectSymbolIndex {
                     Set<String> ids = new HashSet<>();
                     if (isCss) {
                         indexCssFile(file, classNames, ids);
-                        synchronized (this) {
-                            for (String c : classNames) {
-                                boolean exists = false;
-                                for (CompletionItem ci : cssClassItems) {
-                                    if (c.equals(ci.getLabel())) { exists = true; break; }
-                                }
-                                if (!exists) {
-                                    cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
-                                }
-                            }
-                            for (String id : ids) {
-                                boolean exists = false;
-                                for (CompletionItem ci : cssIdItems) {
-                                    if (id.equals(ci.getLabel())) { exists = true; break; }
-                                }
-                                if (!exists) {
-                                    cssIdItems.add(new CompletionItem(id, id, "CSS ID", CompletionItem.Type.CSS_VALUE, 0));
-                                }
-                            }
-                        }
                     } else {
                         indexHtmlFile(file, classNames, ids);
-                        synchronized (this) {
-                            for (String c : classNames) {
-                                boolean exists = false;
-                                for (CompletionItem ci : cssClassItems) {
-                                    if (c.equals(ci.getLabel())) { exists = true; break; }
-                                }
-                                if (!exists) {
-                                    cssClassItems.add(new CompletionItem(c, c, "CSS Class", CompletionItem.Type.CSS_VALUE, 0));
-                                }
-                            }
-                            for (String id : ids) {
-                                boolean exists = false;
-                                for (CompletionItem ci : htmlIdItems) {
-                                    if (id.equals(ci.getLabel())) { exists = true; break; }
-                                }
-                                if (!exists) {
-                                    htmlIdItems.add(new CompletionItem(id, id, "HTML ID", CompletionItem.Type.VALUE, 0));
-                                }
-                            }
-                        }
                     }
+                    rebuildInMemorySelectorLists();
                 }
 
                 if (segmentedStore != null && projectRoot != null) {

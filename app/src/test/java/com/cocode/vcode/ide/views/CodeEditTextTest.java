@@ -370,6 +370,36 @@ public class CodeEditTextTest {
     }
 
     @Test
+    public void testInsertCompletionReplacesTypedWordConWithConsoleLog() {
+        editor.setText("con");
+        inputConnection.setSelection(3, 3);
+
+        CompletionItem item = new CompletionItem("console.log", "console.log(|);", "Built-in", CompletionItem.Type.BUILTIN, 0);
+        item.setReplaceLength(3);
+
+        editor.insertCompletion(item);
+        ShadowLooper.runUiThreadTasks();
+
+        assertEquals("console.log();", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletionReplacesEntireTypedWordWhenReplaceLengthIsStale() {
+        // User typed "con", but item had stale replaceLength of 2 from earlier "co"
+        editor.setText("con");
+        inputConnection.setSelection(3, 3);
+
+        CompletionItem item = new CompletionItem("console.log", "console.log(|);", "Built-in", CompletionItem.Type.BUILTIN, 0);
+        item.setReplaceLength(2); // Stale replaceLength
+
+        editor.insertCompletion(item);
+        ShadowLooper.runUiThreadTasks();
+
+        // Must completely replace "con" and NOT leave leading "c" ("cconsole.log();")
+        assertEquals("console.log();", editor.getText().toString());
+    }
+
+    @Test
     public void testComposingTextSkipOverClosingBracket() {
         editor.setAutoCloseBrackets(true);
         editor.setText("p{}");

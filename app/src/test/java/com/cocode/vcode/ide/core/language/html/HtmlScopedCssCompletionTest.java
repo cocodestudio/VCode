@@ -249,4 +249,89 @@ public class HtmlScopedCssCompletionTest {
         assertTrue("Should contain ID from linked CSS", foundLinkedHeader);
         assertTrue("Should contain ID from <style> tag", foundOnlyStyleId);
     }
+
+    @Test
+    public void testEmbeddedStyleTagClassCompletionScoping() {
+        String html = "<!DOCTYPE html>\n" +
+                      "<html lang=\"en\">\n" +
+                      "  <head>\n" +
+                      "    <style>\n" +
+                      "      .wrapper {\n" +
+                      "        display: flex;\n" +
+                      "      }\n" +
+                      "\n" +
+                      "      .bg-wrapper {\n" +
+                      "        \n" +
+                      "      }\n" +
+                      "      #wrap {\n" +
+                      "        \n" +
+                      "      }\n" +
+                      "      .\n" +
+                      "    </style>\n" +
+                      "  </head>\n" +
+                      "  <body>\n" +
+                      "    <img src=\"\" class=\"\" loading=\"lazy\" id=\"wrapper-new\" alt=\"\">\n" +
+                      "  </body>\n" +
+                      "</html>";
+
+        // Cursor right after '.' inside style tag
+        int dotCursor = html.lastIndexOf('.') + 1;
+        List<CompletionItem> suggestions = engine.getSuggestions(html, dotCursor);
+
+        boolean foundWrapper = false;
+        boolean foundBgWrapper = false;
+        for (CompletionItem item : suggestions) {
+            String label = item.getLabel();
+            if (".wrapper".equals(label) || "wrapper".equals(label)) foundWrapper = true;
+            if (".bg-wrapper".equals(label) || "bg-wrapper".equals(label)) foundBgWrapper = true;
+
+            // Must NOT suggest unlinked css classes
+            assertFalse("Must NOT suggest unlinked CSS class 'unlinked-card'", label.contains("unlinked-card"));
+            // Must NOT suggest incomplete/fragmented tokens
+            assertFalse("Must NOT suggest trailing hyphen tokens", label.endsWith("-"));
+            assertFalse("Must NOT suggest single letter invalid tokens", ".b".equals(label) || ".c".equals(label) || ".w".equals(label));
+        }
+
+        assertTrue("Should suggest wrapper in style tag", foundWrapper);
+        assertTrue("Should suggest bg-wrapper in style tag", foundBgWrapper);
+    }
+
+    @Test
+    public void testEmbeddedStyleTagIdCompletionScoping() {
+        String html = "<!DOCTYPE html>\n" +
+                      "<html lang=\"en\">\n" +
+                      "  <head>\n" +
+                      "    <style>\n" +
+                      "      .wrapper {\n" +
+                      "        display: flex;\n" +
+                      "      }\n" +
+                      "      #wrap {\n" +
+                      "        \n" +
+                      "      }\n" +
+                      "      #\n" +
+                      "    </style>\n" +
+                      "  </head>\n" +
+                      "  <body>\n" +
+                      "    <img src=\"\" class=\"\" loading=\"lazy\" id=\"wrapper-new\" alt=\"\">\n" +
+                      "  </body>\n" +
+                      "</html>";
+
+        // Cursor right after '#' inside style tag
+        int hashCursor = html.lastIndexOf('#') + 1;
+        List<CompletionItem> suggestions = engine.getSuggestions(html, hashCursor);
+
+        boolean foundWrap = false;
+        boolean foundWrapperNew = false;
+        for (CompletionItem item : suggestions) {
+            String label = item.getLabel();
+            if ("#wrap".equals(label) || "wrap".equals(label)) foundWrap = true;
+            if ("#wrapper-new".equals(label) || "wrapper-new".equals(label)) foundWrapperNew = true;
+
+            // Must NOT suggest unlinked CSS IDs
+            assertFalse("Must NOT suggest unlinked CSS ID 'unlinked-modal'", label.contains("unlinked-modal"));
+        }
+
+        assertTrue("Should suggest wrap defined in style tag", foundWrap);
+        assertTrue("Should suggest wrapper-new defined in HTML body id attribute", foundWrapperNew);
+    }
 }
