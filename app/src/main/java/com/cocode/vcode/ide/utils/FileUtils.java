@@ -55,6 +55,20 @@ public class FileUtils {
     }
 
     /**
+     * Determines whether two File objects point to the same physical file on disk,
+     * comparing canonical paths when possible and falling back to absolute paths.
+     */
+    public static boolean isSameFile(File f1, File f2) {
+        if (f1 == null || f2 == null) return false;
+        if (f1.equals(f2)) return true;
+        try {
+            return f1.getCanonicalPath().equals(f2.getCanonicalPath());
+        } catch (Exception e) {
+            return f1.getAbsolutePath().equals(f2.getAbsolutePath());
+        }
+    }
+
+    /**
      * Writes the provided text content to a file with UTF-8 encoding atomically and crash-safely.
      * Content is written to a temporary sibling file first, flushed and synced to physical flash storage,
      * and atomically renamed to the destination.

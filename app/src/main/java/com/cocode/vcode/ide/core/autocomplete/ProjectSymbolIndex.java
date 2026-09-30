@@ -1167,6 +1167,8 @@ public class ProjectSymbolIndex {
                 Set<String> ids = new HashSet<>();
                 indexCssFile(file, classes, ids);
                 set = fileCssClasses.get(pathKey);
+            } else {
+                fileCssClasses.put(pathKey, Collections.emptySet());
             }
         }
         return set != null ? new HashSet<>(set) : Collections.emptySet();
@@ -1187,6 +1189,8 @@ public class ProjectSymbolIndex {
                 Set<String> ids = new HashSet<>();
                 indexCssFile(file, classes, ids);
                 set = fileCssIds.get(pathKey);
+            } else {
+                fileCssIds.put(pathKey, Collections.emptySet());
             }
         }
         return set != null ? new HashSet<>(set) : Collections.emptySet();
@@ -1290,6 +1294,8 @@ public class ProjectSymbolIndex {
             if (canRead) {
                 indexJsFile(file);
                 map = fileJsSymbols.get(pathKey);
+            } else {
+                fileJsSymbols.put(pathKey, Collections.emptyMap());
             }
         }
         return map != null ? new LinkedHashMap<>(map) : Collections.emptyMap();

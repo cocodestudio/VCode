@@ -412,7 +412,6 @@ public class ProjectRepository {
 
                 Project project = readProjectMeta(meta, projectDir);
                 project.setLastModifiedAt(System.currentTimeMillis());
-                project.setFileCount(FileUtils.countFilesInDir(projectDir));
                 writeProjectMeta(projectDir, project);
             } catch (Exception ignored) {
             }

@@ -788,7 +788,7 @@ public class EditorViewModel extends ViewModel {
         List<EditorFile> currentDocs = getOpenFilesList();
         for (int i = 0; i < currentDocs.size(); i++) {
             EditorFile ef = currentDocs.get(i);
-            if (ef.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+            if (FileUtils.isSameFile(ef.getFile(), file)) {
                 activeTabIndexLiveData.setValue(i);
                 if (!ef.isDirty() && !ef.isVirtual() && !ef.isBinaryAsset() && file.exists()) {
                     long diskMod = file.lastModified();
@@ -829,7 +829,7 @@ public class EditorViewModel extends ViewModel {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     List<EditorFile> latestDocs = getOpenFilesList();
                     for (int i = 0; i < latestDocs.size(); i++) {
-                        if (latestDocs.get(i).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+                        if (FileUtils.isSameFile(latestDocs.get(i).getFile(), file)) {
                             activeTabIndexLiveData.setValue(i);
                             return;
                         }
@@ -855,7 +855,7 @@ public class EditorViewModel extends ViewModel {
         // Check if the file is already loaded in a tab
         for (int i = 0; i < currentDocs.size(); i++) {
             EditorFile ef = currentDocs.get(i);
-            if (ef.getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+            if (FileUtils.isSameFile(ef.getFile(), file)) {
                 activeTabIndexLiveData.setValue(i);
                 if (!ef.isDirty() && !ef.isVirtual() && !ef.isBinaryAsset() && file.exists()) {
                     long diskMod = file.lastModified();
@@ -896,7 +896,7 @@ public class EditorViewModel extends ViewModel {
                     // Re-check for existing tabs on the main thread to prevent race conditions
                     List<EditorFile> latestDocs = getOpenFilesList();
                     for (int i = 0; i < latestDocs.size(); i++) {
-                        if (latestDocs.get(i).getFile().getAbsolutePath().equals(file.getAbsolutePath())) {
+                        if (FileUtils.isSameFile(latestDocs.get(i).getFile(), file)) {
                             activeTabIndexLiveData.setValue(i);
                             return;
                         }
@@ -1066,7 +1066,7 @@ public class EditorViewModel extends ViewModel {
 
         if (hasDirtyVirtual || (settings != null && settings.autoSave)) {
             ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);
-            long delay = (settings != null) ? settings.autoSaveDelay * 20L : 2000L;
+            long delay = (settings != null && settings.autoSaveDelay > 0) ? settings.autoSaveDelay * 1000L : 2000L;
             ExecutorProvider.getInstance().getMainHandler().postDelayed(autoSaveRunnable, delay);
         }
     }

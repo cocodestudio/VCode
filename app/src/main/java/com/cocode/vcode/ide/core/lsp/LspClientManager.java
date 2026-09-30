@@ -84,7 +84,7 @@ public final class LspClientManager {
     public void requestCompletion(LspDocument doc, LspPosition pos,
                                   CancellationToken cancellationToken,
                                   LspCallback<List<LspCompletionItem>> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             try {
                 if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 LspServer server = getOrStartServer(doc.languageId);
@@ -151,7 +151,7 @@ public final class LspClientManager {
      */
     public void requestDefinition(LspDocument doc, LspPosition pos,
                                   LspCallback<LspLocation> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {
@@ -175,7 +175,7 @@ public final class LspClientManager {
      */
     public void requestReferences(LspDocument doc, LspPosition pos,
                                   LspCallback<List<LspLocation>> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {
@@ -199,7 +199,7 @@ public final class LspClientManager {
      */
     public void requestRename(LspDocument doc, LspPosition pos,
                               LspCallback<List<LspLocation>> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {
@@ -223,7 +223,7 @@ public final class LspClientManager {
      */
     public void requestSignatureHelp(LspDocument doc, LspPosition pos,
                                      LspCallback<LspSignatureHelp> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {
@@ -247,7 +247,7 @@ public final class LspClientManager {
      */
     public void requestHover(LspDocument doc, LspPosition pos,
                              LspCallback<HoverInfo> callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             try {
                 LspServer server = getOrStartServer(doc.languageId);
                 if (server == null || !server.isReady()) {

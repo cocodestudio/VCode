@@ -30,11 +30,15 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
     private static final int STATE_STRING_SINGLE_PENDING_STYLE = 10;
     private static final int STATE_STRING_DOUBLE_PENDING_SCRIPT = 11;
     private static final int STATE_STRING_SINGLE_PENDING_SCRIPT = 12;
+    private static final int STATE_STRING_DOUBLE_EVENT = 13;
+    private static final int STATE_STRING_SINGLE_EVENT = 14;
+    private static final int STATE_TAG_PENDING_EVENT_VALUE = 15;
     private final int colorTag;
     private final int colorAttribute;
     private final int colorValue;
     private final int colorBracket;
     private final int colorHtmlComment;
+    private final int colorJsIdentifier;
     private final CssSyntaxHighlighter cssHighlighter;
     private final JsSyntaxHighlighter jsHighlighter;
 
@@ -45,6 +49,7 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         colorValue = getColor(R.color.vcode_color_html_value);
         colorBracket = getColor(R.color.vcode_color_html_bracket);
         colorHtmlComment = getColor(R.color.vcode_color_comment);
+        colorJsIdentifier = getColor(R.color.vcode_color_js_function);
         cssHighlighter = new CssSyntaxHighlighter(context);
         jsHighlighter = new JsSyntaxHighlighter(context);
     }
@@ -56,17 +61,23 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         this.colorValue = 0;
         this.colorBracket = 0;
         this.colorHtmlComment = 0;
+        this.colorJsIdentifier = 0;
         this.cssHighlighter = CssSyntaxHighlighter.forTest();
         this.jsHighlighter = JsSyntaxHighlighter.forTest();
     }
 
     protected HtmlSyntaxHighlighter(int tag, int attribute, int value, int bracket, int comment) {
+        this(tag, attribute, value, bracket, comment, bracket);
+    }
+
+    protected HtmlSyntaxHighlighter(int tag, int attribute, int value, int bracket, int comment, int jsIdentifier) {
         super(comment, value, 0, value, 0);
         this.colorTag = tag;
         this.colorAttribute = attribute;
         this.colorValue = value;
         this.colorBracket = bracket;
         this.colorHtmlComment = comment;
+        this.colorJsIdentifier = jsIdentifier;
         this.cssHighlighter = CssSyntaxHighlighter.forTestWithColors(comment, tag, attribute, value, tag, bracket);
         this.jsHighlighter = JsSyntaxHighlighter.forTestWithColors(comment, value, tag, value, attribute, tag, bracket);
     }
@@ -76,7 +87,11 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
     }
 
     public static HtmlSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment) {
-        return new HtmlSyntaxHighlighter(tag, attribute, value, bracket, comment);
+        return new HtmlSyntaxHighlighter(tag, attribute, value, bracket, comment, bracket);
+    }
+
+    public static HtmlSyntaxHighlighter forTestWithColors(int tag, int attribute, int value, int bracket, int comment, int jsIdentifier) {
+        return new HtmlSyntaxHighlighter(tag, attribute, value, bracket, comment, jsIdentifier);
     }
 
     private static int outerState(int combined) {
@@ -89,6 +104,23 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
 
     private static int pack(int outer, int inner) {
         return (inner << 4) | outer;
+    }
+
+    public static boolean isEventAttribute(String name) {
+        if (name == null) return false;
+        return isEventAttribute(name, 0, name.length());
+    }
+
+    public static boolean isEventAttribute(CharSequence s, int start, int end) {
+        int len = end - start;
+        if (len <= 2) return false;
+        char c0 = s.charAt(start);
+        char c1 = s.charAt(start + 1);
+        if ((c0 == 'o' || c0 == 'O') && (c1 == 'n' || c1 == 'N')) {
+            char c2 = s.charAt(start + 2);
+            return (c2 >= 'a' && c2 <= 'z') || (c2 >= 'A' && c2 <= 'Z');
+        }
+        return false;
     }
 
     private static int stringState(int tagOuter, boolean isDouble) {
@@ -107,6 +139,9 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
             case STATE_STRING_DOUBLE_PENDING_SCRIPT:
             case STATE_STRING_SINGLE_PENDING_SCRIPT:
                 return STATE_TAG_PENDING_SCRIPT;
+            case STATE_STRING_DOUBLE_EVENT:
+            case STATE_STRING_SINGLE_EVENT:
+                return STATE_TAG;
             default:
                 return STATE_TAG;
         }
@@ -156,6 +191,11 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         int len = lineStr.length();
         int outer = outerState(startState);
         int inner = innerState(startState);
+        boolean isPendingEventAttr = false;
+        boolean isPendingEventValue = (outer == STATE_TAG_PENDING_EVENT_VALUE);
+        if (outer == STATE_TAG_PENDING_EVENT_VALUE) {
+            outer = STATE_TAG;
+        }
         int i = 0;
         boolean isFirstWord = false;
         boolean isClosingTag = false;
@@ -203,8 +243,11 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
 
             if (outer == STATE_STRING_DOUBLE || outer == STATE_STRING_SINGLE
                     || outer == STATE_STRING_DOUBLE_PENDING_STYLE || outer == STATE_STRING_SINGLE_PENDING_STYLE
-                    || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT || outer == STATE_STRING_SINGLE_PENDING_SCRIPT) {
-                boolean isDouble = (outer == STATE_STRING_DOUBLE || outer == STATE_STRING_DOUBLE_PENDING_STYLE || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT);
+                    || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT || outer == STATE_STRING_SINGLE_PENDING_SCRIPT
+                    || outer == STATE_STRING_DOUBLE_EVENT || outer == STATE_STRING_SINGLE_EVENT) {
+                boolean isDouble = (outer == STATE_STRING_DOUBLE || outer == STATE_STRING_DOUBLE_PENDING_STYLE
+                        || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT || outer == STATE_STRING_DOUBLE_EVENT);
+                boolean isEvent = (outer == STATE_STRING_DOUBLE_EVENT || outer == STATE_STRING_SINGLE_EVENT);
                 char quote = isDouble ? '"' : '\'';
                 int j = i;
                 while (j < len) {
@@ -214,7 +257,8 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     }
                     j++;
                 }
-                tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
+                int valColor = isEvent ? colorJsIdentifier : colorValue;
+                tokens.add(new HighlightToken(lineIndex, i, j, valColor, false));
                 if (j > i && lineStr.charAt(j - 1) == quote) {
                     outer = tagReturnState(outer);
                 }
@@ -293,18 +337,24 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     } else {
                         outer = STATE_NORMAL;
                     }
+                    isPendingEventAttr = false;
+                    isPendingEventValue = false;
                     i++;
                     continue;
                 }
                 if (c == '?' && i + 1 < len && lineStr.charAt(i + 1) == '>') {
                     tokens.add(new HighlightToken(lineIndex, i, i + 2, colorBracket, false));
                     outer = STATE_NORMAL;
+                    isPendingEventAttr = false;
+                    isPendingEventValue = false;
                     i += 2;
                     continue;
                 }
                 if (c == '/' && i + 1 < len && lineStr.charAt(i + 1) == '>') {
                     tokens.add(new HighlightToken(lineIndex, i, i + 2, colorBracket, false));
                     outer = STATE_NORMAL;
+                    isPendingEventAttr = false;
+                    isPendingEventValue = false;
                     i += 2;
                     continue;
                 }
@@ -313,8 +363,12 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     while (j < len && lineStr.charAt(j) != '"') j++;
                     boolean closed = (j < len && lineStr.charAt(j) == '"');
                     if (closed) j++;
-                    tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
-                    if (!closed) outer = stringState(outer, true);
+                    int valColor = isPendingEventValue ? colorJsIdentifier : colorValue;
+                    tokens.add(new HighlightToken(lineIndex, i, j, valColor, false));
+                    if (!closed) {
+                        outer = isPendingEventValue ? STATE_STRING_DOUBLE_EVENT : stringState(outer, true);
+                    }
+                    isPendingEventValue = false;
                     i = j;
                     continue;
                 }
@@ -323,13 +377,19 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     while (j < len && lineStr.charAt(j) != '\'') j++;
                     boolean closed = (j < len && lineStr.charAt(j) == '\'');
                     if (closed) j++;
-                    tokens.add(new HighlightToken(lineIndex, i, j, colorValue, false));
-                    if (!closed) outer = stringState(outer, false);
+                    int valColor = isPendingEventValue ? colorJsIdentifier : colorValue;
+                    tokens.add(new HighlightToken(lineIndex, i, j, valColor, false));
+                    if (!closed) {
+                        outer = isPendingEventValue ? STATE_STRING_SINGLE_EVENT : stringState(outer, false);
+                    }
+                    isPendingEventValue = false;
                     i = j;
                     continue;
                 }
                 if (c == '=') {
                     tokens.add(new HighlightToken(lineIndex, i, i + 1, colorBracket, false));
+                    isPendingEventValue = isPendingEventAttr;
+                    isPendingEventAttr = false;
                     i++;
                     // Check for unquoted attribute value
                     int nextNonWhite = i;
@@ -342,7 +402,9 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                             while (j < len && !Character.isWhitespace(lineStr.charAt(j)) && lineStr.charAt(j) != '>' && lineStr.charAt(j) != '/') {
                                 j++;
                             }
-                            tokens.add(new HighlightToken(lineIndex, nextNonWhite, j, colorValue, false));
+                            int valColor = isPendingEventValue ? colorJsIdentifier : colorValue;
+                            tokens.add(new HighlightToken(lineIndex, nextNonWhite, j, valColor, false));
+                            isPendingEventValue = false;
                             i = j;
                             continue;
                         }
@@ -368,8 +430,12 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                             else if (word.equalsIgnoreCase("script"))
                                 outer = STATE_TAG_PENDING_SCRIPT;
                         }
+                        isPendingEventAttr = false;
+                        isPendingEventValue = false;
                     } else {
                         tokens.add(new HighlightToken(lineIndex, i, j, colorAttribute, false));
+                        isPendingEventAttr = isEventAttribute(lineStr, i, j);
+                        isPendingEventValue = false;
                     }
                     i = j;
                     continue;
@@ -377,6 +443,9 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
 
                 i++;
             }
+        }
+        if (outer == STATE_TAG && isPendingEventValue) {
+            outer = STATE_TAG_PENDING_EVENT_VALUE;
         }
         lastLineState = pack(outer, inner);
         return tokens;
@@ -387,6 +456,11 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
         int len = line.length();
         int outer = outerState(startState);
         int inner = innerState(startState);
+        boolean isPendingEventAttr = false;
+        boolean isPendingEventValue = (outer == STATE_TAG_PENDING_EVENT_VALUE);
+        if (outer == STATE_TAG_PENDING_EVENT_VALUE) {
+            outer = STATE_TAG;
+        }
         int i = 0;
         boolean isFirstWord = false;
         boolean isClosingTag = false;
@@ -436,8 +510,10 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
 
             if (outer == STATE_STRING_DOUBLE || outer == STATE_STRING_SINGLE
                     || outer == STATE_STRING_DOUBLE_PENDING_STYLE || outer == STATE_STRING_SINGLE_PENDING_STYLE
-                    || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT || outer == STATE_STRING_SINGLE_PENDING_SCRIPT) {
-                boolean isDouble = (outer == STATE_STRING_DOUBLE || outer == STATE_STRING_DOUBLE_PENDING_STYLE || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT);
+                    || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT || outer == STATE_STRING_SINGLE_PENDING_SCRIPT
+                    || outer == STATE_STRING_DOUBLE_EVENT || outer == STATE_STRING_SINGLE_EVENT) {
+                boolean isDouble = (outer == STATE_STRING_DOUBLE || outer == STATE_STRING_DOUBLE_PENDING_STYLE
+                        || outer == STATE_STRING_DOUBLE_PENDING_SCRIPT || outer == STATE_STRING_DOUBLE_EVENT);
                 char quote = isDouble ? '"' : '\'';
                 int j = i;
                 while (j < len) {
@@ -510,16 +586,22 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     } else {
                         outer = STATE_NORMAL;
                     }
+                    isPendingEventAttr = false;
+                    isPendingEventValue = false;
                     i++;
                     continue;
                 }
                 if (c == '?' && i + 1 < len && line.charAt(i + 1) == '>') {
                     outer = STATE_NORMAL;
+                    isPendingEventAttr = false;
+                    isPendingEventValue = false;
                     i += 2;
                     continue;
                 }
                 if (c == '/' && i + 1 < len && line.charAt(i + 1) == '>') {
                     outer = STATE_NORMAL;
+                    isPendingEventAttr = false;
+                    isPendingEventValue = false;
                     i += 2;
                     continue;
                 }
@@ -528,7 +610,10 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     while (j < len && line.charAt(j) != '"') j++;
                     boolean closed = (j < len && line.charAt(j) == '"');
                     if (closed) j++;
-                    if (!closed) outer = stringState(outer, true);
+                    if (!closed) {
+                        outer = isPendingEventValue ? STATE_STRING_DOUBLE_EVENT : stringState(outer, true);
+                    }
+                    isPendingEventValue = false;
                     i = j;
                     continue;
                 }
@@ -537,8 +622,32 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                     while (j < len && line.charAt(j) != '\'') j++;
                     boolean closed = (j < len && line.charAt(j) == '\'');
                     if (closed) j++;
-                    if (!closed) outer = stringState(outer, false);
+                    if (!closed) {
+                        outer = isPendingEventValue ? STATE_STRING_SINGLE_EVENT : stringState(outer, false);
+                    }
+                    isPendingEventValue = false;
                     i = j;
+                    continue;
+                }
+                if (c == '=') {
+                    isPendingEventValue = isPendingEventAttr;
+                    isPendingEventAttr = false;
+                    i++;
+                    int nextNonWhite = i;
+                    while (nextNonWhite < len && Character.isWhitespace(line.charAt(nextNonWhite)))
+                        nextNonWhite++;
+                    if (nextNonWhite < len) {
+                        char nc = line.charAt(nextNonWhite);
+                        if (nc != '"' && nc != '\'' && nc != '>' && nc != '/') {
+                            int j = nextNonWhite;
+                            while (j < len && !Character.isWhitespace(line.charAt(j)) && line.charAt(j) != '>' && line.charAt(j) != '/') {
+                                j++;
+                            }
+                            isPendingEventValue = false;
+                            i = j;
+                            continue;
+                        }
+                    }
                     continue;
                 }
                 if (Character.isLetter(c) || c == '!' || c == '-' || c == '_' || c == ':' || Character.isDigit(c)) {
@@ -560,6 +669,11 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
                             else if (wordLen == 6 && equalsIgnoreCaseAt(line, i, "script"))
                                 outer = STATE_TAG_PENDING_SCRIPT;
                         }
+                        isPendingEventAttr = false;
+                        isPendingEventValue = false;
+                    } else {
+                        isPendingEventAttr = isEventAttribute(line, i, j);
+                        isPendingEventValue = false;
                     }
                     i = j;
                     continue;
@@ -567,6 +681,9 @@ public class HtmlSyntaxHighlighter extends SyntaxHighlighter {
 
                 i++;
             }
+        }
+        if (outer == STATE_TAG && isPendingEventValue) {
+            outer = STATE_TAG_PENDING_EVENT_VALUE;
         }
         return pack(outer, inner);
     }

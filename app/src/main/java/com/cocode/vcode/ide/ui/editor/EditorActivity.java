@@ -38,6 +38,7 @@ import com.cocode.vcode.ide.ui.settings.SettingsActivity;
 import com.cocode.vcode.ide.ui.sheets.editor.KeyboardShortcutsBottomSheet;
 
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.data.model.AppSettings;
@@ -551,13 +552,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private boolean isSameFile(File f1, File f2) {
-        if (f1 == null || f2 == null) return false;
-        if (f1.equals(f2)) return true;
-        try {
-            return f1.getCanonicalPath().equals(f2.getCanonicalPath());
-        } catch (Exception e) {
-            return f1.getAbsolutePath().equals(f2.getAbsolutePath());
-        }
+        return FileUtils.isSameFile(f1, f2);
     }
 
     private void handleRunAction() {
@@ -1006,6 +1001,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         List<EditorFile> files = viewModel.getOpenFiles().getValue();
         if (files == null || index < 0 || index >= files.size()) return;
 
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
+        viewModel.syncAllOpenFilesToIndex();
+
         EditorFile file = files.get(index);
         AppSettings settings = viewModel.getSettingsLiveData().getValue();
         boolean confirm = settings == null || settings.confirmOnTabClose;
@@ -1369,6 +1369,21 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void navigateWithUnsavedCheck(Runnable navigateAction) {
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        }
+        viewModel.syncAllOpenFilesToIndex();
+
+        AppSettings settings = viewModel.getSettingsLiveData().getValue();
+        if (settings != null && settings.autoSave) {
+            if (viewModel.hasUnsavedFiles()) {
+                viewModel.saveAll(navigateAction);
+            } else {
+                navigateAction.run();
+            }
+            return;
+        }
+
         if (viewModel.hasUnsavedFiles()) {
             showMultipleFilesUnsavedDialog(navigateAction);
         } else {
@@ -1397,6 +1412,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         dialogBinding.btnSave.setOnClickListener(v -> {
             dialog.dismiss();
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            }
+            viewModel.syncAllOpenFilesToIndex();
             viewModel.saveFile(index, doClose);
         });
         dialogBinding.btnDiscard.setOnClickListener(v -> {
@@ -1437,6 +1456,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         dialogBinding.btnSave.setOnClickListener(v -> {
             dialog.dismiss();
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            }
+            viewModel.syncAllOpenFilesToIndex();
             viewModel.saveAll(navigateAction);
         });
         dialogBinding.btnDiscard.setOnClickListener(v -> {

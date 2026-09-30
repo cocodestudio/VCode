@@ -369,7 +369,7 @@ public final class ProjectIndex {
             documents.put(canon, doc);
         }
         // Re-extract symbols for this single file in the background
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
             updateFileSymbols(doc.uri, symbols);
         });
@@ -429,7 +429,7 @@ public final class ProjectIndex {
         LspDocument existing = documents.get(uri);
         if (existing != null) {
             // Re-extract symbols from the already-up-to-date in-memory snapshot
-            ExecutorProvider.getInstance().runOnIo(() -> {
+            ExecutorProvider.getInstance().runOnCpu(() -> {
                 List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(existing);
                 updateFileSymbols(uri, symbols);
             });
