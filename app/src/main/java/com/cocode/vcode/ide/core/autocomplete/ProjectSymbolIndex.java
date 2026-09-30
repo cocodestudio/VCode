@@ -29,6 +29,7 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -49,6 +50,9 @@ public class ProjectSymbolIndex {
     private final List<CompletionItem> cssClassItems = new ArrayList<>();
     private final List<CompletionItem> cssIdItems = new ArrayList<>();
     private final List<CompletionItem> htmlIdItems = new ArrayList<>();
+    // Maps absolute/canonical file path → CSS classes and IDs defined in that file (CSS files or HTML <style> tags)
+    private final Map<String, Set<String>> fileCssClasses = new HashMap<>();
+    private final Map<String, Set<String>> fileCssIds = new HashMap<>();
     // Maps absolute file path to its exported CompletionItems
     private final Map<String, List<CompletionItem>> jsFileExports = new HashMap<>();
     // Guards against multiple concurrent buildIndex() calls for the same root.
@@ -90,6 +94,8 @@ public class ProjectSymbolIndex {
     public synchronized void clearInMemorySymbols() {
         classMembers.clear();
         fileClassMembers.clear();
+        fileCssClasses.clear();
+        fileCssIds.clear();
         cssClassItems.clear();
         cssIdItems.clear();
         htmlIdItems.clear();
@@ -417,7 +423,7 @@ public class ProjectSymbolIndex {
         }
     }
 
-    private static String stripQuotes(String str) {
+    public static String stripQuotes(String str) {
         if (str == null || str.length() < 2) return str != null ? str : "";
         char first = str.charAt(0);
         char last = str.charAt(str.length() - 1);
@@ -425,6 +431,28 @@ public class ProjectSymbolIndex {
             return str.substring(1, str.length() - 1);
         }
         return str;
+    }
+
+    public static void extractSelectorsFromCssText(String cssContent, Set<String> classNames, Set<String> cssIds) {
+        if (cssContent == null || cssContent.isEmpty()) return;
+        try {
+            CssTokenStream stream = CssLexer.tokenize(cssContent);
+            CssSyntaxTree tree = CssParser.parse(stream, cssContent);
+            for (int i = 1; i < tree.nodeCount; i++) {
+                if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
+                    int parent = tree.nodeParent[i];
+                    if (parent > 0 && tree.nodeType[parent] == CssSyntaxTree.N_AT_RULE) {
+                        continue;
+                    }
+                    String sel = tree.nodeName[i];
+                    if (sel != null && !sel.isEmpty() && !sel.startsWith("@")) {
+                        extractCssClassesAndIds(sel, classNames, cssIds);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            extractCssClassesAndIds(cssContent, classNames, cssIds);
+        }
     }
 
     private static boolean isIgnoredProp(String name) {
@@ -577,26 +605,23 @@ public class ProjectSymbolIndex {
         String content = readFile(file);
         if (content == null) return;
 
-        CssTokenStream stream = CssLexer.tokenize(content);
-        CssSyntaxTree tree = CssParser.parse(stream, content);
-
         Set<String> fileClasses = new HashSet<>();
         Set<String> fileIds = new HashSet<>();
-        for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == CssSyntaxTree.N_SELECTOR) {
-                int parent = tree.nodeParent[i];
-                if (parent > 0 && tree.nodeType[parent] == CssSyntaxTree.N_AT_RULE) {
-                    continue; // Skip at-rules (@media, @keyframes, etc.)
-                }
-                String sel = tree.nodeName[i];
-                if (sel != null && !sel.isEmpty() && !sel.startsWith("@")) {
-                    extractCssClassesAndIds(sel, fileClasses, fileIds);
-                }
-            }
-        }
+        extractSelectorsFromCssText(content, fileClasses, fileIds);
 
         classNames.addAll(fileClasses);
         cssIds.addAll(fileIds);
+
+        synchronized (this) {
+            String pathKey = file.getAbsolutePath();
+            try {
+                pathKey = file.getCanonicalPath();
+            } catch (Exception ignored) {
+            }
+            fileCssClasses.put(pathKey, new HashSet<>(fileClasses));
+            fileCssIds.put(pathKey, new HashSet<>(fileIds));
+        }
+
         if (entries != null) {
             for (String c : fileClasses) {
                 entries.add(new IndexSymbolEntry(SymbolKey.cssClass(c), c, IndexSymbolEntry.KIND_CSS_CLASS, IndexSymbolEntry.FLAG_NONE, fileId, 1, "CSS Class"));
@@ -652,6 +677,41 @@ public class ProjectSymbolIndex {
                     }
                 }
             }
+        }
+
+        // Also index selectors from embedded <style> tags in this HTML file
+        Set<String> styleClasses = new HashSet<>();
+        Set<String> styleIds = new HashSet<>();
+        if (result != null && result.embeddedResults != null) {
+            for (ParseResult.EmbeddedResult emb : result.embeddedResults) {
+                if (emb.result != null && emb.result.cssTree != null) {
+                    CssSyntaxTree cTree = emb.result.cssTree;
+                    for (int j = 1; j < cTree.nodeCount; j++) {
+                        if (cTree.nodeType[j] == CssSyntaxTree.N_SELECTOR) {
+                            int parent = cTree.nodeParent[j];
+                            if (parent > 0 && cTree.nodeType[parent] == CssSyntaxTree.N_AT_RULE) {
+                                continue;
+                            }
+                            String sel = cTree.nodeName[j];
+                            if (sel != null && !sel.isEmpty() && !sel.startsWith("@")) {
+                                extractCssClassesAndIds(sel, styleClasses, styleIds);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        fileClasses.addAll(styleClasses);
+        fileHtmlIds.addAll(styleIds);
+
+        synchronized (this) {
+            String pathKey = file.getAbsolutePath();
+            try {
+                pathKey = file.getCanonicalPath();
+            } catch (Exception ignored) {
+            }
+            fileCssClasses.put(pathKey, new HashSet<>(styleClasses));
+            fileCssIds.put(pathKey, new HashSet<>(styleIds));
         }
 
         classNames.addAll(fileClasses);
@@ -899,7 +959,7 @@ public class ProjectSymbolIndex {
         }
     }
 
-    private boolean hasDocument(File file) {
+    public static boolean hasDocument(File file) {
         if (file == null) return false;
         if (com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getDocument(file.getAbsolutePath()) != null)
             return true;
@@ -1005,15 +1065,162 @@ public class ProjectSymbolIndex {
             String canonical = new File(absolutePath).getCanonicalPath();
             jsFileExports.remove(canonical);
             fileClassMembers.remove(canonical);
+            fileCssClasses.remove(canonical);
+            fileCssIds.remove(canonical);
         } catch (Exception e) {
             // fall back to absolute
         }
         jsFileExports.remove(absolutePath);
         fileClassMembers.remove(absolutePath);
+        fileCssClasses.remove(absolutePath);
+        fileCssIds.remove(absolutePath);
         if (segmentedStore != null && projectRoot != null) {
             String rel = SegmentedSymbolStore.getRelativePath(new File(projectRoot), new File(absolutePath));
             segmentedStore.invalidateFile(rel);
         }
+    }
+
+    public synchronized Set<String> getCssClassesForFile(File file) {
+        if (file == null) return Collections.emptySet();
+        String pathKey = file.getAbsolutePath();
+        try {
+            pathKey = file.getCanonicalPath();
+        } catch (Exception ignored) {
+        }
+        Set<String> set = fileCssClasses.get(pathKey);
+        if (set == null) {
+            boolean canRead = file.exists() || hasDocument(file);
+            if (canRead) {
+                Set<String> classes = new HashSet<>();
+                Set<String> ids = new HashSet<>();
+                indexCssFile(file, classes, ids);
+                set = fileCssClasses.get(pathKey);
+            }
+        }
+        return set != null ? new HashSet<>(set) : Collections.emptySet();
+    }
+
+    public synchronized Set<String> getCssIdsForFile(File file) {
+        if (file == null) return Collections.emptySet();
+        String pathKey = file.getAbsolutePath();
+        try {
+            pathKey = file.getCanonicalPath();
+        } catch (Exception ignored) {
+        }
+        Set<String> set = fileCssIds.get(pathKey);
+        if (set == null) {
+            boolean canRead = file.exists() || hasDocument(file);
+            if (canRead) {
+                Set<String> classes = new HashSet<>();
+                Set<String> ids = new HashSet<>();
+                indexCssFile(file, classes, ids);
+                set = fileCssIds.get(pathKey);
+            }
+        }
+        return set != null ? new HashSet<>(set) : Collections.emptySet();
+    }
+
+    public synchronized void collectCssSelectorsRecursively(File file, Set<String> classNames, Set<String> cssIds, Set<String> visited) {
+        if (file == null) return;
+        String pathKey = file.getAbsolutePath();
+        try {
+            pathKey = file.getCanonicalPath();
+        } catch (Exception ignored) {
+        }
+        if (visited != null && !visited.add(pathKey)) return;
+
+        classNames.addAll(getCssClassesForFile(file));
+        cssIds.addAll(getCssIdsForFile(file));
+
+        String content = readFile(file);
+        if (content != null && content.contains("@import")) {
+            List<File> importedFiles = extractCssImports(content, file);
+            for (File imp : importedFiles) {
+                collectCssSelectorsRecursively(imp, classNames, cssIds, visited);
+            }
+        }
+    }
+
+    public static List<File> extractCssImports(String cssContent, File baseFile) {
+        if (cssContent == null || cssContent.isEmpty() || !cssContent.contains("@import")) {
+            return Collections.emptyList();
+        }
+        List<File> result = new ArrayList<>();
+        File parentDir = baseFile != null ? baseFile.getParentFile() : null;
+        int len = cssContent.length();
+        int p = 0;
+        while (p < len) {
+            int importIdx = indexOfIgnoreCaseStatic(cssContent, "@import", p);
+            if (importIdx == -1) break;
+            int after = importIdx + 7;
+            while (after < len && Character.isWhitespace(cssContent.charAt(after))) after++;
+            if (after >= len) break;
+
+            int endIdx = cssContent.indexOf(';', after);
+            if (endIdx == -1) endIdx = len;
+
+            String statement = cssContent.substring(after, endIdx).trim();
+            String importTarget = null;
+            String lowerStatement = statement.toLowerCase();
+            if (lowerStatement.startsWith("url(") || lowerStatement.startsWith("url (")) {
+                int open = statement.indexOf('(');
+                int close = statement.indexOf(')', open + 1);
+                if (open != -1 && close != -1) {
+                    importTarget = stripQuotes(statement.substring(open + 1, close).trim());
+                }
+            } else if (statement.startsWith("\"") || statement.startsWith("'")) {
+                importTarget = stripQuotes(statement);
+            }
+
+            if (importTarget != null && !importTarget.isEmpty()) {
+                int q = importTarget.indexOf('?');
+                if (q != -1) importTarget = importTarget.substring(0, q);
+                int h = importTarget.indexOf('#');
+                if (h != -1) importTarget = importTarget.substring(0, h);
+                importTarget = importTarget.trim();
+
+                if (!importTarget.startsWith("http://") && !importTarget.startsWith("https://")
+                        && !importTarget.startsWith("//") && !importTarget.startsWith("data:")) {
+                    File resolved = null;
+                    if (importTarget.startsWith("/") && baseFile != null) {
+                        File root = getProjectRoot(baseFile);
+                        resolved = new File(root != null ? root : parentDir, importTarget.substring(1));
+                    } else if (parentDir != null) {
+                        resolved = new File(parentDir, importTarget);
+                    }
+                    if (resolved != null) {
+                        try {
+                            resolved = resolved.getCanonicalFile();
+                        } catch (Exception e) {
+                            resolved = resolved.getAbsoluteFile();
+                        }
+                        if (resolved.exists() || (baseFile != null && hasDocument(resolved))) {
+                            result.add(resolved);
+                        }
+                    }
+                }
+            }
+            p = endIdx + 1;
+        }
+        return result;
+    }
+
+    public static int indexOfIgnoreCaseStatic(String haystack, String needle, int from) {
+        if (haystack == null || needle == null) return -1;
+        int hLen = haystack.length();
+        int nLen = needle.length();
+        if (from >= hLen || nLen == 0) return -1;
+        for (int i = Math.max(0, from); i <= hLen - nLen; i++) {
+            boolean match = true;
+            for (int j = 0; j < nLen; j++) {
+                if (Character.toLowerCase(haystack.charAt(i + j)) != Character.toLowerCase(needle.charAt(j))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
     }
 
     private void loadCachedSymbolsIntoMemory() {

@@ -19,8 +19,12 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Intelligent completion coordinator for HTML source code — mirrors VS Code's HTML language server.
@@ -66,9 +70,12 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         return "<'/\"!=:@-.*+^[]{}()#>&";
     }
 
+    @Override
     public void setCurrentFile(File file) {
+        super.setCurrentFile(file);
         this.currentFile = file;
         jsEngine.setCurrentFile(file);
+        cssEngine.setCurrentFile(file);
     }
 
     // Tag loading
@@ -337,26 +344,41 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                 }
 
                 if ("class".equals(attrName)) {
-                    List<CompletionItem> classes = ProjectSymbolIndex.getInstance().getCssClassItems();
-                    if (!classes.isEmpty()) {
-                        List<CompletionItem> res = fuzzyFilter(classes, attrWord);
+                    ensureHtmlSelectorsResolved(fullText);
+                    if (!cachedHtmlClassItems.isEmpty()) {
+                        Set<String> alreadyChosen = new HashSet<>();
+                        String[] tokens = typedValue.split("\\s+");
+                        for (String t : tokens) {
+                            if (!t.isEmpty()) {
+                                alreadyChosen.add(t.toLowerCase());
+                            }
+                        }
+                        alreadyChosen.remove(attrWord.toLowerCase());
+
+                        List<CompletionItem> candidates = new ArrayList<>();
+                        for (CompletionItem ci : cachedHtmlClassItems) {
+                            if (!alreadyChosen.contains(ci.getLabel().toLowerCase())) {
+                                candidates.add(ci);
+                            }
+                        }
+
+                        List<CompletionItem> res = fuzzyFilter(candidates, attrWord);
                         for (CompletionItem ci : res) {
                             ci.setReplaceLength(attrWord.length());
                         }
                         return res;
                     }
+                    return new ArrayList<>();
                 } else if ("id".equals(attrName)) {
-                    List<CompletionItem> ids = ProjectSymbolIndex.getInstance().getCssIdItems();
-                    List<CompletionItem> htmlIds = ProjectSymbolIndex.getInstance().getHtmlIdItems();
-                    List<CompletionItem> allIds = new ArrayList<>(ids);
-                    allIds.addAll(htmlIds);
-                    if (!allIds.isEmpty()) {
-                        List<CompletionItem> res = fuzzyFilter(allIds, attrWord);
+                    ensureHtmlSelectorsResolved(fullText);
+                    if (!cachedHtmlIdItems.isEmpty()) {
+                        List<CompletionItem> res = fuzzyFilter(cachedHtmlIdItems, attrWord);
                         for (CompletionItem ci : res) {
                             ci.setReplaceLength(attrWord.length());
                         }
                         return res;
                     }
+                    return new ArrayList<>();
                 }
 
                 String[] values = HtmlDefinitions.getAttributeValues(ctx.currentTagName, attrName);
@@ -800,5 +822,265 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         }
         // For other generic tags (like <a>, <iframe>), allow everything
         return true;
+    }
+
+    // CSS Selector completions for HTML class and id attributes
+
+    private final List<CompletionItem> cachedHtmlClassItems = new ArrayList<>();
+    private final List<CompletionItem> cachedHtmlIdItems = new ArrayList<>();
+    private int lastHtmlSelectorsHash = 0;
+
+    private void ensureHtmlSelectorsResolved(String fullText) {
+        if (fullText == null) return;
+        int docHash = fullText.hashCode();
+        if (docHash == lastHtmlSelectorsHash) {
+            return;
+        }
+        lastHtmlSelectorsHash = docHash;
+        cachedHtmlClassItems.clear();
+        cachedHtmlIdItems.clear();
+
+        Map<String, String> classOrigins = new LinkedHashMap<>();
+        Map<String, String> idOrigins = new LinkedHashMap<>();
+        Set<String> visitedFiles = new HashSet<>();
+
+        // 1. Linked CSS files (<link rel="stylesheet" href="...">)
+        List<File> linkedFiles = extractLinkedCssFiles(fullText, currentFile);
+        for (File linkedFile : linkedFiles) {
+            String fileName = linkedFile.getName();
+            Set<String> fClasses = new LinkedHashSet<>();
+            Set<String> fIds = new LinkedHashSet<>();
+            ProjectSymbolIndex.getInstance().collectCssSelectorsRecursively(linkedFile, fClasses, fIds, visitedFiles);
+            for (String c : fClasses) {
+                if (!classOrigins.containsKey(c)) {
+                    classOrigins.put(c, fileName);
+                }
+            }
+            for (String id : fIds) {
+                if (!idOrigins.containsKey(id)) {
+                    idOrigins.put(id, fileName);
+                }
+            }
+        }
+
+        // 2. Embedded <style> tags in fullText
+        Set<String> styleClasses = new LinkedHashSet<>();
+        Set<String> styleIds = new LinkedHashSet<>();
+        extractEmbeddedStyleSelectors(fullText, styleClasses, styleIds, currentFile, visitedFiles);
+
+        for (String c : styleClasses) {
+            String prev = classOrigins.get(c);
+            if (prev != null) {
+                classOrigins.put(c, "<style>, " + prev);
+            } else {
+                classOrigins.put(c, "<style>");
+            }
+        }
+        for (String id : styleIds) {
+            String prev = idOrigins.get(id);
+            if (prev != null) {
+                idOrigins.put(id, "<style>, " + prev);
+            } else {
+                idOrigins.put(id, "<style>");
+            }
+        }
+
+        for (Map.Entry<String, String> entry : classOrigins.entrySet()) {
+            cachedHtmlClassItems.add(new CompletionItem(entry.getKey(), entry.getKey(), entry.getValue(), CompletionItem.Type.CSS_VALUE, 0));
+        }
+        for (Map.Entry<String, String> entry : idOrigins.entrySet()) {
+            cachedHtmlIdItems.add(new CompletionItem(entry.getKey(), entry.getKey(), entry.getValue(), CompletionItem.Type.CSS_VALUE, 0));
+        }
+    }
+
+    public static List<File> extractLinkedCssFiles(String html, File currentHtmlFile) {
+        if (html == null || html.isEmpty()) return Collections.emptyList();
+        List<File> files = new ArrayList<>();
+        Set<String> seenPaths = new HashSet<>();
+        File parentDir = currentHtmlFile != null ? currentHtmlFile.getParentFile() : null;
+
+        int len = html.length();
+        int p = 0;
+        while (p < len) {
+            // Skip HTML comments
+            if (html.startsWith("<!--", p)) {
+                int end = html.indexOf("-->", p + 4);
+                p = (end == -1) ? len : end + 3;
+                continue;
+            }
+
+            // Check for <link
+            if (p + 5 < len && html.charAt(p) == '<' &&
+                    (html.charAt(p + 1) == 'l' || html.charAt(p + 1) == 'L') &&
+                    (html.charAt(p + 2) == 'i' || html.charAt(p + 2) == 'I') &&
+                    (html.charAt(p + 3) == 'n' || html.charAt(p + 3) == 'N') &&
+                    (html.charAt(p + 4) == 'k' || html.charAt(p + 4) == 'K') &&
+                    (Character.isWhitespace(html.charAt(p + 5)) || html.charAt(p + 5) == '/' || html.charAt(p + 5) == '>')) {
+
+                int tagEnd = html.indexOf('>', p + 5);
+                if (tagEnd == -1) tagEnd = len;
+                String tagContent = html.substring(p, tagEnd);
+
+                String rel = extractAttributeValue(tagContent, "rel");
+                String as = extractAttributeValue(tagContent, "as");
+                String type = extractAttributeValue(tagContent, "type");
+                boolean isStylesheet = (rel != null && rel.toLowerCase().contains("stylesheet"))
+                        || ("style".equalsIgnoreCase(as))
+                        || ("text/css".equalsIgnoreCase(type));
+
+                if (isStylesheet) {
+                    String href = extractAttributeValue(tagContent, "href");
+                    if (href != null && !href.trim().isEmpty()) {
+                        int q = href.indexOf('?');
+                        if (q != -1) href = href.substring(0, q);
+                        int h = href.indexOf('#');
+                        if (h != -1) href = href.substring(0, h);
+                        href = href.trim();
+
+                        if (!href.startsWith("http://") && !href.startsWith("https://")
+                                && !href.startsWith("//") && !href.startsWith("data:")
+                                && !href.startsWith("javascript:") && !href.startsWith("#")) {
+
+                            File resolved = null;
+                            if (href.startsWith("/")) {
+                                File root = currentHtmlFile != null ? ProjectSymbolIndex.getProjectRoot(currentHtmlFile) : null;
+                                resolved = new File(root != null ? root : parentDir, href.substring(1));
+                            } else if (parentDir != null) {
+                                resolved = new File(parentDir, href);
+                            }
+
+                            if (resolved != null) {
+                                try {
+                                    resolved = resolved.getCanonicalFile();
+                                } catch (Exception e) {
+                                    resolved = resolved.getAbsoluteFile();
+                                }
+                                String canonical = resolved.getAbsolutePath();
+                                if (seenPaths.add(canonical)) {
+                                    files.add(resolved);
+                                }
+                            }
+                        }
+                    }
+                }
+                p = (tagEnd < len) ? tagEnd + 1 : len;
+                continue;
+            }
+            p++;
+        }
+        return files;
+    }
+
+    private void extractEmbeddedStyleSelectors(String html, Set<String> classNames, Set<String> cssIds, File currentHtmlFile, Set<String> visited) {
+        if (html == null || html.isEmpty()) return;
+        int len = html.length();
+        int p = 0;
+        while (p < len) {
+            if (html.startsWith("<!--", p)) {
+                int end = html.indexOf("-->", p + 4);
+                p = (end == -1) ? len : end + 3;
+                continue;
+            }
+
+            if (p + 6 <= len && html.charAt(p) == '<' &&
+                    (html.charAt(p + 1) == 's' || html.charAt(p + 1) == 'S') &&
+                    (html.charAt(p + 2) == 't' || html.charAt(p + 2) == 'T') &&
+                    (html.charAt(p + 3) == 'y' || html.charAt(p + 3) == 'Y') &&
+                    (html.charAt(p + 4) == 'l' || html.charAt(p + 4) == 'L') &&
+                    (html.charAt(p + 5) == 'e' || html.charAt(p + 5) == 'E') &&
+                    (p + 6 == len || Character.isWhitespace(html.charAt(p + 6)) || html.charAt(p + 6) == '>')) {
+
+                int openTagEnd = html.indexOf('>', p + 6);
+                if (openTagEnd == -1) break;
+
+                int contentStart = openTagEnd + 1;
+                int closeTagStart = indexOfIgnoreCase(html, "</style", contentStart);
+                int contentEnd = (closeTagStart != -1) ? closeTagStart : len;
+
+                if (contentEnd > contentStart) {
+                    String cssSnippet = html.substring(contentStart, contentEnd);
+                    ProjectSymbolIndex.extractSelectorsFromCssText(cssSnippet, classNames, cssIds);
+
+                    // Check for @import inside <style>
+                    if (currentHtmlFile != null && cssSnippet.contains("@import")) {
+                        List<File> imported = ProjectSymbolIndex.extractCssImports(cssSnippet, currentHtmlFile);
+                        for (File imp : imported) {
+                            ProjectSymbolIndex.getInstance().collectCssSelectorsRecursively(imp, classNames, cssIds, visited);
+                        }
+                    }
+                }
+
+                if (closeTagStart != -1) {
+                    int closeTagEnd = html.indexOf('>', closeTagStart);
+                    p = (closeTagEnd != -1) ? closeTagEnd + 1 : len;
+                } else {
+                    p = len;
+                }
+                continue;
+            }
+            p++;
+        }
+    }
+
+    public static String extractAttributeValue(String tagContent, String attrName) {
+        if (tagContent == null || attrName == null) return null;
+        int len = tagContent.length();
+        int nameLen = attrName.length();
+        int p = 0;
+        while (p < len) {
+            int idx = indexOfIgnoreCase(tagContent, attrName, p);
+            if (idx == -1) break;
+            if (idx > 0) {
+                char before = tagContent.charAt(idx - 1);
+                if (!Character.isWhitespace(before) && before != '<') {
+                    p = idx + nameLen;
+                    continue;
+                }
+            }
+            int after = idx + nameLen;
+            while (after < len && Character.isWhitespace(tagContent.charAt(after))) after++;
+            if (after < len && tagContent.charAt(after) == '=') {
+                after++;
+                while (after < len && Character.isWhitespace(tagContent.charAt(after))) after++;
+                if (after < len) {
+                    char quote = tagContent.charAt(after);
+                    if (quote == '"' || quote == '\'') {
+                        int valEnd = tagContent.indexOf(quote, after + 1);
+                        if (valEnd != -1) {
+                            return tagContent.substring(after + 1, valEnd);
+                        } else {
+                            return tagContent.substring(after + 1);
+                        }
+                    } else {
+                        int valEnd = after;
+                        while (valEnd < len && !Character.isWhitespace(tagContent.charAt(valEnd))
+                                && tagContent.charAt(valEnd) != '>' && tagContent.charAt(valEnd) != '/') {
+                            valEnd++;
+                        }
+                        return tagContent.substring(after, valEnd);
+                    }
+                }
+            }
+            p = idx + nameLen;
+        }
+        return null;
+    }
+
+    private static int indexOfIgnoreCase(String haystack, String needle, int from) {
+        if (haystack == null || needle == null) return -1;
+        int hLen = haystack.length();
+        int nLen = needle.length();
+        if (from >= hLen || nLen == 0) return -1;
+        for (int i = Math.max(0, from); i <= hLen - nLen; i++) {
+            boolean match = true;
+            for (int j = 0; j < nLen; j++) {
+                if (Character.toLowerCase(haystack.charAt(i + j)) != Character.toLowerCase(needle.charAt(j))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
     }
 }
