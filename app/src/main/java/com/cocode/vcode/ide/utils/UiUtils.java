@@ -96,6 +96,14 @@ public class UiUtils {
     }
 
     /**
+     * Displays an info custom VCodeSnackbar with info styling.
+     */
+    public static void showInfoSnackbar(View anchor, String message) {
+        if (anchor == null || message == null) return;
+        com.cocode.vcode.ide.views.VCodeSnackbar.info(anchor, message).show();
+    }
+
+    /**
      * Applies system bar insets (status bar and navigation bar) as padding to the given view.
      */
     public static void applySystemBarInsets(View view) {

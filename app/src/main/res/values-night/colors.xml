@@ -9,6 +9,7 @@
     <color name="vcode_accent_secondary">#7C5CFC</color>
     <color name="vcode_accent_success">#3DD68C</color>
     <color name="vcode_accent_warning">#F5A623</color>
+    <color name="vcode_warning_tint">#362814</color>
     <color name="vcode_accent_error">#F25F5C</color>
     <color name="vcode_accent_json">#E5C07B</color>
     <color name="vcode_bracket_match_bg">#264F8EF7</color>
