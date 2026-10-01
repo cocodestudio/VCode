@@ -56,5 +56,33 @@ public class QuickFixRegistryTest {
     @Test
     public void testNullProblemHandled() {
         assertFalse(QuickFixRegistry.hasFixes(null));
+        assertTrue(QuickFixRegistry.getFixesForProblem(null).isEmpty());
+    }
+
+    @Test
+    public void testUnfixableLintingMessageDoesNotHaveFixes() {
+        // Linting messages for which a quick fix cannot be added must NOT show bulb icon (hasFixes == false)
+        Problem pUnfixable1 = new Problem(mockFile, 1, 1, 1, "Function 'calculateTotal' has cyclomatic complexity of 15", Problem.Severity.WARNING, (ProblemCode) null);
+        assertFalse("Unfixable lint message should not indicate quick fix availability",
+                QuickFixRegistry.hasFixes(pUnfixable1));
+        assertTrue(QuickFixRegistry.getFixesForProblem(pUnfixable1).isEmpty());
+
+        Problem pUnfixable2 = new Problem(mockFile, 1, 1, 1, "Spelling error: 'functoin'", Problem.Severity.INFO, (ProblemCode) null);
+        assertFalse("Unknown info diagnostic should not have quick fixes",
+                QuickFixRegistry.hasFixes(pUnfixable2));
+        assertTrue(QuickFixRegistry.getFixesForProblem(pUnfixable2).isEmpty());
+
+        Problem pUnfixable3 = new Problem(mockFile, 1, 1, 1, "", Problem.Severity.WARNING, (ProblemCode) null);
+        assertFalse("Empty diagnostic message should not have quick fixes",
+                QuickFixRegistry.hasFixes(pUnfixable3));
+        assertTrue(QuickFixRegistry.getFixesForProblem(pUnfixable3).isEmpty());
+    }
+
+    @Test
+    public void testFixableMessageWithoutProblemCode() {
+        // Messages with recognized pattern but null ProblemCode should still have fixes
+        Problem pFixable = new Problem(mockFile, 1, 1, 1, "Element 'img' is missing 'alt' attribute", Problem.Severity.WARNING, (ProblemCode) null);
+        assertTrue("Recognized pattern should have quick fix", QuickFixRegistry.hasFixes(pFixable));
+        assertFalse(QuickFixRegistry.getFixesForProblem(pFixable).isEmpty());
     }
 }

@@ -21,7 +21,16 @@ public final class QuickFixRegistry {
 
     /**
      * Resolves all applicable quick-fix intentions for the given diagnostic problem.
-     * Guaranteed to provide at least one actionable intention for any recognized problem.
+     *
+     * @param problem diagnostic problem at cursor/gutter
+     * @return non-null list of available quick fixes
+     */
+    public static List<QuickFix> getFixesForProblem(Problem problem) {
+        return getFixesForProblem(problem, (CodeEditorTarget) null);
+    }
+
+    /**
+     * Resolves all applicable quick-fix intentions for the given diagnostic problem.
      *
      * @param problem diagnostic problem at cursor/gutter
      * @param editor  active code editor view
@@ -32,7 +41,7 @@ public final class QuickFixRegistry {
     }
 
     public static List<QuickFix> getFixesForProblem(Problem problem, CodeEditorTarget editor) {
-        if (problem == null || editor == null) return Collections.emptyList();
+        if (problem == null) return Collections.emptyList();
 
         List<QuickFix> fixes = new ArrayList<>();
         ProblemCode code = problem.getProblemCode();
@@ -51,13 +60,11 @@ public final class QuickFixRegistry {
 
     /**
      * Checks whether the problem has any registered quick fix intentions.
-     * Returns true for ALL standardized problem codes and all diagnostic messages.
+     * Returns true if and only if at least one actionable quick fix can be added.
      */
     public static boolean hasFixes(Problem problem) {
         if (problem == null) return false;
-        if (problem.getProblemCode() != null) return true;
-        String msg = problem.getMessage();
-        return msg != null && !msg.trim().isEmpty();
+        return !getFixesForProblem(problem, (CodeEditorTarget) null).isEmpty();
     }
 
     // ==========================================
@@ -1902,7 +1909,7 @@ public final class QuickFixRegistry {
         }
 
         // Generic Syntax Error
-        if (fixes.isEmpty() || code == ProblemCode.SYNTAX_ERROR || msg.toLowerCase().contains("syntax error")) {
+        if (code == ProblemCode.SYNTAX_ERROR || msg.toLowerCase().contains("syntax error")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
