@@ -77,20 +77,23 @@ public enum FileType {
         return fromExtension(name.substring(dot + 1));
     }
 
+    private static final java.util.Map<String, FileType> EXTENSION_MAP = new java.util.HashMap<>();
+
+    static {
+        for (FileType type : values()) {
+            for (String ext : type.extensions) {
+                EXTENSION_MAP.put(ext.toLowerCase(), type);
+            }
+        }
+    }
+
     /**
      * Resolves a {@link FileType} from a file extension string. Defaults to {@link #TEXT} if unknown.
      */
     public static FileType fromExtension(String ext) {
         if (ext == null || ext.isEmpty()) return TEXT;
-        ext = ext.toLowerCase();
-
-        for (FileType type : values()) {
-            if (type.extensions.contains(ext)) {
-                return type;
-            }
-        }
-
-        return TEXT;
+        FileType type = EXTENSION_MAP.get(ext.toLowerCase());
+        return type != null ? type : TEXT;
     }
 
     public int getIconResId() {

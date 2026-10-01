@@ -74,16 +74,6 @@ public class CodeFileViewer implements IFileViewer {
                         currentFile.setDirty(true);
                         viewModel.notifyFileDirtyStatusChanged();
                     }
-                    if (currentFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT ||
-                            currentFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.TYPESCRIPT) {
-                        int cursorOffset = codeEditText.getSelectionStart();
-                        com.cocode.vcode.ide.core.language.js.JsParsePipeline.getInstance().onTextChanged(
-                                currentFile.getFile(), codeEditText.getTextAsString(), cursorOffset);
-                    } else if (currentFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.HTML) {
-                        int cursorOffset = codeEditText.getSelectionStart();
-                        com.cocode.vcode.ide.core.language.html.HtmlParsePipeline.getInstance().onTextChanged(
-                                currentFile.getFile(), codeEditText.getTextAsString(), cursorOffset);
-                    }
                     validateCodeIfRequired();
                 }
             });
@@ -418,6 +408,16 @@ public class CodeFileViewer implements IFileViewer {
             capturedFile.setContent(textSnapshot);
             capturedFile.setCursorPosition(cursor);
             capturedFile.setScrollY(scrollY);
+
+            // Notify language parse pipelines with the debounced snapshot (avoids per-keystroke allocations)
+            if (capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT ||
+                    capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.TYPESCRIPT) {
+                com.cocode.vcode.ide.core.language.js.JsParsePipeline.getInstance().onTextChanged(
+                        capturedFile.getFile(), textSnapshot, cursor);
+            } else if (capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.HTML) {
+                com.cocode.vcode.ide.core.language.html.HtmlParsePipeline.getInstance().onTextChanged(
+                        capturedFile.getFile(), textSnapshot, cursor);
+            }
 
             // 2. Show "Analyzing..." ONLY when the legacy linter is about to run.
             //    When LSP is active, the bridge fires its own 300ms-debounced diagnostic

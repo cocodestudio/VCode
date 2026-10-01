@@ -1404,8 +1404,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void navigateWithUnsavedCheck(Runnable navigateAction) {
-        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        if (activeViewer != null) {
+            activeViewer.flushContentToViewModel();
         }
         viewModel.syncAllOpenFilesToIndex();
 

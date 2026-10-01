@@ -86,4 +86,12 @@ public class DiffViewerViewModel extends AndroidViewModel {
             }
         });
     }
+
+    @Override
+    protected void onCleared() {
+        super.onCleared();
+        if (repository != null) {
+            repository.close();
+        }
+    }
 }

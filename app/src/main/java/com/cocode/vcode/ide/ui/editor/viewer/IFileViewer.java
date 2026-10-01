@@ -48,6 +48,13 @@ public interface IFileViewer {
     void destroy();
 
     /**
+     * Flushes any in-memory UI buffer state back into the active EditorFile and ViewModel.
+     * Default implementation is a no-op for non-editable or static viewers.
+     */
+    default void flushContentToViewModel() {
+    }
+
+    /**
      * Returns the underlying CodeEditText if this viewer is a code editor.
      * Returns null for non-code viewers. Used for Find/Replace and formatting.
      */

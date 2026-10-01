@@ -72,6 +72,8 @@ public final class LspEditorBridge {
     private volatile CancellationToken activeDiagnosticToken;
     private volatile CancellationToken activeCompletionToken;
     private final Runnable diagnosticRunnable = this::performDiagnostics;
+    private final Runnable updateProjectIndexRunnable = this::updateProjectIndex;
+    private static final long PROJECT_INDEX_DEBOUNCE_MS = 300L;
     private static final long SILENT_INDEX_DEBOUNCE_MS = 600L;
     private final Runnable silentIndexRunnable = () -> {
         if (currentFile != null) {
@@ -501,8 +503,9 @@ public final class LspEditorBridge {
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.postDelayed(diagnosticRunnable, DIAGNOSTIC_DEBOUNCE_MS);
 
-        // Notify ProjectIndex of the in-memory change (no IO, just updates the snapshot)
-        updateProjectIndex();
+        // Reschedule debounced ProjectIndex in-memory snapshot update (no per-keystroke full-text allocation)
+        mainHandler.removeCallbacks(updateProjectIndexRunnable);
+        mainHandler.postDelayed(updateProjectIndexRunnable, PROJECT_INDEX_DEBOUNCE_MS);
 
         // Reschedule debounced silent single-file indexing in the background
         mainHandler.removeCallbacks(silentIndexRunnable);
@@ -811,6 +814,7 @@ public final class LspEditorBridge {
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.removeCallbacks(completionRunnable);
         mainHandler.removeCallbacks(signatureHelpRunnable);
+        mainHandler.removeCallbacks(updateProjectIndexRunnable);
         mainHandler.removeCallbacks(silentIndexRunnable);
         if (editor != null) {
             editor.removeContentChangeListener(contentListener);

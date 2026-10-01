@@ -112,16 +112,7 @@ public final class ProjectIndex {
     }
 
     private static String getLanguageId(String fileName) {
-        String lower = fileName.toLowerCase();
-        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
-        if (lower.endsWith(".css")) return "css";
-        if (lower.endsWith(".scss")) return "scss";
-        if (lower.endsWith(".ts")) return "typescript";
-        if (lower.endsWith(".js")) return "javascript";
-        if (lower.endsWith(".json")) return "json";
-        if (lower.endsWith(".md")) return "markdown";
-        if (lower.endsWith(".svg")) return "svg";
-        return "plaintext";
+        return com.cocode.vcode.ide.core.model.FileType.fromFileName(fileName).getLspLanguageId();
     }
 
     // -------------------------------------------------------------------------
