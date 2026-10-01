@@ -138,10 +138,14 @@ public final class ProjectIndex {
      */
     private static String canonicalize(String uri) {
         if (uri == null) return null;
+        String clean = uri;
+        if (clean.startsWith("file://")) {
+            clean = clean.substring(7);
+        }
         try {
-            return new java.io.File(uri).getAbsolutePath();
+            return new java.io.File(clean).getAbsolutePath();
         } catch (Exception e) {
-            return uri;
+            return clean;
         }
     }
 
@@ -266,6 +270,12 @@ public final class ProjectIndex {
         return parseResults.get(canonicalize(uri));
     }
 
+    public com.cocode.vcode.ide.core.language.js.ParseResult getOrParseJsFile(String uri) {
+        if (uri == null) return null;
+        String path = uri.startsWith("file://") ? uri.substring(7) : uri;
+        return getOrParseJsFile(new File(path));
+    }
+
     /**
      * Retrieves the ParseResult for the given JS/TS file, or parses it on demand if not
      * yet cached. If the file is open in the editor, its live document snapshot is used.
@@ -274,7 +284,12 @@ public final class ProjectIndex {
      * @return the ParseResult, or null if file cannot be read
      */
     public com.cocode.vcode.ide.core.language.js.ParseResult getOrParseJsFile(File file) {
-        if (file == null || file.length() > 500 * 1024) return null; // 500 KB safety limit
+        if (file == null) return null;
+        String path = file.getPath();
+        if (path.startsWith("file://")) {
+            file = new File(path.substring(7));
+        }
+        if (file.exists() && file.length() > 500 * 1024) return null; // 500 KB safety limit
         String uri = file.getAbsolutePath();
         com.cocode.vcode.ide.core.language.js.ParseResult cached = getParseResult(uri);
         LspDocument doc = getDocument(uri);
@@ -395,6 +410,20 @@ public final class ProjectIndex {
         if (canon != null && !canon.equals(uri)) {
             documents.put(canon, doc);
         }
+        if (canon != null) {
+            com.cocode.vcode.ide.core.language.js.ParseResult cachedPr = parseResults.get(canon);
+            if (cachedPr != null && !text.equals(cachedPr.source)) {
+                parseResults.remove(canon);
+                exportTables.remove(canon);
+            }
+        }
+        if (!uri.equals(canon)) {
+            com.cocode.vcode.ide.core.language.js.ParseResult cachedPr = parseResults.get(uri);
+            if (cachedPr != null && !text.equals(cachedPr.source)) {
+                parseResults.remove(uri);
+                exportTables.remove(uri);
+            }
+        }
     }
 
     /**
@@ -456,8 +485,15 @@ public final class ProjectIndex {
         if (doc == null) {
             doc = documents.get(canonicalize(uri));
         }
+        String cleanUri = uri.startsWith("file://") ? uri.substring(7) : uri;
+        if (doc == null && !cleanUri.equals(uri)) {
+            doc = documents.get(cleanUri);
+            if (doc == null) {
+                doc = documents.get(canonicalize(cleanUri));
+            }
+        }
         if (doc == null) {
-            File f = new File(uri);
+            File f = new File(cleanUri);
             if (f.exists() && f.isFile() && isSupportedFile(f)) {
                 try {
                     String text = readFile(f);

@@ -102,6 +102,13 @@ public final class SymbolExtractor {
             } else if (type == JsSyntaxTree.N_CLASS_DECL) {
                 kind = SymbolEntry.KIND_CLASS;
             } else if (type == JsSyntaxTree.N_VAR_DECL) {
+                if (tree.nodeParent[i] > 0 && tree.nodeType[tree.nodeParent[i]] == JsSyntaxTree.N_IMPORT) {
+                    continue;
+                }
+                if (tree.nodeTypeAnn != null && tree.nodeTypeAnn[i] != null &&
+                        (tree.nodeTypeAnn[i].startsWith("@IMPORT:") || tree.nodeTypeAnn[i].startsWith("@REQUIRE:") || tree.nodeTypeAnn[i].startsWith("@REQUIRE_PROP:"))) {
+                    continue;
+                }
                 // Promote variables with arrow functions or function expressions to KIND_FUNCTION
                 int start = tree.nodeStart[i];
                 int end = Math.min(tree.nodeEnd[i], text.length());

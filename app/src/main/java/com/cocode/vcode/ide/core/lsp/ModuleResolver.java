@@ -25,7 +25,9 @@ public class ModuleResolver {
      * @return the resolved LspLocation with a (0,0) range, or null if not found
      */
     public static LspLocation resolveModulePath(String docUri, String importPath) {
-        File base = new File(docUri).getParentFile();
+        if (docUri == null || importPath == null) return null;
+        String cleanUri = docUri.startsWith("file://") ? docUri.substring(7) : docUri;
+        File base = new File(cleanUri).getParentFile();
         if (base == null) return null;
 
         ProjectIndex index = ProjectIndex.getInstance();
