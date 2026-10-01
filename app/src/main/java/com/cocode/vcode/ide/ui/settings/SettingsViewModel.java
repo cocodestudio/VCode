@@ -101,6 +101,28 @@ public class SettingsViewModel extends ViewModel {
     }
 
     /**
+     * Toggles the visibility of the quick symbol bar accessory.
+     */
+    public void updateShowQuickSymbolBar(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.showQuickSymbolBar = value;
+            saveSettings(current);
+        }
+    }
+
+    /**
+     * Updates the custom list of quick symbols.
+     */
+    public void updateQuickSymbols(java.util.List<String> symbols) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.quickSymbols = symbols != null ? new java.util.ArrayList<>(symbols) : null;
+            saveSettings(current);
+        }
+    }
+
+    /**
      * Toggles word wrap in the editor.
      */
     public void updateWordWrap(boolean value) {

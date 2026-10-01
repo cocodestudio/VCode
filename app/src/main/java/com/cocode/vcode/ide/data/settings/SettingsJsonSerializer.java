@@ -59,6 +59,14 @@ public final class SettingsJsonSerializer {
         editor.put("showSquigglyLines", s.showSquigglyLines);
         editor.put("deleteMatchingPairs", s.deleteMatchingPairs);
         editor.put("forceLargeFileHighlighting", s.forceLargeFileHighlighting);
+        editor.put("showQuickSymbolBar", s.showQuickSymbolBar);
+        if (s.quickSymbols != null) {
+            org.json.JSONArray symArray = new org.json.JSONArray();
+            for (String sym : s.quickSymbols) {
+                symArray.put(sym);
+            }
+            editor.put("quickSymbols", symArray);
+        }
         root.put("editor", editor);
 
         // Appearance settings
@@ -123,6 +131,18 @@ public final class SettingsJsonSerializer {
                     s.deleteMatchingPairs = ed.optBoolean("deleteMatchingPairs", s.deleteMatchingPairs);
                 if (ed.has("forceLargeFileHighlighting"))
                     s.forceLargeFileHighlighting = ed.optBoolean("forceLargeFileHighlighting", s.forceLargeFileHighlighting);
+                if (ed.has("showQuickSymbolBar"))
+                    s.showQuickSymbolBar = ed.optBoolean("showQuickSymbolBar", s.showQuickSymbolBar);
+                if (ed.has("quickSymbols")) {
+                    org.json.JSONArray arr = ed.optJSONArray("quickSymbols");
+                    if (arr != null) {
+                        java.util.List<String> list = new java.util.ArrayList<>();
+                        for (int i = 0; i < arr.length(); i++) {
+                            list.add(arr.optString(i));
+                        }
+                        s.quickSymbols = list;
+                    }
+                }
             }
         }
 
@@ -190,6 +210,18 @@ public final class SettingsJsonSerializer {
             s.deleteMatchingPairs = root.optBoolean("editor.deleteMatchingPairs", s.deleteMatchingPairs);
         if (root.has("editor.forceLargeFileHighlighting"))
             s.forceLargeFileHighlighting = root.optBoolean("editor.forceLargeFileHighlighting", s.forceLargeFileHighlighting);
+        if (root.has("editor.showQuickSymbolBar"))
+            s.showQuickSymbolBar = root.optBoolean("editor.showQuickSymbolBar", s.showQuickSymbolBar);
+        if (root.has("editor.quickSymbols")) {
+            org.json.JSONArray arr = root.optJSONArray("editor.quickSymbols");
+            if (arr != null) {
+                java.util.List<String> list = new java.util.ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.optString(i));
+                }
+                s.quickSymbols = list;
+            }
+        }
 
         if (root.has("appearance.theme")) parseTheme(root.optString("appearance.theme"), s);
         if (root.has("theme")) parseTheme(root.optString("theme"), s);
@@ -247,6 +279,7 @@ public final class SettingsJsonSerializer {
                 || root.has("editor.matchBrackets")
                 || root.has("editor.enableDiagnostics") || root.has("editor.showSquigglyLines")
                 || root.has("editor.deleteMatchingPairs") || root.has("editor.forceLargeFileHighlighting")
+                || root.has("editor.showQuickSymbolBar")
                 || root.has("fontSize") || root.has("theme")
                 || root.has("git.defaultBranch") || root.has("defaultBranch")
                 || root.has("general.openPreviewInApp") || root.has("autoSave");

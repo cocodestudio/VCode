@@ -676,6 +676,21 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
     }
 
+    private void updateQuickSymbolBarVisibility() {
+        AppSettings settings = viewModel.getSettingsLiveData().getValue();
+        boolean shouldShow = settings == null || settings.showQuickSymbolBar;
+        CodeEditText editor = getActiveCodeEditor();
+        if (shouldShow && editor != null) {
+            binding.quickSymbolBar.setVisibility(View.VISIBLE);
+            binding.quickSymbolBar.bindEditor(editor);
+        } else {
+            binding.quickSymbolBar.setVisibility(View.GONE);
+            if (!shouldShow || editor == null) {
+                binding.quickSymbolBar.bindEditor(null);
+            }
+        }
+    }
+
     private void executeActiveFilePreviewIntent() {
         EditorPreviewHelper.executeActiveFilePreviewIntent(this, viewModel, localWebServer);
     }
@@ -701,6 +716,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             if (!settings.enableDiagnostics) {
                 binding.diagnosticBar.setVisibility(View.GONE);
             }
+            binding.quickSymbolBar.setSymbols(settings.getQuickSymbolsList());
+            updateQuickSymbolBarVisibility();
             updateToolbarVisibility();
         });
 
@@ -731,8 +748,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 editor.requestFocus();
                             }
                             if (editor != null) {
-                                binding.quickSymbolBar.setVisibility(View.VISIBLE);
-                                binding.quickSymbolBar.bindEditor(editor);
+                                updateQuickSymbolBarVisibility();
                             }
                             UiUtils.hideKeyboard(EditorActivity.this);
                         });
@@ -998,14 +1014,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         activeViewer.bindFile(activeFile, viewModel);
         activeViewer.onResume();
 
-        CodeEditText editor = activeViewer.getCodeEditor();
-        if (editor != null && !isPreview) {
-            binding.quickSymbolBar.setVisibility(View.VISIBLE);
-            binding.quickSymbolBar.bindEditor(editor);
-        } else {
-            binding.quickSymbolBar.setVisibility(View.GONE);
-            binding.quickSymbolBar.bindEditor(null);
-        }
+        updateQuickSymbolBarVisibility();
 
         applyReadOnlyState();
 

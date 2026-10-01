@@ -27,7 +27,6 @@ import com.cocode.vcode.ide.ui.git.tabs.GitHistoryFragment;
 import com.cocode.vcode.ide.ui.git.tabs.GitRemoteFragment;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.cocode.vcode.ide.views.VCodeSnackbar;
 import com.google.android.material.tabs.TabLayoutMediator;
 
 import android.graphics.Color;

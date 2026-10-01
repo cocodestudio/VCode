@@ -22,6 +22,12 @@ public class AppSettings {
     public boolean showSquigglyLines = true;
     public boolean deleteMatchingPairs = true;
     public boolean forceLargeFileHighlighting = false;
+    public boolean showQuickSymbolBar = true;
+    public java.util.List<String> quickSymbols = null;
+
+    public static final java.util.List<String> DEFAULT_QUICK_SYMBOLS = java.util.Collections.unmodifiableList(
+            java.util.Arrays.asList("Tab", "{", "}", "(", ")", "[", "]", ";", ":", "\"", "'", "=", ">", "<", "!", "/", "->", "=>")
+    );
 
     // JSON Validation & Formatting
     public int jsonIndentSize = 2;
@@ -77,6 +83,29 @@ public class AppSettings {
 
     public void setAutoCloseBrackets(boolean auto) {
         this.autoCloseBrackets = auto;
+    }
+
+    public boolean isShowQuickSymbolBar() {
+        return showQuickSymbolBar;
+    }
+
+    public void setShowQuickSymbolBar(boolean show) {
+        this.showQuickSymbolBar = show;
+    }
+
+    public java.util.List<String> getQuickSymbols() {
+        return quickSymbols;
+    }
+
+    public void setQuickSymbols(java.util.List<String> symbols) {
+        this.quickSymbols = symbols != null ? new java.util.ArrayList<>(symbols) : null;
+    }
+
+    public java.util.List<String> getQuickSymbolsList() {
+        if (quickSymbols == null || quickSymbols.isEmpty()) {
+            return new java.util.ArrayList<>(DEFAULT_QUICK_SYMBOLS);
+        }
+        return new java.util.ArrayList<>(quickSymbols);
     }
 
     /**

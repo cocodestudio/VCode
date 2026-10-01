@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.databinding.FragmentSettingsEditorBinding;
+import com.cocode.vcode.ide.ui.sheets.settings.CustomizeQuickSymbolsBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
 
 import java.text.MessageFormat;
@@ -77,6 +78,10 @@ public class EditorSettingsFragment extends Fragment {
         binding.tvDeleteMatchingPairsDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvForceLargeFileHighlighting.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvForceLargeFileHighlightingDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvQuickSymbolBar.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvQuickSymbolBarDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvCustomizeQuickSymbols.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvCustomizeQuickSymbolsDesc.setTypeface(fm.getUiFont(requireContext()));
     }
 
     private void setupListeners() {
@@ -109,6 +114,14 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchDeleteMatchingPairs.setChecked(!binding.switchDeleteMatchingPairs.isChecked()));
         binding.opForceLargeFileHighlighting.setOnClickListener(_view ->
                 binding.switchForceLargeFileHighlighting.setChecked(!binding.switchForceLargeFileHighlighting.isChecked()));
+        binding.opQuickSymbolBar.setOnClickListener(_view ->
+                binding.switchQuickSymbolBar.setChecked(!binding.switchQuickSymbolBar.isChecked()));
+        binding.opCustomizeQuickSymbols.setOnClickListener(_view -> {
+            if (binding.switchQuickSymbolBar.isChecked()) {
+                CustomizeQuickSymbolsBottomSheet sheet = CustomizeQuickSymbolsBottomSheet.newInstance();
+                sheet.show(getChildFragmentManager(), "CustomizeQuickSymbolsBottomSheet");
+            }
+        });
 
         binding.btnFontIncrease.setOnClickListener(v -> {
             AppSettings current = viewModel.getSettingsLiveData().getValue();
@@ -180,6 +193,13 @@ public class EditorSettingsFragment extends Fragment {
         binding.switchForceLargeFileHighlighting.setOnCheckedChangeListener((btn, isChecked) -> {
             if (!isUpdatingUi) viewModel.updateForceLargeFileHighlighting(isChecked);
         });
+
+        binding.switchQuickSymbolBar.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) {
+                updateCustomizeSymbolsRowUi(isChecked);
+                viewModel.updateShowQuickSymbolBar(isChecked);
+            }
+        });
     }
 
     private void setupObservers() {
@@ -198,10 +218,17 @@ public class EditorSettingsFragment extends Fragment {
                 updateSquigglyLinesUi(settings.enableDiagnostics, settings.showSquigglyLines);
                 binding.switchDeleteMatchingPairs.setChecked(settings.deleteMatchingPairs);
                 binding.switchForceLargeFileHighlighting.setChecked(settings.forceLargeFileHighlighting);
+                binding.switchQuickSymbolBar.setChecked(settings.showQuickSymbolBar);
+                updateCustomizeSymbolsRowUi(settings.showQuickSymbolBar);
                 binding.tvFontSizeValue.setText(MessageFormat.format("{0}px", settings.getFontSize()));
                 isUpdatingUi = false;
             }
         });
+    }
+
+    private void updateCustomizeSymbolsRowUi(boolean isEnabled) {
+        binding.opCustomizeQuickSymbols.setEnabled(isEnabled);
+        binding.opCustomizeQuickSymbols.setAlpha(isEnabled ? 1.0f : 0.4f);
     }
 
     private void updateSquigglyLinesUi(boolean diagnosticsEnabled, boolean squigglyChecked) {

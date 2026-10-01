@@ -22,7 +22,10 @@ import com.cocode.vcode.ide.core.quickfix.QuickFixRegistry;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
+import com.cocode.vcode.ide.data.model.AppSettings;
+
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,9 +34,7 @@ import java.util.List;
  */
 public class QuickSymbolBar extends LinearLayout {
 
-    private static final String[] DEFAULT_SYMBOLS = {
-            "Tab", "{", "}", "(", ")", "[", "]", ";", ":", "\"", "'", "=", ">", "<", "!", "/", "->", "=>"
-    };
+    private List<String> currentSymbols = new ArrayList<>(AppSettings.DEFAULT_QUICK_SYMBOLS);
 
     private ImageView btnQuickFix;
     private View dividerQuickFix;
@@ -76,7 +77,7 @@ public class QuickSymbolBar extends LinearLayout {
         int marginPx = UiUtils.dpToPx(context, 2);
         int textColor = ContextCompat.getColor(context, R.color.vcode_text_primary);
 
-        for (String sym : DEFAULT_SYMBOLS) {
+        for (String sym : currentSymbols) {
             TextView keyView = new TextView(context);
             keyView.setText(sym);
             keyView.setGravity(Gravity.CENTER);
@@ -102,6 +103,32 @@ public class QuickSymbolBar extends LinearLayout {
             });
             layoutKeysContainer.addView(keyView);
         }
+    }
+
+    /**
+     * Returns the default list of quick symbol keys.
+     */
+    public static List<String> getDefaultSymbols() {
+        return AppSettings.DEFAULT_QUICK_SYMBOLS;
+    }
+
+    /**
+     * Updates the active symbols displayed in this bar and re-populates keycaps.
+     */
+    public void setSymbols(@Nullable List<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) {
+            this.currentSymbols = new ArrayList<>(AppSettings.DEFAULT_QUICK_SYMBOLS);
+        } else {
+            this.currentSymbols = new ArrayList<>(symbols);
+        }
+        populateSymbolKeys(getContext());
+    }
+
+    /**
+     * Returns the current list of symbols displayed in this bar.
+     */
+    public List<String> getSymbols() {
+        return new ArrayList<>(currentSymbols);
     }
 
     /**
@@ -240,6 +267,9 @@ public class QuickSymbolBar extends LinearLayout {
                 break;
             case "'":
                 editor.wrapSelection("'", "'");
+                break;
+            case "`":
+                editor.wrapSelection("`", "`");
                 break;
             case "->":
                 editor.insertText("->");

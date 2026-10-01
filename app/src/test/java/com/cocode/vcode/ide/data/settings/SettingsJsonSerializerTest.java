@@ -52,9 +52,9 @@ public class SettingsJsonSerializerTest {
         assertTrue(root.has("git"));
         assertTrue(root.has("general"));
 
-        // Editor: 13 fields
+        // Editor: 14 fields (plus optional quickSymbols)
         JSONObject editor = root.getJSONObject("editor");
-        assertEquals("Editor must have 13 fields", 13, editor.length());
+        assertEquals("Editor must have 14 fields", 14, editor.length());
         assertEquals(16, editor.getInt("fontSize"));
         assertTrue(editor.getBoolean("showLineNumbers"));
         assertTrue(editor.getBoolean("autoCloseBrackets"));
@@ -68,6 +68,7 @@ public class SettingsJsonSerializerTest {
         assertFalse(editor.getBoolean("showSquigglyLines"));
         assertFalse(editor.getBoolean("deleteMatchingPairs"));
         assertTrue(editor.getBoolean("forceLargeFileHighlighting"));
+        assertTrue(editor.getBoolean("showQuickSymbolBar"));
 
         // Appearance: 1 field
         JSONObject appearance = root.getJSONObject("appearance");
@@ -250,5 +251,59 @@ public class SettingsJsonSerializerTest {
         assertTrue(resultFlat.isValid);
         assertFalse(resultFlat.settings.enableDiagnostics);
         assertFalse(resultFlat.settings.showSquigglyLines);
+    }
+
+    @Test
+    public void testQuickSymbolsSerializationAndDeserialization() throws Exception {
+        AppSettings s = new AppSettings();
+        s.showQuickSymbolBar = false;
+        s.quickSymbols = java.util.Arrays.asList("Tab", "{", "}", "===", "=>");
+
+        JSONObject root = SettingsJsonSerializer.serialize(s);
+        JSONObject editor = root.getJSONObject("editor");
+        assertFalse(editor.getBoolean("showQuickSymbolBar"));
+        assertTrue(editor.has("quickSymbols"));
+        org.json.JSONArray arr = editor.getJSONArray("quickSymbols");
+        assertEquals(5, arr.length());
+        assertEquals("===", arr.getString(3));
+
+        // Deserialization: Hierarchical
+        String hierarchicalJson = root.toString();
+        SettingsJsonSerializer.ValidationResult resultHierarchical =
+                SettingsJsonSerializer.validateAndParse(hierarchicalJson, new AppSettings());
+        assertTrue(resultHierarchical.isValid);
+        assertFalse(resultHierarchical.settings.showQuickSymbolBar);
+        assertNotNull(resultHierarchical.settings.quickSymbols);
+        assertEquals(5, resultHierarchical.settings.quickSymbols.size());
+        assertEquals("===", resultHierarchical.settings.quickSymbols.get(3));
+
+        // Deserialization: Flat Dot Notation
+        String flatJson = "{\n" +
+                "  \"editor.showQuickSymbolBar\": true,\n" +
+                "  \"editor.quickSymbols\": [\"(\", \")\", \";\", \"const\"]\n" +
+                "}";
+        SettingsJsonSerializer.ValidationResult resultFlat =
+                SettingsJsonSerializer.validateAndParse(flatJson, new AppSettings());
+        assertTrue(resultFlat.isValid);
+        assertTrue(resultFlat.settings.showQuickSymbolBar);
+        assertNotNull(resultFlat.settings.quickSymbols);
+        assertEquals(4, resultFlat.settings.quickSymbols.size());
+        assertEquals("const", resultFlat.settings.quickSymbols.get(3));
+    }
+
+    @Test
+    public void testAppSettingsQuickSymbolsDefaultsAndCustom() {
+        AppSettings s = new AppSettings();
+        assertTrue(s.isShowQuickSymbolBar());
+        assertEquals(AppSettings.DEFAULT_QUICK_SYMBOLS, s.getQuickSymbolsList());
+        assertEquals(18, s.getQuickSymbolsList().size());
+
+        s.setQuickSymbols(java.util.Arrays.asList("a", "b", "c"));
+        assertEquals(3, s.getQuickSymbolsList().size());
+        assertEquals("a", s.getQuickSymbolsList().get(0));
+
+        s.setQuickSymbols(null);
+        assertEquals(18, s.getQuickSymbolsList().size());
+        assertEquals(AppSettings.DEFAULT_QUICK_SYMBOLS, s.getQuickSymbolsList());
     }
 }

@@ -39,6 +39,10 @@
     <string name="vcode_setting_rainbow_brackets_desc">Colorize matching bracket pairs with distinct rainbow colors</string>
     <string name="vcode_setting_bracket_highlighting">Bracket Highlighting</string>
     <string name="vcode_setting_bracket_highlighting_desc">Highlight matching bracket pairs with a stroked boundary</string>
+    <string name="vcode_setting_quick_symbol_bar">Quick Symbol Bar</string>
+    <string name="vcode_setting_quick_symbol_bar_desc">Show rapid symbol insertion bar above keyboard</string>
+    <string name="vcode_setting_customize_quick_symbols">Customize Symbols</string>
+    <string name="vcode_setting_customize_quick_symbols_desc">Configure, add, or remove quick symbol keys</string>
     <string name="auto_save">Auto save</string>
     <string name="automatically_save_file">Automatically save the file as you stopped typing</string>
     <string name="git_settings">GIT SETTINGS</string>
@@ -86,6 +90,22 @@
     <string name="vcode_settings_import_error_unrecognized">This file does not contain recognized VCode settings. Please select a valid settings.json file.</string>
     <string name="vcode_settings_export_error">Failed to export settings: %1$s</string>
     <string name="vcode_settings_import_error_msg">The selected file could not be imported as settings.</string>
+
+    <!-- Customize Quick Symbols Sheet -->
+    <string name="vcode_customize_symbols_title">Customize Quick Symbols</string>
+    <string name="vcode_customize_symbols_subtitle">Tap a symbol to remove it, or add new symbols below</string>
+    <string name="vcode_customize_symbols_preview">Preview</string>
+    <string name="vcode_customize_symbols_active_title">Active Symbols (%1$d)</string>
+    <string name="vcode_customize_symbols_add_title">Add Custom Symbol</string>
+    <string name="vcode_customize_symbols_add_hint">e.g. ===, ||, &amp;&amp;, #</string>
+    <string name="vcode_customize_symbols_add_button">Add</string>
+    <string name="vcode_customize_symbols_suggestions_title">Suggested Symbols</string>
+    <string name="vcode_customize_symbols_reset_defaults">Reset</string>
+    <string name="vcode_customize_symbols_reset_defaults_desc">Reset symbols to default configuration</string>
+    <string name="vcode_customize_symbols_save">Save Changes</string>
+    <string name="vcode_customize_symbols_empty_error">Symbol cannot be empty</string>
+    <string name="vcode_customize_symbols_exists_error">Symbol is already added</string>
+    <string name="vcode_customize_symbols_max_length_error">Symbol cannot exceed 12 characters</string>
 
     <!--    Activity: Debug-->
     <string name="vcode_app_crashed">App Crashed</string>

@@ -59,6 +59,19 @@ public class SettingsRepository {
         }
         s.deleteMatchingPairs = prefs.getBoolean(PreferenceKeys.DELETE_MATCHING_PAIRS, s.deleteMatchingPairs);
         s.forceLargeFileHighlighting = prefs.getBoolean(PreferenceKeys.FORCE_LARGE_FILE_HIGHLIGHTING, s.forceLargeFileHighlighting);
+        s.showQuickSymbolBar = prefs.getBoolean(PreferenceKeys.SHOW_QUICK_SYMBOL_BAR, s.showQuickSymbolBar);
+        String quickSymbolsJson = prefs.getString(PreferenceKeys.QUICK_SYMBOLS, null);
+        if (quickSymbolsJson != null && !quickSymbolsJson.trim().isEmpty()) {
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(quickSymbolsJson);
+                java.util.List<String> list = new java.util.ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.optString(i));
+                }
+                s.quickSymbols = list;
+            } catch (Exception ignored) {
+            }
+        }
 
         // Language syntax preferences
         s.jsonFormatOnSave = prefs.getBoolean(PreferenceKeys.JSON_FORMAT_ON_SAVE, s.jsonFormatOnSave);
@@ -200,6 +213,16 @@ public class SettingsRepository {
         ed.putBoolean(PreferenceKeys.SHOW_SQUIGGLY_LINES, s.showSquigglyLines);
         ed.putBoolean(PreferenceKeys.DELETE_MATCHING_PAIRS, s.deleteMatchingPairs);
         ed.putBoolean(PreferenceKeys.FORCE_LARGE_FILE_HIGHLIGHTING, s.forceLargeFileHighlighting);
+        ed.putBoolean(PreferenceKeys.SHOW_QUICK_SYMBOL_BAR, s.showQuickSymbolBar);
+        if (s.quickSymbols != null) {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (String sym : s.quickSymbols) {
+                arr.put(sym);
+            }
+            ed.putString(PreferenceKeys.QUICK_SYMBOLS, arr.toString());
+        } else {
+            ed.remove(PreferenceKeys.QUICK_SYMBOLS);
+        }
 
         ed.putBoolean(PreferenceKeys.JSON_FORMAT_ON_SAVE, s.jsonFormatOnSave);
 

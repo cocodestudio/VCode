@@ -23,6 +23,8 @@ public final class PreferenceKeys {
     public static final String DELETE_MATCHING_PAIRS = "vcode_pref_delete_matching_pairs";
     public static final String FORCE_LARGE_FILE_HIGHLIGHTING = "vcode_pref_force_large_file_highlighting";
     public static final String JSON_FORMAT_ON_SAVE = "vcode_pref_json_format_on_save";
+    public static final String SHOW_QUICK_SYMBOL_BAR = "vcode_pref_show_quick_symbol_bar";
+    public static final String QUICK_SYMBOLS = "vcode_pref_quick_symbols";
 
     // Git
     public static final String GIT_AUTHOR_NAME = "vcode_pref_git_author_name";
