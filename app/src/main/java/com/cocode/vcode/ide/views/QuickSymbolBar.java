@@ -8,8 +8,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.TextView;
+
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -210,22 +210,16 @@ public class QuickSymbolBar extends LinearLayout {
             editor.removeProblem(targetProblem);
             checkQuickFixAvailable();
         } else {
-            PopupMenu popup = new PopupMenu(getContext(), btnQuickFix);
-            for (int i = 0; i < fixes.size(); i++) {
-                popup.getMenu().add(0, i, i, fixes.get(i).getTitle());
-            }
+            CustomPopupMenu popup = new CustomPopupMenu(getContext(), btnQuickFix);
             final Problem finalProb = targetProblem;
-            final List<QuickFix> finalFixes = fixes;
-            popup.setOnMenuItemClickListener(item -> {
-                int id = item.getItemId();
-                if (id >= 0 && id < finalFixes.size()) {
-                    finalFixes.get(id).apply(editor, finalProb);
+            for (int i = 0; i < fixes.size(); i++) {
+                final QuickFix fix = fixes.get(i);
+                popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {
+                    fix.apply(editor, finalProb);
                     editor.removeProblem(finalProb);
                     checkQuickFixAvailable();
-                    return true;
-                }
-                return false;
-            });
+                });
+            }
             popup.show();
         }
     }

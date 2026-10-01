@@ -63,6 +63,7 @@ import com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
+import com.cocode.vcode.ide.views.CustomPopupMenu;
 import com.cocode.vcode.ide.utils.LocalWebServer;
 import com.cocode.vcode.ide.utils.ProjectFileRecovery;
 import com.cocode.vcode.ide.utils.UiUtils;
@@ -1293,25 +1294,18 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             binding.quickSymbolBar.checkQuickFixAvailable();
                         } else if (fixes.size() > 1) {
                             View anchor = anchorView != null ? anchorView : binding.quickSymbolBar;
-                            androidx.appcompat.widget.PopupMenu popup =
-                                    new androidx.appcompat.widget.PopupMenu(anchor.getContext(), anchor);
+                            CustomPopupMenu popup = new CustomPopupMenu(anchor.getContext(), anchor);
                             for (int i = 0; i < fixes.size(); i++) {
-                                popup.getMenu().add(0, i, i, fixes.get(i).getTitle());
-                            }
-                            final List<com.cocode.vcode.ide.core.quickfix.QuickFix> finalFixes = fixes;
-                            popup.setOnMenuItemClickListener(menuItem -> {
-                                int id = menuItem.getItemId();
-                                if (id >= 0 && id < finalFixes.size()) {
-                                    finalFixes.get(id).apply(editor, problem);
+                                final com.cocode.vcode.ide.core.quickfix.QuickFix fix = fixes.get(i);
+                                popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {
+                                    fix.apply(editor, problem);
                                     editor.removeProblem(problem);
                                     if (viewModel != null) {
                                         viewModel.removeProblem(problem);
                                     }
                                     binding.quickSymbolBar.checkQuickFixAvailable();
-                                    return true;
-                                }
-                                return false;
-                            });
+                                });
+                            }
                             popup.show();
                         }
                     }

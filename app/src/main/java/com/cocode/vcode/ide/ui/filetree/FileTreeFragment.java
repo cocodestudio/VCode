@@ -419,49 +419,19 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     }
 
     private void showCopyPathPopup(View anchor, File file) {
-        LayoutCustomPopupBinding popupBinding = LayoutCustomPopupBinding.inflate(getLayoutInflater());
-        int screenWidth = requireContext().getResources().getDisplayMetrics().widthPixels;
-        int maxWidth = requireContext().getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
-        int preferredWidth = UiUtils.dpToPx(requireContext(), 220);
-        int width = Math.min(preferredWidth, Math.min((int) (screenWidth * 0.92f), maxWidth));
-
-        PopupWindow popupWindow = new PopupWindow(
-                popupBinding.getRoot(),
-                width,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                true
-        );
-        popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        popupWindow.setElevation(8f);
-        popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
-
-        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_absolute_path), () -> {
-            copyToSystemClipboard("Absolute Path", file.getAbsolutePath());
-        });
-
-        addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_relative_path), () -> {
-            if (viewModel.getProjectRoot() != null) {
-                String relPath = file.getAbsolutePath().replace(viewModel.getProjectRoot().getAbsolutePath() + File.separator, "");
-                if (relPath.startsWith(File.separator)) relPath = relPath.substring(1);
-                copyToSystemClipboard("Relative Path", relPath);
-            }
-        });
-
-        popupBinding.getRoot().measure(
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int popupHeight = popupBinding.getRoot().getMeasuredHeight();
-
-        int[] loc = new int[2];
-        anchor.getLocationOnScreen(loc);
-        int screenH = requireActivity().getWindow().getDecorView().getHeight();
-        int spaceBelow = screenH - loc[1] - anchor.getHeight();
-
-        if (spaceBelow >= popupHeight) {
-            popupWindow.showAsDropDown(anchor, anchor.getWidth() / 2, -anchor.getHeight() / 2);
-        } else {
-            popupWindow.showAsDropDown(anchor, anchor.getWidth() / 2, -(popupHeight + anchor.getHeight() / 2));
-        }
+        if (!isAdded() || getContext() == null) return;
+        new com.cocode.vcode.ide.views.CustomPopupMenu(requireContext(), anchor)
+                .addItem(R.drawable.ic_copy, getString(R.string.vcode_absolute_path), () -> {
+                    copyToSystemClipboard("Absolute Path", file.getAbsolutePath());
+                })
+                .addItem(R.drawable.ic_copy, getString(R.string.vcode_relative_path), () -> {
+                    if (viewModel.getProjectRoot() != null) {
+                        String relPath = file.getAbsolutePath().replace(viewModel.getProjectRoot().getAbsolutePath() + File.separator, "");
+                        if (relPath.startsWith(File.separator)) relPath = relPath.substring(1);
+                        copyToSystemClipboard("Relative Path", relPath);
+                    }
+                })
+                .show();
     }
 
     private View addPopupItem(ViewGroup container, PopupWindow popup, int iconRes, String title, Runnable action) {
