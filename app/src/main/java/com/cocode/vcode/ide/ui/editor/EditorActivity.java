@@ -99,13 +99,17 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener indexingProgressListener;
     private final Runnable hideIndexingCardRunnable = () -> {
         if (binding == null || binding.cardIndexingStatus == null) return;
-        binding.cardIndexingStatus.getRoot().animate()
+        View card = binding.cardIndexingStatus.getRoot();
+        float hideY = getIndexingCardOffscreenTranslationY();
+        card.animate()
                 .alpha(0f)
-                .translationY(30f)
-                .setDuration(250)
+                .translationY(hideY)
+                .setDuration(280)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.5f))
                 .withEndAction(() -> {
                     if (binding != null && binding.cardIndexingStatus != null) {
-                        binding.cardIndexingStatus.getRoot().setVisibility(View.GONE);
+                        card.setVisibility(View.GONE);
+                        card.setTranslationY(0f);
                         binding.cardIndexingStatus.ivIndexingIcon.animate().cancel();
                         binding.cardIndexingStatus.ivIndexingIcon.setRotation(0f);
                         binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_arrows_rotate);
@@ -115,6 +119,35 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 })
                 .start();
     };
+
+    private float getIndexingCardOffscreenTranslationY() {
+        if (binding == null || binding.cardIndexingStatus == null) return 500f;
+        View card = binding.cardIndexingStatus.getRoot();
+        int[] location = new int[2];
+        card.getLocationOnScreen(location);
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        if (location[1] > 0) {
+            return (float) (screenHeight - location[1] + UiUtils.dpToPx(this, 16));
+        }
+        View parent = binding.mainContent != null ? binding.mainContent : binding.getRoot();
+        int parentHeight = parent != null && parent.getHeight() > 0 ? parent.getHeight() : screenHeight;
+        return (float) (parentHeight + UiUtils.dpToPx(this, 32));
+    }
+
+    private void updateIndexingCardMargin() {
+        if (binding == null || binding.cardIndexingStatus == null) return;
+        View card = binding.cardIndexingStatus.getRoot();
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) card.getLayoutParams();
+        if (lp != null) {
+            boolean previewVisible = (binding.ivTogglePreview != null && binding.ivTogglePreview.getVisibility() == View.VISIBLE)
+                    || (binding.ivViewPreview != null && binding.ivViewPreview.getVisibility() == View.VISIBLE);
+            int newMargin = previewVisible ? UiUtils.dpToPx(this, 8) : 0;
+            if (lp.bottomMargin != newMargin) {
+                lp.bottomMargin = newMargin;
+                card.setLayoutParams(lp);
+            }
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -995,6 +1028,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         if (binding.findReplaceBar.getVisibility() == View.VISIBLE) {
             binding.findReplaceBar.slideUp();
         }
+
+        updateIndexingCardMargin();
     }
 
     private void handleTabClose(int index) {
@@ -1592,7 +1627,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             public void onIndexingStarted(int totalFiles) {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
-                    binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+                    View card = binding.cardIndexingStatus.getRoot();
+                    card.removeCallbacks(hideIndexingCardRunnable);
+                    card.animate().cancel();
+                    updateIndexingCardMargin();
+
                     binding.cardIndexingStatus.ivIndexingIcon.animate().cancel();
                     binding.cardIndexingStatus.ivIndexingIcon.setRotation(0f);
                     binding.cardIndexingStatus.ivIndexingIcon.setImageResource(R.drawable.ic_arrows_rotate);
@@ -1610,15 +1649,22 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 String.format(getString(R.string.vcode_indexing_percent_format), 0));
                     }
 
-                    if (binding.cardIndexingStatus.getRoot().getVisibility() != View.VISIBLE) {
-                        binding.cardIndexingStatus.getRoot().setAlpha(0f);
-                        binding.cardIndexingStatus.getRoot().setTranslationY(30f);
-                        binding.cardIndexingStatus.getRoot().setVisibility(View.VISIBLE);
-                        binding.cardIndexingStatus.getRoot().animate()
-                                .alpha(1f)
-                                .translationY(0f)
-                                .setDuration(250)
-                                .start();
+                    if (card.getVisibility() != View.VISIBLE) {
+                        card.setAlpha(0f);
+                        card.setVisibility(View.VISIBLE);
+                        card.post(() -> {
+                            if (isFinishing() || isDestroyed() || binding == null || binding.cardIndexingStatus == null) return;
+                            float startY = getIndexingCardOffscreenTranslationY();
+                            card.setTranslationY(startY);
+                            card.animate()
+                                    .alpha(1f)
+                                    .translationY(0f)
+                                    .setDuration(350)
+                                    .setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f))
+                                    .start();
+                        });
+                    } else {
+                        card.animate().alpha(1f).translationY(0f).setDuration(200).start();
                     }
                 });
             }
