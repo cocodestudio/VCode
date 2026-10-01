@@ -27,7 +27,6 @@ import com.cocode.vcode.ide.ui.sheets.settings.SettingsOptionsBottomSheet;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.cocode.vcode.ide.views.VCodeSnackbar;
 
 import java.io.File;
 
@@ -152,7 +151,7 @@ public class SettingsHomeFragment extends Fragment {
                             break;
                     }
                 }
-                VCodeSnackbar.success(binding.getRoot(), R.string.vcode_settings_import_success).show();
+                Toast.makeText(requireContext(), R.string.vcode_settings_import_success, Toast.LENGTH_SHORT).show();
             } else {
                 showImportErrorDialog(result.errorMessage);
             }
@@ -180,16 +179,7 @@ public class SettingsHomeFragment extends Fragment {
                 String path = exportedFile.getAbsolutePath();
                 String message = getString(R.string.vcode_settings_export_success, path);
 
-                VCodeSnackbar.success(binding.getRoot(), message)
-                        .setAction(R.string.vcode_settings_copy_path, v -> {
-                            ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
-                            if (clipboard != null) {
-                                ClipData clip = ClipData.newPlainText("Settings Path", path);
-                                clipboard.setPrimaryClip(clip);
-                                Toast.makeText(requireContext(), R.string.vcode_settings_path_copied, Toast.LENGTH_SHORT).show();
-                            }
-                        })
-                        .show();
+                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -198,7 +188,7 @@ public class SettingsHomeFragment extends Fragment {
                 String errorMsg = error != null && error.getLocalizedMessage() != null
                         ? getString(R.string.vcode_settings_export_error, error.getLocalizedMessage())
                         : getString(R.string.vcode_settings_export_error, "Unknown error");
-                VCodeSnackbar.error(binding.getRoot(), errorMsg).show();
+                Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -222,7 +212,7 @@ public class SettingsHomeFragment extends Fragment {
                     String errorMsg = error != null && error.getLocalizedMessage() != null
                             ? getString(R.string.vcode_settings_export_error, error.getLocalizedMessage())
                             : getString(R.string.vcode_settings_export_error, "Unknown error");
-                    VCodeSnackbar.error(binding.getRoot(), errorMsg).show();
+                    Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show();
                 }
             });
             return;

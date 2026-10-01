@@ -16,12 +16,17 @@ import java.util.regex.Pattern;
 public final class DocCommentParser {
 
     private static final Pattern PAT_PARAM = Pattern.compile(
-            "^@param\\s*(?:\\{([^}]+)\\})?\\s*([a-zA-Z0-9_$.]+)\\s*(?:-\\s*)?(.*)$",
+            "^@param\\s*(?:\\{([^}]+)\\})?\\s*(?:\\[?\\s*([a-zA-Z0-9_$.]+)(?:=[^\\]]+)?\\]?)\\s*(?:-\\s*)?(.*)$",
             Pattern.DOTALL
     );
 
     private static final Pattern PAT_RETURNS = Pattern.compile(
             "^@returns?\\s*(?:\\{([^}]+)\\})?\\s*(?:-\\s*)?(.*)$",
+            Pattern.DOTALL
+    );
+
+    private static final Pattern PAT_THROWS = Pattern.compile(
+            "^@(?:throws|exception)\\s*(?:\\{([^}]+)\\})?\\s*(?:-\\s*)?(.*)$",
             Pattern.DOTALL
     );
 
@@ -37,6 +42,7 @@ public final class DocCommentParser {
         public final Map<String, String> paramTypes;
         public final String returnDoc;
         public final String returnType;
+        public final Map<String, String> throwsDocs;
         public final String rawComment;
 
         public DocCommentInfo(String description,
@@ -45,16 +51,27 @@ public final class DocCommentParser {
                               String returnDoc,
                               String returnType,
                               String rawComment) {
+            this(description, paramDocs, paramTypes, returnDoc, returnType, Collections.emptyMap(), rawComment);
+        }
+
+        public DocCommentInfo(String description,
+                              Map<String, String> paramDocs,
+                              Map<String, String> paramTypes,
+                              String returnDoc,
+                              String returnType,
+                              Map<String, String> throwsDocs,
+                              String rawComment) {
             this.description = description != null ? description.trim() : "";
             this.paramDocs = paramDocs != null ? Collections.unmodifiableMap(paramDocs) : Collections.emptyMap();
             this.paramTypes = paramTypes != null ? Collections.unmodifiableMap(paramTypes) : Collections.emptyMap();
             this.returnDoc = returnDoc != null ? returnDoc.trim() : "";
             this.returnType = returnType != null ? returnType.trim() : "";
+            this.throwsDocs = throwsDocs != null ? Collections.unmodifiableMap(throwsDocs) : Collections.emptyMap();
             this.rawComment = rawComment != null ? rawComment : "";
         }
 
         public boolean isEmpty() {
-            return description.isEmpty() && paramDocs.isEmpty() && returnDoc.isEmpty() && returnType.isEmpty();
+            return description.isEmpty() && paramDocs.isEmpty() && returnDoc.isEmpty() && returnType.isEmpty() && throwsDocs.isEmpty();
         }
 
         /**
@@ -75,12 +92,11 @@ public final class DocCommentParser {
                 sb.append(description).append("\n\n");
             }
             if (!paramDocs.isEmpty()) {
-                sb.append("**Parameters:**\n");
                 for (Map.Entry<String, String> entry : paramDocs.entrySet()) {
                     String pName = entry.getKey();
                     String pDoc = entry.getValue();
                     String pType = paramTypes.get(pName);
-                    sb.append("• `").append(pName);
+                    sb.append("@param `").append(pName);
                     if (pType != null && !pType.isEmpty()) {
                         sb.append(": ").append(pType);
                     }
@@ -93,17 +109,29 @@ public final class DocCommentParser {
                 sb.append("\n");
             }
             if (!returnDoc.isEmpty() || !returnType.isEmpty()) {
-                sb.append("**Returns:**\n");
+                sb.append("@returns");
                 if (!returnType.isEmpty()) {
-                    sb.append("`").append(returnType).append("`");
-                    if (!returnDoc.isEmpty()) {
-                        sb.append(" — ");
-                    }
+                    sb.append(" `").append(returnType).append("`");
                 }
                 if (!returnDoc.isEmpty()) {
-                    sb.append(returnDoc);
+                    sb.append(" — ").append(returnDoc);
                 }
                 sb.append("\n\n");
+            }
+            if (throwsDocs != null && !throwsDocs.isEmpty()) {
+                for (Map.Entry<String, String> entry : throwsDocs.entrySet()) {
+                    String tType = entry.getKey();
+                    String tDoc = entry.getValue();
+                    sb.append("@throws");
+                    if (tType != null && !tType.isEmpty()) {
+                        sb.append(" `").append(tType).append("`");
+                    }
+                    if (tDoc != null && !tDoc.isEmpty()) {
+                        sb.append(" — ").append(tDoc);
+                    }
+                    sb.append("\n");
+                }
+                sb.append("\n");
             }
             return sb.toString().trim();
         }
@@ -127,6 +155,40 @@ public final class DocCommentParser {
         while (pos >= 0 && Character.isWhitespace(text.charAt(pos))) {
             pos--;
         }
+        int effectiveDeclOffset = declOffset;
+
+        // Skip preceding export, default, async, declare, and declaration keywords to locate the doc comment
+        while (pos >= 0 && (Character.isJavaIdentifierPart(text.charAt(pos)) || text.charAt(pos) == '*')) {
+            if (pos >= 1 && text.charAt(pos) == '/' && text.charAt(pos - 1) == '*') {
+                break;
+            }
+            int wordEnd = pos;
+            while (pos >= 0 && Character.isJavaIdentifierPart(text.charAt(pos))) {
+                pos--;
+            }
+            if (pos == wordEnd) {
+                if (text.charAt(pos) == '*' && (pos == 0 || text.charAt(pos - 1) != '/')) {
+                    pos--;
+                    while (pos >= 0 && Character.isWhitespace(text.charAt(pos))) pos--;
+                    continue;
+                }
+                break;
+            }
+            String modifier = text.substring(pos + 1, wordEnd + 1);
+            if ("export".equals(modifier) || "default".equals(modifier) || "async".equals(modifier)
+                    || "declare".equals(modifier) || "const".equals(modifier) || "let".equals(modifier)
+                    || "var".equals(modifier) || "function".equals(modifier) || "class".equals(modifier)
+                    || "static".equals(modifier) || "readonly".equals(modifier) || "public".equals(modifier)
+                    || "private".equals(modifier) || "protected".equals(modifier)) {
+                effectiveDeclOffset = pos + 1;
+                while (pos >= 0 && Character.isWhitespace(text.charAt(pos))) {
+                    pos--;
+                }
+            } else {
+                pos = wordEnd;
+                break;
+            }
+        }
         if (pos < 0) return null;
 
         // 1. Check for block comment ending with "*/"
@@ -134,17 +196,14 @@ public final class DocCommentParser {
             int commentEnd = pos - 1; // position of '*' in "*/"
             int commentStart = text.lastIndexOf("/*", commentEnd);
             if (commentStart >= 0) {
-                String between = text.substring(commentEnd + 2, declOffset);
-                if (between.trim().isEmpty()) {
-                    boolean isJsDoc = (commentStart + 2 < text.length() && text.charAt(commentStart + 2) == '*');
-                    String raw = text.substring(commentStart, commentEnd + 2);
-                    return parseBlockComment(raw, isJsDoc);
-                }
+                boolean isJsDoc = (commentStart + 2 < text.length() && text.charAt(commentStart + 2) == '*');
+                String raw = text.substring(commentStart, commentEnd + 2);
+                return parseBlockComment(raw, isJsDoc);
             }
         }
 
         // 2. Check for consecutive single-line comments "// ..."
-        return parsePrecedingLineComments(text, declOffset);
+        return parsePrecedingLineComments(text, effectiveDeclOffset);
     }
 
     private static DocCommentInfo parseBlockComment(String raw, boolean isJsDoc) {
@@ -158,6 +217,7 @@ public final class DocCommentParser {
         StringBuilder descBuilder = new StringBuilder();
         Map<String, String> paramDocs = new HashMap<>();
         Map<String, String> paramTypes = new HashMap<>();
+        Map<String, String> throwsDocs = new HashMap<>();
         String returnDoc = null;
         String returnType = null;
 
@@ -171,7 +231,7 @@ public final class DocCommentParser {
                 trimmed = trimmed.substring(1).trim();
             }
 
-            if (isJsDoc && trimmed.startsWith("@")) {
+            if (trimmed.startsWith("@")) {
                 flushTag(currentTag, currentParamName, currentTagContent.toString().trim(),
                         paramDocs, paramTypes);
                 if ("returns".equals(currentTag)) {
@@ -210,6 +270,16 @@ public final class DocCommentParser {
                     continue;
                 }
 
+                Matcher mThrows = PAT_THROWS.matcher(trimmed);
+                if (mThrows.matches()) {
+                    currentTag = "throws";
+                    String type = mThrows.group(1);
+                    String desc = mThrows.group(2);
+                    String tKey = (type != null && !type.trim().isEmpty()) ? type.trim() : "Error";
+                    throwsDocs.put(tKey, desc != null ? desc.trim() : "");
+                    continue;
+                }
+
                 currentTag = "other";
                 currentTagContent.append(trimmed);
             } else if (currentTag != null) {
@@ -237,6 +307,7 @@ public final class DocCommentParser {
                 paramTypes,
                 returnDoc,
                 returnType,
+                throwsDocs,
                 raw
         );
     }

@@ -14,7 +14,7 @@
     app:cardPreventCornerOverlap="false"
     app:cardUseCompatPadding="false"
     app:strokeColor="@color/vcode_outline_variant"
-    app:strokeWidth="1.5dp">
+    app:strokeWidth="0.6dp">
 
     <LinearLayout
         android:layout_width="wrap_content"

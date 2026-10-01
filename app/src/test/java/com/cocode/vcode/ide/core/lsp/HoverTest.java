@@ -233,9 +233,9 @@ public class HoverTest {
         assertNotNull(info);
         assertTrue(info.getMarkdownContent().contains("function multiply(x, y)"));
         assertTrue(info.getMarkdownContent().contains("Multiplies two numbers."));
-        assertTrue(info.getMarkdownContent().contains("• `x` — Factor 1"));
-        assertTrue(info.getMarkdownContent().contains("• `y` — Factor 2"));
-        assertTrue(info.getMarkdownContent().contains("**Returns:**\nProduct"));
+        assertTrue(info.getMarkdownContent().contains("@param `x` — Factor 1"));
+        assertTrue(info.getMarkdownContent().contains("@param `y` — Factor 2"));
+        assertTrue(info.getMarkdownContent().contains("@returns — Product"));
     }
 
     @Test

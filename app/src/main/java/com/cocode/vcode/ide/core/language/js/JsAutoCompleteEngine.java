@@ -479,6 +479,11 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         // Object key position indicators: after { or after ,
         if (preceding != '{' && preceding != ',') return null;
 
+        // Ensure we are genuinely inside an object literal {...} and not in function call arguments (...), array [...], etc.
+        if (!isInsideObjectLiteral(fullText, cursorPos - word.length())) {
+            return null;
+        }
+
         // Exclude class bodies, switch statements, and block-level code scopes
         if (cachedTree != null && cachedTree.nodesByOffset != null && cachedTree.nodeCount > 1) {
             int deepest = 0;
@@ -579,6 +584,100 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         if (items.isEmpty()) return null; // Not enough context to suggest
         return fuzzyFilter(items, word);
+    }
+
+    private static boolean isInsideObjectLiteral(String text, int pos) {
+        if (text == null || pos <= 0 || pos > text.length()) return false;
+        int parenDepth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        int limit = Math.max(0, pos - 4000);
+
+        for (int i = pos - 1; i >= limit; i--) {
+            char c = text.charAt(i);
+
+            // Skip strings backwards
+            if (c == '"' || c == '\'' || c == '`') {
+                char quote = c;
+                i--;
+                while (i >= limit) {
+                    if (text.charAt(i) == quote) {
+                        int slashes = 0;
+                        for (int j = i - 1; j >= limit && text.charAt(j) == '\\'; j--) {
+                            slashes++;
+                        }
+                        if ((slashes & 1) == 0) {
+                            break;
+                        }
+                    }
+                    i--;
+                }
+                continue;
+            }
+
+            // Skip block comment backwards
+            if (c == '/' && i > limit && text.charAt(i - 1) == '*') {
+                i -= 2;
+                while (i > limit && !(text.charAt(i) == '*' && text.charAt(i - 1) == '/')) {
+                    i--;
+                }
+                if (i > limit) i--;
+                continue;
+            }
+
+            // Check delimiters
+            if (c == ')') {
+                parenDepth++;
+            } else if (c == '(') {
+                if (parenDepth > 0) {
+                    parenDepth--;
+                } else {
+                    // Innermost unclosed delimiter is '(', meaning cursor is in function arguments or parentheses
+                    return false;
+                }
+            } else if (c == ']') {
+                bracketDepth++;
+            } else if (c == '[') {
+                if (bracketDepth > 0) {
+                    bracketDepth--;
+                } else {
+                    // Innermost unclosed delimiter is '[', meaning cursor is in an array literal or indexer
+                    return false;
+                }
+            } else if (c == '}') {
+                braceDepth++;
+            } else if (c == '{') {
+                if (braceDepth > 0) {
+                    braceDepth--;
+                } else {
+                    // Innermost unclosed delimiter is '{'. Verify if this brace opens an object literal vs code block
+                    int j = i - 1;
+                    while (j >= limit && Character.isWhitespace(text.charAt(j))) j--;
+                    if (j < 0) return true;
+                    char beforeBrace = text.charAt(j);
+                    // Preceding ')' means if(...){, for(...){, while(...){, function(...){, catch(...){ - NOT object literal
+                    if (beforeBrace == ')' || beforeBrace == '>' || beforeBrace == ';') {
+                        return false;
+                    }
+                    int wEnd = j + 1;
+                    int wStart = j;
+                    while (wStart >= limit && Character.isJavaIdentifierPart(text.charAt(wStart))) wStart--;
+                    String kwBefore = text.substring(wStart + 1, wEnd);
+                    if ("else".equals(kwBefore) || "try".equals(kwBefore) || "catch".equals(kwBefore)
+                            || "finally".equals(kwBefore) || "do".equals(kwBefore) || "switch".equals(kwBefore)
+                            || "class".equals(kwBefore) || "interface".equals(kwBefore) || "enum".equals(kwBefore)
+                            || "function".equals(kwBefore) || "static".equals(kwBefore)) {
+                        return false;
+                    }
+                    return true;
+                }
+            } else if (c == ';') {
+                if (braceDepth == 0 && parenDepth == 0 && bracketDepth == 0) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isInsideTemplateExpression(String text, int cursorPos) {

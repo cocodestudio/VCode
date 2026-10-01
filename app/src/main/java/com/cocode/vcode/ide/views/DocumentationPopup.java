@@ -68,15 +68,23 @@ public class DocumentationPopup {
         // Header TextView for function signatures or symbol declaration banners
         tvHeader = new TextView(context);
         tvHeader.setTextColor(ContextCompat.getColor(context, R.color.vcode_text_primary));
-        tvHeader.setTypeface(FontManager.getInstance().getCodeFont(context));
+        tvHeader.setTypeface(FontManager.getInstance().getCodeFont(context), Typeface.BOLD);
         tvHeader.setTextSize(13f);
         container.addView(tvHeader, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
         // Hairline separator between declaration header and documentation body
-        vDivider = new View(context);
+        // Custom onMeasure ensures divider does not expand container in AT_MOST measurement
+        vDivider = new View(context) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                int widthMode = MeasureSpec.getMode(widthMeasureSpec);
+                int width = (widthMode == MeasureSpec.EXACTLY) ? MeasureSpec.getSize(widthMeasureSpec) : 0;
+                setMeasuredDimension(width, UiUtils.dpToPx(context, 1));
+            }
+        };
         vDivider.setBackgroundColor(ContextCompat.getColor(context, R.color.vcode_divider));
         LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -104,7 +112,7 @@ public class DocumentationPopup {
         tvParamDoc.setTypeface(FontManager.getInstance().getUiFont(context));
         tvParamDoc.setTextSize(12f);
         LinearLayout.LayoutParams paramParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         paramParams.bottomMargin = UiUtils.dpToPx(context, 4);
@@ -118,17 +126,17 @@ public class DocumentationPopup {
         tvContent.setLineSpacing(UiUtils.dpToPx(context, 2), 1.1f);
         tvContent.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
         contentContainer.addView(tvContent, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
         scrollView.addView(contentContainer, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
         container.addView(scrollView, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
@@ -413,6 +421,8 @@ public class DocumentationPopup {
         container.measure(widthSpec, heightSpec);
 
         int popupWidth = Math.max(minPopupWidth, Math.min(container.getMeasuredWidth(), maxPopupWidth));
+        // Remeasure container with resolved exact width so layout and multi-line wrapping are accurate
+        container.measure(View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY), heightSpec);
         int popupHeight = container.getMeasuredHeight();
 
         Rect visibleFrame = new Rect();
@@ -471,6 +481,8 @@ public class DocumentationPopup {
         container.measure(widthSpec, heightSpec);
 
         int popupWidth = Math.max(minPopupWidth, Math.min(container.getMeasuredWidth(), maxPopupWidth));
+        // Remeasure container with resolved exact width so layout and multi-line wrapping are accurate
+        container.measure(View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY), heightSpec);
         int popupHeight = container.getMeasuredHeight();
 
         Rect visibleFrame = new Rect();
@@ -526,6 +538,8 @@ public class DocumentationPopup {
         }
         String accentHex = String.format("#%06X", (0xFFFFFF & ContextCompat.getColor(context, R.color.vcode_accent_primary)));
         String secondaryHex = String.format("#%06X", (0xFFFFFF & ContextCompat.getColor(context, R.color.vcode_accent_secondary)));
+        String typeHex = String.format("#%06X", (0xFFFFFF & ContextCompat.getColor(context, R.color.vcode_lang_md)));
+        String errorHex = String.format("#%06X", (0xFFFFFF & ContextCompat.getColor(context, R.color.vcode_accent_error)));
 
         String escaped = markdown
                 .replace("&", "&amp;")
@@ -537,6 +551,15 @@ public class DocumentationPopup {
                 .replaceAll("### ([^\n]+)", "<b><font color=\"" + accentHex + "\">$1</font></b><br/>")
                 .replaceAll("```[a-z]*\n([\\s\\S]*?)\n```", "<tt><font color=\"" + accentHex + "\">$1</font></tt><br/>")
                 .replaceAll("\\[([^\\]]+)\\]\\(([^)]+)\\)", "<a href=\"$2\"><font color=\"" + accentHex + "\">$1</font></a>")
+                .replaceAll("@param `([a-zA-Z0-9_$.]+):\\s*([^`]+)`", "<font color=\"" + secondaryHex + "\"><b>@param</b></font> <b><font color=\"" + accentHex + "\">$1</font></b><font color=\"" + typeHex + "\">: $2</font>")
+                .replaceAll("@param `([a-zA-Z0-9_$.]+)`", "<font color=\"" + secondaryHex + "\"><b>@param</b></font> <b><font color=\"" + accentHex + "\">$1</font></b>")
+                .replaceAll("@param\\s*\\{([^}]+)\\}\\s*(\\[?[a-zA-Z0-9_$.=]+\\]?)", "<font color=\"" + secondaryHex + "\"><b>@param</b></font> <b><font color=\"" + accentHex + "\">$2</font></b> <font color=\"" + typeHex + "\">{$1}</font>")
+                .replaceAll("@returns `([^`]+)`", "<font color=\"" + secondaryHex + "\"><b>@returns</b></font> <font color=\"" + typeHex + "\"><b>$1</b></font>")
+                .replaceAll("@returns\\s*\\{([^}]+)\\}", "<font color=\"" + secondaryHex + "\"><b>@returns</b></font> <font color=\"" + typeHex + "\">{$1}</font>")
+                .replaceAll("@throws `([^`]+)`", "<font color=\"" + secondaryHex + "\"><b>@throws</b></font> <font color=\"" + errorHex + "\"><b>$1</b></font>")
+                .replaceAll("@throws\\s*\\{([^}]+)\\}", "<font color=\"" + secondaryHex + "\"><b>@throws</b></font> <font color=\"" + errorHex + "\">{$1}</font>")
+                .replaceAll("(@(?:param|returns?|throws?|exception|typedef|property|see|example|deprecated|template|type|default))\\b", "<font color=\"" + secondaryHex + "\"><b>$1</b></font>")
+                .replaceAll("(?<![\\w`])\\{([a-zA-Z0-9_$|\\[\\].?]+)\\}", "<font color=\"" + typeHex + "\">{$1}</font>")
                 .replaceAll("\\*\\*([^*]+)\\*\\*", "<b>$1</b>")
                 .replaceAll("`([^`]+)`", "<tt><font color=\"" + secondaryHex + "\">$1</font></tt>")
                 .replace("\n\n", "<br/><br/>")

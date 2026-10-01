@@ -17,7 +17,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.views.VCodeSnackbar;
+import android.widget.Toast;
 
 /**
  * UI utility methods for density conversions, soft keyboard management, Snackbars, window insets, and view styling.
@@ -64,43 +64,43 @@ public class UiUtils {
     }
 
     /**
-     * Displays a standard custom VCodeSnackbar message.
+     * Displays a standard toast message.
      */
     public static void showSnackbar(View anchor, String message, int duration) {
         if (anchor == null || message == null) return;
-        com.cocode.vcode.ide.views.VCodeSnackbar.make(anchor, message, duration).show();
+        Toast.makeText(anchor.getContext(), message, duration == -2 ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
     }
 
     /**
-     * Displays an error custom VCodeSnackbar with error styling.
+     * Displays an error toast message.
      */
     public static void showErrorSnackbar(View anchor, String message) {
         if (anchor == null || message == null) return;
-        com.cocode.vcode.ide.views.VCodeSnackbar.error(anchor, message).show();
+        Toast.makeText(anchor.getContext(), message, Toast.LENGTH_SHORT).show();
     }
 
     /**
-     * Displays a success custom VCodeSnackbar with success styling.
+     * Displays a success toast message.
      */
     public static void showSuccessSnackbar(View anchor, String message) {
         if (anchor == null || message == null) return;
-        com.cocode.vcode.ide.views.VCodeSnackbar.success(anchor, message).show();
+        Toast.makeText(anchor.getContext(), message, Toast.LENGTH_SHORT).show();
     }
 
     /**
-     * Displays a warning custom VCodeSnackbar with warning styling.
+     * Displays a warning toast message.
      */
     public static void showWarningSnackbar(View anchor, String message) {
         if (anchor == null || message == null) return;
-        com.cocode.vcode.ide.views.VCodeSnackbar.warning(anchor, message).show();
+        Toast.makeText(anchor.getContext(), message, Toast.LENGTH_SHORT).show();
     }
 
     /**
-     * Displays an info custom VCodeSnackbar with info styling.
+     * Displays an info toast message.
      */
     public static void showInfoSnackbar(View anchor, String message) {
         if (anchor == null || message == null) return;
-        com.cocode.vcode.ide.views.VCodeSnackbar.info(anchor, message).show();
+        Toast.makeText(anchor.getContext(), message, Toast.LENGTH_SHORT).show();
     }
 
     /**

@@ -335,7 +335,10 @@ public final class JsLspServer implements LspServer {
                             if (typeAnn != null && !typeAnn.isEmpty()) {
                                 sig += ": " + typeAnn;
                             }
-                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
+                            int docOffset = (tree.nodeParent[i] > 0 && tree.nodeType[tree.nodeParent[i]] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_EXPORT)
+                                    ? tree.nodeStart[tree.nodeParent[i]]
+                                    : tree.nodeStart[i];
+                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, docOffset);
                             String md = (docInfo != null && !docInfo.isEmpty())
                                     ? docInfo.toMarkdown(sig, doc.languageId != null ? doc.languageId : "javascript")
                                     : "```javascript\n" + sig + "\n```";
@@ -344,16 +347,22 @@ public final class JsLspServer implements LspServer {
                             String sig = "class " + word;
                             String superName = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[i] : null;
                             if (superName != null && !superName.isEmpty()) sig += " extends " + superName;
-                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
+                            int docOffset = (tree.nodeParent[i] > 0 && tree.nodeType[tree.nodeParent[i]] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_EXPORT)
+                                    ? tree.nodeStart[tree.nodeParent[i]]
+                                    : tree.nodeStart[i];
+                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, docOffset);
                             String md = (docInfo != null && !docInfo.isEmpty())
                                     ? docInfo.toMarkdown(sig, doc.languageId != null ? doc.languageId : "javascript")
                                     : "```javascript\n" + sig + "\n```";
                             return new com.cocode.vcode.ide.core.lsp.HoverInfo(new LspRange(doc.toPosition(s), doc.toPosition(e)), md);
                         } else if (nType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_VAR_DECL) {
                             String typeAnn = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[i] : null;
-                            String sig = "let " + word;
+                            String sig = getVarKindPrefix(tree, i, doc.text) + word;
                             if (typeAnn != null && !typeAnn.isEmpty() && !typeAnn.startsWith("@")) sig += ": " + typeAnn;
-                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, tree.nodeStart[i]);
+                            int docOffset = (tree.nodeParent[i] > 0 && tree.nodeType[tree.nodeParent[i]] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_EXPORT)
+                                    ? tree.nodeStart[tree.nodeParent[i]]
+                                    : tree.nodeStart[i];
+                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(doc.text, docOffset);
                             String md = (docInfo != null && !docInfo.isEmpty())
                                     ? docInfo.toMarkdown(sig, doc.languageId != null ? doc.languageId : "javascript")
                                     : "```javascript\n" + sig + "\n```";
@@ -433,7 +442,7 @@ public final class JsLspServer implements LspServer {
                     for (com.cocode.vcode.ide.core.lsp.LspLocation loc : defs) {
                         if (loc.uri != null) {
                             com.cocode.vcode.ide.core.language.js.ParseResult targetPr =
-                                    pIndex.getOrParseJsFile(new java.io.File(loc.uri));
+                                     pIndex.getOrParseJsFile(new java.io.File(loc.uri));
                             if (targetPr != null && targetPr.tree != null && targetPr.source != null) {
                                 for (int k = 1; k < targetPr.tree.nodeCount; k++) {
                                     if (word.equals(targetPr.tree.nodeName[k])) {
@@ -454,10 +463,15 @@ public final class JsLspServer implements LspServer {
                                         } else if (kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_CLASS_DECL) {
                                             sig = "class " + word;
                                         } else if (kType == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_VAR_DECL) {
-                                            sig = "let " + word;
+                                            sig = getVarKindPrefix(targetPr.tree, k, targetPr.source) + word;
+                                            String typeAnn = targetPr.tree.nodeTypeAnn != null ? targetPr.tree.nodeTypeAnn[k] : null;
+                                            if (typeAnn != null && !typeAnn.isEmpty() && !typeAnn.startsWith("@")) sig += ": " + typeAnn;
                                         }
                                         if (sig != null) {
-                                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(targetPr.source, targetPr.tree.nodeStart[k]);
+                                            int docOffset = (targetPr.tree.nodeParent[k] > 0 && targetPr.tree.nodeType[targetPr.tree.nodeParent[k]] == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.N_EXPORT)
+                                                    ? targetPr.tree.nodeStart[targetPr.tree.nodeParent[k]]
+                                                    : targetPr.tree.nodeStart[k];
+                                            DocCommentParser.DocCommentInfo docInfo = DocCommentParser.extractDoc(targetPr.source, docOffset);
                                             String md = (docInfo != null && !docInfo.isEmpty())
                                                     ? docInfo.toMarkdown(sig, "javascript")
                                                     : "```javascript\n" + sig + "\n```";
@@ -472,5 +486,25 @@ public final class JsLspServer implements LspServer {
             }
         }
         return null;
+    }
+
+    private static String getVarKindPrefix(com.cocode.vcode.ide.core.language.js.JsSyntaxTree tree, int nodeIndex, String source) {
+        if (tree != null && tree.nodeExtra != null && nodeIndex >= 0 && nodeIndex < tree.nodeExtra.length) {
+            int flag = tree.nodeExtra[nodeIndex] & 3;
+            if (flag == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.FLAG_CONST) return "const ";
+            if (flag == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.FLAG_VAR) return "var ";
+            if (flag == com.cocode.vcode.ide.core.language.js.JsSyntaxTree.FLAG_LET) return "let ";
+        }
+        if (source != null && tree != null && nodeIndex >= 0 && nodeIndex < tree.nodeCount) {
+            int start = tree.nodeStart[nodeIndex];
+            if (start >= 0 && start <= source.length()) {
+                int lookback = Math.max(0, start - 30);
+                String snippet = source.substring(lookback, Math.min(source.length(), start + 20));
+                if (snippet.contains("const ")) return "const ";
+                if (snippet.contains("var ")) return "var ";
+                if (snippet.contains("let ")) return "let ";
+            }
+        }
+        return "let ";
     }
 }
