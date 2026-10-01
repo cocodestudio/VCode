@@ -5,11 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Thread-safe, memory-bounded Least-Recently-Used (LRU) block cache.
- * <p>
- * Ensures that flat-memory index segment blocks (8KB each) never exceed a strict
- * resident heap ceiling (e.g. 64 blocks = 512KB), preventing memory thrashing
- * and Out-Of-Memory errors on low-end Android hardware.
+ * Memory-bounded LRU cache for 8KB index segment blocks.
+ * Keeps memory usage predictable by capping resident blocks.
  */
 public class BoundedBlockCache {
 

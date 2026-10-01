@@ -24,11 +24,10 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 
 /**
- * SettingsJsonSerializer manages serialization, deserialization, and schema validation
- * for VCode's VS Code-compatible settings.json format.
+ * Manages serialization, deserialization, and schema validation
+ * for settings.json.
  * <p>
- * It supports both clean hierarchical domain objects and flat dot-notation keys,
- * ensuring backwards compatibility and future extensibility.
+ * Supports both hierarchical JSON objects and flat dot-notation keys.
  */
 public final class SettingsJsonSerializer {
 

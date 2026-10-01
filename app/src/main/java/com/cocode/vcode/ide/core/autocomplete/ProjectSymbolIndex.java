@@ -42,8 +42,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Global project indexer that extracts CSS classes, IDs, HTML IDs, and JS/TS exports
- * and class members for cross-file intellisense using pure AST parsing and flat-memory segments.
+ * Indexes project symbols across CSS classes, IDs, HTML IDs, JS/TS exports,
+ * and class members for cross-file completion and navigation.
  */
 public class ProjectSymbolIndex {
     private static ProjectSymbolIndex instance;

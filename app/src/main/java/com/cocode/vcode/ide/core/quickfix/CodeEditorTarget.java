@@ -3,9 +3,7 @@ package com.cocode.vcode.ide.core.quickfix;
 import android.content.Context;
 
 /**
- * Interface representing a code editor buffer target for automated quick fixes.
- * Implemented natively by {@link com.cocode.vcode.ide.views.CodeEditText}
- * and lightweight in-memory test targets.
+ * Editor buffer abstraction for applying quick fixes.
  */
 public interface CodeEditorTarget {
 

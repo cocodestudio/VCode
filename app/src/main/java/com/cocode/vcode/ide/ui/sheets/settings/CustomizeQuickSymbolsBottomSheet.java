@@ -33,8 +33,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * CustomizeQuickSymbolsBottomSheet provides a Material Design interface for configuring
- * the QuickSymbolBar: adding, deleting, and restoring default symbols with a real-time preview.
+ * Bottom sheet for configuring the symbols displayed in {@link com.cocode.vcode.ide.views.QuickSymbolBar}.
  */
 public class CustomizeQuickSymbolsBottomSheet extends BaseBottomSheetDialogFragment {
 

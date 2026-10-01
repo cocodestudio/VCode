@@ -22,8 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Comprehensive execution tests covering ALL linting messages and their equivalent quick fixes.
- * Verifies that applying every quick fix transforms editor buffer text correctly and deterministically.
+ * Verifies quick fix application across supported diagnostic problems.
  */
 public class QuickFixExecutionTest {
 

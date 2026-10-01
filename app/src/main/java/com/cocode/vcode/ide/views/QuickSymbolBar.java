@@ -29,8 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Mobile virtual keyboard accessory bar providing rapid 1-tap insertion of programming symbols
- * and contextual Quick Fix (💡) intentions.
+ * Keyboard accessory toolbar for inserting programming symbols
+ * and triggering quick fixes.
  */
 public class QuickSymbolBar extends LinearLayout {
 

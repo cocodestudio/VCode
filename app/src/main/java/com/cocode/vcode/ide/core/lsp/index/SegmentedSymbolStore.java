@@ -16,8 +16,8 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Flat-memory segmented symbol store orchestrating incremental workspace indexing,
- * immutable on-disk binary segments, and bounded LRU block caching.
+ * Segmented symbol store for workspace indexing with on-disk binary segments
+ * and bounded LRU block caching.
  */
 public class SegmentedSymbolStore {
 

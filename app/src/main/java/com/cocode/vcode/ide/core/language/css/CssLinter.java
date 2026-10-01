@@ -15,10 +15,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Real-time zero-allocation AST linter for CSS.
- * Operates directly on {@link CssSyntaxTree} and {@link CssTokenStream},
- * providing comprehensive validation for rules, selectors, properties,
- * values, color formats, and best practices without regex token masks.
+ * AST-based linter for CSS.
+ * Operates on {@link CssSyntaxTree} and {@link CssTokenStream} to validate
+ * rules, selectors, properties, values, color formats, and syntax.
  */
 public class CssLinter {
 

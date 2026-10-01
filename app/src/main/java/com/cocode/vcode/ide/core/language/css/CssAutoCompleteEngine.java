@@ -22,9 +22,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Contextual suggestion engine for CSS — mirrors VS Code's CSS language server.
+ * Contextual suggestion engine for CSS.
  *
- * <p>Key fixes vs previous version:
+ * <p>Key behaviors:
  * <ul>
  *   <li>{@code isInsideMediaQuery} is checked BEFORE the {@code @} rule check, so
  *       "@media (" triggers feature completions instead of at-rule completions.</li>
@@ -575,8 +575,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
     /**
      * Suggestions for nested selector context (inside a rule block with CSS nesting support).
-     * Shows selectors (HTML tags, & prefix, class/id), properties, and Emmet at once —
-     * matching how VS Code behaves inside nested CSS.
+     * Shows selectors (HTML tags, & prefix, class/id), properties, and Emmet at once inside nested rules.
      */
     private List<CompletionItem> getNestedSuggestions(String word, String trimmed, String fullText, int cursorPos) {
         // Emmet CSS shorthand takes priority

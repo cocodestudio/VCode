@@ -404,7 +404,7 @@ public final class JsLspServer implements LspServer {
                 }
             }
 
-            // Check comprehensive JsDocumentationProvider first
+            // Check built-in documentation provider first
             String richDoc = null;
             if (receiver != null) {
                 richDoc = com.cocode.vcode.ide.core.language.js.JsDocumentationProvider.resolveMemberDoc(receiver, word, doc.languageId != null ? doc.languageId : "javascript");

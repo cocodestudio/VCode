@@ -25,9 +25,8 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * Universal custom popup menu matching the VCode IDE design language (FileTree Context Menu,
- * SelectionToolbar more menu). Provides Material 3 card styling, custom fonts, entry/exit animations,
- * and boundary-safe positioning that automatically flips above or below the anchor view.
+ * Custom popup menu with Material 3 styling, icon support,
+ * and boundary-safe positioning relative to the anchor view.
  */
 public class CustomPopupMenu {
 

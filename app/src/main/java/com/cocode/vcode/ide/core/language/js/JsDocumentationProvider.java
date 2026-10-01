@@ -4,8 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Comprehensive documentation provider for JavaScript and TypeScript built-ins, standard library,
- * DOM interfaces, keywords, and global APIs matching VS Code's rich hover documentation.
+ * Documentation provider for JavaScript and TypeScript standard library,
+ * DOM interfaces, keywords, and global APIs shown in hover popups.
  */
 public final class JsDocumentationProvider {
 

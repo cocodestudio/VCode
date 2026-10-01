@@ -5,9 +5,9 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Comprehensive documentation provider for CSS properties, pseudo-classes, pseudo-elements,
+ * Documentation provider for CSS properties, pseudo-classes, pseudo-elements,
  * at-rules, functions, and selector specificity.
- * Matches the official MDN-backed documentation that VS Code displays on hover.
+ * Provides reference documentation and MDN links for hover popups.
  */
 public final class CssDocumentationProvider {
 

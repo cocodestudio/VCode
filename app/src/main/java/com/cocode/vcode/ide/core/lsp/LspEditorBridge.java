@@ -102,9 +102,9 @@ public final class LspEditorBridge {
     private boolean lastActionWasTextChange = false;
     private final Runnable completionRunnable = this::performCompletion;    /**
      * Fires when {@link CodeEditText#setText} finishes loading new content into the editor.
-     * Used to detect the moment a file switch's real content has landed (see
+     * Used to detect the moment a file switch's content has landed (see
      * {@link #contentSyncPending}) and to run the diagnostic pass that {@link #setFile(File)}
-     * had to defer, now that {@code editor.getText()} is guaranteed to match {@code currentFile}.
+     * had to defer, once {@code editor.getText()} matches {@code currentFile}.
      */
     private final CodeEditText.OnTextLoadListener textLoadListener = isLoading -> {
         if (isLoading || !contentSyncPending) return;

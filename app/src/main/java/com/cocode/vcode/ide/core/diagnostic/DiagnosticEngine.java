@@ -44,7 +44,7 @@ public class DiagnosticEngine {
     }
 
     /**
-     * Tier 2: Comprehensive semantic checks executed after typing pause (e.g. 400ms idle).
+     * Tier 2: Semantic checks executed after a typing pause (e.g. 400ms idle).
      * Validates AST structures, scopes, undefined references, accessibility rules, and cross-file exports.
      */
     public static List<Problem> runSemanticLint(File file, String text, FileType type, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {

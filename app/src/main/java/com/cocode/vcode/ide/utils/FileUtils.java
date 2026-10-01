@@ -69,9 +69,8 @@ public class FileUtils {
     }
 
     /**
-     * Writes the provided text content to a file with UTF-8 encoding atomically and crash-safely.
-     * Content is written to a temporary sibling file first, flushed and synced to physical flash storage,
-     * and atomically renamed to the destination.
+     * Writes text content to a file with UTF-8 encoding.
+     * Writes to a temporary sibling file first before renaming to destination.
      */
     public static void writeFile(File file, String content) throws IOException {
         if (file == null) throw new IOException("File is null");

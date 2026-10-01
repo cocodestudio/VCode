@@ -18,11 +18,8 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * Floating selection and cursor action bar shown for text selections or on empty-line long-presses.
- *
- * <p>Displays as a native-style floating PopupWindow above or below the selection or cursor.
- * Follows the selection as the user scrolls, dynamically adapts options based on document state,
- * and maintains visibility when the entire document is selected.
+ * Floating toolbar shown for text selections or cursor long-presses.
+ * Follows the selection as the editor scrolls and provides editing actions.
  */
 public class SelectionToolbar {
 

@@ -19,10 +19,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * High-performance, crash-safe on-disk binary cache for workspace symbol tables.
+ * Binary file cache for workspace symbol tables.
  * <p>
- * Stores symbol records in a compact binary format (".vcode/cache/symbols.idx") to allow
- * sub-50ms cold-start project symbol loading without re-parsing source files.
+ * Stores symbol records in a binary format (".vcode/cache/symbols.idx") to allow
+ * quick symbol loading without re-parsing source files on startup.
  */
 public final class PersistentSymbolStore {
 

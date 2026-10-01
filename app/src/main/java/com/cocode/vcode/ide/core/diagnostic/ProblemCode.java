@@ -1,8 +1,7 @@
 package com.cocode.vcode.ide.core.diagnostic;
 
 /**
- * Standardized problem identifiers for diagnostic errors, warnings, and code quality issues.
- * Enables deterministic mapping between diagnostic issues and automated quick-fix intentions.
+ * Diagnostic error and warning codes mapped to available quick fixes.
  */
 public enum ProblemCode {
     SYNTAX_ERROR,

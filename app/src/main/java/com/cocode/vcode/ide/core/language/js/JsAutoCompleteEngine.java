@@ -29,9 +29,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * ECMAScript/JavaScript IntelliSense engine — mirrors VS Code's JavaScript Language Server behaviour.
+ * Context-aware code completion engine for JavaScript and TypeScript.
  *
- * <p>Key behaviours:
+ * <p>Key behaviors:
  * <ul>
  *   <li>Member items use insertText = just the method name (e.g. "floor(|)"), NOT "Math.floor(|)".
  *       The dot and namespace are already in the document — we only insert after the dot.</li>
@@ -650,7 +650,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (braceDepth > 0) {
                     braceDepth--;
                 } else {
-                    // Innermost unclosed delimiter is '{'. Verify if this brace opens an object literal vs code block
+                    // Innermost unclosed delimiter is '{'. Check whether this brace opens an object literal or a statement block
                     int j = i - 1;
                     while (j >= limit && Character.isWhitespace(text.charAt(j))) j--;
                     if (j < 0) return true;

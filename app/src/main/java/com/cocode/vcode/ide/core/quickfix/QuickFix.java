@@ -4,8 +4,7 @@ import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.views.CodeEditText;
 
 /**
- * Executable quick-fix transformation associated with a diagnostic problem.
- * Encapsulates an atomic mutation on the editor buffer.
+ * Quick-fix transformation associated with a diagnostic problem.
  */
 public interface QuickFix {
 
@@ -15,7 +14,7 @@ public interface QuickFix {
     String getTitle();
 
     /**
-     * Executes the fix against the given editor target atomically.
+     * Executes the fix against the given editor target.
      *
      * @param editor  target editor view or test buffer holding content and undo stack
      * @param problem the diagnostic problem being resolved

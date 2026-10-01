@@ -20,10 +20,8 @@ import java.io.File;
 import java.util.List;
 
 /**
- * Comprehensive position verification tests for squiggly lines across all linters
- * (HTML, CSS, JS, TS, JSON, MD).
- * Ensures that every diagnostic message underlines the exact expected target token
- * rather than overshooting, undershooting, or starting at irrelevant keywords.
+ * Tests diagnostic error ranges and squiggly line positions across linters
+ * (HTML, CSS, JS, TS, JSON, Markdown).
  */
 public class DiagnosticPositionTest {
 

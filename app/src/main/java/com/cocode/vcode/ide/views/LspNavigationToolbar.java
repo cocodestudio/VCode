@@ -20,11 +20,9 @@ import com.cocode.vcode.ide.databinding.ViewLspNavigationToolbarBinding;
 import java.util.List;
 
 /**
- * Floating action bar shown when the cursor is idle on a navigable symbol.
- *
- * <p>Displays as a native-style floating PopupWindow above/below the cursor line.
- * It queries the LSP bridge to determine if Go to Definition or Find References
- * are available, and only shows the corresponding icons if they are.
+ * Floating toolbar shown when the cursor rests on a navigable symbol.
+ * Queries the LSP bridge to provide navigation actions such as Go to Definition
+ * and Find References.
  */
 public class LspNavigationToolbar {
 

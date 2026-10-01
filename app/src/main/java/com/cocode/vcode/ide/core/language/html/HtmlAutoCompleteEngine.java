@@ -27,19 +27,19 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Intelligent completion coordinator for HTML source code — mirrors VS Code's HTML language server.
+ * Context-aware completion engine for HTML source code.
  *
- * <p>Feature highlights:
+ * <p>Features:
  * <ul>
- *   <li>VS Code-style fuzzy scoring via {@link AutoCompleteEngine#fuzzyFilter}</li>
+ *   <li>Fuzzy scoring via {@link AutoCompleteEngine#fuzzyFilter}</li>
  *   <li>Tag completions with self-closing awareness (void elements get {@code />})</li>
- *   <li>Attribute completions per tag (loaded from JSON) + global HTML attributes</li>
+ *   <li>Attribute completions per tag + global HTML attributes</li>
  *   <li>Attribute-value enumerations (e.g., {@code type="…"} → text, email, checkbox…)</li>
  *   <li>Inline {@code style="…"} delegates to {@link CssAutoCompleteEngine}</li>
  *   <li>Inline {@code on*="…"} event-handler attributes delegate to {@link JsAutoCompleteEngine}</li>
- *   <li>Embedded {@code <style>} / {@code <script>} block delegation</li>
- *   <li>Smart file-path completions for {@code src}, {@code href}, {@code action}, {@code data} attributes</li>
- *   <li>Full Emmet expansion (unchanged — keeps pipe-based cursor positioning)</li>
+ *   <li>Embedded {@code <style>} and {@code <script>} block delegation</li>
+ *   <li>File-path completions for {@code src}, {@code href}, {@code action}, {@code data} attributes</li>
+ *   <li>Emmet expansion with cursor positioning</li>
  *   <li>Closing-tag auto-suggestion on {@code </}</li>
  * </ul>
  */
@@ -675,9 +675,9 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     // File / folder path suggestions
 
     /**
-     * Provides VS Code-style file/folder path completions for path-bearing attributes
-     * (src, href, action…). Shows the immediate directory contents when a slash is
-     * present; otherwise does a recursive fuzzy-prefix search from the project root.
+     * Provides file and folder path completions for path-bearing attributes
+     * (src, href, action…). Shows directory contents when a slash is
+     * present; otherwise searches from project root.
      */
     private List<CompletionItem> getFileSuggestions(String typedPath, String tagName, String attrName) {
         if (currentFile == null) return new ArrayList<>();

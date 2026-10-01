@@ -11,8 +11,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Universal registry resolving actionable QuickFix intentions for ALL diagnostic issues
- * across HTML, CSS, JavaScript, TypeScript, JSON, Markdown, and syntax/bracket mismatches.
+ * Resolves quick fixes for diagnostic issues across HTML, CSS,
+ * JavaScript, TypeScript, JSON, Markdown, and syntax/bracket mismatches.
  */
 public final class QuickFixRegistry {
 

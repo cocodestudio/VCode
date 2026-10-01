@@ -27,14 +27,9 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
 /**
- * Universal floating documentation and signature hint popup window.
- * Dynamically adapts to render both method parameter signatures with active parameter
- * highlighting (Signature Help mode) and rich Markdown symbol descriptions, MDN references,
- * and user-written JSDoc comments (Hover Doc mode).
- *
- * <p>Enforces dynamic min/max width bounds based on screen size and caps vertical height
- * using {@link MaxHeightScrollView} so overflowing descriptions can be scrolled smoothly
- * without losing keyboard input focus.</p>
+ * Floating popup window for documentation and signature hints.
+ * Displays method signatures with active parameter highlighting,
+ * symbol descriptions, and hover documentation.
  */
 public class DocumentationPopup {
 

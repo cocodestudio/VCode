@@ -11,11 +11,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The base architectural blueprint for context-aware code completion.
- * Houses shared text tracking utilities, VS Code-style fuzzy matching with score-based ranking,
- * token extraction helpers, and asset loading utilities.
+ * Base engine for context-aware code completion.
+ * Houses text tracking utilities, fuzzy matching with score-based ranking,
+ * token extraction helpers, and asset loading.
  *
- * <p>Fuzzy matching algorithm mirrors VS Code's IntelliSense scorer:
+ * <p>Fuzzy matching scoring strategy:
  * <ul>
  *   <li>Exact full match → highest score</li>
  *   <li>Prefix match → high score with bonus for start-of-word</li>
@@ -27,7 +27,7 @@ import java.util.List;
 public abstract class AutoCompleteEngine {
 
     /**
-     * Maximum number of suggestions shown in the popup — matches VS Code's default.
+     * Maximum number of suggestions shown in the popup.
      */
     protected static final int MAX_SUGGESTIONS = 20;
 
@@ -350,7 +350,7 @@ public abstract class AutoCompleteEngine {
     }
 
     /**
-     * Performs VS Code-style fuzzy matching and score-based ranking against a candidate list.
+     * Performs fuzzy matching and score-based ranking against a candidate list.
      *
      * <p>Scoring tiers (higher = better):
      * <ol>
@@ -395,7 +395,7 @@ public abstract class AutoCompleteEngine {
      * Computes a fuzzy match score between a candidate label and a lowercase query prefix.
      * Returns 0 if the query is not a subsequence of the label (no match).
      *
-     * <p>Scoring bonuses (mirrors VS Code's internal scorer):
+     * <p>Scoring bonuses:
      * <ul>
      *   <li>+100 exact full match</li>
      *   <li>+80  prefix match (label starts with query)</li>

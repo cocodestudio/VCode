@@ -35,9 +35,9 @@ import android.view.ViewGroup;
 import java.io.File;
 
 /**
- * GitActivity provides a comprehensive interface for Git version control management.
- * It features a tabbed layout (Changes, History, Branches, Remote) to handle
- * various Git workflows like staging, committing, branching, and remote synchronization.
+ * Git version control management activity.
+ * Features a tabbed layout (Changes, History, Branches, Remote, Stash)
+ * for staging, committing, branching, and remote synchronization.
  */
 public class GitActivity extends BaseActivity {
 

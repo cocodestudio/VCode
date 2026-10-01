@@ -16,9 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Thread-safe registry that maps LSP language identifiers to server factories and capabilities.
- * Replaces hardcoded switch statements in {@link LspClientManager}, making the IDE's LSP layer
- * modular and dynamically extensible for new languages and frameworks.
+ * Registry that maps LSP language identifiers to server factories and capabilities.
  */
 public final class LspServerRegistry {
 

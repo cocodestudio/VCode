@@ -9,9 +9,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * High-performance parser extracting user-written documentation comments (JSDoc, block comments,
+ * Parses user-written documentation comments (JSDoc, block comments,
  * and single-line comment blocks) directly preceding functions, methods, classes, variables,
- * and identifiers for VS Code-grade signature help and hover documentation.
+ * and identifiers for signature help and hover documentation.
  */
 public final class DocCommentParser {
 
@@ -75,7 +75,7 @@ public final class DocCommentParser {
         }
 
         /**
-         * Formats this documentation into rich VS Code-style Markdown for hover documentation.
+         * Formats this documentation into Markdown for hover documentation.
          *
          * @param signatureLine Code declaration (e.g. "function calculateTotal(subtotal, taxRate): number")
          * @param language      Language tag (e.g. "javascript" or "typescript")

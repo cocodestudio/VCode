@@ -5,7 +5,7 @@ import java.util.Map;
 
 /**
  * Documentation provider for standard JSON configuration files (package.json, tsconfig.json).
- * Provides rich hover descriptions matching VS Code's schema documentation.
+ * Provides schema descriptions and field examples for hover popups.
  */
 public final class JsonDocumentationProvider {
 

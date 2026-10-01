@@ -26,9 +26,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 /**
- * Comprehensive test suite verifying the flat-memory segmented index system:
+ * Tests for the segmented symbol store index:
  * - BoundedBlockCache LRU eviction and segment invalidation
- * - SegmentWriter & SegmentReader 8KB block serialization and prefix pushdown queries
+ * - SegmentWriter & SegmentReader 8KB block serialization and prefix queries
  * - IndexCatalog fingerprint tracking and serialization
  * - SegmentedSymbolStore incremental indexing, progress listener events, and compaction
  */

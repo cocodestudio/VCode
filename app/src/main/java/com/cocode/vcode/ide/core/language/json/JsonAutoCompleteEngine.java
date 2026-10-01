@@ -19,16 +19,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Formatted suggestion provider for JSON — mirrors VS Code's JSON language server.
+ * Context-aware suggestion provider for JSON documents.
  *
- * <p>Improvements:
+ * <p>Features:
  * <ul>
- *   <li>VS Code-style fuzzy scoring for snippet matching</li>
+ *   <li>Fuzzy scoring for snippet matching</li>
  *   <li>Context-aware: key completions on the left of {@code :}, value completions on the right</li>
  *   <li>Document-key indexing — suggests keys already used elsewhere in the document</li>
  *   <li>Schema-aware completions for package.json, tsconfig.json, etc.</li>
  *   <li>Nested object depth awareness via brace counting</li>
- *   <li>Properly handles arrays, objects, boolean, null, number</li>
+ *   <li>Handles arrays, objects, boolean, null, and numbers</li>
  * </ul>
  */
 public class JsonAutoCompleteEngine extends AutoCompleteEngine {

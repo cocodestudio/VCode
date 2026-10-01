@@ -12,8 +12,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * High-performance, zero-allocation Flyweight adapter mapping VCode's Structure-of-Arrays (SoA)
- * flat syntax trees into the {@link DomNode} and {@link DomFile} interfaces.
+ * Adapter mapping flat syntax trees into {@link DomNode} and {@link DomFile} interfaces.
  */
 public class SyntaxTreeDomAdapter implements DomNode {
 

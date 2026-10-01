@@ -6,8 +6,8 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Comprehensive documentation provider for HTML elements, attributes, ARIA roles, and event handlers.
- * Mirrors the official documentation and MDN references provided by VS Code's HTML language service.
+ * Documentation provider for HTML elements, attributes, ARIA roles, and event handlers.
+ * Provides reference descriptions and MDN links for hover popups.
  */
 public final class HtmlDocumentationProvider {
 

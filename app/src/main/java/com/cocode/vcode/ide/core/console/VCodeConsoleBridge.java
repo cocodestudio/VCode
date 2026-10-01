@@ -5,8 +5,8 @@ import android.webkit.JavascriptInterface;
 import org.json.JSONObject;
 
 /**
- * JavaScript interface bridge facilitating real-time bidirectional console and runtime error forwarding
- * from preview WebViews into VCode's live console manager.
+ * JavaScript interface bridge for forwarding preview WebView console messages
+ * and runtime errors to the live console manager.
  */
 public class VCodeConsoleBridge {
 

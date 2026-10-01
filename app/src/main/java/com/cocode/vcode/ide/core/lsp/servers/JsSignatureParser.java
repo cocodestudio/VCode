@@ -13,11 +13,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Resolves context-aware signature help for JavaScript and TypeScript function and constructor invocations.
- * <p>Identifies the active function call at the cursor position using AST call expressions with a resilient
- * textual parenthesis fallback for transient unclosed calls. Accurately determines active parameter indices
- * across commas while ignoring string literals and comments, and provides rich signature labels, parameter
- * highlights, and documentation previews for local functions, project symbols, and built-in standard library APIs.
+ * Resolves signature help for JavaScript and TypeScript function and constructor calls.
+ * Identifies the active call at the cursor, computes the active parameter index,
+ * and formats parameter labels and documentation.
  */
 public class JsSignatureParser {
 

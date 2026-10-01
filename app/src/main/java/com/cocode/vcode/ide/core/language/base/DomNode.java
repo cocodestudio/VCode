@@ -3,9 +3,8 @@ package com.cocode.vcode.ide.core.language.base;
 import java.util.List;
 
 /**
- * A backend-neutral AST node representation inspired by CodeAssist's DomNode architecture.
- * Decouples high-level IDE capabilities (e.g. code folding, breadcrumbs, outline trees,
- * symbol navigation) from language-specific parser implementations.
+ * Language-neutral AST node representation for code folding, breadcrumbs,
+ * outline trees, and symbol navigation.
  */
 public interface DomNode {
 
