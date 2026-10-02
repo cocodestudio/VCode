@@ -965,7 +965,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         Integer index = viewModel.getActiveTabIndex().getValue();
         if (files != null && !files.isEmpty() && index != null && index >= 0 && index < files.size()) {
             EditorFile activeFile = files.get(index);
-            if (activeFile.getFileType() == FileType.API_TESTER) {
+            if (activeFile.getFileType() == FileType.API_TESTER || activeFile.getFileType() == FileType.TERMINAL) {
                 binding.breadcrumb.setVisibility(View.GONE);
             } else {
                 binding.breadcrumb.setVisibility(View.VISIBLE);
@@ -1295,6 +1295,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                         } else if (fixes.size() > 1) {
                             View anchor = anchorView != null ? anchorView : binding.quickSymbolBar;
                             CustomPopupMenu popup = new CustomPopupMenu(anchor.getContext(), anchor);
+                            popup.setTokenView(editor);
+                            popup.setCardBackgroundColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_bg_surface));
+                            popup.setTextColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_text_primary));
                             for (int i = 0; i < fixes.size(); i++) {
                                 final com.cocode.vcode.ide.core.quickfix.QuickFix fix = fixes.get(i);
                                 popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {

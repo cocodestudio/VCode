@@ -292,6 +292,9 @@ public class SelectionToolbar {
         }
 
         CustomPopupMenu popup = new CustomPopupMenu(context, anchor);
+        if (editor != null) {
+            popup.setTokenView(editor);
+        }
         popup.setAlignRight(true);
         popup.setOnDismissListener(() -> moreMenuPopup = null);
 

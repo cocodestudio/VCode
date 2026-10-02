@@ -88,6 +88,10 @@ public class ProjectState {
         return relativePath != null ? virtualFiles.get(normalizePath(relativePath)) : null;
     }
 
+    public void removeVirtualFile(String relativePath) {
+        if (relativePath != null) virtualFiles.remove(normalizePath(relativePath));
+    }
+
     public String getProjectId() {
         return projectId;
     }

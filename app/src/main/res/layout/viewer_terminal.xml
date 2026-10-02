@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/vcode_bg_surface">
+
+    <!-- Terminal Header Toolbar -->
+    <LinearLayout
+        android:id="@+id/headerToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:background="@color/vcode_bg_surface">
+
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/vcode_terminal_status_dot" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Clear Screen Button -->
+        <ImageView
+            android:id="@+id/btnClear"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="6dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_trash"
+            app:tint="@color/vcode_text_secondary"
+            android:contentDescription="@string/vcode_terminal_clear" />
+
+        <!-- Restart Shell Button -->
+        <ImageView
+            android:id="@+id/btnRestart"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:padding="6dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_arrows_rotate"
+            app:tint="@color/vcode_text_secondary"
+            android:contentDescription="@string/vcode_terminal_restart" />
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/vcode_divider" />
+
+    <!-- Terminal Screen Canvas -->
+    <com.cocode.vcode.ide.core.terminal.TerminalView
+        android:id="@+id/terminalView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/vcode_divider" />
+
+    <!-- Terminal Virtual Key Bar -->
+    <com.cocode.vcode.ide.core.terminal.TerminalKeyBar
+        android:id="@+id/terminalKeyBar"
+        android:layout_width="match_parent"
+        android:layout_height="42dp" />
+
+</LinearLayout>

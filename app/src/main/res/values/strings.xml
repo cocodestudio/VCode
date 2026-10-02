@@ -490,6 +490,15 @@
     <string name="vcode_response">RESPONSE</string>
     <string name="vcode_none">None</string>
     <string name="vcode_share">Share</string>
+
+    <!-- Terminal -->
+    <string name="vcode_terminal">Terminal</string>
+    <string name="vcode_terminal_clear">Clear</string>
+    <string name="vcode_terminal_restart">Restart</string>
+    <string name="vcode_terminal_running">Running</string>
+    <string name="vcode_terminal_terminated">Process terminated</string>
+    <string name="vcode_terminal_error">Failed to launch terminal process</string>
+
     <!-- GitHub & Clone Strings -->
     <string name="vcode_github_connected">Connected</string>
     <string name="vcode_github_waiting_auth">Waiting for authorization...</string>

@@ -1,15 +1,19 @@
 package com.cocode.vcode.ide.views;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 
@@ -36,6 +40,8 @@ public class CustomPopupMenu {
     private final View anchor;
     private final LayoutCustomPopupBinding binding;
     private final PopupWindow popupWindow;
+    private View tokenView;
+    private Integer customTextColor = null;
     private int customWidth = -1;
     private boolean alignRight = false;
 
@@ -82,6 +88,24 @@ public class CustomPopupMenu {
         return this;
     }
 
+    @NonNull
+    public CustomPopupMenu setTokenView(@Nullable View tokenView) {
+        this.tokenView = tokenView;
+        return this;
+    }
+
+    @NonNull
+    public CustomPopupMenu setTextColor(@ColorInt int colorInt) {
+        this.customTextColor = colorInt;
+        return this;
+    }
+
+    @NonNull
+    public CustomPopupMenu setTextColorRes(@ColorRes int colorRes) {
+        this.customTextColor = ContextCompat.getColor(context, colorRes);
+        return this;
+    }
+
     public CustomPopupMenu setOnDismissListener(@Nullable PopupWindow.OnDismissListener listener) {
         popupWindow.setOnDismissListener(listener);
         return this;
@@ -116,6 +140,10 @@ public class CustomPopupMenu {
 
         itemBinding.tvTitle.setText(title);
         itemBinding.tvTitle.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
+        int textColor = customTextColor != null
+                ? customTextColor
+                : ContextCompat.getColor(context, R.color.vcode_text_primary);
+        itemBinding.tvTitle.setTextColor(textColor);
         itemBinding.tvTitle.setTypeface(FontManager.getInstance().getUiMedium(context));
 
         itemBinding.getRoot().setOnClickListener(v -> {
@@ -156,8 +184,36 @@ public class CustomPopupMenu {
     public void show(@NonNull View targetAnchor) {
         if (targetAnchor.getWindowToken() == null) return;
 
+        View parentView = tokenView;
+        if (parentView == null || parentView.getWindowToken() == null) {
+            Activity activity = findActivity(targetAnchor.getContext());
+            if (activity == null) {
+                activity = findActivity(context);
+            }
+            if (activity != null) {
+                if (activity.isFinishing() || activity.isDestroyed()) {
+                    return;
+                }
+                if (activity.getWindow() != null && activity.getWindow().getDecorView() != null
+                        && activity.getWindow().getDecorView().getWindowToken() != null) {
+                    parentView = activity.getWindow().getDecorView();
+                }
+            }
+        }
+        if (parentView == null || parentView.getWindowToken() == null) {
+            parentView = targetAnchor.getRootView() != null ? targetAnchor.getRootView() : targetAnchor;
+        }
+        if (parentView == null || parentView.getWindowToken() == null) {
+            return;
+        }
+
         Rect visibleFrame = new Rect();
-        targetAnchor.getWindowVisibleDisplayFrame(visibleFrame);
+        if (parentView != null) {
+            parentView.getWindowVisibleDisplayFrame(visibleFrame);
+        }
+        if (visibleFrame.isEmpty() || visibleFrame.width() <= 0 || visibleFrame.height() <= 0) {
+            targetAnchor.getWindowVisibleDisplayFrame(visibleFrame);
+        }
         if (visibleFrame.isEmpty() || visibleFrame.width() <= 0 || visibleFrame.height() <= 0) {
             visibleFrame.set(0, 0,
                     context.getResources().getDisplayMetrics().widthPixels,
@@ -231,8 +287,23 @@ public class CustomPopupMenu {
         if (popupWindow.isShowing()) {
             popupWindow.update(x, y, width, popupHeight);
         } else {
-            popupWindow.showAtLocation(targetAnchor, Gravity.NO_GRAVITY, x, y);
+            try {
+                popupWindow.showAtLocation(parentView, Gravity.NO_GRAVITY, x, y);
+            } catch (WindowManager.BadTokenException e) {
+                Log.e("CustomPopupMenu", "Failed to show popup window: invalid window token", e);
+            }
         }
+    }
+
+    @Nullable
+    private static Activity findActivity(@Nullable Context context) {
+        while (context instanceof ContextWrapper) {
+            if (context instanceof Activity) {
+                return (Activity) context;
+            }
+            context = ((ContextWrapper) context).getBaseContext();
+        }
+        return null;
     }
 
     private int measureContentWidth(int maxAllowedWidth) {

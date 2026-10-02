@@ -92,4 +92,5 @@
     <color name="vcode_status_error">#F44336</color>
     <color name="vcode_search_match_bg">#55FFD700</color>
     <color name="vcode_search_active_bg">#AAFF9800</color>
+
 </resources>

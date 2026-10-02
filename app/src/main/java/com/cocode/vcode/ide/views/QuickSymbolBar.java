@@ -193,6 +193,11 @@ public class QuickSymbolBar extends LinearLayout {
         }
 
         CustomPopupMenu popup = new CustomPopupMenu(getContext(), btnQuickFix);
+        if (editor != null) {
+            popup.setTokenView(editor);
+        }
+        popup.setCardBackgroundColor(ContextCompat.getColor(getContext(), R.color.vcode_bg_surface));
+        popup.setTextColor(ContextCompat.getColor(getContext(), R.color.vcode_text_primary));
         int totalFixes = 0;
 
         for (Problem p : problems) {

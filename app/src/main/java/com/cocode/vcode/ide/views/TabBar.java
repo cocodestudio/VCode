@@ -131,7 +131,7 @@ public class TabBar extends HorizontalScrollView {
         ItemEditorTabBinding binding = (ItemEditorTabBinding) tabView.getTag();
         if (binding != null) {
             boolean showDot = dirty;
-            if (tabs.get(index).getFileType() == FileType.API_TESTER) showDot = false;
+            if (tabs.get(index).getFileType() == FileType.API_TESTER || tabs.get(index).getFileType() == FileType.TERMINAL) showDot = false;
             else if (isAutoSaveOn) showDot = false;
 
             binding.dotDirty.setVisibility(showDot ? VISIBLE : GONE);
@@ -183,7 +183,7 @@ public class TabBar extends HorizontalScrollView {
         binding.tvFileName.setTypeface(FontManager.getInstance().getUiMedium(getContext()));
 
         boolean showDot = file.isDirty();
-        if (file.getFileType() == FileType.API_TESTER) showDot = false;
+        if (file.getFileType() == FileType.API_TESTER || file.getFileType() == FileType.TERMINAL) showDot = false;
         else if (isAutoSaveOn) showDot = false;
 
         binding.dotDirty.setVisibility(showDot ? VISIBLE : GONE);
@@ -215,6 +215,19 @@ public class TabBar extends HorizontalScrollView {
     private String getFileName(EditorFile file) {
         if (file.getFileType() == FileType.API_TESTER) {
             return "API Tester";
+        }
+        if (file.getFileType() == FileType.TERMINAL) {
+            String name = file.getFileName();
+            if ("Terminal".equals(name)) {
+                int terminalCount = 0;
+                for (EditorFile ef : tabs) {
+                    if (ef != null && ef.getFileType() == FileType.TERMINAL) terminalCount++;
+                }
+                if (terminalCount > 1) {
+                    return "Terminal 1";
+                }
+            }
+            return name;
         }
         String displayFileName = file.getFileName();
         if (displayFileName != null && displayFileName.length() > 12) {

@@ -31,8 +31,158 @@ import java.util.Map;
 public class ProjectStateRepository {
 
     private static final String SESSION_FILE = "session.json";
+    public static final String VIRTUAL_DIR = "virtual";
+    public static final String API_TESTER_VIRTUAL_NAME = "vcode_api_tester.api";
+    public static final String TERMINAL_VIRTUAL_NAME = "vcode_terminal.term";
+
+    public static final String API_TESTER_FILE_NAME = "api_tester.json";
+    public static final String TERMINAL_FILE_NAME = "terminal.json";
 
     public ProjectStateRepository() {
+    }
+
+    /**
+     * Determines where dedicated virtual files should be persisted.
+     * <p>
+     * For VCode-owned projects the virtual files are stored in .vcode/virtual/.
+     * <p>
+     * For external directories or files opened via intent, the virtual files are stored
+     * in app-private internal storage keyed by a hash of the directory path.
+     */
+    public static File getVirtualStorageDir(File projectDir, boolean isFromIntent) {
+        android.content.Context ctx = VCodeApplication.getInstance();
+        String absPath = projectDir.getAbsolutePath().replace('\\', '/');
+        String lowerAbsPath = absPath.toLowerCase(java.util.Locale.US);
+        String templatesLower = com.cocode.vcode.ide.core.template.FileTemplateManager.TEMPLATES_DIR_NAME.toLowerCase(java.util.Locale.US);
+
+        if (projectDir.getName().equalsIgnoreCase(com.cocode.vcode.ide.core.template.FileTemplateManager.TEMPLATES_DIR_NAME)
+                || projectDir.getName().equalsIgnoreCase("templates")
+                || lowerAbsPath.contains("/" + templatesLower + "/")
+                || lowerAbsPath.endsWith("/" + templatesLower)) {
+            if (ctx != null) {
+                File bucket = new File(ctx.getFilesDir(), "templates_virtual");
+                if (!bucket.exists()) {
+                    bucket.mkdirs();
+                }
+                return bucket;
+            }
+        }
+
+        if (isFromIntent) {
+            String safeKey = Integer.toHexString(absPath.hashCode());
+            if (ctx != null) {
+                File bucket = new File(ctx.getFilesDir(), "intent_virtual/" + safeKey);
+                if (!bucket.exists()) {
+                    bucket.mkdirs();
+                }
+                return bucket;
+            }
+            File fallback = new File(System.getProperty("java.io.tmpdir"), "vcode_intent_virtual/" + safeKey);
+            if (!fallback.exists()) {
+                fallback.mkdirs();
+            }
+            return fallback;
+        }
+
+        if (absPath.contains("/VCodeProjects/") || absPath.contains("/VCodeProjects")) {
+            File virtualDir = new File(new File(projectDir, ".vcode"), VIRTUAL_DIR);
+            if (!virtualDir.exists()) {
+                virtualDir.mkdirs();
+            }
+            return virtualDir;
+        }
+
+        if (ctx != null) {
+            String safeKey = Integer.toHexString(absPath.hashCode());
+            File bucket = new File(ctx.getFilesDir(), "external_virtual/" + safeKey);
+            if (!bucket.exists()) {
+                bucket.mkdirs();
+            }
+            return bucket;
+        }
+
+        File virtualDir = new File(new File(projectDir, ".vcode"), VIRTUAL_DIR);
+        if (!virtualDir.exists()) {
+            virtualDir.mkdirs();
+        }
+        return virtualDir;
+    }
+
+    public static File getVirtualStorageDir(File projectDir) {
+        return getVirtualStorageDir(projectDir, false);
+    }
+
+    /**
+     * Converts a virtual file relative tab path to a dedicated filename inside .vcode/virtual/.
+     */
+    public static String toVirtualFileName(String relativePath) {
+        if (relativePath == null || relativePath.isEmpty()) {
+            return "unknown.json";
+        }
+        if (API_TESTER_VIRTUAL_NAME.equals(relativePath)) {
+            return API_TESTER_FILE_NAME;
+        }
+        if (TERMINAL_VIRTUAL_NAME.equals(relativePath)) {
+            return TERMINAL_FILE_NAME;
+        }
+        String name = relativePath.replace('\\', '/');
+        int lastSlash = name.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            name = name.substring(lastSlash + 1);
+        }
+        if (name.startsWith("vcode_")) {
+            name = name.substring("vcode_".length());
+        }
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            name = name.substring(0, dot);
+        }
+        return name + ".json";
+    }
+
+    /**
+     * Converts a filename in .vcode/virtual/ back to the corresponding relative tab path.
+     */
+    public static String toRelativePath(String fileName) {
+        if (fileName == null || fileName.isEmpty()) {
+            return "unknown";
+        }
+        if (API_TESTER_FILE_NAME.equals(fileName)) {
+            return API_TESTER_VIRTUAL_NAME;
+        }
+        if (TERMINAL_FILE_NAME.equals(fileName)) {
+            return TERMINAL_VIRTUAL_NAME;
+        }
+        String base = fileName;
+        if (base.endsWith(".json")) {
+            base = base.substring(0, base.length() - ".json".length());
+        }
+        if (base.startsWith("terminal_")) {
+            return "vcode_" + base + ".term";
+        }
+        if (base.startsWith("api_tester_")) {
+            return "vcode_" + base + ".api";
+        }
+        return "vcode_" + base + ".virtual";
+    }
+
+    private static String formatContentForVirtualFile(String content) {
+        if (content == null || content.isEmpty()) {
+            return "";
+        }
+        String trimmed = content.trim();
+        if (trimmed.startsWith("{")) {
+            try {
+                return new JSONObject(trimmed).toString(2);
+            } catch (Exception ignored) {
+            }
+        } else if (trimmed.startsWith("[")) {
+            try {
+                return new JSONArray(trimmed).toString(2);
+            } catch (Exception ignored) {
+            }
+        }
+        return content;
     }
 
     /**
@@ -226,20 +376,38 @@ public class ProjectStateRepository {
         }
         root.put("previewStates", previews);
 
-        // Virtual files
-        JSONObject virtuals = new JSONObject();
-        Map<String, String> virtualMap = state.getVirtualFiles();
-        if (virtualMap != null) {
-            for (Map.Entry<String, String> entry : virtualMap.entrySet()) {
-                if (entry.getKey() != null && entry.getValue() != null) {
-                    virtuals.put(entry.getKey(), entry.getValue());
-                }
-            }
-        }
-        root.put("virtualFiles", virtuals);
-
         File sessionFile = getSessionFile(projectDir, isFromIntent);
         com.cocode.vcode.ide.utils.FileUtils.writeFile(sessionFile, root.toString(2));
+
+        // Save dedicated virtual files in .vcode/virtual/
+        writeVirtualFilesToDisk(projectDir, state, isFromIntent);
+    }
+
+    private void writeVirtualFilesToDisk(File projectDir, ProjectState state, boolean isFromIntent) {
+        Map<String, String> virtualMap = state.getVirtualFiles();
+        if (virtualMap == null || virtualMap.isEmpty()) {
+            return;
+        }
+
+        File virtualDir = getVirtualStorageDir(projectDir, isFromIntent);
+        if (!virtualDir.exists()) {
+            virtualDir.mkdirs();
+        }
+
+        for (Map.Entry<String, String> entry : virtualMap.entrySet()) {
+            String relativePath = entry.getKey();
+            String content = entry.getValue();
+            if (relativePath == null) continue;
+
+            String fileName = toVirtualFileName(relativePath);
+            File targetFile = new File(virtualDir, fileName);
+
+            String formattedContent = formatContentForVirtualFile(content);
+            try {
+                com.cocode.vcode.ide.utils.FileUtils.writeFile(targetFile, formattedContent);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private ProjectState readStateFromDisk(File projectDir, String projectId, boolean isFromIntent) throws Exception {
@@ -314,12 +482,32 @@ public class ProjectStateRepository {
             }
         }
 
+        // Restore dedicated virtual files from virtual/ directory
+        File virtualDir = getVirtualStorageDir(projectDir, isFromIntent);
+        if (virtualDir.exists() && virtualDir.isDirectory()) {
+            File[] vFiles = virtualDir.listFiles((dir, name) -> name != null && name.endsWith(".json"));
+            if (vFiles != null) {
+                for (File vf : vFiles) {
+                    try {
+                        String relPath = toRelativePath(vf.getName());
+                        String content = com.cocode.vcode.ide.utils.FileUtils.readFile(vf);
+                        state.setVirtualFile(relPath, content);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+
+        // Backward compatibility: If legacy session.json contained virtualFiles, import any entries
+        // that were not already loaded from the dedicated virtual/ directory.
         if (root.has("virtualFiles")) {
             JSONObject virtuals = root.getJSONObject("virtualFiles");
             Iterator<String> keys = virtuals.keys();
             while (keys.hasNext()) {
                 String k = keys.next();
-                state.setVirtualFile(k, virtuals.getString(k));
+                if (!state.getVirtualFiles().containsKey(k)) {
+                    state.setVirtualFile(k, virtuals.getString(k));
+                }
             }
         }
 

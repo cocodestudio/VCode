@@ -439,6 +439,7 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
         itemBinding.ivIcon.setImageResource(iconRes);
         itemBinding.tvTitle.setText(title);
         itemBinding.tvTitle.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
+        itemBinding.tvTitle.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vcode_text_primary));
         itemBinding.tvTitle.setTypeface(FontManager.getInstance().getUiMedium(requireContext()));
         itemBinding.getRoot().setOnClickListener(v -> {
             popup.dismiss();

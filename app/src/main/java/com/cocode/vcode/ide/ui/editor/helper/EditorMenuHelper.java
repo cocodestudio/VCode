@@ -71,6 +71,8 @@ public class EditorMenuHelper {
 
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_star, "Snippet Manager", callbacks::onShowSnippetManager));
 
+        options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_terminal, activity.getString(R.string.vcode_terminal), () -> viewModel.openTerminal()));
+
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_globe, "API Tester", () -> viewModel.openApiTester()));
 
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_git, "Git", () -> callbacks.onNavigateWithUnsavedCheck(() -> {

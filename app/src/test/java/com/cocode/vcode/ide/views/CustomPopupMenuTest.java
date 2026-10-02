@@ -69,8 +69,26 @@ public class CustomPopupMenuTest {
         assertEquals(1, container.getChildCount());
 
         View itemRow = container.getChildAt(0);
+        android.widget.TextView tvTitle = itemRow.findViewById(R.id.tv_title);
+        assertNotNull(tvTitle);
+        assertEquals(ContextCompat.getColor(context, R.color.vcode_text_primary), tvTitle.getCurrentTextColor());
         itemRow.performClick();
         assertTrue(clicked.get());
+    }
+
+    @Test
+    public void testCustomTextColorOverridesItemTextColor() {
+        CustomPopupMenu popup = new CustomPopupMenu(context, anchor);
+        int customColor = android.graphics.Color.RED;
+        popup.setTextColor(customColor);
+        popup.addItem(R.drawable.ic_lightbulb, "Title", null);
+
+        View contentView = popup.getPopupWindow().getContentView();
+        android.view.ViewGroup container = contentView.findViewById(R.id.popup_container);
+        View itemRow = container.getChildAt(0);
+        android.widget.TextView tvTitle = itemRow.findViewById(R.id.tv_title);
+        assertNotNull(tvTitle);
+        assertEquals(customColor, tvTitle.getCurrentTextColor());
     }
 
     @Test

@@ -43,7 +43,8 @@ public enum FileType {
     TEXT(R.drawable.ic_file_lines, R.color.vcode_accent_primary, "Plain Text", true, "txt"),
 
     // Virtual Tools
-    API_TESTER(R.drawable.ic_globe, R.color.vcode_accent_primary, "API Tester", true, "api");
+    API_TESTER(R.drawable.ic_globe, R.color.vcode_accent_primary, "API Tester", true, "api"),
+    TERMINAL(R.drawable.ic_terminal, R.color.vcode_accent_primary, "Terminal", true, "term");
 
     private final int iconResId;
     private final int colorResId;

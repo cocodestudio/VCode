@@ -36,6 +36,7 @@ public class ProjectRepository {
     public static final String VCODE_DIR = ".vcode";
     public static final String META_DIR = "meta";
     public static final String STATE_DIR = "state";
+    public static final String VIRTUAL_DIR = "virtual";
     public static final String PROJECT_FILE = "project.json";
     public static final String LEGACY_META_FILE = "project_meta.json";
     private static final String KEY_ID = "id";
@@ -75,6 +76,10 @@ public class ProjectRepository {
             return legacySession;
         }
         return new File(new File(new File(projectRoot, VCODE_DIR), STATE_DIR), "session.json");
+    }
+
+    public static File getVirtualDir(File projectRoot) {
+        return new File(new File(projectRoot, VCODE_DIR), VIRTUAL_DIR);
     }
 
     /**

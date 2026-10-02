@@ -47,7 +47,7 @@ public class EditorFile {
             this.fileType = FileType.fromExtension(FileUtils.getExtension(file.getName()));
         }
 
-        if (this.fileType == FileType.API_TESTER) {
+        if (this.fileType == FileType.API_TESTER || this.fileType == FileType.TERMINAL) {
             this.isVirtual = true;
         }
 
@@ -103,6 +103,18 @@ public class EditorFile {
     public String getFileName() {
         if (fileType == FileType.API_TESTER) {
             return "API Tester";
+        }
+        if (fileType == FileType.TERMINAL) {
+            if (file != null) {
+                String name = file.getName();
+                if (name.startsWith("vcode_terminal_")) {
+                    String numPart = name.substring("vcode_terminal_".length());
+                    int dot = numPart.indexOf('.');
+                    if (dot > 0) numPart = numPart.substring(0, dot);
+                    return "Terminal " + numPart;
+                }
+            }
+            return "Terminal";
         }
         return file != null ? file.getName() : "Untitled";
     }

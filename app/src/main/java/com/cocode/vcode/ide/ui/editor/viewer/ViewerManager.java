@@ -76,6 +76,8 @@ public class ViewerManager {
             return new WebPreviewViewer();
         } else if (type == FileType.API_TESTER) {
             return new ApiTesterViewer();
+        } else if (type == FileType.TERMINAL) {
+            return new TerminalViewer();
         } else {
             return new CodeFileViewer();
         }

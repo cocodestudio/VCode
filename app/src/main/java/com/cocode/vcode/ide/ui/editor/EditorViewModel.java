@@ -33,8 +33,10 @@ import android.widget.Toast;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -365,6 +367,12 @@ public class EditorViewModel extends ViewModel {
         if (legacyApiFile.exists() && legacyApiFile.isFile()) {
             legacyApiFile.delete();
         }
+        File[] legacyTermFiles = projectRoot.listFiles((dir, name) -> name != null && name.startsWith("vcode_terminal") && name.endsWith(".term"));
+        if (legacyTermFiles != null) {
+            for (File f : legacyTermFiles) {
+                if (f.isFile()) f.delete();
+            }
+        }
 
         refreshFileTree();
         isEditorLoadingLiveData.setValue(true);
@@ -412,7 +420,7 @@ public class EditorViewModel extends ViewModel {
             for (String relativePath : paths) {
                 File file = new File(projectRoot, relativePath);
                 FileType fileType = FileType.fromExtension(com.cocode.vcode.ide.utils.FileUtils.getExtension(file.getName()));
-                boolean isVirtual = (state.getVirtualFiles() != null && state.getVirtualFiles().containsKey(relativePath)) || fileType == FileType.API_TESTER;
+                boolean isVirtual = (state.getVirtualFiles() != null && state.getVirtualFiles().containsKey(relativePath)) || fileType == FileType.API_TESTER || fileType == FileType.TERMINAL;
 
                 if (isVirtual || (file.exists() && file.isFile())) {
                     try {
@@ -949,14 +957,81 @@ public class EditorViewModel extends ViewModel {
     }
 
     /**
+     * Opens an integrated Terminal tool as a dedicated virtual file tab.
+     * Supports opening multiple concurrent terminal instances with persistent history.
+     */
+    public void openTerminal() {
+        if (projectRoot == null) return;
+
+        List<EditorFile> currentDocs = getOpenFilesList();
+
+        // Find existing terminal indices to allocate the lowest unused slot
+        Set<Integer> usedSlots = new HashSet<>();
+        for (EditorFile ef : currentDocs) {
+            if (ef.getFileType() == FileType.TERMINAL && ef.getFile() != null) {
+                String name = ef.getFile().getName();
+                if ("vcode_terminal.term".equals(name)) {
+                    usedSlots.add(1);
+                } else if (name.startsWith("vcode_terminal_") && name.endsWith(".term")) {
+                    try {
+                        String numPart = name.substring("vcode_terminal_".length(), name.length() - ".term".length());
+                        usedSlots.add(Integer.parseInt(numPart));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+
+        int slot = 1;
+        while (usedSlots.contains(slot)) {
+            slot++;
+        }
+
+        String virtualName = (slot == 1) ? "vcode_terminal.term" : ("vcode_terminal_" + slot + ".term");
+        File virtualFile = new File(projectRoot, virtualName);
+
+        EditorFile newFile = new EditorFile(UUID.randomUUID().toString(), virtualFile, "", FileType.TERMINAL);
+        newFile.setVirtual(true);
+        if (currentState != null) {
+            String relativePath = newFile.getRelativePath(projectRoot);
+            String content = currentState.getVirtualFile(relativePath);
+            newFile.setContent(content != null ? content : "");
+            newFile.setScrollY(currentState.getScrollFor(relativePath));
+            newFile.setCursorPosition(currentState.getCursorFor(relativePath));
+        }
+        newFile.markSaved();
+        newFile.setContentLoaded(true);
+
+        List<EditorFile> updated = new ArrayList<>(currentDocs);
+        updated.add(newFile);
+        openFilesLiveData.setValue(updated);
+        activeTabIndexLiveData.setValue(updated.size() - 1);
+        persistStateAsync();
+    }
+
+    /**
      * Closes the file tab at the specified index and manages the active tab transition.
      */
     public void closeFile(int index) {
         List<EditorFile> currentDocs = new ArrayList<>(getOpenFilesList());
         if (index < 0 || index >= currentDocs.size()) return;
 
-        currentDocs.remove(index);
+        EditorFile fileToClose = currentDocs.remove(index);
         openFilesLiveData.setValue(currentDocs);
+
+        if (fileToClose != null && fileToClose.getFileType() == FileType.TERMINAL && projectRoot != null) {
+            String relPath = fileToClose.getRelativePath(projectRoot);
+            if (currentState != null) {
+                currentState.removeVirtualFile(relPath);
+            }
+            ExecutorProvider.getInstance().runOnIo(() -> {
+                File vDir = ProjectStateRepository.getVirtualStorageDir(projectRoot, isFromIntent);
+                File vFile = new File(vDir, ProjectStateRepository.toVirtualFileName(relPath));
+                if (vFile.exists()) {
+                    vFile.delete();
+                }
+            });
+        }
 
         int currentIndex = activeTabIndexLiveData.getValue() != null ? activeTabIndexLiveData.getValue() : -1;
         if (currentDocs.isEmpty()) {
@@ -974,6 +1049,24 @@ public class EditorViewModel extends ViewModel {
      * Closes all currently open file tabs.
      */
     public void closeAll() {
+        List<EditorFile> currentDocs = getOpenFilesList();
+        if (projectRoot != null) {
+            for (EditorFile ef : currentDocs) {
+                if (ef != null && ef.getFileType() == FileType.TERMINAL) {
+                    String relPath = ef.getRelativePath(projectRoot);
+                    if (currentState != null) {
+                        currentState.removeVirtualFile(relPath);
+                    }
+                    ExecutorProvider.getInstance().runOnIo(() -> {
+                        File vDir = ProjectStateRepository.getVirtualStorageDir(projectRoot, isFromIntent);
+                        File vFile = new File(vDir, ProjectStateRepository.toVirtualFileName(relPath));
+                        if (vFile.exists()) {
+                            vFile.delete();
+                        }
+                    });
+                }
+            }
+        }
         openFilesLiveData.setValue(new ArrayList<>());
         activeTabIndexLiveData.setValue(-1);
         persistStateAsync();
@@ -1058,7 +1151,7 @@ public class EditorViewModel extends ViewModel {
 
         boolean hasDirtyVirtual = false;
         for (EditorFile ef : getOpenFilesList()) {
-            if (ef.isDirty() && ef.getFileType() == FileType.API_TESTER) {
+            if (ef.isDirty() && (ef.getFileType() == FileType.API_TESTER || ef.getFileType() == FileType.TERMINAL)) {
                 hasDirtyVirtual = true;
                 break;
             }
@@ -1066,7 +1159,7 @@ public class EditorViewModel extends ViewModel {
 
         if (hasDirtyVirtual || (settings != null && settings.autoSave)) {
             ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);
-            long delay = (settings != null && settings.autoSaveDelay > 0) ? settings.autoSaveDelay * 1000L : 2000L;
+            long delay = hasDirtyVirtual ? 1000L : ((settings != null && settings.autoSaveDelay > 0) ? settings.autoSaveDelay * 1000L : 2000L);
             ExecutorProvider.getInstance().getMainHandler().postDelayed(autoSaveRunnable, delay);
         }
     }
@@ -1165,6 +1258,7 @@ public class EditorViewModel extends ViewModel {
         ExecutorProvider.getInstance().runOnIo(() -> {
             boolean allSuccess = true;
             boolean anySaved = false;
+            boolean anyVirtualSaved = false;
 
             for (EditorFile ef : docs) {
                 if (ef.isDirty() && !ef.isBinaryAsset()) {
@@ -1174,6 +1268,7 @@ public class EditorViewModel extends ViewModel {
                             currentState.setVirtualFile(ef.getRelativePath(projectRoot), ef.getContent());
                         }
                         anySaved = true;
+                        anyVirtualSaved = true;
                     } else {
                         try {
                             fileRepo.writeFileSync(ef.getFile(), ef.getContent());
@@ -1195,8 +1290,12 @@ public class EditorViewModel extends ViewModel {
 
             boolean finalAllSuccess = allSuccess;
             boolean finalAnySaved = anySaved;
+            boolean finalAnyVirtualSaved = anyVirtualSaved;
 
             ExecutorProvider.getInstance().runOnMain(() -> {
+                if (finalAnyVirtualSaved) {
+                    persistStateAsync();
+                }
                 if (finalAnySaved) {
                     openFilesLiveData.setValue(new ArrayList<>(docs));
                     touchCurrentProject();
@@ -1246,10 +1345,29 @@ public class EditorViewModel extends ViewModel {
         AppSettings appSettings = getSettingsLiveData().getValue();
         if (appSettings != null && appSettings.autoSave) {
             saveAllSync();
+        } else {
+            saveDirtyVirtualFilesSync();
         }
 
         updateCurrentStateObject();
         stateRepo.saveStateSync(projectRoot, currentState, isFromIntent);
+    }
+
+    private void saveDirtyVirtualFilesSync() {
+        List<EditorFile> docs = getOpenFilesList();
+        boolean anySaved = false;
+        for (EditorFile ef : docs) {
+            if (ef.isDirty() && ef.isVirtual()) {
+                ef.markSaved();
+                if (currentState != null) {
+                    currentState.setVirtualFile(ef.getRelativePath(projectRoot), ef.getContent());
+                }
+                anySaved = true;
+            }
+        }
+        if (anySaved) {
+            touchCurrentProject();
+        }
     }
 
     /**

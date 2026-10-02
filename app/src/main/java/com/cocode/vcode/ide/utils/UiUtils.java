@@ -28,6 +28,15 @@ public class UiUtils {
     }
 
     /**
+     * Checks if the given context is currently operating in night/dark mode.
+     */
+    public static boolean isNightMode(Context context) {
+        if (context == null) return false;
+        int nightModeFlags = context.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        return nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /**
      * Converts density-independent pixels (dp) to device pixels (px).
      */
     public static int dpToPx(Context ctx, float dp) {
