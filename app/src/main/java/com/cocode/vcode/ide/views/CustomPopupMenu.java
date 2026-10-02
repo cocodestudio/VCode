@@ -3,8 +3,10 @@ package com.cocode.vcode.ide.views;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -42,6 +44,7 @@ public class CustomPopupMenu {
         this.anchor = anchor;
         this.binding = LayoutCustomPopupBinding.inflate(LayoutInflater.from(context));
 
+        this.binding.getRoot().setCardElevation(0f);
         this.binding.getRoot().setCardBackgroundColor(
                 ContextCompat.getColor(context, R.color.vcode_bg_surface));
 
@@ -54,6 +57,7 @@ public class CustomPopupMenu {
         this.popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         this.popupWindow.setElevation(UiUtils.dpToPx(context, 8));
         this.popupWindow.setAnimationStyle(R.style.VCodePopupMenuAnimation);
+        this.popupWindow.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
     }
 
     public CustomPopupMenu setCardBackgroundColor(@Nullable ColorStateList colorStateList) {
@@ -152,21 +156,25 @@ public class CustomPopupMenu {
     public void show(@NonNull View targetAnchor) {
         if (targetAnchor.getWindowToken() == null) return;
 
-        int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
-        int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
+        Rect visibleFrame = new Rect();
+        targetAnchor.getWindowVisibleDisplayFrame(visibleFrame);
+        if (visibleFrame.isEmpty() || visibleFrame.width() <= 0 || visibleFrame.height() <= 0) {
+            visibleFrame.set(0, 0,
+                    context.getResources().getDisplayMetrics().widthPixels,
+                    context.getResources().getDisplayMetrics().heightPixels);
+        }
+
+        int availableWidth = visibleFrame.width();
         int maxWidth = context.getResources().getDimensionPixelSize(R.dimen.dialog_max_width);
-        int maxAllowedWidth = Math.min((int) (screenWidth * 0.92f), maxWidth);
+        int maxAllowedWidth = Math.min((int) (availableWidth * 0.92f), maxWidth);
 
         int width;
         if (customWidth > 0) {
             width = Math.min(customWidth, maxAllowedWidth);
         } else {
-            int preferredWidth = UiUtils.dpToPx(context, 220);
-            binding.getRoot().measure(
-                    View.MeasureSpec.makeMeasureSpec(maxAllowedWidth, View.MeasureSpec.AT_MOST),
-                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-            int measuredW = binding.getRoot().getMeasuredWidth();
-            width = Math.max(preferredWidth, Math.min(measuredW, maxAllowedWidth));
+            int minWidth = UiUtils.dpToPx(context, 160);
+            int contentWidth = measureContentWidth(maxAllowedWidth);
+            width = Math.min(Math.max(contentWidth, minWidth), maxAllowedWidth);
         }
 
         popupWindow.setWidth(width);
@@ -175,32 +183,77 @@ public class CustomPopupMenu {
                 View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int popupHeight = binding.getRoot().getMeasuredHeight();
+        popupWindow.setHeight(popupHeight);
 
         int[] anchorLoc = new int[2];
         targetAnchor.getLocationOnScreen(anchorLoc);
+        int anchorX = anchorLoc[0];
+        int anchorY = anchorLoc[1];
+        int anchorWidth = targetAnchor.getWidth();
+        int anchorHeight = targetAnchor.getHeight();
 
         int margin = UiUtils.dpToPx(context, 4);
-        int spaceBelow = screenHeight - anchorLoc[1] - targetAnchor.getHeight();
-        int spaceAbove = anchorLoc[1];
 
-        // Horizontal positioning: align right or center, clamped to screen edges
-        int xOffset = alignRight ? (targetAnchor.getWidth() - width) : (targetAnchor.getWidth() - width) / 2;
-        int screenX = anchorLoc[0] + xOffset;
-        if (screenX < margin) {
-            xOffset += (margin - screenX);
-        } else if (screenX + width > screenWidth - margin) {
-            xOffset -= (screenX + width - (screenWidth - margin));
-        }
-
-        // Vertical positioning: flip above if insufficient space below
-        int yOffset;
-        if (spaceBelow >= popupHeight || spaceBelow >= spaceAbove) {
-            yOffset = margin;
+        // Horizontal positioning: align right edge with anchor right edge if alignRight;
+        // otherwise align left edge with anchor left edge.
+        int x = alignRight ? (anchorX + anchorWidth - width) : anchorX;
+        int minX = visibleFrame.left + margin;
+        int maxX = visibleFrame.right - width - margin;
+        if (maxX >= minX) {
+            x = Math.max(minX, Math.min(x, maxX));
         } else {
-            yOffset = -targetAnchor.getHeight() - popupHeight - margin;
+            x = minX;
         }
 
-        popupWindow.showAsDropDown(targetAnchor, xOffset, yOffset);
+        // Vertical positioning: check space below and space above within visible frame
+        int spaceBelow = visibleFrame.bottom - (anchorY + anchorHeight);
+        int spaceAbove = anchorY - visibleFrame.top;
+
+        int y;
+        if (spaceBelow >= popupHeight + margin) {
+            y = anchorY + anchorHeight + margin;
+        } else if (spaceAbove >= popupHeight + margin) {
+            y = anchorY - popupHeight - margin;
+        } else if (spaceAbove >= spaceBelow) {
+            y = Math.max(visibleFrame.top + margin, anchorY - popupHeight - margin);
+        } else {
+            y = anchorY + anchorHeight + margin;
+        }
+
+        int minY = visibleFrame.top + margin;
+        int maxY = visibleFrame.bottom - popupHeight - margin;
+        if (maxY >= minY) {
+            y = Math.max(minY, Math.min(y, maxY));
+        } else {
+            y = minY;
+        }
+
+        if (popupWindow.isShowing()) {
+            popupWindow.update(x, y, width, popupHeight);
+        } else {
+            popupWindow.showAtLocation(targetAnchor, Gravity.NO_GRAVITY, x, y);
+        }
+    }
+
+    private int measureContentWidth(int maxAllowedWidth) {
+        int maxWidth = 0;
+        int widthMeasureSpec = View.MeasureSpec.makeMeasureSpec(maxAllowedWidth, View.MeasureSpec.AT_MOST);
+        int heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+
+        int count = binding.popupContainer.getChildCount();
+        for (int i = 0; i < count; i++) {
+            View child = binding.popupContainer.getChildAt(i);
+            if (child.getVisibility() == View.GONE) continue;
+            // Only measure item rows, skipping dividers (which are plain Views)
+            if (child instanceof ViewGroup) {
+                child.measure(widthMeasureSpec, heightMeasureSpec);
+                maxWidth = Math.max(maxWidth, child.getMeasuredWidth());
+            }
+        }
+
+        int padding = binding.popupContainer.getPaddingLeft() + binding.popupContainer.getPaddingRight()
+                + binding.getRoot().getContentPaddingLeft() + binding.getRoot().getContentPaddingRight();
+        return Math.min(maxWidth + padding, maxAllowedWidth);
     }
 
     public void dismiss() {

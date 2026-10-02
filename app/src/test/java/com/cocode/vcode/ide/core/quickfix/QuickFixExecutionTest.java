@@ -10,10 +10,17 @@ import com.cocode.vcode.ide.core.language.md.MarkdownLinter;
 import com.cocode.vcode.ide.core.language.ts.TsLinter;
 import com.cocode.vcode.ide.core.model.Problem;
 
+import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
+import com.cocode.vcode.ide.core.language.js.JsLexer;
+import com.cocode.vcode.ide.core.language.js.JsParser;
+import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
+import com.cocode.vcode.ide.core.language.js.ScopeTree;
+
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -511,12 +518,32 @@ public class QuickFixExecutionTest {
     }
 
     @Test
-    public void testCssEmptyRule() {
-        editor.setText(".empty {\n}\n.full { color: red; }");
-        Problem p = new Problem(cssFile, 1, 1, 6, "Empty rule for selector '.empty'",
+    public void testCssEmptyRule_singleLine() {
+        editor.setText("#wrapper {}\n.full { color: red; }");
+        Problem p = new Problem(cssFile, 1, 1, 8, "Empty rule for selector '#wrapper'",
                 Problem.Severity.WARNING, ProblemCode.CSS_EMPTY_RULE);
         applyFirstFix(p);
-        assertFalse(editor.getText().toString().contains(".empty"));
+        assertEquals(".full { color: red; }", editor.getText().toString().trim());
+    }
+
+    @Test
+    public void testCssEmptyRule_multiLine() {
+        editor.setText("#wrapper {\n}\n.full { color: red; }");
+        Problem p = new Problem(cssFile, 1, 1, 8, "Empty rule for selector '#wrapper'",
+                Problem.Severity.WARNING, ProblemCode.CSS_EMPTY_RULE);
+        applyFirstFix(p);
+        String result = editor.getText().toString().trim();
+        assertEquals(".full { color: red; }", result);
+        assertFalse("Closing brace of empty rule must not remain", result.startsWith("}"));
+    }
+
+    @Test
+    public void testCssEmptyRule_multiLineWithInnerWhitespace() {
+        editor.setText("#wrapper {\n    \n}\n.full { color: red; }");
+        Problem p = new Problem(cssFile, 1, 1, 8, "Empty rule for selector '#wrapper'",
+                Problem.Severity.WARNING, ProblemCode.CSS_EMPTY_RULE);
+        applyFirstFix(p);
+        assertEquals(".full { color: red; }", editor.getText().toString().trim());
     }
 
     @Test
@@ -724,6 +751,36 @@ public class QuickFixExecutionTest {
                 Problem.Severity.WARNING, ProblemCode.JS_TYPEOF_UNDEFINED_COMPARISON);
         applyFirstFix(p);
         assertTrue(editor.getText().toString().contains("=== 'undefined'"));
+    }
+
+    @Test
+    public void testJsTooFewArguments_noArgs() {
+        editor.setText("calculate();");
+        Problem p = new Problem(jsFile, 1, 1, 9,
+                "Too few arguments: 'calculate' expects 1 argument(s), but got 0 (missing: tax)",
+                Problem.Severity.WARNING, ProblemCode.JS_TOO_FEW_ARGUMENTS);
+        applyFirstFix(p);
+        assertEquals("calculate(tax);", editor.getText().toString());
+    }
+
+    @Test
+    public void testJsTooFewArguments_partialArgs() {
+        editor.setText("calculate(amount);");
+        Problem p = new Problem(jsFile, 1, 1, 9,
+                "Too few arguments: 'calculate' expects 2 argument(s), but got 1 (missing: rate)",
+                Problem.Severity.WARNING, ProblemCode.JS_TOO_FEW_ARGUMENTS);
+        applyFirstFix(p);
+        assertEquals("calculate(amount, rate);", editor.getText().toString());
+    }
+
+    @Test
+    public void testJsTooManyArguments() {
+        editor.setText("calculate(amount, rate, extra);");
+        Problem p = new Problem(jsFile, 1, 1, 9,
+                "Too many arguments: 'calculate' expects 2 argument(s), but got 3",
+                Problem.Severity.WARNING, ProblemCode.JS_TOO_MANY_ARGUMENTS);
+        applyFirstFix(p);
+        assertEquals("calculate(amount, rate);", editor.getText().toString());
     }
 
     @Test
@@ -1050,6 +1107,46 @@ public class QuickFixExecutionTest {
         editor.setText(code);
         applyFirstFix(problems.get(0));
         assertTrue(editor.getText().toString().contains("}"));
+    }
+
+    @Test
+    public void testLinterEndToEnd_cssEmptyRuleMultiLine() {
+        String code = "#wrapper {\n}\n.full {\n    color: red;\n}";
+        List<Problem> problems = CssLinter.analyze(cssFile, code);
+        boolean foundEmptyRule = false;
+        for (Problem prob : problems) {
+            if (prob.getProblemCode() == ProblemCode.CSS_EMPTY_RULE) {
+                foundEmptyRule = true;
+                editor.setText(code);
+                applyFirstFix(prob);
+                String result = editor.getText().toString().trim();
+                assertFalse("Selector #wrapper must be removed", result.contains("#wrapper"));
+                assertFalse("Closing brace of empty rule must not be dangling", result.startsWith("}"));
+                assertTrue(".full rule must be preserved", result.contains(".full {\n    color: red;\n}"));
+            }
+        }
+        assertTrue("CssLinter should detect empty rule", foundEmptyRule);
+    }
+
+    @Test
+    public void testLinterEndToEnd_jsTooFewArguments() {
+        String code = "function calculate(tax) {\n    return tax * 0.1;\n}\ncalculate();";
+        TokenStream stream = JsLexer.tokenize(code);
+        JsSyntaxTree tree = JsParser.parseFull(code, stream);
+        ScopeTree scopeTree = ScopeTree.build(tree);
+        List<Problem> problems = new ArrayList<>();
+        JsSemanticLinter.analyze(jsFile, code, stream, tree, scopeTree, null, problems);
+        boolean foundArityProblem = false;
+        for (Problem prob : problems) {
+            if (prob.getProblemCode() == ProblemCode.JS_TOO_FEW_ARGUMENTS) {
+                foundArityProblem = true;
+                editor.setText(code);
+                applyFirstFix(prob);
+                assertTrue("calculate() call should have missing argument 'tax' inserted",
+                        editor.getText().toString().contains("calculate(tax);"));
+            }
+        }
+        assertTrue("JsSemanticLinter should detect too few arguments", foundArityProblem);
     }
 
     @Test

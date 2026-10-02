@@ -236,7 +236,7 @@ public class SelectionToolbarTest {
     }
 
     @Test
-    public void testMoreMenuHasSameBackgroundColorAsToolbar() {
+    public void testMoreMenuHasSurfaceBackgroundColor() {
         editor.setText("line 1\nline 2");
         editor.setSelection(0);
 
@@ -251,13 +251,36 @@ public class SelectionToolbarTest {
         assertTrue(popupView instanceof com.google.android.material.card.MaterialCardView);
         com.google.android.material.card.MaterialCardView popupCard = (com.google.android.material.card.MaterialCardView) popupView;
 
-        View toolbarCardView = toolbar.findViewById(com.cocode.vcode.ide.R.id.cardToolbar);
-        assertTrue(toolbarCardView instanceof com.google.android.material.card.MaterialCardView);
-        com.google.android.material.card.MaterialCardView toolbarCard = (com.google.android.material.card.MaterialCardView) toolbarCardView;
-
-        assertNotNull(toolbarCard.getCardBackgroundColor());
+        int expectedColor = androidx.core.content.ContextCompat.getColor(context, com.cocode.vcode.ide.R.color.vcode_bg_surface);
         assertNotNull(popupCard.getCardBackgroundColor());
-        assertEquals(toolbarCard.getCardBackgroundColor().getDefaultColor(),
-                popupCard.getCardBackgroundColor().getDefaultColor());
+        assertEquals(expectedColor, popupCard.getCardBackgroundColor().getDefaultColor());
+    }
+
+    @Test
+    public void testMoreMenuWidthFitsContentNotFullWidth() {
+        editor.setText("line 1\nline 2");
+        editor.setSelection(0);
+
+        toolbar.show();
+        View btnMore = toolbar.findViewById(com.cocode.vcode.ide.R.id.btnMore);
+        btnMore.performClick();
+        assertTrue(toolbar.isMoreMenuShowing());
+
+        android.widget.PopupWindow popup = toolbar.getMoreMenuPopup();
+        assertNotNull(popup);
+
+        int screenWidth = context.getResources().getDisplayMetrics().widthPixels;
+        int maxAllowedWidth = (int) (screenWidth * 0.92f);
+
+        // Width must be substantially smaller than full width / maxAllowedWidth, fitting content (~200dp)
+        assertTrue("Popup width (" + popup.getWidth() + ") should be less than max allowed width (" + maxAllowedWidth + ")",
+                popup.getWidth() < maxAllowedWidth);
+        assertTrue("Popup width should be greater than 0", popup.getWidth() > 0);
+
+        // Check card elevation is 0 to avoid M3 blue surface tint
+        View popupView = popup.getContentView();
+        assertTrue(popupView instanceof com.google.android.material.card.MaterialCardView);
+        com.google.android.material.card.MaterialCardView popupCard = (com.google.android.material.card.MaterialCardView) popupView;
+        assertEquals(0f, popupCard.getCardElevation(), 0.01f);
     }
 }

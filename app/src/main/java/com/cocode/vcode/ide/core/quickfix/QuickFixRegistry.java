@@ -921,7 +921,7 @@ public final class QuickFixRegistry {
 
                 @Override
                 public void apply(CodeEditorTarget ed, Problem prob) {
-                    deleteProblemLine(ed, prob);
+                    deleteCssEmptyRule(ed, prob);
                 }
             });
         }
@@ -1098,6 +1098,44 @@ public final class QuickFixRegistry {
     // 3. JavaScript & TypeScript Quick Fixes
     // ==========================================
     private static void buildJsTsFixes(List<QuickFix> fixes, Problem problem, CodeEditorTarget editor, ProblemCode code, String msg) {
+        // JS: Too few arguments
+        if (code == ProblemCode.JS_TOO_FEW_ARGUMENTS || msg.startsWith("Too few arguments")) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    List<String> missing = extractMissingArgsFromMessage(probMsg());
+                    if (!missing.isEmpty()) {
+                        return "Insert missing argument(s) (" + String.join(", ", missing) + ")";
+                    }
+                    return "Insert missing argument(s)";
+                }
+
+                private String probMsg() {
+                    return problem != null && problem.getMessage() != null ? problem.getMessage() : "";
+                }
+
+                @Override
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    insertMissingCallArguments(ed, prob);
+                }
+            });
+        }
+
+        // JS: Too many arguments
+        if (code == ProblemCode.JS_TOO_MANY_ARGUMENTS || msg.startsWith("Too many arguments")) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return "Remove extraneous argument(s)";
+                }
+
+                @Override
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    removeExtraneousCallArguments(ed, prob);
+                }
+            });
+        }
+
         // JS: Const reassignment
         if (code == ProblemCode.JS_CONST_REASSIGNMENT || msg.contains("reassign 'const' variable")) {
             fixes.add(new QuickFix() {
@@ -1909,7 +1947,8 @@ public final class QuickFixRegistry {
         }
 
         // Generic Syntax Error
-        if (code == ProblemCode.SYNTAX_ERROR || msg.toLowerCase().contains("syntax error")) {
+        if ((code == ProblemCode.SYNTAX_ERROR || msg.toLowerCase().contains("syntax error"))
+                && !msg.toLowerCase().contains("argument")) {
             fixes.add(new QuickFix() {
                 @Override
                 public String getTitle() {
@@ -2412,6 +2451,424 @@ public final class QuickFixRegistry {
             return name.endsWith(".json") || name.endsWith(".jsonc");
         }
         return false;
+    }
+
+    private static void deleteCssEmptyRule(CodeEditorTarget editor, Problem problem) {
+        if (editor == null || problem == null) return;
+        int line = problem.getLine() - 1;
+        if (line < 0 || line >= editor.getLineCount()) return;
+
+        CharSequence allTextSeq = editor.getText();
+        if (allTextSeq == null) return;
+        String allText = allTextSeq.toString();
+
+        // 1. Locate line start offset in buffer
+        int lineStartOffset = 0;
+        int currentLine = 0;
+        for (int i = 0; i < allText.length() && currentLine < line; i++) {
+            if (allText.charAt(i) == '\n') {
+                currentLine++;
+                lineStartOffset = i + 1;
+            }
+        }
+
+        // 2. Find opening brace '{' from lineStartOffset
+        int openBrace = allText.indexOf('{', lineStartOffset);
+        if (openBrace == -1) {
+            deleteProblemLine(editor, problem);
+            return;
+        }
+
+        // 3. Find matching closing brace '}' respecting depth
+        int closeBrace = -1;
+        int depth = 0;
+        for (int i = openBrace; i < allText.length(); i++) {
+            char c = allText.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    closeBrace = i;
+                    break;
+                }
+            }
+        }
+        if (closeBrace == -1) {
+            deleteProblemLine(editor, problem);
+            return;
+        }
+
+        // 4. Calculate line numbers for start and closeBrace
+        int startLine = line;
+        int closeBraceLine = line;
+        for (int i = lineStartOffset; i <= closeBrace && i < allText.length(); i++) {
+            if (allText.charAt(i) == '\n') {
+                closeBraceLine++;
+            }
+        }
+
+        // 5. Check if the rule is on its own line(s) or inline
+        String startLineText = editor.getLineText(startLine);
+        String closeLineText = editor.getLineText(closeBraceLine);
+
+        int colInStart = openBrace - lineStartOffset;
+        String beforeStart = startLineText.substring(0, Math.min(startLineText.length(), Math.max(0, problem.getColumn() - 1))).trim();
+        String afterClose = "";
+        int closeLineStart = allText.lastIndexOf('\n', closeBrace);
+        int colInClose = (closeLineStart == -1) ? closeBrace : (closeBrace - (closeLineStart + 1));
+        if (colInClose + 1 < closeLineText.length()) {
+            afterClose = closeLineText.substring(colInClose + 1).trim();
+        }
+
+        editor.beginAtomicGroup();
+        try {
+            if (beforeStart.isEmpty() && afterClose.isEmpty()) {
+                // Delete entire lines from startLine through closeBraceLine
+                int totalLines = editor.getLineCount();
+                int endCol = closeLineText.length();
+                if (closeBraceLine + 1 < totalLines) {
+                    // Consume trailing newline after closing brace line
+                    editor.replaceRange(startLine, 0, closeBraceLine + 1, 0, "");
+                } else if (startLine > 0) {
+                    String prevLineText = editor.getLineText(startLine - 1);
+                    editor.replaceRange(startLine - 1, prevLineText.length(), closeBraceLine, endCol, "");
+                } else {
+                    editor.replaceRange(startLine, 0, closeBraceLine, endCol, "");
+                }
+            } else {
+                // Inline rule: delete from problem start to closing brace
+                int startCol = Math.max(0, problem.getColumn() - 1);
+                int endCol = colInClose + 1;
+                if (endCol < closeLineText.length() && closeLineText.charAt(endCol) == ' ') {
+                    endCol++;
+                }
+                editor.replaceRange(startLine, startCol, closeBraceLine, endCol, "");
+            }
+        } finally {
+            editor.endAtomicGroup();
+        }
+    }
+
+    private static void insertMissingCallArguments(CodeEditorTarget ed, Problem prob) {
+        if (ed == null || prob == null) return;
+        int pLine = Math.max(0, prob.getLine() - 1);
+        if (pLine >= ed.getLineCount()) return;
+
+        CharSequence allSeq = ed.getText();
+        if (allSeq == null) return;
+        String allText = allSeq.toString();
+
+        int lineStartOffset = 0;
+        int curLine = 0;
+        for (int i = 0; i < allText.length() && curLine < pLine; i++) {
+            if (allText.charAt(i) == '\n') {
+                curLine++;
+                lineStartOffset = i + 1;
+            }
+        }
+        int startOffset = lineStartOffset + Math.max(0, prob.getColumn() - 1);
+        if (startOffset > allText.length()) startOffset = allText.length();
+
+        int openParen = allText.indexOf('(', startOffset);
+        if (openParen == -1) return;
+
+        int closeParen = -1;
+        int depth = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        boolean inTemplate = false;
+        for (int i = openParen; i < allText.length(); i++) {
+            char c = allText.charAt(i);
+            if (c == '\\' && (inSingleQuote || inDoubleQuote || inTemplate)) {
+                i++;
+                continue;
+            }
+            if (c == '\'' && !inDoubleQuote && !inTemplate) {
+                inSingleQuote = !inSingleQuote;
+            } else if (c == '"' && !inSingleQuote && !inTemplate) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (c == '`' && !inSingleQuote && !inDoubleQuote) {
+                inTemplate = !inTemplate;
+            } else if (!inSingleQuote && !inDoubleQuote && !inTemplate) {
+                if (c == '(') depth++;
+                else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        closeParen = i;
+                        break;
+                    }
+                }
+            }
+        }
+        if (closeParen == -1) return;
+
+        String msg = prob.getMessage() != null ? prob.getMessage() : "";
+        List<String> missing = extractMissingArgsFromMessage(msg);
+        if (missing.isEmpty()) return;
+
+        String toInsert = String.join(", ", missing);
+        String inner = allText.substring(openParen + 1, closeParen).trim();
+
+        if (inner.isEmpty()) {
+            int insLine = 0;
+            int insCol = 0;
+            int curOffset = 0;
+            for (int i = 0; i < openParen + 1; i++) {
+                if (allText.charAt(i) == '\n') {
+                    insLine++;
+                    curOffset = i + 1;
+                }
+            }
+            insCol = (openParen + 1) - curOffset;
+
+            int endLine = insLine;
+            int endCol = insCol;
+            for (int i = openParen + 1; i < closeParen; i++) {
+                if (allText.charAt(i) == '\n') {
+                    endLine++;
+                    curOffset = i + 1;
+                }
+            }
+            endCol = closeParen - curOffset;
+
+            ed.beginAtomicGroup();
+            try {
+                ed.replaceRange(insLine, insCol, endLine, endCol, toInsert);
+            } finally {
+                ed.endAtomicGroup();
+            }
+        } else {
+            int closeLine = 0;
+            int curOffset = 0;
+            for (int i = 0; i < closeParen; i++) {
+                if (allText.charAt(i) == '\n') {
+                    closeLine++;
+                    curOffset = i + 1;
+                }
+            }
+            int closeCol = closeParen - curOffset;
+
+            ed.beginAtomicGroup();
+            try {
+                ed.replaceRange(closeLine, closeCol, closeLine, closeCol, ", " + toInsert);
+            } finally {
+                ed.endAtomicGroup();
+            }
+        }
+    }
+
+    private static void removeExtraneousCallArguments(CodeEditorTarget ed, Problem prob) {
+        if (ed == null || prob == null) return;
+        int pLine = Math.max(0, prob.getLine() - 1);
+        if (pLine >= ed.getLineCount()) return;
+
+        CharSequence allSeq = ed.getText();
+        if (allSeq == null) return;
+        String allText = allSeq.toString();
+
+        int lineStartOffset = 0;
+        int curLine = 0;
+        for (int i = 0; i < allText.length() && curLine < pLine; i++) {
+            if (allText.charAt(i) == '\n') {
+                curLine++;
+                lineStartOffset = i + 1;
+            }
+        }
+        int startOffset = lineStartOffset + Math.max(0, prob.getColumn() - 1);
+        if (startOffset > allText.length()) startOffset = allText.length();
+
+        int openParen = allText.indexOf('(', startOffset);
+        if (openParen == -1) return;
+
+        int closeParen = -1;
+        int depth = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        boolean inTemplate = false;
+        for (int i = openParen; i < allText.length(); i++) {
+            char c = allText.charAt(i);
+            if (c == '\\' && (inSingleQuote || inDoubleQuote || inTemplate)) {
+                i++;
+                continue;
+            }
+            if (c == '\'' && !inDoubleQuote && !inTemplate) {
+                inSingleQuote = !inSingleQuote;
+            } else if (c == '"' && !inSingleQuote && !inTemplate) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (c == '`' && !inSingleQuote && !inDoubleQuote) {
+                inTemplate = !inTemplate;
+            } else if (!inSingleQuote && !inDoubleQuote && !inTemplate) {
+                if (c == '(') depth++;
+                else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        closeParen = i;
+                        break;
+                    }
+                }
+            }
+        }
+        if (closeParen == -1) return;
+
+        String msg = prob.getMessage() != null ? prob.getMessage() : "";
+        int expectedCount = 0;
+        int expIdx = msg.indexOf("expects ");
+        if (expIdx >= 0) {
+            int argIdx = msg.indexOf(" argument(s)", expIdx);
+            if (argIdx > expIdx) {
+                try {
+                    expectedCount = Integer.parseInt(msg.substring(expIdx + 8, argIdx).trim());
+                } catch (Exception ignored) {}
+            }
+        }
+
+        String inside = allText.substring(openParen + 1, closeParen);
+        List<int[]> argSpans = new ArrayList<>();
+        depth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        inSingleQuote = false;
+        inDoubleQuote = false;
+        inTemplate = false;
+        int argStart = 0;
+
+        for (int i = 0; i < inside.length(); i++) {
+            char c = inside.charAt(i);
+            if (c == '\\' && (inSingleQuote || inDoubleQuote || inTemplate)) {
+                i++;
+                continue;
+            }
+            if (c == '\'' && !inDoubleQuote && !inTemplate) {
+                inSingleQuote = !inSingleQuote;
+            } else if (c == '"' && !inSingleQuote && !inTemplate) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (c == '`' && !inSingleQuote && !inDoubleQuote) {
+                inTemplate = !inTemplate;
+            } else if (!inSingleQuote && !inDoubleQuote && !inTemplate) {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (c == '[') bracketDepth++;
+                else if (c == ']') bracketDepth--;
+                else if (c == '{') braceDepth++;
+                else if (c == '}') braceDepth--;
+                else if (c == ',' && depth == 0 && bracketDepth == 0 && braceDepth == 0) {
+                    argSpans.add(new int[]{argStart, i});
+                    argStart = i + 1;
+                }
+            }
+        }
+        if (argStart < inside.length() && !inside.substring(argStart).trim().isEmpty()) {
+            argSpans.add(new int[]{argStart, inside.length()});
+        }
+
+        if (argSpans.size() <= expectedCount) return;
+
+        int cutOffsetInInside;
+        if (expectedCount == 0) {
+            cutOffsetInInside = 0;
+        } else {
+            cutOffsetInInside = argSpans.get(expectedCount - 1)[1];
+        }
+
+        int deleteStartOffset = openParen + 1 + cutOffsetInInside;
+        int deleteEndOffset = closeParen;
+
+        int sLine = 0;
+        int sCol = 0;
+        int eLine = 0;
+        int eCol = 0;
+        curLine = 0;
+        lineStartOffset = 0;
+        for (int i = 0; i < allText.length(); i++) {
+            if (i == deleteStartOffset) {
+                sLine = curLine;
+                sCol = i - lineStartOffset;
+            }
+            if (i == deleteEndOffset) {
+                eLine = curLine;
+                eCol = i - lineStartOffset;
+                break;
+            }
+            if (allText.charAt(i) == '\n') {
+                curLine++;
+                lineStartOffset = i + 1;
+            }
+        }
+
+        ed.beginAtomicGroup();
+        try {
+            ed.replaceRange(sLine, sCol, eLine, eCol, "");
+        } finally {
+            ed.endAtomicGroup();
+        }
+    }
+
+    private static List<String> extractMissingArgsFromMessage(String msg) {
+        List<String> result = new ArrayList<>();
+        if (msg == null) return result;
+
+        int actualGot = 0;
+        int gotIdx = msg.lastIndexOf("but got ");
+        if (gotIdx >= 0) {
+            try {
+                actualGot = Integer.parseInt(msg.substring(gotIdx + 8).trim());
+            } catch (Exception ignored) {}
+        }
+
+        int missingIdx = msg.indexOf("(missing: ");
+        if (missingIdx >= 0) {
+            missingIdx += "(missing: ".length();
+            int parenEnd = msg.indexOf(')', missingIdx);
+            if (parenEnd > missingIdx) {
+                String namesStr = msg.substring(missingIdx, parenEnd);
+                String[] parts = namesStr.split(",");
+                for (String part : parts) {
+                    String clean = part.trim();
+                    if (!clean.isEmpty()) {
+                        result.add(clean);
+                    }
+                }
+            }
+        }
+
+        if (result.isEmpty()) {
+            int parenStart = msg.indexOf("argument(s) (");
+            if (parenStart >= 0) {
+                parenStart += "argument(s) (".length();
+                int parenEnd = msg.indexOf("), but got", parenStart);
+                if (parenEnd > parenStart) {
+                    String namesStr = msg.substring(parenStart, parenEnd);
+                    String[] parts = namesStr.split(",");
+                    for (int i = actualGot; i < parts.length; i++) {
+                        String name = parts[i].trim();
+                        if (!name.isEmpty()) {
+                            result.add(name);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (result.isEmpty()) {
+            int expectsIdx = msg.indexOf("expects ");
+            if (expectsIdx >= 0) {
+                int argIdx = msg.indexOf(" argument(s)", expectsIdx);
+                if (argIdx > expectsIdx) {
+                    String expStr = msg.substring(expectsIdx + 8, argIdx).trim();
+                    if (expStr.startsWith("at least ")) {
+                        expStr = expStr.substring("at least ".length()).trim();
+                    }
+                    try {
+                        int expectedCount = Integer.parseInt(expStr);
+                        int needed = expectedCount - actualGot;
+                        for (int i = 1; i <= needed; i++) {
+                            result.add("arg" + (actualGot + i));
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+        return result;
     }
 
 }

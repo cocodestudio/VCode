@@ -101,7 +101,7 @@ public class CustomizeQuickSymbolsBottomSheet extends BaseBottomSheetDialogFragm
         binding.tvSuggestionsTitle.setTypeface(fm.getUiMedium(context));
         binding.etCustomSymbol.setTypeface(fm.getCodeFont(context));
         binding.btnAddSymbol.setTypeface(fm.getUiMedium(context));
-        binding.btnSaveSymbols.setTypeface(fm.getUiMedium(context));
+        binding.btnSaveSymbols.setTypeface(fm.getUiSemiBold(context));
     }
 
     private void setupListeners() {

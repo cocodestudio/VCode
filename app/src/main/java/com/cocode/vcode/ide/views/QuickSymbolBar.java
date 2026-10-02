@@ -187,41 +187,35 @@ public class QuickSymbolBar extends LinearLayout {
         if (editor == null) return;
 
         List<Problem> problems = editor.getProblemsAtCursor();
-        Problem targetProblem = null;
-        List<QuickFix> fixes = null;
-
-        for (Problem p : problems) {
-            List<QuickFix> candidateFixes = QuickFixRegistry.getFixesForProblem(p, editor);
-            if (!candidateFixes.isEmpty()) {
-                targetProblem = p;
-                fixes = candidateFixes;
-                break;
-            }
-        }
-
-        if (targetProblem == null || fixes == null || fixes.isEmpty()) {
+        if (problems == null || problems.isEmpty()) {
             setQuickFixVisible(false);
             return;
         }
 
-        if (fixes.size() == 1) {
-            QuickFix fix = fixes.get(0);
-            fix.apply(editor, targetProblem);
-            editor.removeProblem(targetProblem);
-            checkQuickFixAvailable();
-        } else {
-            CustomPopupMenu popup = new CustomPopupMenu(getContext(), btnQuickFix);
-            final Problem finalProb = targetProblem;
-            for (int i = 0; i < fixes.size(); i++) {
-                final QuickFix fix = fixes.get(i);
-                popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {
-                    fix.apply(editor, finalProb);
-                    editor.removeProblem(finalProb);
-                    checkQuickFixAvailable();
-                });
+        CustomPopupMenu popup = new CustomPopupMenu(getContext(), btnQuickFix);
+        int totalFixes = 0;
+
+        for (Problem p : problems) {
+            List<QuickFix> candidateFixes = QuickFixRegistry.getFixesForProblem(p, editor);
+            if (candidateFixes != null) {
+                for (QuickFix fix : candidateFixes) {
+                    totalFixes++;
+                    final Problem finalProb = p;
+                    popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {
+                        fix.apply(editor, finalProb);
+                        editor.removeProblem(finalProb);
+                        checkQuickFixAvailable();
+                    });
+                }
             }
-            popup.show();
         }
+
+        if (totalFixes == 0) {
+            setQuickFixVisible(false);
+            return;
+        }
+
+        popup.show();
     }
 
     @Override

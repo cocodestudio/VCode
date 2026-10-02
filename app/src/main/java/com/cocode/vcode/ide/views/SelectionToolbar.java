@@ -292,13 +292,6 @@ public class SelectionToolbar {
         }
 
         CustomPopupMenu popup = new CustomPopupMenu(context, anchor);
-        android.content.res.ColorStateList toolbarBg = binding.cardToolbar.getCardBackgroundColor();
-        if (toolbarBg != null) {
-            popup.setCardBackgroundColor(toolbarBg);
-        } else {
-            popup.setCardBackgroundColor(
-                    androidx.core.content.ContextCompat.getColor(context, R.color.vcode_bg_surface));
-        }
         popup.setAlignRight(true);
         popup.setOnDismissListener(() -> moreMenuPopup = null);
 

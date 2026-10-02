@@ -11,6 +11,7 @@ import com.cocode.vcode.ide.core.lsp.SymbolEntry;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -573,6 +574,7 @@ public class JsSemanticLinter {
                 int totalParams = 0;
                 int minParams = 0;
                 boolean isVariadic = false;
+                List<String> paramNames = new ArrayList<>();
 
                 if (dotIdx >= 0) {
                     ResolvedMethod rm = null;
@@ -598,6 +600,8 @@ public class JsSemanticLinter {
                                     if ((rm.tree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
                                         minParams++;
                                     }
+                                    String pName = rm.tree.nodeName[child];
+                                    paramNames.add(pName != null && !pName.isEmpty() ? pName : "arg" + totalParams);
                                 }
                             }
                             child = rm.tree.nodeSibling[child];
@@ -613,6 +617,8 @@ public class JsSemanticLinter {
                                     if (!JsStandardLibrary.isOptionalParameter(p)) {
                                         minParams++;
                                     }
+                                    String cleanP = p.replace("?", "").trim();
+                                    paramNames.add(!cleanP.isEmpty() ? cleanP : "arg" + totalParams);
                                 }
                             }
                         } else {
@@ -637,7 +643,7 @@ public class JsSemanticLinter {
                             JsSyntaxTree tTree = target.tree;
                             int tNode = target.nodeId;
                             if (tTree.nodeType[tNode] == JsSyntaxTree.N_CLASS_DECL) {
-                                int[] ctorInfo = resolveClassConstructorParams(tTree, tNode, target.scopeTree, 0, index);
+                                int[] ctorInfo = resolveClassConstructorParams(tTree, tNode, target.scopeTree, 0, index, paramNames);
                                 if (ctorInfo == null) continue;
                                 minParams = ctorInfo[0];
                                 totalParams = ctorInfo[1];
@@ -654,6 +660,8 @@ public class JsSemanticLinter {
                                             if ((tTree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
                                                 minParams++;
                                             }
+                                            String pName = tTree.nodeName[child];
+                                            paramNames.add(pName != null && !pName.isEmpty() ? pName : "arg" + totalParams);
                                         }
                                     }
                                     child = tTree.nodeSibling[child];
@@ -673,12 +681,14 @@ public class JsSemanticLinter {
                                                 if ((tTree.nodeExtra[pChild] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
                                                     minParams++;
                                                 }
+                                                String pName = tTree.nodeName[pChild];
+                                                paramNames.add(pName != null && !pName.isEmpty() ? pName : "arg" + totalParams);
                                             }
                                         }
                                         pChild = tTree.nodeSibling[pChild];
                                     }
                                 } else if (child > 0 && child < tTree.nodeCount && tTree.nodeType[child] == JsSyntaxTree.N_CLASS_DECL) {
-                                    int[] ctorInfo = resolveClassConstructorParams(tTree, child, target.scopeTree, 0, index);
+                                    int[] ctorInfo = resolveClassConstructorParams(tTree, child, target.scopeTree, 0, index, paramNames);
                                     if (ctorInfo == null) continue;
                                     minParams = ctorInfo[0];
                                     totalParams = ctorInfo[1];
@@ -701,7 +711,7 @@ public class JsSemanticLinter {
 
                             int targetType = (targetNodeId > 0 && targetNodeId < tree.nodeCount) ? tree.nodeType[targetNodeId] : 0;
                             if (targetType == JsSyntaxTree.N_CLASS_DECL) {
-                                int[] ctorInfo = resolveClassConstructorParams(tree, targetNodeId, scopeTree, scopeId, index);
+                                int[] ctorInfo = resolveClassConstructorParams(tree, targetNodeId, scopeTree, scopeId, index, paramNames);
                                 if (ctorInfo == null) continue;
                                 minParams = ctorInfo[0];
                                 totalParams = ctorInfo[1];
@@ -718,6 +728,8 @@ public class JsSemanticLinter {
                                             if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
                                                 minParams++;
                                             }
+                                            String pName = tree.nodeName[child];
+                                            paramNames.add(pName != null && !pName.isEmpty() ? pName : "arg" + totalParams);
                                         }
                                     }
                                     child = tree.nodeSibling[child];
@@ -754,7 +766,7 @@ public class JsSemanticLinter {
                                 if (topId > 0) {
                                     int tType = targetPr.tree.nodeType[topId];
                                     if (tType == JsSyntaxTree.N_CLASS_DECL) {
-                                        int[] ctorInfo = resolveClassConstructorParams(targetPr.tree, topId, targetPr.scopeTree, 0, index);
+                                        int[] ctorInfo = resolveClassConstructorParams(targetPr.tree, topId, targetPr.scopeTree, 0, index, paramNames);
                                         if (ctorInfo == null) continue;
                                         minParams = ctorInfo[0];
                                         totalParams = ctorInfo[1];
@@ -771,6 +783,8 @@ public class JsSemanticLinter {
                                                     if ((targetPr.tree.nodeExtra[c] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
                                                         minParams++;
                                                     }
+                                                    String pName = targetPr.tree.nodeName[c];
+                                                    paramNames.add(pName != null && !pName.isEmpty() ? pName : "arg" + totalParams);
                                                 }
                                             }
                                             c = targetPr.tree.nodeSibling[c];
@@ -789,8 +803,13 @@ public class JsSemanticLinter {
                                 totalParams = declaredParams.length;
                                 minParams = 0;
                                 for (String p : declaredParams) {
-                                    if (!p.contains("...") && !JsStandardLibrary.isOptionalParameter(p)) {
+                                    String trimmed = p.trim();
+                                    if (!trimmed.contains("...") && !JsStandardLibrary.isOptionalParameter(trimmed)) {
                                         minParams++;
+                                    }
+                                    if (!trimmed.contains("...")) {
+                                        String cleanP = trimmed.replace("?", "").trim();
+                                        paramNames.add(!cleanP.isEmpty() ? cleanP : "arg" + (paramNames.size() + 1));
                                     }
                                 }
                             } else {
@@ -806,6 +825,8 @@ public class JsSemanticLinter {
                                         if (!JsStandardLibrary.isOptionalParameter(p)) {
                                             minParams++;
                                         }
+                                        String cleanP = p.replace("?", "").trim();
+                                        paramNames.add(!cleanP.isEmpty() ? cleanP : "arg" + totalParams);
                                     }
                                 }
                             } else {
@@ -821,6 +842,12 @@ public class JsSemanticLinter {
                         || "flatMap".equals(baseIdentifier) || "reduce".equals(baseIdentifier) || "reduceRight".equals(baseIdentifier)) {
                     minParams = Math.min(minParams, 1);
                     totalParams = Math.max(totalParams, 2);
+                }
+
+                if (paramNames.isEmpty() && minParams > 0) {
+                    for (int pIdx = 1; pIdx <= totalParams; pIdx++) {
+                        paramNames.add("arg" + pIdx);
+                    }
                 }
 
                 if (isVariadic) continue;
@@ -839,23 +866,37 @@ public class JsSemanticLinter {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     String expectedStr = (minParams == totalParams) ? String.valueOf(totalParams) : "at least " + minParams;
+                    String namesPart = "";
+                    if (!paramNames.isEmpty() && actualArgs < paramNames.size()) {
+                        StringBuilder sb = new StringBuilder(" (missing: ");
+                        for (int pIdx = actualArgs; pIdx < paramNames.size(); pIdx++) {
+                            if (pIdx > actualArgs) sb.append(", ");
+                            sb.append(paramNames.get(pIdx));
+                        }
+                        sb.append(")");
+                        namesPart = sb.toString();
+                    }
                     problems.add(new Problem(file, line, col, identifier.length(),
-                            "Too few arguments: '" + identifier + "' expects " + expectedStr + " argument(s), but got " + actualArgs,
+                            "Too few arguments: '" + identifier + "' expects " + expectedStr + " argument(s), but got " + actualArgs + namesPart,
                             Problem.Severity.WARNING,
-                            ProblemCode.SYNTAX_ERROR));
+                            ProblemCode.JS_TOO_FEW_ARGUMENTS));
                 } else if (actualArgs > totalParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, identifier.length(),
                             "Too many arguments: '" + identifier + "' expects " + totalParams + " argument(s), but got " + actualArgs,
                             Problem.Severity.WARNING,
-                            ProblemCode.SYNTAX_ERROR));
+                            ProblemCode.JS_TOO_MANY_ARGUMENTS));
                 }
             }
         }
     }
 
     private static int[] resolveClassConstructorParams(JsSyntaxTree tree, int classNodeId, ScopeTree scopeTree, int scopeId, ProjectIndex index) {
+        return resolveClassConstructorParams(tree, classNodeId, scopeTree, scopeId, index, null);
+    }
+
+    private static int[] resolveClassConstructorParams(JsSyntaxTree tree, int classNodeId, ScopeTree scopeTree, int scopeId, ProjectIndex index, List<String> paramNames) {
         if (tree == null || classNodeId <= 0 || classNodeId >= tree.nodeCount) {
             return new int[]{0, 0, 0};
         }
@@ -878,6 +919,10 @@ public class JsSemanticLinter {
                             if ((tree.nodeExtra[pChild] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
                                 min++;
                             }
+                            if (paramNames != null) {
+                                String pName = tree.nodeName[pChild];
+                                paramNames.add(pName != null && !pName.isEmpty() ? pName : "arg" + total);
+                            }
                         }
                     }
                     pChild = tree.nodeSibling[pChild];
@@ -899,14 +944,14 @@ public class JsSemanticLinter {
                     if (superTypeAnn != null && (superTypeAnn.startsWith("@IMPORT:") || superTypeAnn.startsWith("@REQUIRE:"))) {
                         ResolvedImport imp = resolveImportedSymbol(null, superTypeAnn, index);
                         if (imp != null && imp.tree != null && imp.nodeId > 0 && imp.tree.nodeType[imp.nodeId] == JsSyntaxTree.N_CLASS_DECL) {
-                            return resolveClassConstructorParams(imp.tree, imp.nodeId, imp.scopeTree, 0, index);
+                            return resolveClassConstructorParams(imp.tree, imp.nodeId, imp.scopeTree, 0, index, paramNames);
                         }
                     } else if (tree.nodeType[superDeclId] == JsSyntaxTree.N_CLASS_DECL) {
-                        return resolveClassConstructorParams(tree, superDeclId, scopeTree, scopeId, index);
+                        return resolveClassConstructorParams(tree, superDeclId, scopeTree, scopeId, index, paramNames);
                     } else if (tree.nodeType[superDeclId] == JsSyntaxTree.N_VAR_DECL) {
                         int sc = tree.nodeChild[superDeclId];
                         if (sc > 0 && sc < tree.nodeCount && tree.nodeType[sc] == JsSyntaxTree.N_CLASS_DECL) {
-                            return resolveClassConstructorParams(tree, sc, scopeTree, scopeId, index);
+                            return resolveClassConstructorParams(tree, sc, scopeTree, scopeId, index, paramNames);
                         }
                     }
                 }
@@ -924,6 +969,10 @@ public class JsSemanticLinter {
                         total++;
                         if (!JsStandardLibrary.isOptionalParameter(p)) {
                             min++;
+                        }
+                        if (paramNames != null) {
+                            String cleanP = p.replace("?", "").trim();
+                            paramNames.add(!cleanP.isEmpty() ? cleanP : "arg" + total);
                         }
                     }
                 }
@@ -957,6 +1006,10 @@ public class JsSemanticLinter {
                                                 total++;
                                                 if (!JsStandardLibrary.isOptionalParameter(pt)) {
                                                     min++;
+                                                }
+                                                if (paramNames != null) {
+                                                    String cleanP = pt.replace("?", "").trim();
+                                                    paramNames.add(!cleanP.isEmpty() ? cleanP : "arg" + total);
                                                 }
                                             }
                                         }
