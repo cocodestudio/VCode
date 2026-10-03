@@ -421,6 +421,12 @@ public class FileUtils {
             }
         }
 
+        // Check if an ancestor directory contains project metadata, package.json, or .git
+        File discovered = com.cocode.vcode.ide.data.repository.ProjectRepository.findProjectRoot(file);
+        if (discovered != null) {
+            return discovered;
+        }
+
         // Fallback: use the file's parent directory as a standalone project root
         File parent = file.getParentFile();
         return (parent != null && parent.exists()) ? parent : file;

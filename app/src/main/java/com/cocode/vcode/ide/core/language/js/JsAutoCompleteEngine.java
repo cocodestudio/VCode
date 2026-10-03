@@ -766,13 +766,21 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         }
         if (braceOpen < 0) return null;
 
-        // Check if preceding non-whitespace before `{` is `import`
+        // Check if preceding non-whitespace before `{` is `import` (or `import type`)
         int p = braceOpen - 1;
         while (p >= 0 && Character.isWhitespace(fullText.charAt(p))) p--;
-        if (p < 5) return null;
+        if (p < 0) return null;
         int wordEnd = p + 1;
         while (p >= 0 && Character.isLetterOrDigit(fullText.charAt(p))) p--;
         String kw = fullText.substring(p + 1, wordEnd);
+        if ("type".equals(kw)) {
+            while (p >= 0 && Character.isWhitespace(fullText.charAt(p))) p--;
+            if (p >= 0) {
+                int wordEnd2 = p + 1;
+                while (p >= 0 && Character.isLetterOrDigit(fullText.charAt(p))) p--;
+                kw = fullText.substring(p + 1, wordEnd2);
+            }
+        }
         if (!"import".equals(kw)) return null;
 
         // We are inside `import { ... }`!
@@ -852,7 +860,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         if (depExports != null && !depExports.isEmpty()) {
             return depExports;
         }
-        List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers().get(path);
+        List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers(currentFile, path);
         if (depMembers != null && !depMembers.isEmpty()) {
             return depMembers;
         }
@@ -1134,7 +1142,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 }
                 return fuzzyFilter(res, word);
             }
-            List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers().get(objectToken);
+            List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers(currentFile, objectToken);
             if (depMembers != null && !depMembers.isEmpty()) {
                 int rLen = word != null ? word.length() : 0;
                 List<CompletionItem> res = new ArrayList<>(depMembers.size());
@@ -1685,6 +1693,16 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                             return new ArrayList<>(merged.values());
                         }
                         return fuzzyFilter(new ArrayList<>(merged.values()), word);
+                    }
+                } else if (inferredType.startsWith("module:")) {
+                    String modName = inferredType.substring(7);
+                    List<CompletionItem> depExports = ProjectSymbolIndex.getInstance().getExportsForPath(currentFile, modName);
+                    if (depExports != null && !depExports.isEmpty()) {
+                        return fuzzyFilter(depExports, word);
+                    }
+                    List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers(currentFile, modName);
+                    if (depMembers != null && !depMembers.isEmpty()) {
+                        return fuzzyFilter(depMembers, word);
                     }
                 } else if (inferredType.startsWith("@PROMISE") || inferredType.equals("promise")) {
                     String[] methods = JsStandardLibrary.PROTOTYPE_METHODS.get("promise");

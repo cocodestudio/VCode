@@ -586,6 +586,87 @@ public class NpmPackageManagerTest {
         assertEquals("Active parameter index should be 1", 1, sigHelp2.activeParameter);
     }
 
+    @Test
+    public void testImportCompletionDoesNotAppendParentheses() throws Exception {
+        File nodeModules = new File(projectRoot, "node_modules");
+        File lodashDir = new File(nodeModules, "lodash");
+        lodashDir.mkdirs();
+
+        FileUtils.writeFile(new File(lodashDir, "package.json"), "{\"name\":\"lodash\",\"types\":\"index.d.ts\"}");
+        String dts = "export function debounce(func: Function, wait?: number): Function;\n";
+        FileUtils.writeFile(new File(lodashDir, "index.d.ts"), dts);
+        TypeDefinitionIndexer.indexDependency(projectRoot, "lodash");
+
+        JsAutoCompleteEngine engine = new JsAutoCompleteEngine(null);
+        File mainFile = new File(projectRoot, "main.js");
+        engine.setCurrentFile(mainFile);
+
+        String importCode = "import { deb";
+        List<CompletionItem> items = engine.getSuggestions(importCode, importCode.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        CompletionItem debounceItem = null;
+        for (CompletionItem item : items) {
+            if ("debounce".equals(item.getLabel())) {
+                debounceItem = item;
+                break;
+            }
+        }
+        assertNotNull("Should suggest debounce inside import clause", debounceItem);
+        assertEquals("debounce", debounceItem.getInsertText());
+        assertFalse("Import completion must not contain opening parenthesis", debounceItem.getInsertText().contains("("));
+    }
+
+    @Test
+    public void testNodeGlobalsAndRequireInJsSemanticLinter() {
+        String code = "const fs = require('fs');\n" +
+                "module.exports = { port: 3000 };\n" +
+                "exports.active = true;\n" +
+                "console.log(__dirname, __filename, process.env);\n" +
+                "setImmediate(() => {});\n" +
+                "clearImmediate(1);\n" +
+                "const buf = Buffer.from('hello');\n";
+
+        TokenStream stream = JsLexer.tokenize(code);
+        JsSyntaxTree tree = JsParser.parseFull(code, stream);
+        assertNotNull(tree);
+        ScopeTree scopeTree = ScopeTree.build(tree);
+        assertNotNull(scopeTree);
+
+        List<Problem> problems = new java.util.ArrayList<>();
+        JsSemanticLinter.analyze(new File(projectRoot, "server.js"), code, stream, tree, scopeTree, null, problems);
+
+        for (Problem p : problems) {
+            assertFalse("Node global should not be flagged as undefined variable: " + p.getMessage(),
+                    p.getMessage().contains("is not defined"));
+        }
+    }
+
+    @Test
+    public void testImportedPackageSymbolsNotUndefinedInJsSemanticLinter() {
+        String code = "import axios from 'axios';\n" +
+                "const lodash = require('lodash');\n" +
+                "const { debounce } = require('lodash');\n" +
+                "axios.get('/test');\n" +
+                "lodash.isString('abc');\n" +
+                "debounce();\n";
+
+        TokenStream stream = JsLexer.tokenize(code);
+        JsSyntaxTree tree = JsParser.parseFull(code, stream);
+        assertNotNull(tree);
+        ScopeTree scopeTree = ScopeTree.build(tree);
+        assertNotNull(scopeTree);
+
+        List<Problem> problems = new java.util.ArrayList<>();
+        JsSemanticLinter.analyze(new File(projectRoot, "app.js"), code, stream, tree, scopeTree, null, problems);
+
+        for (Problem p : problems) {
+            assertFalse("Imported package symbol should not be flagged as undefined: " + p.getMessage(),
+                    p.getMessage().contains("is not defined"));
+        }
+    }
+
     private byte[] createTarHeader(String name, int size) {
         byte[] header = new byte[512];
         // Name (100 bytes)

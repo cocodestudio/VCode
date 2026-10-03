@@ -51,10 +51,15 @@ public class ProjectRepository {
     }
 
     public static File findProjectRoot(File file) {
-        File current = file;
+        if (file == null) return null;
+        File current = file.isDirectory() ? file : file.getParentFile();
         while (current != null) {
             File vcodeMeta = new File(new File(new File(current, VCODE_DIR), META_DIR), PROJECT_FILE);
             if (vcodeMeta.exists() || new File(current, LEGACY_META_FILE).exists()) {
+                return current;
+            }
+            // Heuristic root discovery: check for package.json or .git
+            if (new File(current, "package.json").exists() || new File(current, ".git").exists()) {
                 return current;
             }
             current = current.getParentFile();
@@ -288,8 +293,9 @@ public class ProjectRepository {
                 long now = System.currentTimeMillis();
 
                 Project project = new Project(id, name.trim(), now, now, resolvedMainFile, 0);
-
+                project.setRootDir(projectDir);
                 applyProjectTemplate(projectDir, templateChoice, resolvedMainFile);
+                attachDefaultFacets(project, projectDir);
 
                 if (initGit) {
                     GitRepository git = new GitRepository();
@@ -385,7 +391,9 @@ public class ProjectRepository {
                 long now = System.currentTimeMillis();
                 String copyName = "Copy of " + source.getName();
                 Project copy = new Project(newId, copyName, now, now, source.getMainFile(), 0);
+                copy.setRootDir(destDir);
                 copy.setFileCount(FileUtils.countFilesInDir(destDir));
+                attachDefaultFacets(copy, destDir);
 
                 writeProjectMeta(destDir, copy);
 
@@ -456,6 +464,71 @@ public class ProjectRepository {
         String mainFile = obj.optString(KEY_MAIN_FILE, "index.html");
         int fileCount = obj.optInt(KEY_FILE_COUNT, 0);
 
-        return new Project(id, name, createdAt, lastModifiedAt, mainFile, fileCount);
+        Project project = new Project(id, name, createdAt, lastModifiedAt, mainFile, fileCount);
+        project.setRootDir(projectDir);
+        attachDefaultFacets(project, projectDir);
+        return project;
+    }
+
+    /**
+     * Inspects project directory and attaches known facets (e.g. NpmProjectFacet if package.json exists).
+     */
+    public static void attachDefaultFacets(@NonNull Project project, @NonNull File projectDir) {
+        if (new File(projectDir, com.cocode.vcode.ide.data.npm.sync.PackageJsonSync.PACKAGE_JSON).exists()) {
+            if (!project.hasFacet(com.cocode.vcode.ide.data.npm.NpmProjectFacet.class)) {
+                project.addFacet(new com.cocode.vcode.ide.data.npm.NpmProjectFacet(projectDir));
+            }
+        }
+    }
+
+    /**
+     * Obtains or synthesizes a Project instance for an arbitrary directory, with root heuristic and facets attached.
+     */
+    @NonNull
+    public static Project getProjectForDirectory(@NonNull File dir) {
+        File metaFile = getProjectMetaFile(dir);
+        if (metaFile.exists() && metaFile.isFile()) {
+            try {
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(new FileInputStream(metaFile), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                }
+                JSONObject obj = new JSONObject(sb.toString());
+                String id = obj.optString(KEY_ID, dir.getName());
+                String name = obj.optString(KEY_NAME, "Untitled");
+                long createdAt = obj.optLong(KEY_CREATED_AT, 0L);
+                long lastModifiedAt = obj.optLong(KEY_LAST_MODIFIED_AT, createdAt);
+                String mainFile = obj.optString(KEY_MAIN_FILE, "index.html");
+                int fileCount = obj.optInt(KEY_FILE_COUNT, 0);
+
+                Project project = new Project(id, name, createdAt, lastModifiedAt, mainFile, fileCount);
+                project.setRootDir(dir);
+                attachDefaultFacets(project, dir);
+                return project;
+            } catch (Exception ignored) {
+            }
+        }
+
+        String name = getProjectName(dir);
+        long now = System.currentTimeMillis();
+        String mainFile = "index.html";
+        File pkgFile = new File(dir, com.cocode.vcode.ide.data.npm.sync.PackageJsonSync.PACKAGE_JSON);
+        if (pkgFile.exists()) {
+            try {
+                JSONObject json = com.cocode.vcode.ide.data.npm.sync.PackageJsonSync.readPackageJson(dir);
+                if (json != null && json.has("main")) {
+                    mainFile = json.optString("main", "index.html");
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        Project project = new Project(dir.getName(), name, now, now, mainFile, FileUtils.countFilesInDir(dir));
+        project.setRootDir(dir);
+        attachDefaultFacets(project, dir);
+        return project;
     }
 }

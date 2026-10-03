@@ -47,6 +47,82 @@ public class GitRepository {
     private Git git;
     private String configuredDefaultBranch = "main";
     private File repoDir;
+    private final List<GitEventListener> eventListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addEventListener(@NonNull GitEventListener listener) {
+        if (!eventListeners.contains(listener)) {
+            eventListeners.add(listener);
+        }
+    }
+
+    public void removeEventListener(@NonNull GitEventListener listener) {
+        eventListeners.remove(listener);
+    }
+
+    public List<GitEventListener> getEventListeners() {
+        return java.util.Collections.unmodifiableList(eventListeners);
+    }
+
+    private void notifyPreCommit(String message) {
+        File root = repoDir != null ? repoDir : (git != null ? git.getRepository().getWorkTree() : null);
+        if (root == null) return;
+        for (GitEventListener l : eventListeners) {
+            try { l.onPreCommit(root, message != null ? message : ""); } catch (Exception ignored) {}
+        }
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                new com.cocode.vcode.ide.core.events.GitEvent.GitPreCommitEvent(root, message != null ? message : ""));
+    }
+
+    private void notifyPostCommit(String commitId, String message) {
+        File root = repoDir != null ? repoDir : (git != null ? git.getRepository().getWorkTree() : null);
+        if (root == null) return;
+        for (GitEventListener l : eventListeners) {
+            try { l.onPostCommit(root, commitId != null ? commitId : "", message != null ? message : ""); } catch (Exception ignored) {}
+        }
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                new com.cocode.vcode.ide.core.events.GitEvent.GitPostCommitEvent(root, commitId != null ? commitId : "", message != null ? message : ""));
+    }
+
+    private void notifyPrePull() {
+        File root = repoDir != null ? repoDir : (git != null ? git.getRepository().getWorkTree() : null);
+        if (root == null) return;
+        for (GitEventListener l : eventListeners) {
+            try { l.onPrePull(root); } catch (Exception ignored) {}
+        }
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                new com.cocode.vcode.ide.core.events.GitEvent.GitPrePullEvent(root));
+    }
+
+    private void notifyPostPull(boolean successful, List<String> updatedFiles) {
+        File root = repoDir != null ? repoDir : (git != null ? git.getRepository().getWorkTree() : null);
+        if (root == null) return;
+        List<String> files = updatedFiles != null ? updatedFiles : java.util.Collections.emptyList();
+        for (GitEventListener l : eventListeners) {
+            try { l.onPostPull(root, successful, files); } catch (Exception ignored) {}
+        }
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                new com.cocode.vcode.ide.core.events.GitEvent.GitPostPullEvent(root, successful, files));
+        if (successful && new File(root, com.cocode.vcode.ide.data.npm.sync.PackageJsonSync.PACKAGE_JSON).exists()) {
+            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                    new com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent(
+                            root, "package.json", com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent.Action.UPDATED));
+        }
+    }
+
+    private void notifyPostCheckout(String branch) {
+        File root = repoDir != null ? repoDir : (git != null ? git.getRepository().getWorkTree() : null);
+        if (root == null) return;
+        for (GitEventListener l : eventListeners) {
+            try { l.onPostCheckout(root, branch != null ? branch : ""); } catch (Exception ignored) {}
+        }
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                new com.cocode.vcode.ide.core.events.GitEvent.GitPostCheckoutEvent(root, branch != null ? branch : ""));
+        if (new File(root, com.cocode.vcode.ide.data.npm.sync.PackageJsonSync.PACKAGE_JSON).exists()) {
+            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                    new com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent(
+                            root, "package.json", com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent.Action.UPDATED));
+        }
+    }
 
     public static GitOperationResult cloneRepo(android.content.Context context, String url, File targetDir,
                                                String username, String token,
@@ -379,25 +455,31 @@ public class GitRepository {
      * Binds a standard text message row to create a commit transaction using global profile markers.
      */
     public void commit(String message) throws Exception {
-        git.commit().setMessage(message).call();
+        notifyPreCommit(message);
+        RevCommit rev = git.commit().setMessage(message).call();
+        notifyPostCommit(rev != null ? rev.getName() : "", message);
     }
 
     /**
      * Overloaded commit processor explicitly anchoring custom profile identity strings to authored changes fields.
      */
     public void commit(String message, String authorName, String authorEmail) throws Exception {
-        git.commit()
+        notifyPreCommit(message);
+        RevCommit rev = git.commit()
                 .setMessage(message)
                 .setAuthor(authorName, authorEmail)
                 .setCommitter(authorName, authorEmail)
                 .call();
+        notifyPostCommit(rev != null ? rev.getName() : "", message);
     }
 
     /**
      * Combines currently staged updates directly into the previous commit tip block, modifying its message field.
      */
     public void amendCommit(String message) throws Exception {
-        git.commit().setAmend(true).setMessage(message).call();
+        notifyPreCommit(message);
+        RevCommit rev = git.commit().setAmend(true).setMessage(message).call();
+        notifyPostCommit(rev != null ? rev.getName() : "", message);
     }
 
     /**
@@ -528,6 +610,7 @@ public class GitRepository {
     public void checkoutBranch(String name) throws Exception {
         try {
             git.checkout().setName(name).call();
+            notifyPostCheckout(name);
         } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
             List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
             throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
@@ -555,6 +638,7 @@ public class GitRepository {
                         .setUpstreamMode(org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode.TRACK)
                         .call();
             }
+            notifyPostCheckout(localName);
         } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
             List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
             throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
@@ -727,13 +811,19 @@ public class GitRepository {
 
         org.eclipse.jgit.api.PullResult result;
         try {
+            notifyPrePull();
             result = pullCommand.call();
         } catch (org.eclipse.jgit.api.errors.CheckoutConflictException e) {
+            notifyPostPull(false, java.util.Collections.emptyList());
             List<String> conflicts = e.getConflictingPaths() != null ? e.getConflictingPaths() : new ArrayList<>();
             throw new GitCheckoutConflictException("Checkout conflict with files: " + (conflicts.isEmpty() ? e.getMessage() : String.join(", ", conflicts)), conflicts);
+        } catch (Exception e) {
+            notifyPostPull(false, java.util.Collections.emptyList());
+            throw e;
         }
 
         if (!result.isSuccessful()) {
+            notifyPostPull(false, java.util.Collections.emptyList());
             // Check merge conflicts
             org.eclipse.jgit.api.MergeResult merge = result.getMergeResult();
             if (merge != null) {
@@ -762,6 +852,9 @@ public class GitRepository {
             }
             throw new Exception("Pull failed — unknown reason.");
         }
+
+        List<String> updatedFiles = new ArrayList<>();
+        notifyPostPull(true, updatedFiles);
 
         // Build success summary from fetch result
         org.eclipse.jgit.transport.FetchResult fetchResult = result.getFetchResult();

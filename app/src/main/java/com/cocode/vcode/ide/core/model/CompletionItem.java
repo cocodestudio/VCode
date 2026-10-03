@@ -29,6 +29,22 @@ public class CompletionItem {
         this.cursorOffset = cursorOffset;
     }
 
+    public CompletionItem(String label, String insertText, String detail, Type type) {
+        this(label, insertText, detail, type, 0);
+    }
+
+    public CompletionItem(String label, String insertText, String detail, String typeName) {
+        this(label, insertText, detail, parseType(typeName), 0);
+    }
+
+    private static Type parseType(String typeName) {
+        if (typeName == null) return Type.KEYWORD;
+        for (Type t : Type.values()) {
+            if (t.name().equalsIgnoreCase(typeName)) return t;
+        }
+        return Type.KEYWORD;
+    }
+
     /**
      * Constructor with source-URI attached. Use for cross-file
      * completions so the import-statement auto-insert

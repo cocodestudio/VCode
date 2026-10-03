@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.editor.highlight.HighlightToken;
 import com.cocode.vcode.ide.core.editor.text.Content;
+import com.cocode.vcode.ide.core.editor.text.SpanPool;
 import com.cocode.vcode.ide.utils.ColorParser;
 import com.cocode.vcode.ide.views.span.SyntaxHighlightSpan;
 
@@ -102,7 +103,7 @@ public class SyntaxHighlighter {
             List<HighlightToken> tokens = tokenizeLine(lineStr, 0, state);
             state = lastLineState;
             for (HighlightToken t : tokens) {
-                ssb.setSpan(new SyntaxHighlightSpan(t.color, t.underline),
+                ssb.setSpan(SpanPool.getInstance().obtain(t.color, t.underline),
                         offset + t.startCol, offset + t.endCol, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             offset += lineStr.length() + 1;

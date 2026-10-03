@@ -12,6 +12,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import java.io.File;
+
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 
@@ -201,20 +203,14 @@ public class PreviewActivity extends BaseActivity {
             }
         });
 
-        // Manage page navigation events and error handling
-        binding.webView.setWebViewClient(new WebViewClient() {
+        File rootFile = projectPath != null ? new File(projectPath) : null;
+        WebPreviewViewer previewViewer = new WebPreviewViewer(binding.webView, rootFile);
+        previewViewer.configure(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 binding.layoutError.setVisibility(View.GONE);
                 binding.webView.setVisibility(View.VISIBLE);
-                view.evaluateJavascript(com.cocode.vcode.ide.core.console.VCodeConsoleBridge.INJECTION_SCRIPT, null);
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                view.evaluateJavascript(com.cocode.vcode.ide.core.console.VCodeConsoleBridge.INJECTION_SCRIPT, null);
             }
 
             @Override

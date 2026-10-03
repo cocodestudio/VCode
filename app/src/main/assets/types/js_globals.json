@@ -31,7 +31,12 @@
     "IDBRequest", "IDBKeyRange", "AudioContext", "OfflineAudioContext", "Audio",
     "Image", "Option", "ReadableStream", "WritableStream", "TransformStream",
     "BroadcastChannel", "Notification", "DOMException", "Range", "Selection",
-    "TreeWalker", "NodeIterator", "NodeFilter", "CSSStyleDeclaration"
+    "TreeWalker", "NodeIterator", "NodeFilter", "CSSStyleDeclaration",
+    "setImmediate", "clearImmediate"
+  ],
+  "nodeGlobals": [
+    "require", "module", "exports", "process", "global", "Buffer",
+    "__dirname", "__filename", "setImmediate", "clearImmediate"
   ],
   "asyncApis": [
     "fetch", "json", "text", "arrayBuffer", "blob", "formData",

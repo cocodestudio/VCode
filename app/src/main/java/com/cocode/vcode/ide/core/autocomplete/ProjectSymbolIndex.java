@@ -67,6 +67,15 @@ public class ProjectSymbolIndex {
     private final Map<String, List<CompletionItem>> dependencyExports = new HashMap<>();
     // Maps dependency package name → member CompletionItems
     private final Map<String, List<CompletionItem>> dependencyMembers = new HashMap<>();
+    // Scoped symbols partition (PROJECT, LIBRARIES, EXTENSIONS)
+    private final Map<SymbolScope, Map<String, List<CompletionItem>>> scopedSymbols = new java.util.concurrent.ConcurrentHashMap<>();
+
+    {
+        for (SymbolScope scope : SymbolScope.values()) {
+            scopedSymbols.put(scope, new java.util.concurrent.ConcurrentHashMap<>());
+        }
+    }
+
     // Guards against multiple concurrent buildIndex() calls for the same root.
     private final java.util.concurrent.atomic.AtomicBoolean isBuilding = new java.util.concurrent.atomic.AtomicBoolean(false);
     private String projectRoot = null;
@@ -74,6 +83,10 @@ public class ProjectSymbolIndex {
     private final List<IndexingProgressListener> progressListeners = new CopyOnWriteArrayList<>();
 
     private ProjectSymbolIndex() {
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().subscribe(
+                com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent.class,
+                event -> invalidateScope(SymbolScope.LIBRARIES)
+        );
     }
 
     public static synchronized ProjectSymbolIndex getInstance() {
@@ -103,7 +116,67 @@ public class ProjectSymbolIndex {
         return segmentedStore;
     }
 
+    /**
+     * Selectively invalidates symbols for a specific scope without rebuilding
+     * or clearing other partitions (e.g. invalidating dependencies when package.json
+     * changes without wiping project symbols).
+     */
+    public synchronized void invalidateScope(SymbolScope scope) {
+        if (scope == null) return;
+        Map<String, List<CompletionItem>> map = scopedSymbols.get(scope);
+        if (map != null) {
+            map.clear();
+        }
+        if (scope == SymbolScope.LIBRARIES) {
+            dependencyExports.clear();
+            dependencyMembers.clear();
+        } else if (scope == SymbolScope.PROJECT) {
+            classMembers.clear();
+            fileClassMembers.clear();
+            fileCssClasses.clear();
+            fileCssIds.clear();
+            fileHtmlIds.clear();
+            fileJsSymbols.clear();
+            cssClassItems.clear();
+            cssIdItems.clear();
+            htmlIdItems.clear();
+            jsFileExports.clear();
+        }
+    }
+
+    public void putScopedSymbols(SymbolScope scope, String key, List<CompletionItem> items) {
+        if (scope == null || key == null || items == null) return;
+        Map<String, List<CompletionItem>> map = scopedSymbols.get(scope);
+        if (map != null) {
+            map.put(key, new ArrayList<>(items));
+        }
+    }
+
+    public List<CompletionItem> getScopedSymbols(SymbolScope scope, String key) {
+        if (scope == null || key == null) return Collections.emptyList();
+        Map<String, List<CompletionItem>> map = scopedSymbols.get(scope);
+        if (map != null) {
+            List<CompletionItem> items = map.get(key);
+            if (items != null) return Collections.unmodifiableList(items);
+        }
+        return Collections.emptyList();
+    }
+
+    public List<CompletionItem> getAllScopedSymbols(SymbolScope scope) {
+        if (scope == null) return Collections.emptyList();
+        Map<String, List<CompletionItem>> map = scopedSymbols.get(scope);
+        if (map == null || map.isEmpty()) return Collections.emptyList();
+        List<CompletionItem> result = new ArrayList<>();
+        for (List<CompletionItem> list : map.values()) {
+            if (list != null) result.addAll(list);
+        }
+        return result;
+    }
+
     public synchronized void clearInMemorySymbols() {
+        for (Map<String, List<CompletionItem>> map : scopedSymbols.values()) {
+            map.clear();
+        }
         classMembers.clear();
         fileClassMembers.clear();
         fileCssClasses.clear();

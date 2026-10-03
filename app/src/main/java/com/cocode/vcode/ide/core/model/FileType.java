@@ -94,7 +94,19 @@ public enum FileType {
     public static FileType fromExtension(String ext) {
         if (ext == null || ext.isEmpty()) return TEXT;
         FileType type = EXTENSION_MAP.get(ext.toLowerCase());
-        return type != null ? type : TEXT;
+        if (type != null) return type;
+
+        com.cocode.vcode.ide.core.language.base.LanguageDefinition def =
+                com.cocode.vcode.ide.core.language.base.LanguageRegistry.getInstance().getDefinitionForExtension(ext);
+        if (def != null && def.getFallbackFileType() != null) {
+            return def.getFallbackFileType();
+        }
+        com.cocode.vcode.ide.core.language.base.LanguageBackend backend =
+                com.cocode.vcode.ide.core.language.base.LanguageRegistry.getInstance().getBackendForExtension(ext);
+        if (backend != null && backend.getFileType() != null) {
+            return backend.getFileType();
+        }
+        return TEXT;
     }
 
     public int getIconResId() {

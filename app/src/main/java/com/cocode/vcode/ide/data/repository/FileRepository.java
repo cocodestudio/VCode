@@ -43,6 +43,8 @@ public class FileRepository {
                 ExecutorProvider.getInstance().runOnMain(() -> {
                     liveData.setValue(Result.success(true));
                     fileSavedEvent.setValue(file);
+                    com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                            new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentSaveEvent(file));
                 });
             } catch (Exception e) {
                 ExecutorProvider.getInstance()
@@ -60,7 +62,11 @@ public class FileRepository {
             return;
         try {
             FileUtils.writeFile(file, content != null ? content : "");
-            ExecutorProvider.getInstance().runOnMain(() -> fileSavedEvent.setValue(file));
+            ExecutorProvider.getInstance().runOnMain(() -> {
+                fileSavedEvent.setValue(file);
+                com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                        new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentSaveEvent(file));
+            });
         } catch (Exception ignored) {
         }
     }

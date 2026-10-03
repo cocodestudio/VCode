@@ -54,7 +54,11 @@ public final class TypeDefinitionIndexer {
     );
 
     private static final Pattern PAT_MEMBER_METHOD = Pattern.compile(
-            "^\\s*(?:(?:public|private|protected|static|readonly|abstract)\\s+)*([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\??\\s*(?:<.*>)?\\s*\\("
+            "^\\s*(?:(?:public|private|protected|static|readonly|abstract)\\s+)*([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\??\\s*(?:<.*?>)?\\s*\\("
+    );
+
+    private static final Pattern PAT_EXPORT_DEFAULT = Pattern.compile(
+            "export\\s+default\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)"
     );
 
     private static final Pattern PAT_MEMBER_PROP = Pattern.compile(
@@ -332,6 +336,19 @@ public final class TypeDefinitionIndexer {
         Matcher varMatcher = PAT_EXPORT_VAR.matcher(content);
         while (varMatcher.find()) {
             String name = varMatcher.group(1);
+            if (ProjectSymbolIndex.isValidJsIdentifier(name) && seenExports.add(name)) {
+                CompletionItem item = new CompletionItem(name, name, detail, CompletionItem.Type.VALUE, 0);
+                exports.add(item);
+                if (seenMembers.add(name)) {
+                    members.add(item);
+                }
+            }
+        }
+
+        // 2b. Export default identifier
+        Matcher defaultMatcher = PAT_EXPORT_DEFAULT.matcher(content);
+        while (defaultMatcher.find()) {
+            String name = defaultMatcher.group(1);
             if (ProjectSymbolIndex.isValidJsIdentifier(name) && seenExports.add(name)) {
                 CompletionItem item = new CompletionItem(name, name, detail, CompletionItem.Type.VALUE, 0);
                 exports.add(item);

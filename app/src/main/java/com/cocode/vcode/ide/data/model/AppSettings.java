@@ -193,6 +193,36 @@ public class AppSettings {
     }
 
     /**
+     * Obtains the global ConfigurationRegistry instance.
+     */
+    public static com.cocode.vcode.ide.data.preferences.ConfigurationRegistry getConfigurationRegistry() {
+        return com.cocode.vcode.ide.data.preferences.ConfigurationRegistry.getInstance();
+    }
+
+    /**
+     * Reads a dynamically registered configuration setting, falling back to defaultValue.
+     */
+    public <T> T getDynamicSetting(String key, T defaultValue) {
+        Object val = com.cocode.vcode.ide.data.preferences.ConfigurationRegistry.getInstance().get(key);
+        if (val != null) {
+            try {
+                @SuppressWarnings("unchecked")
+                T typed = (T) val;
+                return typed;
+            } catch (Exception ignored) {
+            }
+        }
+        return defaultValue;
+    }
+
+    /**
+     * Writes a dynamically registered configuration setting.
+     */
+    public void setDynamicSetting(String key, Object value) {
+        com.cocode.vcode.ide.data.preferences.ConfigurationRegistry.getInstance().set(key, value);
+    }
+
+    /**
      * Available UI visual style modes supported by the workspace presentation layer.
      */
     public enum Theme {DARK, LIGHT, SYSTEM}

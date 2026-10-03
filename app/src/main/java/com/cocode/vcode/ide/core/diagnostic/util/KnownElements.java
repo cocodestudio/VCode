@@ -34,6 +34,7 @@ public final class KnownElements {
 
     // JS / Async API lookup tables — populated from types/js_globals.json
     public static final Set<String> JS_GLOBALS = new HashSet<>();
+    public static final Set<String> NODE_GLOBALS = new HashSet<>();
     public static final Set<String> ASYNC_APIS = new HashSet<>();
 
     // HTML tag, void element & inline element lookup tables — populated from completions/html_tags.json
@@ -120,8 +121,12 @@ public final class KnownElements {
                 "HTMLImageElement", "HTMLFormElement", "SVGElement", "DocumentFragment",
                 "DOMParser", "XMLSerializer", "Worker", "SharedWorker", "ServiceWorker",
                 "MessageChannel", "MessagePort", "indexedDB", "AudioContext", "Audio",
-                "Image", "Option", "ReadableStream", "WritableStream", "TransformStream",
-                "Notification", "DOMException", "Range", "Selection", "CSSStyleDeclaration");
+                "Notification", "DOMException", "Range", "Selection", "CSSStyleDeclaration",
+                "setImmediate", "clearImmediate");
+
+        Collections.addAll(NODE_GLOBALS,
+                "require", "module", "exports", "process", "global", "Buffer",
+                "__dirname", "__filename", "setImmediate", "clearImmediate");
 
         Collections.addAll(VALID_HTML_TAGS,
                 "html", "head", "title", "base", "link", "meta", "style", "body",
@@ -222,6 +227,14 @@ public final class KnownElements {
     public static boolean isBorderShorthandProperty(String prop) {
         if (!isLoaded) ensureLoaded();
         return prop != null && CSS_BORDER_SHORTHAND_PROPERTIES.contains(prop.toLowerCase());
+    }
+
+    /**
+     * Determines if an identifier is a standard Node.js / CommonJS global.
+     */
+    public static boolean isNodeGlobal(String name) {
+        if (!isLoaded) ensureLoaded();
+        return name != null && NODE_GLOBALS.contains(name);
     }
 
     /**
@@ -330,6 +343,11 @@ public final class KnownElements {
                 JSONArray arr = root.getJSONArray("globals");
                 JS_GLOBALS.clear();
                 for (int i = 0; i < arr.length(); i++) JS_GLOBALS.add(arr.getString(i));
+            }
+            if (root.has("nodeGlobals")) {
+                JSONArray arr = root.getJSONArray("nodeGlobals");
+                NODE_GLOBALS.clear();
+                for (int i = 0; i < arr.length(); i++) NODE_GLOBALS.add(arr.getString(i));
             }
             if (root.has("asyncApis")) {
                 JSONArray arr = root.getJSONArray("asyncApis");

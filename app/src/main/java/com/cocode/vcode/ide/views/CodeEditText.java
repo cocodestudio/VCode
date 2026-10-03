@@ -29,6 +29,7 @@ import androidx.core.view.GestureDetectorCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.autocomplete.CompositeCompletionEngine;
 import com.cocode.vcode.ide.core.keybinding.KeyCommand;
 import com.cocode.vcode.ide.core.keybinding.KeybindingManager;
 import com.cocode.vcode.ide.ui.editor.helper.EditorCommentHelper;
@@ -41,20 +42,13 @@ import com.cocode.vcode.ide.core.editor.text.ContentChangeListener;
 import com.cocode.vcode.ide.core.editor.text.ContentPosition;
 import com.cocode.vcode.ide.core.editor.text.UndoStack;
 import com.cocode.vcode.ide.core.language.base.SyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.css.CssSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.html.HtmlAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.html.HtmlSyntaxHighlighter;
 import com.cocode.vcode.ide.core.language.html.HtmlTagParser;
-import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.json.JsonAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.json.JsonSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.md.MarkdownSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.svg.SvgAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.svg.SvgSyntaxHighlighter;
-import com.cocode.vcode.ide.core.language.ts.TsAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.ts.TsSyntaxHighlighter;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 import com.cocode.vcode.ide.core.model.CompletionItem;
@@ -187,7 +181,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     private FileType fileType = FileType.TEXT;
     private File currentFile;
     private SyntaxHighlighter syntaxHighlighter;
-    private AutoCompleteEngine autoCompleteEngine;
+    private CompositeCompletionEngine autoCompleteEngine;
     // State flags
     private boolean isAutoClosing = false;
     private boolean isApplyingHighlight = false;
@@ -231,6 +225,13 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     private List<SearchResult> searchDecorations = new ArrayList<>();
     private int searchActiveIndex = -1;
     private volatile long textLoadToken = 0;
+
+    // Generic text canvas decoration manager
+    private final TextDecorationManager textDecorationManager = new TextDecorationManager();
+
+    public TextDecorationManager getTextDecorationManager() {
+        return textDecorationManager;
+    }
 
     // Full text cache for autocomplete and search
     private String cachedFullText;
@@ -380,6 +381,8 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         handleRadiusPx = dpToPx(5);
         handleThresholdPx = dpToPx(20);
         setTabSize(new AppSettings().tabSize);
+        autoCompleteEngine = new CompositeCompletionEngine(context);
+        textDecorationManager.addListener(this::postInvalidate);
 
         setFocusable(true);
         setFocusableInTouchMode(true);
@@ -589,6 +592,9 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         // 3. Search decorations background
         drawSearchDecorations(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
+        // 3b. Generic background decorations
+        drawBackgroundDecorations(canvas, firstLine, lastLine, paddingLeft, paddingTop);
+
         // 4. Text (token-colored using char array buffer to avoid allocations per line)
         textPaint.setStyle(Paint.Style.FILL);
 
@@ -749,6 +755,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
         // 7. Diagnostic squiggles
         drawDiagnostics(canvas, firstLine, lastLine, paddingLeft, paddingTop);
+        drawGenericDecorations(canvas, firstLine, lastLine, paddingLeft, paddingTop);
 
         // 8. Selection handles (drawn at start and end of selection)
         if (selectionAnchor != null) {
@@ -889,6 +896,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         if (configHash != lastSquiggleConfigHash) {
             lastSquiggleConfigHash = configHash;
             for (Problem p : currentProblems) p.setCachedPath(null);
+            textDecorationManager.invalidateCachedPaths();
         }
 
         for (Problem problem : currentProblems) {
@@ -962,6 +970,90 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                 }
                 canvas.drawPath(problem.getCachedPath(), diagnosticPaint);
             }
+        }
+    }
+
+    private void drawBackgroundDecorations(Canvas canvas, int firstLine, int lastLine,
+                                           float paddingLeft, float paddingTop) {
+        List<TextDecoration> list = textDecorationManager.getDecorationsInRangeAndType(
+                firstLine, lastLine, TextDecoration.Type.BACKGROUND_HIGHLIGHT);
+        if (list.isEmpty()) return;
+
+        Paint bgPaint = new Paint();
+        bgPaint.setStyle(Paint.Style.FILL);
+
+        for (TextDecoration dec : list) {
+            bgPaint.setColor(dec.getColor());
+            int startL = Math.max(dec.getStartLine(), firstLine);
+            int endL = Math.min(dec.getEndLine(), lastLine);
+            for (int line = startL; line <= endL; line++) {
+                int lineLen = content.lineLength(line);
+                int colStart = (line == dec.getStartLine()) ? dec.getStartCol() : 0;
+                int colEnd = (line == dec.getEndLine()) ? dec.getEndCol() : lineLen;
+                if (!wordWrap) {
+                    float x0 = paddingLeft + getCursorX(line, colStart);
+                    float x1 = paddingLeft + getCursorX(line, colEnd);
+                    float y0 = paddingTop + line * lineHeightPx;
+                    canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, bgPaint);
+                } else {
+                    int subRows = getSubRowCount(line);
+                    for (int sr = 0; sr < subRows; sr++) {
+                        int srStart = getSubRowStart(line, sr);
+                        int srEndRow = getSubRowEnd(line, sr);
+                        if (colEnd <= srStart || colStart >= srEndRow) continue;
+                        int s = Math.max(colStart, srStart);
+                        int e = Math.min(colEnd, srEndRow);
+                        float x0 = paddingLeft + getSubRowCursorX(line, sr, s);
+                        float x1 = paddingLeft + getSubRowCursorX(line, sr, e);
+                        float y0 = paddingTop + (visualRowOf(line) + sr) * lineHeightPx;
+                        canvas.drawRect(x0, y0, x1, y0 + lineHeightPx, bgPaint);
+                    }
+                }
+            }
+        }
+    }
+
+    private void drawGenericDecorations(Canvas canvas, int firstLine, int lastLine,
+                                        float paddingLeft, float paddingTop) {
+        List<TextDecoration> list = textDecorationManager.getDecorationsInRangeAndType(
+                firstLine, lastLine, TextDecoration.Type.SQUIGGLY_UNDERLINE);
+        if (list.isEmpty()) return;
+
+        Paint decPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        decPaint.setStyle(Paint.Style.STROKE);
+        decPaint.setStrokeWidth(3f);
+
+        for (TextDecoration dec : list) {
+            if ("diagnostic".equals(dec.getTag()) && currentProblems != null && !currentProblems.isEmpty()) {
+                continue;
+            }
+            decPaint.setColor(dec.getColor());
+            int lineIdx = dec.getStartLine();
+            if (lineIdx < firstLine || lineIdx > lastLine || lineIdx >= content.lineCount()) continue;
+
+            int colStart = Math.max(0, dec.getStartCol());
+            int colEnd = dec.getEndCol();
+            float x0 = paddingLeft + getCursorX(lineIdx, colStart);
+            float x1 = paddingLeft + getCursorX(lineIdx, colEnd);
+            float waveY = paddingTop + absoluteVisualRow(lineIdx, colStart) * lineHeightPx + lineHeightPx + 2;
+            float amp = 2.5f;
+            float period = 8f;
+            float half = period / 2f;
+
+            if (dec.getCachedPath() == null) {
+                Path path = new Path();
+                path.moveTo(x0, waveY);
+                boolean up = true;
+                for (float cx2 = x0; cx2 < x1; cx2 += half) {
+                    float ex = Math.min(cx2 + half, x1);
+                    float mid = (cx2 + ex) / 2f;
+                    float ctlY = up ? waveY - amp : waveY + amp;
+                    path.quadTo(mid, ctlY, ex, waveY);
+                    up = !up;
+                }
+                dec.setCachedPath(path);
+            }
+            canvas.drawPath(dec.getCachedPath(), decPaint);
         }
     }
 
@@ -2519,7 +2611,8 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     }
 
     public void showSignatureHint(LspSignatureHelp help) {
-        if (help == null) {
+        int flatCursor = (content != null && cursor != null) ? content.flatOffset(cursor) : -1;
+        if (help == null || (flatCursor >= 0 && isInsideImportStatement(flatCursor))) {
             dismissSignatureHint();
             return;
         }
@@ -2533,7 +2626,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         if (lspNavigationToolbar != null && lspNavigationToolbar.isVisible()) {
             lspNavigationToolbar.hide();
         }
-        int flatCursor = content.flatOffset(cursor);
         signatureHintPopup.show(help, this, flatCursor);
     }
 
@@ -3449,6 +3541,25 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
     public void applyDiagnostics(List<Problem> problems) {
         this.currentProblems = problems != null ? new ArrayList<>(problems) : new ArrayList<>();
+        textDecorationManager.removeDecorationsByTag("diagnostic");
+        if (problems != null && !problems.isEmpty()) {
+            List<TextDecoration> decs = new ArrayList<>();
+            for (Problem p : problems) {
+                int line = p.getLine() - 1;
+                int colStart = Math.max(0, p.getColumn() - 1);
+                int colEnd = colStart + Math.max(1, p.getLength());
+                int color = p.getSeverity() == Problem.Severity.ERROR ? cachedErrorColor :
+                        (p.getSeverity() == Problem.Severity.WARNING ? cachedWarningColor : cachedInfoColor);
+                decs.add(TextDecoration.builder(TextDecoration.Type.SQUIGGLY_UNDERLINE)
+                        .id("diag_" + p.getLine() + "_" + p.getColumn() + "_" + (p.getCode() != null ? p.getCode() : p.getMessage().hashCode()))
+                        .line(line, colStart, colEnd)
+                        .color(color)
+                        .tooltip(p.getMessage())
+                        .tag("diagnostic")
+                        .build());
+            }
+            textDecorationManager.addDecorations(decs);
+        }
         invalidate();
         notifyDiagnosticsChanged();
     }
@@ -3580,65 +3691,56 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
     public void setFileType(FileType fileType) {
         this.fileType = fileType;
+        if (autoCompleteEngine == null) {
+            autoCompleteEngine = new CompositeCompletionEngine(getContext());
+        }
+        autoCompleteEngine.setFileType(fileType);
+        if (currentFile != null) {
+            autoCompleteEngine.setCurrentFile(currentFile);
+        }
+
         if (fileType != null) {
             Context ctx = getContext();
             switch (fileType) {
                 case HTML:
                     this.syntaxHighlighter = new HtmlSyntaxHighlighter(ctx);
-                    this.autoCompleteEngine = new HtmlAutoCompleteEngine(ctx);
-                    if (currentFile != null) {
-                        this.autoCompleteEngine.setCurrentFile(currentFile);
-                    }
                     break;
                 case CSS:
                     this.syntaxHighlighter = new CssSyntaxHighlighter(ctx);
-                    CssAutoCompleteEngine cssEngine = new CssAutoCompleteEngine(ctx);
-                    if (currentFile != null) cssEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = cssEngine;
                     break;
                 case JAVASCRIPT:
                     this.syntaxHighlighter = new JsSyntaxHighlighter(ctx);
-                    JsAutoCompleteEngine jsEngine = new JsAutoCompleteEngine(ctx);
-                    if (currentFile != null) jsEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = jsEngine;
                     break;
                 case TYPESCRIPT:
                     this.syntaxHighlighter = new TsSyntaxHighlighter(ctx);
-                    TsAutoCompleteEngine tsEngine = new TsAutoCompleteEngine(ctx);
-                    if (currentFile != null) tsEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = tsEngine;
                     break;
                 case JSON:
                     this.syntaxHighlighter = new JsonSyntaxHighlighter(ctx);
-                    JsonAutoCompleteEngine jsonEngine = new JsonAutoCompleteEngine(ctx);
-                    if (currentFile != null) jsonEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = jsonEngine;
                     break;
                 case MARKDOWN:
                     this.syntaxHighlighter = new MarkdownSyntaxHighlighter(ctx);
-                    MarkdownAutoCompleteEngine mdEngine = new MarkdownAutoCompleteEngine(ctx);
-                    if (currentFile != null) mdEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = mdEngine;
                     break;
                 case GITIGNORE:
-                    this.syntaxHighlighter = null; // Assuming no syntax highlighter for gitignore
-                    com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine gitignoreEngine = new com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine(ctx);
-                    if (currentFile != null) gitignoreEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = gitignoreEngine;
+                    this.syntaxHighlighter = null;
                     break;
                 case SVG:
                     this.syntaxHighlighter = new SvgSyntaxHighlighter(ctx);
-                    SvgAutoCompleteEngine svgEngine = new SvgAutoCompleteEngine(ctx);
-                    if (currentFile != null) svgEngine.setCurrentFile(currentFile);
-                    this.autoCompleteEngine = svgEngine;
                     break;
                 default:
                     this.syntaxHighlighter = null;
-                    this.autoCompleteEngine = null;
                     break;
             }
+        } else {
+            this.syntaxHighlighter = null;
         }
         scheduleHighlight();
+    }
+
+    public CompositeCompletionEngine getAutoCompleteEngine() {
+        if (autoCompleteEngine == null) {
+            autoCompleteEngine = new CompositeCompletionEngine(getContext());
+        }
+        return autoCompleteEngine;
     }
 
     // Public API — diagnostics
@@ -4225,9 +4327,8 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
             boolean insideImport = isInsideImportStatement(flatCursor);
             if (insideImport) {
-                if (item.getType() == CompletionItem.Type.FUNCTION || insertText.endsWith("()") || insertText.contains("(|)")) {
-                    insertText = item.getLabel();
-                }
+                // In import statements, never append parentheses, snippets or parameter placeholders
+                insertText = item.getLabel();
             }
 
             // Handle cursor marker or offset
@@ -4354,11 +4455,19 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         if (braceOpen >= 0) {
             int p = braceOpen - 1;
             while (p >= 0 && Character.isWhitespace(textBefore.charAt(p))) p--;
-            if (p >= 5) {
+            if (p >= 0) {
                 int end = p + 1;
                 while (p >= 0 && Character.isLetterOrDigit(textBefore.charAt(p))) p--;
                 String kw = textBefore.substring(p + 1, end);
                 if ("import".equals(kw)) return true;
+                if ("type".equals(kw)) {
+                    while (p >= 0 && Character.isWhitespace(textBefore.charAt(p))) p--;
+                    if (p >= 0) {
+                        int end2 = p + 1;
+                        while (p >= 0 && Character.isLetterOrDigit(textBefore.charAt(p))) p--;
+                        if ("import".equals(textBefore.substring(p + 1, end2))) return true;
+                    }
+                }
             }
         }
 
@@ -4366,7 +4475,8 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         int lineStart = textBefore.lastIndexOf('\n');
         String currentLine = lineStart >= 0 ? textBefore.substring(lineStart + 1) : textBefore;
         String trimmed = currentLine.trim();
-        return trimmed.startsWith("import ") || trimmed.startsWith("import{") || trimmed.startsWith("import*");
+        return trimmed.startsWith("import ") || trimmed.startsWith("import{") || trimmed.startsWith("import*")
+                || trimmed.startsWith("import\t") || trimmed.startsWith("import\n");
     }
 
     private void handleAutoClose(CharSequence text, int insertFlatPos, char typed) {

@@ -148,6 +148,10 @@ public final class PackageJsonSync {
 
             File file = new File(projectRoot, PACKAGE_JSON);
             FileUtils.writeFile(file, json.toString(2));
+            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                    new com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent(
+                            projectRoot, packageName,
+                            com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent.Action.ADDED));
             return true;
         } catch (Exception e) {
             return false;
@@ -182,6 +186,10 @@ public final class PackageJsonSync {
             File file = new File(projectRoot, PACKAGE_JSON);
             try {
                 FileUtils.writeFile(file, json.toString(2));
+                com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                        new com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent(
+                                projectRoot, packageName,
+                                com.cocode.vcode.ide.core.events.ProjectEvent.DependencyChangedEvent.Action.REMOVED));
                 return true;
             } catch (Exception e) {
                 return false;

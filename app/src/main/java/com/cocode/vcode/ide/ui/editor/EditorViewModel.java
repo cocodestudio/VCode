@@ -892,6 +892,8 @@ public class EditorViewModel extends ViewModel {
                     for (int i = 0; i < latestDocs.size(); i++) {
                         if (FileUtils.isSameFile(latestDocs.get(i).getFile(), file)) {
                             activeTabIndexLiveData.setValue(i);
+                            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                                    new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentOpenEvent(file, sourceUriString));
                             return;
                         }
                     }
@@ -900,6 +902,8 @@ public class EditorViewModel extends ViewModel {
                     openFilesLiveData.setValue(updated);
                     activeTabIndexLiveData.setValue(updated.size() - 1);
                     persistStateAsync();
+                    com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                            new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentOpenEvent(file, sourceUriString));
                 });
             } catch (Exception ignored) {
             }
@@ -977,6 +981,8 @@ public class EditorViewModel extends ViewModel {
                     for (int i = 0; i < latestDocs.size(); i++) {
                         if (FileUtils.isSameFile(latestDocs.get(i).getFile(), file)) {
                             activeTabIndexLiveData.setValue(i);
+                            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                                    new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentOpenEvent(file, null));
                             return;
                         }
                     }
@@ -986,6 +992,8 @@ public class EditorViewModel extends ViewModel {
                     openFilesLiveData.setValue(updated);
                     activeTabIndexLiveData.setValue(updated.size() - 1);
                     persistStateAsync();
+                    com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                            new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentOpenEvent(file, null));
                 });
             } catch (Exception ignored) {
             }
@@ -1089,6 +1097,10 @@ public class EditorViewModel extends ViewModel {
 
         EditorFile fileToClose = currentDocs.remove(index);
         openFilesLiveData.setValue(currentDocs);
+        if (fileToClose != null && fileToClose.getFile() != null) {
+            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                    new com.cocode.vcode.ide.core.events.DocumentEvent.DocumentCloseEvent(fileToClose.getFile()));
+        }
 
         if (fileToClose != null && fileToClose.getFileType() == FileType.TERMINAL && projectRoot != null) {
             String relPath = fileToClose.getRelativePath(projectRoot);

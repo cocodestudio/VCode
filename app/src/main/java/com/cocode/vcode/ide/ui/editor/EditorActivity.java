@@ -88,6 +88,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private LocalWebServer localWebServer;
     private EditorViewModel viewModel;
     private ViewerManager viewerManager;
+    private File projectDirectory;
 
     /**
      * Extras for the external file that should be opened once session restore completes.
@@ -173,7 +174,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return;
         }
 
-        File projectDirectory = new File(projectPath);
+        projectDirectory = new File(projectPath);
         if (projectId == null) projectId = projectDirectory.getName();
         if (!isFromIntent) {
             ProjectFileRecovery.ensureProjectFilesExist(projectDirectory);
@@ -205,6 +206,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         setupObservers();
         setupIndexingProgressCard();
         com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().buildIndex(projectDirectory);
+        com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                new com.cocode.vcode.ide.core.events.ProjectEvent.ProjectLoadedEvent(
+                        projectDirectory, projectName));
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -1584,6 +1588,10 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
         if (binding != null && binding.cardIndexingStatus != null) {
             binding.cardIndexingStatus.getRoot().removeCallbacks(hideIndexingCardRunnable);
+        }
+        if (projectDirectory != null) {
+            com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
+                    new com.cocode.vcode.ide.core.events.ProjectEvent.ProjectClosedEvent(projectDirectory));
         }
         super.onDestroy();
         if (localWebServer != null) localWebServer.stop();

@@ -8,12 +8,16 @@ import com.cocode.vcode.ide.core.lsp.LspLocation;
 import com.cocode.vcode.ide.core.lsp.ModuleResolver;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.lsp.SymbolEntry;
+import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Semantic diagnostics analyzer for JavaScript and TypeScript source files.
@@ -26,8 +30,16 @@ public class JsSemanticLinter {
     // Reserved JS and TS keywords
     private static final Set<String> JS_KEYWORDS = JsKeywords.ALL_JS_TS_KEYWORDS;
 
+    private static final Pattern PAT_IMPORT_DEFAULT = Pattern.compile("import\\s+([a-zA-Z0-9_$]+)\\s+from");
+    private static final Pattern PAT_IMPORT_NAMESPACE = Pattern.compile("import\\s*\\*\\s*as\\s+([a-zA-Z0-9_$]+)\\s+from");
+    private static final Pattern PAT_IMPORT_NAMED = Pattern.compile("import\\s*\\{([^}]+)\\}\\s*from");
+    private static final Pattern PAT_REQUIRE_VAR = Pattern.compile("(?:const|let|var)\\s+([a-zA-Z0-9_$]+)\\s*=\\s*require\\s*\\(");
+    private static final Pattern PAT_REQUIRE_DESTRUCTURE = Pattern.compile("(?:const|let|var)\\s*\\{([^}]+)\\}\\s*=\\s*require\\s*\\(");
+
     public static void analyze(File file, String text, TokenStream mask, JsSyntaxTree tree, ScopeTree scopeTree, ProjectIndex index, List<Problem> problems) {
         if (text == null || text.trim().isEmpty() || tree == null || scopeTree == null) return;
+
+        KnownElements.ensureLoaded();
 
         // Scope and declaration validation
         checkDuplicateDeclarations(file, text, scopeTree, tree, problems);
@@ -1032,7 +1044,120 @@ public class JsSemanticLinter {
         return new int[]{0, 0, 0};
     }
 
+    private static boolean isNodeEnvironment(File file, String text) {
+        if (file != null) {
+            File root = ProjectSymbolIndex.getProjectRoot(file);
+            if (root != null && new File(root, "package.json").exists()) {
+                return true;
+            }
+        }
+        if (text != null) {
+            if (text.contains("require(") || text.contains("require (") ||
+                    text.contains("module.exports") || text.contains("exports.") ||
+                    text.contains("process.") || text.contains("__dirname") ||
+                    text.contains("__filename") || text.contains("Buffer.") ||
+                    text.contains("global.")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> collectImportedSymbols(String text, JsSyntaxTree tree) {
+        Set<String> imported = new HashSet<>();
+        if (tree != null) {
+            for (int i = 1; i < tree.nodeCount; i++) {
+                if (tree.nodeType[i] == JsSyntaxTree.N_IMPORT) {
+                    int child = tree.nodeChild[i];
+                    while (child > 0 && child < tree.nodeCount) {
+                        String name = tree.nodeName[child];
+                        if (name != null && !name.isEmpty() && !"{destructure}".equals(name)) {
+                            imported.add(name);
+                        }
+                        child = tree.nodeSibling[child];
+                    }
+                }
+            }
+        }
+        if (text != null) {
+            extractImportedSymbolsFromText(text, imported);
+        }
+        return imported;
+    }
+
+    private static void extractImportedSymbolsFromText(String text, Set<String> imported) {
+        Matcher m = PAT_IMPORT_DEFAULT.matcher(text);
+        while (m.find()) {
+            String name = m.group(1);
+            if (name != null && !"type".equals(name)) {
+                imported.add(name);
+            }
+        }
+        m = PAT_IMPORT_NAMESPACE.matcher(text);
+        while (m.find()) {
+            imported.add(m.group(1));
+        }
+        m = PAT_IMPORT_NAMED.matcher(text);
+        while (m.find()) {
+            String clause = m.group(1);
+            if (clause != null) {
+                parseNamedClause(clause, imported);
+            }
+        }
+        m = PAT_REQUIRE_VAR.matcher(text);
+        while (m.find()) {
+            imported.add(m.group(1));
+        }
+        m = PAT_REQUIRE_DESTRUCTURE.matcher(text);
+        while (m.find()) {
+            String clause = m.group(1);
+            if (clause != null) {
+                parseNamedClause(clause, imported);
+            }
+        }
+    }
+
+    private static void parseNamedClause(String clause, Set<String> imported) {
+        String[] parts = clause.split(",");
+        for (String p : parts) {
+            String trimmed = p.trim();
+            if (trimmed.isEmpty()) continue;
+            if (trimmed.startsWith("type ")) {
+                trimmed = trimmed.substring(5).trim();
+            }
+            if (trimmed.contains(" as ")) {
+                String[] asParts = trimmed.split("\\s+as\\s+");
+                if (asParts.length > 1) {
+                    imported.add(asParts[1].trim());
+                    continue;
+                }
+            } else if (trimmed.contains(":")) {
+                String[] colonParts = trimmed.split(":");
+                if (colonParts.length > 1) {
+                    imported.add(colonParts[1].trim());
+                    continue;
+                }
+            }
+            if (trimmed.contains("=")) {
+                trimmed = trimmed.substring(0, trimmed.indexOf('=')).trim();
+            }
+            if (!trimmed.isEmpty()) {
+                imported.add(trimmed);
+            }
+        }
+    }
+
     private static void checkUndefined(File file, String text, TokenStream mask, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
+        boolean isNode = isNodeEnvironment(file, text);
+        Set<String> importedSymbols = collectImportedSymbols(text, tree);
+        if (scopeTree != null && !importedSymbols.isEmpty()) {
+            for (String sym : importedSymbols) {
+                if (scopeTree.lookupSymbol(sym, 0) == null) {
+                    scopeTree.addSymbol(sym, 0, 0, JsSyntaxTree.N_VAR_DECL);
+                }
+            }
+        }
+
         int ieCount = 0;
         int[] ieStart = new int[16];
         int[] ieEnd = new int[16];
@@ -1188,7 +1313,17 @@ public class JsSemanticLinter {
             int scopeId = scopeTree.findScopeAt(offset, tree);
             int[] resolved = scopeTree.lookupSymbol(id, scopeId, offset, tree);
 
-            if (resolved == null && !KnownElements.JS_GLOBALS.contains(id) && !JS_KEYWORDS.contains(id)) {
+            if (resolved == null) {
+                if (KnownElements.JS_GLOBALS.contains(id)) continue;
+                if (JS_KEYWORDS.contains(id)) continue;
+                if (isNode && KnownElements.NODE_GLOBALS.contains(id)) continue;
+                if (KnownElements.NODE_GLOBALS.contains(id)) continue;
+                if (importedSymbols.contains(id)) continue;
+                ProjectSymbolIndex symIndex = ProjectSymbolIndex.getInstance();
+                if (symIndex.getDependencyExports().containsKey(id) || symIndex.getDependencyMembers().containsKey(id)) {
+                    continue;
+                }
+
                 int line = LinterUtils.getLine(text, offset);
                 int col = LinterUtils.getColumn(text, offset);
                 problems.add(new Problem(file, line, col, id.length(),
