@@ -24,6 +24,7 @@ import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.refactor.FileReferenceUpdater;
+import com.cocode.vcode.ide.data.watcher.ProjectFileWatcher;
 import com.cocode.vcode.ide.ui.editor.helper.EditorGitHelper;
 import com.cocode.vcode.ide.ui.editor.helper.ProjectMetaHelper;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
@@ -76,6 +77,7 @@ public class EditorViewModel extends ViewModel {
     private String projectId;
     private String projectName;
     private ProjectState currentState;
+    private ProjectFileWatcher projectFileWatcher;
     /**
      * Background task for periodic automatic saving of all dirty files.
      */
@@ -91,7 +93,7 @@ public class EditorViewModel extends ViewModel {
     private final com.cocode.vcode.ide.core.event.WorkspaceEventManager.WorkspaceChangeListener workspaceChangeListener =
             changedRoot -> {
                 if (changedRoot == null || (projectRoot != null && changedRoot.getAbsolutePath().equals(projectRoot.getAbsolutePath()))) {
-                    validateOpenFilesWithDisk();
+                    onFileSystemChanged();
                     refreshGitStatuses();
                 }
             };
@@ -375,6 +377,12 @@ public class EditorViewModel extends ViewModel {
         }
 
         refreshFileTree();
+        if (projectFileWatcher != null) {
+            projectFileWatcher.stopWatching();
+        }
+        projectFileWatcher = new ProjectFileWatcher(projectRoot, this::onFileSystemChanged);
+        projectFileWatcher.startWatching();
+
         isEditorLoadingLiveData.setValue(true);
 
         // Load project-specific state (open tabs, scroll positions) from the metadata repository
@@ -453,6 +461,8 @@ public class EditorViewModel extends ViewModel {
                         String content = FileUtils.readFile(active.getFile());
                         active.setContent(content);
                         active.markSaved();
+                        active.setLastDiskModified(active.getFile().lastModified());
+                        active.setLastDiskSize(active.getFile().length());
                         // Only mark loaded on success — if this throws, contentLoaded stays
                         // false so CodeFileViewer.bindFile() will retry the read.
                         active.setContentLoaded(true);
@@ -498,6 +508,8 @@ public class EditorViewModel extends ViewModel {
                             String content = FileUtils.readFile(ef.getFile());
                             ef.setContent(content);
                             ef.markSaved();
+                            ef.setLastDiskModified(ef.getFile().lastModified());
+                            ef.setLastDiskSize(ef.getFile().length());
                         } catch (Exception ignored) {
                         }
                     }
@@ -541,6 +553,35 @@ public class EditorViewModel extends ViewModel {
     }
 
     /**
+     * Reacts to real-time filesystem events (e.g. from FileObserver or terminal commands).
+     * Refreshes the file tree and synchronizes open editor buffers.
+     */
+    public void onFileSystemChanged() {
+        refreshFileTree();
+        validateOpenFilesWithDisk();
+    }
+
+    public void startFileWatcher() {
+        if (projectFileWatcher != null) {
+            projectFileWatcher.startWatching();
+        }
+    }
+
+    public void stopFileWatcher() {
+        if (projectFileWatcher != null) {
+            projectFileWatcher.stopWatching();
+        }
+    }
+
+    public void saveActiveFileImmediately() {
+        AppSettings settings = settingsLiveData.getValue();
+        if (settings != null && settings.autoSave) {
+            ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);
+            saveFile(getActiveTabIndexValue());
+        }
+    }
+
+    /**
      * Analyzes the project's Git repository to identify modified, untracked, or staged files.
      * Results are mapped by relative path for easy lookup by the UI.
      */
@@ -575,11 +616,6 @@ public class EditorViewModel extends ViewModel {
                     long diskMod = fileOnDisk.lastModified();
                     long diskSize = fileOnDisk.length();
 
-                    // If disk timestamp and file size match cached metadata, skip reading file content
-                    if (doc.getLastDiskModified() != -1 && diskMod == doc.getLastDiskModified() && diskSize == doc.getLastDiskSize()) {
-                        continue;
-                    }
-
                     try {
                         String diskContent = com.cocode.vcode.ide.utils.FileUtils.readFile(fileOnDisk);
                         doc.setLastDiskModified(diskMod);
@@ -597,17 +633,17 @@ public class EditorViewModel extends ViewModel {
                     List<EditorFile> latestDocs = new java.util.ArrayList<>(getOpenFilesList());
                     boolean actuallyAltered = false;
                     int activeIndex = getActiveTabIndexValue();
+                    String activeFileId = (activeIndex >= 0 && activeIndex < latestDocs.size())
+                            ? latestDocs.get(activeIndex).getId() : null;
                     List<File> externallyModifiedFiles = new ArrayList<>();
 
                     java.util.Iterator<EditorFile> iterator = latestDocs.iterator();
-                    int i = 0;
                     while (iterator.hasNext()) {
                         EditorFile doc = iterator.next();
                         String path = doc.getFile().getAbsolutePath();
                         if (missingPaths.contains(path)) {
                             iterator.remove();
                             actuallyAltered = true;
-                            if (i <= activeIndex && activeIndex > 0) activeIndex--;
                         } else {
                             if (updatedContent.containsKey(path)) {
                                 doc.setContent(updatedContent.get(path));
@@ -617,13 +653,26 @@ public class EditorViewModel extends ViewModel {
                                     externallyModifiedFiles.add(doc.getFile());
                                 }
                             }
-                            i++;
                         }
                     }
 
                     if (actuallyAltered) {
                         openFilesLiveData.setValue(latestDocs);
-                        activeTabIndexLiveData.setValue(latestDocs.isEmpty() ? -1 : Math.min(activeIndex, latestDocs.size() - 1));
+                        if (!missingPaths.isEmpty()) {
+                            int newActiveIndex = -1;
+                            if (activeFileId != null) {
+                                for (int k = 0; k < latestDocs.size(); k++) {
+                                    if (activeFileId.equals(latestDocs.get(k).getId())) {
+                                        newActiveIndex = k;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (newActiveIndex == -1 && !latestDocs.isEmpty()) {
+                                newActiveIndex = Math.min(activeIndex, latestDocs.size() - 1);
+                            }
+                            activeTabIndexLiveData.setValue(newActiveIndex);
+                        }
                         updateCurrentStateObject();
                         persistStateAsync();
                         if (!externallyModifiedFiles.isEmpty()) {
@@ -823,6 +872,10 @@ public class EditorViewModel extends ViewModel {
                 EditorFile newFile = new EditorFile(UUID.randomUUID().toString(), file, content, fileType);
                 newFile.markSaved();
                 newFile.setContentLoaded(true);
+                if (file != null && file.exists()) {
+                    newFile.setLastDiskModified(file.lastModified());
+                    newFile.setLastDiskSize(file.length());
+                }
                 if (sourceUriString != null) {
                     newFile.setSourceUriString(sourceUriString);
                 }
@@ -848,6 +901,20 @@ public class EditorViewModel extends ViewModel {
                     activeTabIndexLiveData.setValue(updated.size() - 1);
                     persistStateAsync();
                 });
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    /**
+     * Asynchronously warms the disk/page cache for a file on the IO thread
+     * so that subsequent open operations are instantaneous.
+     */
+    public void preloadFile(File file) {
+        if (file == null || !file.exists() || file.isDirectory()) return;
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                FileUtils.readFile(file);
             } catch (Exception ignored) {
             }
         });
@@ -892,6 +959,10 @@ public class EditorViewModel extends ViewModel {
                 EditorFile newFile = new EditorFile(UUID.randomUUID().toString(), file, content, fileType);
                 newFile.markSaved();
                 newFile.setContentLoaded(true);
+                if (file != null && file.exists()) {
+                    newFile.setLastDiskModified(file.lastModified());
+                    newFile.setLastDiskSize(file.length());
+                }
 
                 // Restore previous scroll and cursor if available in the state object
                 if (currentState != null) {
@@ -1203,6 +1274,10 @@ public class EditorViewModel extends ViewModel {
                 liveData.removeObserver(this);
                 if (result != null && result.isSuccess()) {
                     ef.markSaved();
+                    if (ef.getFile() != null) {
+                        ef.setLastDiskModified(ef.getFile().lastModified());
+                        ef.setLastDiskSize(ef.getFile().length());
+                    }
                     openFilesLiveData.setValue(new ArrayList<>(docs));
                     touchCurrentProject();
 
@@ -1273,6 +1348,10 @@ public class EditorViewModel extends ViewModel {
                         try {
                             fileRepo.writeFileSync(ef.getFile(), ef.getContent());
                             ef.markSaved();
+                            if (ef.getFile() != null) {
+                                ef.setLastDiskModified(ef.getFile().lastModified());
+                                ef.setLastDiskSize(ef.getFile().length());
+                            }
                             anySaved = true;
                             // Write back to the original content:// source if applicable
                             if (ef.getSourceUriString() != null) {
@@ -1476,6 +1555,10 @@ public class EditorViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        if (projectFileWatcher != null) {
+            projectFileWatcher.stopWatching();
+            projectFileWatcher = null;
+        }
         com.cocode.vcode.ide.core.event.WorkspaceEventManager.getInstance().removeListener(workspaceChangeListener);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(diagnosticWatchdogRunnable);
         ExecutorProvider.getInstance().getMainHandler().removeCallbacks(autoSaveRunnable);

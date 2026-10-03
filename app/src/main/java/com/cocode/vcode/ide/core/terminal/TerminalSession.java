@@ -29,6 +29,7 @@ public class TerminalSession {
         void onOutput();
         void onProcessTerminated(int exitCode);
         default void onCommandExecuted(String command) {}
+        default void onCommandFinished(String command, int exitCode) {}
     }
 
     public static final int SPECIAL_KEY_ESC = 1;
@@ -43,6 +44,9 @@ public class TerminalSession {
     public static final int SPECIAL_KEY_ARROW_RIGHT = 10;
     public static final int SPECIAL_KEY_ENTER = 11;
     public static final int SPECIAL_KEY_BACKSPACE = 12;
+    public static final int SPECIAL_KEY_HOME = 13;
+    public static final int SPECIAL_KEY_END = 14;
+    public static final int SPECIAL_KEY_DELETE = 15;
 
     private final Context context;
     private final File projectRoot;
@@ -51,6 +55,7 @@ public class TerminalSession {
     private final TerminalEmulator emulator;
 
     private final StringBuilder currentInput = new StringBuilder();
+    private int inputCursorPos = 0;
     private final List<String> history = new ArrayList<>();
     private int historyIndex = -1;
     private File currentDir;
@@ -61,6 +66,7 @@ public class TerminalSession {
     private volatile boolean isRunning = false;
     private volatile boolean isExecutingCommand = false;
     private volatile String activeSentinel = null;
+    private volatile String lastExecutedCommand = null;
     private TerminalSessionListener listener;
 
     public TerminalSession(@NonNull Context context, @NonNull File projectRoot) {
@@ -201,6 +207,8 @@ public class TerminalSession {
         String relPath = getDisplayPath();
         String prompt = "\033[01;32m" + projectName + "\033[00m:\033[01;34m" + relPath + "\033[00m$ ";
         emulator.appendOutput(prompt);
+        currentInput.setLength(0);
+        inputCursorPos = 0;
     }
 
     private String getDisplayPath() {
@@ -241,18 +249,29 @@ public class TerminalSession {
                                 // Sentinel line not yet fully read; wait for next read
                                 break;
                             }
+                            int exitCode = 0;
+                            try {
+                                String sentinelLine = pendingOutput.substring(sentinelIdx, newlineIdx).trim();
+                                int colonIdx = sentinelLine.lastIndexOf(':');
+                                if (colonIdx != -1) {
+                                    exitCode = Integer.parseInt(sentinelLine.substring(colonIdx + 1).trim());
+                                }
+                            } catch (Exception ignored) {
+                            }
                             String outputBefore = pendingOutput.substring(0, sentinelIdx);
                             if (!outputBefore.isEmpty()) {
                                 emulator.appendOutput(outputBefore);
                             }
                             pendingOutput.delete(0, newlineIdx + 1);
 
+                            String finishedCmd = lastExecutedCommand;
                             isExecutingCommand = false;
                             activeSentinel = null;
                             printPrompt();
                             if (currentInput.length() > 0) {
                                 emulator.appendOutput(currentInput.toString());
                             }
+                            notifyCommandFinished(finishedCmd, exitCode);
                         }
                     }
 
@@ -314,8 +333,20 @@ public class TerminalSession {
             } else if (c == '\t') {
                 handleTabCompletion();
             } else if (c >= 32) {
-                currentInput.append(c);
-                emulator.appendOutput(String.valueOf(c));
+                if (inputCursorPos == currentInput.length()) {
+                    currentInput.append(c);
+                    inputCursorPos++;
+                    emulator.appendOutput(String.valueOf(c));
+                } else {
+                    currentInput.insert(inputCursorPos, c);
+                    inputCursorPos++;
+                    String rest = currentInput.substring(inputCursorPos - 1);
+                    emulator.appendOutput(rest);
+                    int charsBack = currentInput.length() - inputCursorPos;
+                    if (charsBack > 0) {
+                        emulator.appendOutput("\033[" + charsBack + "D");
+                    }
+                }
                 notifyOutput();
             }
         }
@@ -370,11 +401,53 @@ public class TerminalSession {
             case SPECIAL_KEY_ARROW_LEFT:
                 if (isExecutingCommand) {
                     writeToProcess("\033[D");
+                } else {
+                    if (inputCursorPos > 0) {
+                        inputCursorPos--;
+                        emulator.appendOutput("\033[D");
+                        notifyOutput();
+                    }
                 }
                 break;
             case SPECIAL_KEY_ARROW_RIGHT:
                 if (isExecutingCommand) {
                     writeToProcess("\033[C");
+                } else {
+                    if (inputCursorPos < currentInput.length()) {
+                        inputCursorPos++;
+                        emulator.appendOutput("\033[C");
+                        notifyOutput();
+                    }
+                }
+                break;
+            case SPECIAL_KEY_HOME:
+                if (isExecutingCommand) {
+                    writeToProcess("\033[H");
+                } else {
+                    if (inputCursorPos > 0) {
+                        emulator.appendOutput("\033[" + inputCursorPos + "D");
+                        inputCursorPos = 0;
+                        notifyOutput();
+                    }
+                }
+                break;
+            case SPECIAL_KEY_END:
+                if (isExecutingCommand) {
+                    writeToProcess("\033[F");
+                } else {
+                    int forward = currentInput.length() - inputCursorPos;
+                    if (forward > 0) {
+                        emulator.appendOutput("\033[" + forward + "C");
+                        inputCursorPos = currentInput.length();
+                        notifyOutput();
+                    }
+                }
+                break;
+            case SPECIAL_KEY_DELETE:
+                if (isExecutingCommand) {
+                    writeToProcess("\033[3~");
+                } else {
+                    handleDelete();
                 }
                 break;
             case SPECIAL_KEY_CTRL_C:
@@ -412,12 +485,43 @@ public class TerminalSession {
         }
     }
 
+    public synchronized int getInputCursorPos() {
+        return inputCursorPos;
+    }
+
+    public synchronized void setInputCursorPos(int newPos) {
+        if (isExecutingCommand) return;
+        newPos = Math.max(0, Math.min(newPos, currentInput.length()));
+        int diff = newPos - inputCursorPos;
+        if (diff > 0) {
+            emulator.appendOutput("\033[" + diff + "C");
+            inputCursorPos = newPos;
+            notifyOutput();
+        } else if (diff < 0) {
+            emulator.appendOutput("\033[" + (-diff) + "D");
+            inputCursorPos = newPos;
+            notifyOutput();
+        }
+    }
+
+    private void handleDelete() {
+        if (inputCursorPos < currentInput.length()) {
+            currentInput.deleteCharAt(inputCursorPos);
+            String rest = currentInput.substring(inputCursorPos);
+            emulator.appendOutput(rest + " ");
+            int charsBack = currentInput.length() - inputCursorPos + 1;
+            emulator.appendOutput("\033[" + charsBack + "D");
+            notifyOutput();
+        }
+    }
+
     private void handleCtrlC() {
         if (isExecutingCommand) {
             writeToProcess("\u0003");
         }
         emulator.appendOutput("^C\r\n");
         currentInput.setLength(0);
+        inputCursorPos = 0;
         isExecutingCommand = false;
         activeSentinel = null;
         printPrompt();
@@ -425,9 +529,20 @@ public class TerminalSession {
     }
 
     private void handleBackspace() {
-        if (currentInput.length() > 0) {
-            currentInput.deleteCharAt(currentInput.length() - 1);
-            emulator.appendOutput("\b");
+        if (inputCursorPos > 0) {
+            if (inputCursorPos == currentInput.length()) {
+                currentInput.deleteCharAt(currentInput.length() - 1);
+                inputCursorPos--;
+                emulator.appendOutput("\b");
+            } else {
+                currentInput.deleteCharAt(inputCursorPos - 1);
+                inputCursorPos--;
+                emulator.appendOutput("\033[D");
+                String rest = currentInput.substring(inputCursorPos);
+                emulator.appendOutput(rest + " ");
+                int charsBack = currentInput.length() - inputCursorPos + 1;
+                emulator.appendOutput("\033[" + charsBack + "D");
+            }
             notifyOutput();
         }
     }
@@ -441,15 +556,23 @@ public class TerminalSession {
         if (newIndex == historyIndex) return;
         historyIndex = newIndex;
 
+        // Move cursor to end of current input if needed
+        int forward = currentInput.length() - inputCursorPos;
+        if (forward > 0) {
+            emulator.appendOutput("\033[" + forward + "C");
+        }
+
         // Erase current input from screen
         for (int i = 0; i < currentInput.length(); i++) {
             emulator.appendOutput("\b");
         }
         currentInput.setLength(0);
+        inputCursorPos = 0;
 
         if (historyIndex < history.size()) {
             String histCmd = history.get(historyIndex);
             currentInput.append(histCmd);
+            inputCursorPos = histCmd.length();
             emulator.appendOutput(histCmd);
         }
         notifyOutput();
@@ -459,6 +582,7 @@ public class TerminalSession {
         emulator.appendOutput("\r\n");
         String cmd = currentInput.toString().trim();
         currentInput.setLength(0);
+        inputCursorPos = 0;
 
         if (cmd.isEmpty()) {
             printPrompt();
@@ -505,6 +629,7 @@ public class TerminalSession {
             }
         }
         historyIndex = history.size();
+        lastExecutedCommand = cmd;
         notifyCommandExecuted(cmd);
 
         isExecutingCommand = true;
@@ -630,6 +755,7 @@ public class TerminalSession {
                 completion += " ";
             }
             currentInput.append(completion);
+            inputCursorPos = currentInput.length();
             emulator.appendOutput(completion);
             notifyOutput();
         } else {
@@ -655,6 +781,7 @@ public class TerminalSession {
         printPrompt();
         if (currentInput.length() > 0) {
             emulator.appendOutput(currentInput.toString());
+            inputCursorPos = currentInput.length();
         }
         notifyOutput();
         notifyCommandExecuted("clear");
@@ -663,6 +790,12 @@ public class TerminalSession {
     private void notifyCommandExecuted(@NonNull String command) {
         if (listener != null) {
             listener.onCommandExecuted(command);
+        }
+    }
+
+    private void notifyCommandFinished(@Nullable String command, int exitCode) {
+        if (listener != null) {
+            listener.onCommandFinished(command, exitCode);
         }
     }
 

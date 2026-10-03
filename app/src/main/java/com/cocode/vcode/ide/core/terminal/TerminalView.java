@@ -371,8 +371,10 @@ public class TerminalView extends View {
                 session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
                 return true;
             case KeyEvent.KEYCODE_DEL:
-            case KeyEvent.KEYCODE_FORWARD_DEL:
                 session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
+                return true;
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_DELETE);
                 return true;
             case KeyEvent.KEYCODE_TAB:
                 session.sendSpecialKey(TerminalSession.SPECIAL_KEY_TAB);
@@ -392,9 +394,50 @@ public class TerminalView extends View {
             case KeyEvent.KEYCODE_ESCAPE:
                 session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ESC);
                 return true;
+            case KeyEvent.KEYCODE_MOVE_HOME:
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_HOME);
+                return true;
+            case KeyEvent.KEYCODE_MOVE_END:
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_END);
+                return true;
+            case KeyEvent.KEYCODE_PAGE_UP: {
+                int scrollUp = Math.max(0, getScrollY() - (int) (getHeight() * 0.75f));
+                scrollTo(0, scrollUp);
+                autoScrollToBottom = false;
+                invalidate();
+                return true;
+            }
+            case KeyEvent.KEYCODE_PAGE_DOWN: {
+                int scrollDown = Math.min(getMaxScrollY(), getScrollY() + (int) (getHeight() * 0.75f));
+                scrollTo(0, scrollDown);
+                autoScrollToBottom = (scrollDown >= getMaxScrollY());
+                invalidate();
+                return true;
+            }
         }
 
         if (event.isCtrlPressed()) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == KeyEvent.KEYCODE_C) {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_C);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_L) {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_L);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_D) {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_D);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_Z) {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_Z);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_A) {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_HOME);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_E) {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_END);
+                return true;
+            }
+
             char c = (char) event.getUnicodeChar();
             char lower = Character.toLowerCase(c);
             if (lower == 'c') {
@@ -409,13 +452,22 @@ public class TerminalView extends View {
             } else if (lower == 'z') {
                 session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_Z);
                 return true;
+            } else if (lower == 'a') {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_HOME);
+                return true;
+            } else if (lower == 'e') {
+                session.sendSpecialKey(TerminalSession.SPECIAL_KEY_END);
+                return true;
             }
+            return true;
         }
 
-        int unicode = event.getUnicodeChar();
-        if (unicode >= 32) {
-            session.handleInput(String.valueOf((char) unicode));
-            return true;
+        if (!event.isCtrlPressed() && !event.isAltPressed()) {
+            int unicode = event.getUnicodeChar();
+            if (unicode >= 32) {
+                session.handleInput(String.valueOf((char) unicode));
+                return true;
+            }
         }
 
         return false;
@@ -427,6 +479,15 @@ public class TerminalView extends View {
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyMultiple(int keyCode, int repeatCount, KeyEvent event) {
+        if (session != null && event != null && event.getCharacters() != null) {
+            session.handleInput(event.getCharacters());
+            return true;
+        }
+        return super.onKeyMultiple(keyCode, repeatCount, event);
     }
 
     @Override
@@ -485,6 +546,9 @@ public class TerminalView extends View {
                     for (int i = 0; i < beforeLength; i++) {
                         session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
                     }
+                    for (int i = 0; i < afterLength; i++) {
+                        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_DELETE);
+                    }
                 }
                 return true;
             }
@@ -492,6 +556,14 @@ public class TerminalView extends View {
             @Override
             public boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
                 return deleteSurroundingText(beforeLength, afterLength);
+            }
+
+            @Override
+            public boolean setSelection(int start, int end) {
+                if (session != null) {
+                    session.setInputCursorPos(start);
+                }
+                return true;
             }
 
             @Override
@@ -506,11 +578,10 @@ public class TerminalView extends View {
             public CharSequence getTextBeforeCursor(int n, int flags) {
                 if (session != null) {
                     String input = session.getCurrentInput();
-                    if (input != null && !input.isEmpty()) {
-                        if (input.length() > n) {
-                            return input.substring(input.length() - n);
-                        }
-                        return input;
+                    int cursorPos = session.getInputCursorPos();
+                    if (input != null && !input.isEmpty() && cursorPos > 0) {
+                        int start = Math.max(0, cursorPos - n);
+                        return input.substring(start, cursorPos);
                     }
                 }
                 return "";
@@ -518,6 +589,14 @@ public class TerminalView extends View {
 
             @Override
             public CharSequence getTextAfterCursor(int n, int flags) {
+                if (session != null) {
+                    String input = session.getCurrentInput();
+                    int cursorPos = session.getInputCursorPos();
+                    if (input != null && cursorPos < input.length()) {
+                        int end = Math.min(input.length(), cursorPos + n);
+                        return input.substring(cursorPos, end);
+                    }
+                }
                 return "";
             }
         };

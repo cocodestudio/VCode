@@ -143,6 +143,17 @@ public class TerminalViewer implements IFileViewer {
                 @Override
                 public void onCommandExecuted(String command) {
                     saveStateToVirtualFile();
+                    if (viewModel != null) {
+                        viewModel.onFileSystemChanged();
+                    }
+                }
+
+                @Override
+                public void onCommandFinished(String command, int exitCode) {
+                    saveStateToVirtualFile();
+                    if (viewModel != null) {
+                        viewModel.onFileSystemChanged();
+                    }
                 }
             });
             session.start();
@@ -181,9 +192,6 @@ public class TerminalViewer implements IFileViewer {
     @Override
     public void onPause() {
         saveStateToVirtualFile();
-        if (context instanceof android.app.Activity) {
-            UiUtils.hideKeyboard((android.app.Activity) context);
-        }
     }
 
     @Override
@@ -294,5 +302,15 @@ public class TerminalViewer implements IFileViewer {
     @Override
     public CodeEditText getCodeEditor() {
         return null;
+    }
+
+    @Override
+    public EditorFile getCurrentFile() {
+        return currentFile;
+    }
+
+    @Nullable
+    public TerminalView getTerminalView() {
+        return binding != null ? binding.terminalView : null;
     }
 }

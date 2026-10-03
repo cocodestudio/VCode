@@ -97,6 +97,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private String pendingOpenSourceUri = null;
     private IFileViewer activeViewer;
     private boolean isReadOnly = false;
+    private Runnable pendingDrawerAction = null;
     private com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener indexingProgressListener;
     private final Runnable hideIndexingCardRunnable = () -> {
         if (binding == null || binding.cardIndexingStatus == null) return;
@@ -297,13 +298,6 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     private void setupListeners() {
         binding.drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
             @Override
-            public void onDrawerSlide(@NonNull View drawerView, float slideOffset) {
-                if (slideOffset > 0) {
-                    saveCurrentEditorState();
-                }
-            }
-
-            @Override
             public void onDrawerOpened(@NonNull View drawerView) {
                 saveCurrentEditorState();
             }
@@ -313,6 +307,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 Fragment fragment = getSupportFragmentManager().findFragmentById(binding.drawerContainer.getId());
                 if (fragment instanceof FileTreeFragment) {
                     ((FileTreeFragment) fragment).clearClipboardState();
+                }
+                if (pendingDrawerAction != null) {
+                    Runnable action = pendingDrawerAction;
+                    pendingDrawerAction = null;
+                    action.run();
                 }
             }
         });
@@ -380,9 +379,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
         if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
             ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+            viewModel.saveActiveFileImmediately();
             viewModel.triggerAutoSave();
         }
         viewModel.syncAllOpenFilesToIndex();
+        viewModel.validateOpenFilesWithDisk();
         viewModel.setActiveTab(index);
         binding.viewerContainer.post(() -> {
             CodeEditText newEditor = getActiveCodeEditor();
@@ -406,6 +407,14 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 }
             }
 
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.TerminalViewer) {
+                com.cocode.vcode.ide.ui.editor.viewer.TerminalViewer tv =
+                        (com.cocode.vcode.ide.ui.editor.viewer.TerminalViewer) activeViewer;
+                if (tv.getTerminalView() != null && tv.getTerminalView().handleKeyEvent(event)) {
+                    return true;
+                }
+            }
+
             KeyCommand cmd = KeybindingManager.getInstance(this).findCommand(event);
             if (cmd != null && handleGlobalCommand(cmd)) {
                 return true;
@@ -424,6 +433,14 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             return true;
                         }
                     }
+                }
+            }
+        } else if (event.getAction() == KeyEvent.ACTION_MULTIPLE) {
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.TerminalViewer) {
+                com.cocode.vcode.ide.ui.editor.viewer.TerminalViewer tv =
+                        (com.cocode.vcode.ide.ui.editor.viewer.TerminalViewer) activeViewer;
+                if (tv.getTerminalView() != null && tv.getTerminalView().onKeyMultiple(event.getKeyCode(), event.getRepeatCount(), event)) {
+                    return true;
                 }
             }
         }
@@ -864,22 +881,14 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 if (f == null) continue;
                 for (EditorFile ef : files) {
                     if (ef.getFile() != null && isSameFile(f, ef.getFile())) {
-                        boolean isActive = false;
-                        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-                            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
-                            if (cfv.getCodeEditor() != null && isSameFile(f, cfv.getCodeEditor().getCurrentFile())) {
-                                isActive = true;
-                                if (ef.getContent() != null) {
-                                    cfv.reloadExternalContent(ef.getContent());
-                                }
+                        IFileViewer viewer = viewerManager != null ? viewerManager.getViewer(ef.getId()) : null;
+                        if (viewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) viewer;
+                            if (ef.getContent() != null) {
+                                cfv.reloadExternalContent(ef.getContent());
                             }
-                        }
-                        if (!isActive) {
-                            // Inactive tab: invalidate cached viewer in ViewerManager so it never
-                            // retains or flushes stale text buffers back to disk.
-                            if (viewerManager != null) {
-                                viewerManager.destroyViewer(ef.getId());
-                            }
+                        } else if (viewer instanceof com.cocode.vcode.ide.ui.editor.viewer.WebPreviewViewer) {
+                            viewer.bindFile(ef, viewModel);
                         }
                         break;
                     }
@@ -994,6 +1003,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void updateActiveViewer(EditorFile activeFile, boolean isPreview) {
+        if (activeViewer != null && activeViewer.getCurrentFile() == activeFile) {
+            updateQuickSymbolBarVisibility();
+            applyReadOnlyState();
+            return;
+        }
+
         if (activeViewer != null) {
             activeViewer.onPause();
         }
@@ -1231,28 +1246,43 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
 
     @Override
     public void onFileSelected(FileNode fileNode) {
-        binding.drawerLayout.closeDrawer(GravityCompat.START);
-        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
-            ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
+        if (fileNode == null || fileNode.getFile() == null) return;
+        File file = fileNode.getFile();
+        viewModel.preloadFile(file);
+
+        if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            pendingDrawerAction = () -> openSelectedFile(file);
+            binding.drawerLayout.closeDrawer(GravityCompat.START);
+        } else {
+            openSelectedFile(file);
         }
-        viewModel.syncAllOpenFilesToIndex();
-        saveCurrentEditorState();
-        viewModel.openFile(fileNode.getFile());
     }
 
     @Override
     public void onFindInFile(FileNode fileNode) {
-        binding.drawerLayout.closeDrawer(GravityCompat.START);
+        if (fileNode == null || fileNode.getFile() == null) return;
+        File file = fileNode.getFile();
+        viewModel.preloadFile(file);
+
+        if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            pendingDrawerAction = () -> {
+                openSelectedFile(file);
+                showFindReplaceBar();
+            };
+            binding.drawerLayout.closeDrawer(GravityCompat.START);
+        } else {
+            openSelectedFile(file);
+            showFindReplaceBar();
+        }
+    }
+
+    private void openSelectedFile(File file) {
         if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
             ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
         }
         viewModel.syncAllOpenFilesToIndex();
         saveCurrentEditorState();
-        viewModel.openFile(fileNode.getFile());
-
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            showFindReplaceBar();
-        }, 300);
+        viewModel.openFile(file);
     }
 
     private void showGoToLineDialog() {
@@ -1523,6 +1553,9 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     @Override
     protected void onStop() {
         super.onStop();
+        if (viewModel != null) {
+            viewModel.stopFileWatcher();
+        }
         if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
             ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).flushContentToViewModel();
         }
@@ -1535,6 +1568,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         super.onResume();
         if (viewModel != null) {
             viewModel.reloadSettings();
+            viewModel.startFileWatcher();
             viewModel.refreshFileTree();
             viewModel.validateOpenFilesWithDisk();
         }

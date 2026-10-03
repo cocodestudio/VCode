@@ -59,4 +59,11 @@ public interface IFileViewer {
      * Returns null for non-code viewers. Used for Find/Replace and formatting.
      */
     com.cocode.vcode.ide.views.CodeEditText getCodeEditor();
+
+    /**
+     * Returns the currently bound EditorFile, or null if unassigned.
+     */
+    default EditorFile getCurrentFile() {
+        return null;
+    }
 }

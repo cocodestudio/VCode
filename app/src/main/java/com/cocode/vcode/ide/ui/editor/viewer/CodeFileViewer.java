@@ -3,6 +3,8 @@ package com.cocode.vcode.ide.ui.editor.viewer;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+
+import java.io.File;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -176,6 +178,10 @@ public class CodeFileViewer implements IFileViewer {
                     String content = com.cocode.vcode.ide.utils.FileUtils.readFile(capturedFile.getFile());
                     capturedFile.setContent(content);
                     capturedFile.markSaved();
+                    if (capturedFile.getFile() != null) {
+                        capturedFile.setLastDiskModified(capturedFile.getFile().lastModified());
+                        capturedFile.setLastDiskSize(capturedFile.getFile().length());
+                    }
                     capturedFile.setContentLoaded(true);
                     ExecutorProvider.getInstance().runOnMain(() -> {
                         // Only apply if this viewer is still bound to the same file.
@@ -294,8 +300,34 @@ public class CodeFileViewer implements IFileViewer {
     @Override
     public void onResume() {
         if (currentFile != null && codeEditText != null) {
+            checkExternalDiskModification();
             validateCodeIfRequired();
         }
+    }
+
+    private void checkExternalDiskModification() {
+        if (currentFile == null || currentFile.isVirtual() || currentFile.isBinaryAsset()) return;
+        File fileOnDisk = currentFile.getFile();
+        if (fileOnDisk == null || !fileOnDisk.exists()) return;
+        if (currentFile.isDirty()) return;
+
+        ExecutorProvider.getInstance().runOnIo(() -> {
+            try {
+                long diskMod = fileOnDisk.lastModified();
+                long diskSize = fileOnDisk.length();
+                String diskContent = com.cocode.vcode.ide.utils.FileUtils.readFile(fileOnDisk);
+                currentFile.setLastDiskModified(diskMod);
+                currentFile.setLastDiskSize(diskSize);
+                if (!diskContent.equals(currentFile.getContent())) {
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        if (currentFile != null && com.cocode.vcode.ide.utils.FileUtils.isSameFile(fileOnDisk, currentFile.getFile())) {
+                            reloadExternalContent(diskContent);
+                        }
+                    });
+                }
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     @Override
@@ -312,11 +344,15 @@ public class CodeFileViewer implements IFileViewer {
 
     @Override
     public void destroy() {
-        onPause();
-        lspBridge.detach();
+        jsonValidationHandler.removeCallbacksAndMessages(null);
+        if (editorLayout != null && editorLayout.getSelectionToolbar() != null) {
+            editorLayout.getSelectionToolbar().hide();
+        }
         if (editorLayout != null && editorLayout.getLspNavigationToolbar() != null) {
+            editorLayout.getLspNavigationToolbar().hide();
             editorLayout.getLspNavigationToolbar().setNavigationListener(null);
         }
+        lspBridge.detach();
         if (codeEditText != null) {
             codeEditText.setOnProblemRemovedListener(null);
         }
@@ -327,6 +363,10 @@ public class CodeFileViewer implements IFileViewer {
         editorCallback = null;
     }
 
+    @Override
+    public EditorFile getCurrentFile() {
+        return currentFile;
+    }
 
     @Override
     public CodeEditText getCodeEditor() {

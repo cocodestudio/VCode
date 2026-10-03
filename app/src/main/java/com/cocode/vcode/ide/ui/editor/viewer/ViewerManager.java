@@ -39,6 +39,15 @@ public class ViewerManager {
     }
 
     /**
+     * Looks up an existing instantiated viewer for the given file ID if cached.
+     */
+    public IFileViewer getViewer(String fileId) {
+        IFileViewer v = activeViewers.get(fileId + "_edit");
+        if (v != null) return v;
+        return activeViewers.get(fileId + "_preview");
+    }
+
+    /**
      * Destroys all viewers associated with a closed file to free memory.
      *
      * @param fileId The unique ID of the file being closed.

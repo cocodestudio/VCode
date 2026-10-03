@@ -40,6 +40,7 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
     public static final float CUT_OPACITY = 0.5f;
     public static final float NORMAL_OPACITY = 1.0f;
     public static final Object PAYLOAD_CLIPBOARD = new Object();
+    public static final Object PAYLOAD_GIT_STATUS = new Object();
 
     private final List<FileNode> flatNodes = new ArrayList<>();
     private final FileTreeListener listener;
@@ -215,11 +216,16 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
     }
 
     /**
-     * Updates the Git status mapping and refreshes the UI badges.
+     * Updates the Git status mapping and refreshes the UI badges without rebinding entire items.
      */
     public void setGitStatuses(Map<String, FileStatus.Type> statuses) {
+        if (java.util.Objects.equals(this.gitStatusMap, statuses)) {
+            return;
+        }
         this.gitStatusMap = statuses;
-        notifyDataSetChanged();
+        if (!flatNodes.isEmpty()) {
+            notifyItemRangeChanged(0, flatNodes.size(), PAYLOAD_GIT_STATUS);
+        }
     }
 
     /**
@@ -272,8 +278,13 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
 
     @Override
     public void onBindViewHolder(@NonNull FileViewHolder holder, int position, @NonNull List<Object> payloads) {
-        if (!payloads.isEmpty() && payloads.contains(PAYLOAD_CLIPBOARD)) {
-            holder.updateCutOpacity(flatNodes.get(position));
+        if (!payloads.isEmpty()) {
+            if (payloads.contains(PAYLOAD_CLIPBOARD)) {
+                holder.updateCutOpacity(flatNodes.get(position));
+            }
+            if (payloads.contains(PAYLOAD_GIT_STATUS)) {
+                holder.updateGitStatus(flatNodes.get(position));
+            }
         } else {
             super.onBindViewHolder(holder, position, payloads);
         }
@@ -309,6 +320,7 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
 
         private final ItemFileTreeNodeBinding binding;
         private final FileTreeAdapter adapter;
+        private FileNode boundNode;
 
         public FileViewHolder(@NonNull ItemFileTreeNodeBinding binding, FileTreeAdapter adapter) {
             super(binding.getRoot());
@@ -317,37 +329,60 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
             setupClickListeners();
         }
 
+        private int resolvePosition() {
+            int pos = getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION) {
+                return pos;
+            }
+            pos = getAbsoluteAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION) {
+                return pos;
+            }
+            if (boundNode != null) {
+                return adapter.flatNodes.indexOf(boundNode);
+            }
+            return RecyclerView.NO_POSITION;
+        }
+
+        private FileNode resolveNode() {
+            int pos = resolvePosition();
+            if (pos != RecyclerView.NO_POSITION && pos < adapter.flatNodes.size()) {
+                return adapter.flatNodes.get(pos);
+            }
+            return boundNode;
+        }
+
         private void setupClickListeners() {
             // "New File" action button
             binding.btnAddFile.setOnClickListener(v -> {
-                int pos = getBindingAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && adapter.listener != null) {
-                    FileNode node = adapter.flatNodes.get(pos);
-                    if (node.isDirectory()) {
-                        adapter.listener.onAddFileClick(node.getFile());
-                    }
+                FileNode node = resolveNode();
+                if (node != null && node.isDirectory() && adapter.listener != null) {
+                    adapter.listener.onAddFileClick(node.getFile());
                 }
             });
 
             // "New Folder" action button
             binding.btnAddFolder.setOnClickListener(v -> {
-                int pos = getBindingAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && adapter.listener != null) {
-                    FileNode node = adapter.flatNodes.get(pos);
-                    if (node.isDirectory()) {
-                        adapter.listener.onAddFolderClick(node.getFile());
-                    }
+                FileNode node = resolveNode();
+                if (node != null && node.isDirectory() && adapter.listener != null) {
+                    adapter.listener.onAddFolderClick(node.getFile());
                 }
             });
 
             // Standard click to open file or toggle folder
             binding.getRoot().setOnClickListener(v -> {
-                int pos = getBindingAdapterPosition();
-                if (pos == RecyclerView.NO_POSITION) return;
-                FileNode node = adapter.flatNodes.get(pos);
+                int pos = resolvePosition();
+                FileNode node = (pos != RecyclerView.NO_POSITION && pos < adapter.flatNodes.size())
+                        ? adapter.flatNodes.get(pos) : boundNode;
+                if (node == null) return;
 
                 if (node.isDirectory()) {
-                    handleDirectoryClick(node, pos);
+                    if (pos == RecyclerView.NO_POSITION) {
+                        pos = adapter.flatNodes.indexOf(node);
+                    }
+                    if (pos != RecyclerView.NO_POSITION) {
+                        handleDirectoryClick(node, pos);
+                    }
                 } else {
                     handleFileClick(node.getFile());
                 }
@@ -384,9 +419,13 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
 
                 @Override
                 public boolean onTouch(View v, MotionEvent event) {
+                    // Finger touches on touchscreens must never be consumed or delayed by mouse secondary-click logic
+                    if (event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) {
+                        return false;
+                    }
+
                     boolean isPointer = event.isFromSource(InputDevice.SOURCE_MOUSE)
-                            || event.isFromSource(InputDevice.SOURCE_STYLUS)
-                            || (event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0;
+                            || event.isFromSource(InputDevice.SOURCE_STYLUS);
 
                     int action = event.getActionMasked();
                     boolean hasSecondary = (event.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0
@@ -436,9 +475,8 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
                 return true;
             }
             lastContextMenuTime = now;
-            int pos = getBindingAdapterPosition();
-            if (pos != RecyclerView.NO_POSITION && adapter.listener != null) {
-                FileNode node = adapter.flatNodes.get(pos);
+            FileNode node = resolveNode();
+            if (node != null && adapter.listener != null) {
                 adapter.listener.onNodeContextMenu(binding.getRoot(), node, x, y);
                 return true;
             }
@@ -493,6 +531,7 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
          * Binds the file node data to the view components.
          */
         public void bind(FileNode node) {
+            this.boundNode = node;
             // Apply indentation based on tree depth
             ViewGroup.LayoutParams params = binding.indentSpacer.getLayoutParams();
             params.width = node.getDepth() * adapter.indentWidthPx;
