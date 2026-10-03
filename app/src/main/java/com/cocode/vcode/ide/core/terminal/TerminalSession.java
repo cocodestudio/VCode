@@ -622,6 +622,17 @@ public class TerminalSession {
             return;
         }
 
+        // Validate command security (restricts deleting .vcode or out-of-scope paths)
+        TerminalSecurityPolicy.ValidationResult securityResult =
+                TerminalSecurityPolicy.validateCommand(cmd, projectRoot, currentDir);
+        if (!securityResult.isAllowed()) {
+            emulator.appendOutput(securityResult.getErrorMessage() + "\r\n");
+            printPrompt();
+            notifyOutput();
+            notifyCommandExecuted(cmd);
+            return;
+        }
+
         if (history.isEmpty() || !history.get(history.size() - 1).equals(cmd)) {
             history.add(cmd);
             while (history.size() > MAX_HISTORY_SIZE) {
@@ -678,6 +689,13 @@ public class TerminalSession {
             }
         } catch (Exception e) {
             emulator.appendOutput("cd: permission denied: cannot resolve path: " + target + "\r\n");
+            printPrompt();
+            notifyOutput();
+            return;
+        }
+
+        if (TerminalSecurityPolicy.isVCodePath(newDir, projectRoot)) {
+            emulator.appendOutput("cd: permission denied: .vcode directory is restricted\r\n");
             printPrompt();
             notifyOutput();
             return;
@@ -742,8 +760,15 @@ public class TerminalSession {
             return;
         }
 
+        if (TerminalSecurityPolicy.isVCodePath(searchDir, projectRoot)) {
+            return;
+        }
+
         final String filterPrefix = prefix;
-        File[] files = searchDir.listFiles((dir, name) -> name.startsWith(filterPrefix));
+        File[] files = searchDir.listFiles((dir, name) -> {
+            if (".vcode".equals(name)) return false;
+            return name.startsWith(filterPrefix);
+        });
         if (files == null || files.length == 0) return;
 
         if (files.length == 1) {
