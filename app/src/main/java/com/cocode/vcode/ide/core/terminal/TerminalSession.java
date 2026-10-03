@@ -5,6 +5,8 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.cocode.vcode.ide.data.npm.PackageManagerService;
+import com.cocode.vcode.ide.data.npm.model.NpmPackageInfo;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.UiUtils;
@@ -622,6 +624,11 @@ public class TerminalSession {
             return;
         }
 
+        if (cmd.startsWith("vpm") || cmd.equals("vpm") || cmd.startsWith("npm") || cmd.equals("npm")) {
+            handleVpmCommand(cmd);
+            return;
+        }
+
         // Validate command security (restricts deleting .vcode or out-of-scope paths)
         TerminalSecurityPolicy.ValidationResult securityResult =
                 TerminalSecurityPolicy.validateCommand(cmd, projectRoot, currentDir);
@@ -854,5 +861,223 @@ public class TerminalSession {
             }
             outputStream = null;
         }
+    }
+
+    private void handleVpmCommand(@NonNull String cmd) {
+        if (history.isEmpty() || !history.get(history.size() - 1).equals(cmd)) {
+            history.add(cmd);
+            while (history.size() > MAX_HISTORY_SIZE) {
+                history.remove(0);
+            }
+        }
+        historyIndex = history.size();
+        lastExecutedCommand = cmd;
+        notifyCommandExecuted(cmd);
+
+        String[] parts = cmd.trim().split("\\s+");
+        if (parts.length <= 1 || "help".equals(parts[1]) || "-h".equals(parts[1]) || "--help".equals(parts[1])) {
+            emulator.appendOutput("VCode Package Manager (vpm) - Zero-Node Mobile Package System\r\n\r\n");
+            emulator.appendOutput("Usage:\r\n");
+            emulator.appendOutput("  vpm install <package>[@version] [-D|--save-dev]\r\n");
+            emulator.appendOutput("  vpm uninstall <package>\r\n");
+            emulator.appendOutput("  vpm list\r\n");
+            emulator.appendOutput("  vpm search <query>\r\n");
+            emulator.appendOutput("  vpm help\r\n\r\n");
+            emulator.appendOutput("Aliases:\r\n");
+            emulator.appendOutput("  npm i, npm install, npm uninstall, npm rm, npm ls, npm search\r\n");
+            printPrompt();
+            notifyOutput();
+            notifyCommandFinished(cmd, 0);
+            return;
+        }
+
+        String subCmd = parts[1];
+        if ("install".equals(subCmd) || "i".equals(subCmd) || "add".equals(subCmd)) {
+            boolean isDev = false;
+            String pkgSpec = null;
+            for (int i = 2; i < parts.length; i++) {
+                if ("-D".equals(parts[i]) || "--save-dev".equals(parts[i]) || "-d".equals(parts[i])) {
+                    isDev = true;
+                } else if ("-S".equals(parts[i]) || "--save".equals(parts[i])) {
+                    isDev = false;
+                } else if (pkgSpec == null && !parts[i].startsWith("-")) {
+                    pkgSpec = parts[i];
+                }
+            }
+
+            if (pkgSpec == null) {
+                emulator.appendOutput("vpm: specify a package name to install: vpm install <package>\r\n");
+                printPrompt();
+                notifyOutput();
+                notifyCommandFinished(cmd, 1);
+                return;
+            }
+
+            String packageName = pkgSpec;
+            String targetVersion = null;
+            int atIdx = pkgSpec.lastIndexOf('@');
+            if (atIdx > 0) {
+                packageName = pkgSpec.substring(0, atIdx);
+                targetVersion = pkgSpec.substring(atIdx + 1);
+            }
+
+            isExecutingCommand = true;
+            emulator.appendOutput("vpm: resolving " + packageName + (targetVersion != null ? "@" + targetVersion : "") + "...\r\n");
+            notifyOutput();
+
+            PackageManagerService.getInstance().installPackage(projectRoot, packageName, targetVersion, isDev,
+                    (status, percent) -> {
+                        emulator.appendOutput("vpm: " + status + " (" + percent + "%)\r\n");
+                        notifyOutput();
+                    },
+                    new PackageManagerService.PackageOperationCallback() {
+                        @Override
+                        public void onSuccess(@NonNull String message) {
+                            isExecutingCommand = false;
+                            emulator.appendOutput("vpm: " + message + "\r\n");
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 0);
+                        }
+
+                        @Override
+                        public void onError(@NonNull String error) {
+                            isExecutingCommand = false;
+                            emulator.appendOutput("vpm: error: " + error + "\r\n");
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 1);
+                        }
+                    });
+            return;
+        }
+
+        if ("uninstall".equals(subCmd) || "remove".equals(subCmd) || "rm".equals(subCmd) || "un".equals(subCmd)) {
+            if (parts.length < 3) {
+                emulator.appendOutput("vpm: specify a package name to uninstall: vpm uninstall <package>\r\n");
+                printPrompt();
+                notifyOutput();
+                notifyCommandFinished(cmd, 1);
+                return;
+            }
+            String packageName = parts[2];
+            isExecutingCommand = true;
+            emulator.appendOutput("vpm: uninstalling " + packageName + "...\r\n");
+            notifyOutput();
+
+            PackageManagerService.getInstance().uninstallPackage(projectRoot, packageName,
+                    new PackageManagerService.PackageOperationCallback() {
+                        @Override
+                        public void onSuccess(@NonNull String message) {
+                            isExecutingCommand = false;
+                            emulator.appendOutput("vpm: " + message + "\r\n");
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 0);
+                        }
+
+                        @Override
+                        public void onError(@NonNull String error) {
+                            isExecutingCommand = false;
+                            emulator.appendOutput("vpm: error: " + error + "\r\n");
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 1);
+                        }
+                    });
+            return;
+        }
+
+        if ("list".equals(subCmd) || "ls".equals(subCmd)) {
+            isExecutingCommand = true;
+            emulator.appendOutput("vpm: reading dependencies from package.json...\r\n");
+            notifyOutput();
+
+            PackageManagerService.getInstance().getInstalledPackages(projectRoot,
+                    new PackageManagerService.PackageListCallback() {
+                        @Override
+                        public void onResult(@NonNull List<NpmPackageInfo> packages) {
+                            isExecutingCommand = false;
+                            if (packages.isEmpty()) {
+                                emulator.appendOutput("No packages installed.\r\n");
+                            } else {
+                                emulator.appendOutput("Installed dependencies (" + packages.size() + "):\r\n");
+                                for (NpmPackageInfo p : packages) {
+                                    String devTag = p.isDev() ? " (dev)" : "";
+                                    emulator.appendOutput("  ├── " + p.getName() + "@" + p.getInstalledVersion() + devTag + "\r\n");
+                                }
+                            }
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 0);
+                        }
+
+                        @Override
+                        public void onError(@NonNull String error) {
+                            isExecutingCommand = false;
+                            emulator.appendOutput("vpm: " + error + "\r\n");
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 1);
+                        }
+                    });
+            return;
+        }
+
+        if ("search".equals(subCmd) || "s".equals(subCmd)) {
+            if (parts.length < 3) {
+                emulator.appendOutput("vpm: specify a search query: vpm search <query>\r\n");
+                printPrompt();
+                notifyOutput();
+                notifyCommandFinished(cmd, 1);
+                return;
+            }
+            StringBuilder queryBuilder = new StringBuilder();
+            for (int i = 2; i < parts.length; i++) {
+                if (queryBuilder.length() > 0) queryBuilder.append(" ");
+                queryBuilder.append(parts[i]);
+            }
+            String query = queryBuilder.toString();
+            isExecutingCommand = true;
+            emulator.appendOutput("vpm: searching npm registry for \"" + query + "\"...\r\n");
+            notifyOutput();
+
+            PackageManagerService.getInstance().searchPackages(projectRoot, query,
+                    new PackageManagerService.PackageListCallback() {
+                        @Override
+                        public void onResult(@NonNull List<NpmPackageInfo> packages) {
+                            isExecutingCommand = false;
+                            if (packages.isEmpty()) {
+                                emulator.appendOutput("No packages found matching \"" + query + "\".\r\n");
+                            } else {
+                                for (NpmPackageInfo p : packages) {
+                                    String installedTag = p.isInstalled() ? " [installed: " + p.getInstalledVersion() + "]" : "";
+                                    emulator.appendOutput(p.getName() + "@" + p.getVersion() + installedTag + "\r\n");
+                                    if (p.getDescription() != null && !p.getDescription().isEmpty()) {
+                                        emulator.appendOutput("  " + p.getDescription() + "\r\n");
+                                    }
+                                }
+                            }
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 0);
+                        }
+
+                        @Override
+                        public void onError(@NonNull String error) {
+                            isExecutingCommand = false;
+                            emulator.appendOutput("vpm: search error: " + error + "\r\n");
+                            printPrompt();
+                            notifyOutput();
+                            notifyCommandFinished(cmd, 1);
+                        }
+                    });
+            return;
+        }
+
+        emulator.appendOutput("vpm: unknown command: " + subCmd + ". Run 'vpm help' for available commands.\r\n");
+        printPrompt();
+        notifyOutput();
+        notifyCommandFinished(cmd, 1);
     }
 }

@@ -226,7 +226,6 @@ public final class ScopeTree {
                 type == JsSyntaxTree.N_SETTER ||
                 type == JsSyntaxTree.N_VAR_DECL ||
                 type == JsSyntaxTree.N_PARAM ||
-                type == JsSyntaxTree.N_IMPORT ||
                 type == JsSyntaxTree.N_ENUM ||
                 type == JsSyntaxTree.N_INTERFACE ||
                 type == JsSyntaxTree.N_TYPE_ALIAS) {
@@ -314,9 +313,11 @@ public final class ScopeTree {
                     int declNodeId = tuples[i + 1];
                     if (currentScope == atScopeId && tree != null && declNodeId > 0 && declNodeId < tree.nodeCount && tree.nodeStart[declNodeId] > usageOffset) {
                         int kind = tuples[i + 2];
-                        boolean isHoisted = kind == JsSyntaxTree.N_FUNC_DECL || kind == JsSyntaxTree.N_IMPORT ||
+                        boolean isHoisted = kind == JsSyntaxTree.N_FUNC_DECL ||
                                 kind == JsSyntaxTree.N_INTERFACE || kind == JsSyntaxTree.N_TYPE_ALIAS || kind == JsSyntaxTree.N_ENUM ||
-                                (kind == JsSyntaxTree.N_VAR_DECL && (tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR);
+                                (kind == JsSyntaxTree.N_VAR_DECL && (((tree.nodeExtra[declNodeId] & 3) == JsSyntaxTree.FLAG_VAR) ||
+                                        (tree.nodeParent[declNodeId] > 0 && tree.nodeParent[declNodeId] < tree.nodeCount &&
+                                                tree.nodeType[tree.nodeParent[declNodeId]] == JsSyntaxTree.N_IMPORT)));
                         if (!isHoisted) continue;
                     }
                     return new int[]{tuples[i], tuples[i + 1], tuples[i + 2]};

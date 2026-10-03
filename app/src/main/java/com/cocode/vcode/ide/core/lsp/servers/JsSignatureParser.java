@@ -217,6 +217,28 @@ public class JsSignatureParser {
                                     }
                                 }
                             }
+                        } else {
+                            // Check npm dependency package symbols (e.g. `import { debounce } from 'lodash'`)
+                            com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex symIndex =
+                                    com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance();
+                            File currentFile = (doc != null && doc.uri != null) ? new File(doc.uri) : null;
+                            symIndex.ensureDependencyLoaded(currentFile, modPath);
+                            List<com.cocode.vcode.ide.core.model.CompletionItem> pkgExports = symIndex.getDependencyExports().get(modPath);
+                            if (pkgExports == null || pkgExports.isEmpty()) {
+                                pkgExports = symIndex.getDependencyMembers().get(modPath);
+                            }
+                            if (pkgExports != null) {
+                                for (com.cocode.vcode.ide.core.model.CompletionItem item : pkgExports) {
+                                    if (expName.equals(item.getLabel()) || baseIdentifier.equals(item.getLabel())) {
+                                        String detail = item.getDetail();
+                                        if (detail != null && detail.contains("(") && detail.contains(")")) {
+                                            signature = detail;
+                                            sourceLabel = modPath + " (npm)";
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 } else {
@@ -327,6 +349,56 @@ public class JsSignatureParser {
             }
         }
 
+        // Check npm dependency package member methods (e.g. axios.get(|), lodash.debounce(|))
+        if (signature == null && dotIdx >= 0 && !funcName.startsWith("this.")) {
+            String receiver = funcName.substring(0, dotIdx);
+            String modPath = null;
+            int[] recResolved = scopeTree.lookupSymbol(receiver, scopeId);
+            if (recResolved != null && recResolved[1] > 0 && recResolved[1] < tree.nodeCount) {
+                int recNodeId = recResolved[1];
+                String typeAnn = tree.nodeTypeAnn[recNodeId];
+                if (typeAnn != null) {
+                    if (typeAnn.startsWith("@IMPORT:")) {
+                        int colon = typeAnn.indexOf(':', 8);
+                        if (colon != -1) modPath = typeAnn.substring(8, colon);
+                    } else if (typeAnn.startsWith("@REQUIRE:")) {
+                        modPath = typeAnn.substring(9);
+                    } else if (typeAnn.startsWith("@REQUIRE_PROP:")) {
+                        int colon = typeAnn.indexOf(':', 14);
+                        if (colon != -1) modPath = typeAnn.substring(14, colon);
+                    }
+                }
+            }
+            com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex symIndex =
+                    com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance();
+            File currentFile = (doc != null && doc.uri != null) ? new File(doc.uri) : null;
+            if (modPath == null) {
+                symIndex.ensureDependencyLoaded(currentFile, receiver);
+                if (symIndex.getDependencyMembers().containsKey(receiver) || symIndex.getDependencyExports().containsKey(receiver)) {
+                    modPath = receiver;
+                }
+            }
+            if (modPath != null) {
+                symIndex.ensureDependencyLoaded(currentFile, modPath);
+                List<com.cocode.vcode.ide.core.model.CompletionItem> pkgMembers = symIndex.getDependencyMembers().get(modPath);
+                if (pkgMembers == null || pkgMembers.isEmpty()) {
+                    pkgMembers = symIndex.getDependencyExports().get(modPath);
+                }
+                if (pkgMembers != null) {
+                    for (com.cocode.vcode.ide.core.model.CompletionItem item : pkgMembers) {
+                        if (baseIdentifier.equals(item.getLabel())) {
+                            String detail = item.getDetail();
+                            if (detail != null && detail.contains("(") && detail.contains(")")) {
+                                signature = detail;
+                                sourceLabel = modPath + "." + baseIdentifier + " (npm)";
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Check built-in signatures from standard library
         if (signature == null) {
             String receiverType = null;
@@ -419,6 +491,40 @@ public class JsSignatureParser {
             }
         }
 
+        // Fallback: search across all indexed npm dependency symbols
+        if (signature == null) {
+            com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex symIndex =
+                    com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance();
+            for (java.util.Map.Entry<String, List<com.cocode.vcode.ide.core.model.CompletionItem>> entry : symIndex.getDependencyExports().entrySet()) {
+                for (com.cocode.vcode.ide.core.model.CompletionItem item : entry.getValue()) {
+                    if (baseIdentifier.equals(item.getLabel())) {
+                        String detail = item.getDetail();
+                        if (detail != null && detail.contains("(") && detail.contains(")")) {
+                            signature = detail;
+                            sourceLabel = entry.getKey() + " (npm)";
+                            break;
+                        }
+                    }
+                }
+                if (signature != null) break;
+            }
+            if (signature == null) {
+                for (java.util.Map.Entry<String, List<com.cocode.vcode.ide.core.model.CompletionItem>> entry : symIndex.getDependencyMembers().entrySet()) {
+                    for (com.cocode.vcode.ide.core.model.CompletionItem item : entry.getValue()) {
+                        if (baseIdentifier.equals(item.getLabel())) {
+                            String detail = item.getDetail();
+                            if (detail != null && detail.contains("(") && detail.contains(")")) {
+                                signature = detail;
+                                sourceLabel = entry.getKey() + "." + baseIdentifier + " (npm)";
+                                break;
+                            }
+                        }
+                    }
+                    if (signature != null) break;
+                }
+            }
+        }
+
         if (signature == null) {
             return null;
         }
@@ -427,33 +533,94 @@ public class JsSignatureParser {
                 ? docInfo.description
                 : sourceLabel;
 
-        LspSignatureHelp.LspSignatureInformation sig = new LspSignatureHelp.LspSignatureInformation(
-                baseIdentifier + "(" + signature.trim().replaceAll("\\s+", " ") + ")",
-                docText,
-                new ArrayList<>()
-        );
+        String displayLabel;
+        List<LspSignatureHelp.LspParameterInformation> paramInfoList = new ArrayList<>();
 
         if (parsedParamNames != null) {
+            displayLabel = baseIdentifier + "(" + signature.trim().replaceAll("\\s+", " ") + ")";
             for (String arg : parsedParamNames) {
                 String pDoc = (docInfo != null) ? docInfo.paramDocs.get(arg) : null;
                 if (pDoc == null && docInfo != null && docInfo.paramTypes.containsKey(arg)) {
                     pDoc = "Type: " + docInfo.paramTypes.get(arg);
                 }
-                sig.parameters.add(new LspSignatureHelp.LspParameterInformation(arg, pDoc));
+                paramInfoList.add(new LspSignatureHelp.LspParameterInformation(arg, pDoc));
+            }
+        } else if (signature.trim().startsWith("(")) {
+            String trimmedSig = signature.trim();
+            int closeParen = -1;
+            int pDepth = 0;
+            for (int i = 0; i < trimmedSig.length(); i++) {
+                char c = trimmedSig.charAt(i);
+                if (c == '(') pDepth++;
+                else if (c == ')') {
+                    pDepth--;
+                    if (pDepth == 0) {
+                        closeParen = i;
+                        break;
+                    }
+                }
+            }
+            String insideParams;
+            String returnTypeSuffix = "";
+            if (closeParen != -1) {
+                insideParams = trimmedSig.substring(1, closeParen).trim();
+                returnTypeSuffix = trimmedSig.substring(closeParen + 1).trim();
+            } else {
+                insideParams = trimmedSig.substring(1).trim();
+            }
+            displayLabel = baseIdentifier + "(" + insideParams.replaceAll("\\s+", " ") + ")" + (returnTypeSuffix.isEmpty() ? "" : " " + returnTypeSuffix);
+            List<String> paramList = splitParameters(insideParams);
+            for (String arg : paramList) {
+                String pDoc = (docInfo != null) ? docInfo.paramDocs.get(arg) : null;
+                paramInfoList.add(new LspSignatureHelp.LspParameterInformation(arg, pDoc));
             }
         } else if (!signature.trim().isEmpty()) {
-            String[] args = signature.split(",");
-            for (String arg : args) {
-                String trimmedArg = arg.trim();
-                String pDoc = (docInfo != null) ? docInfo.paramDocs.get(trimmedArg) : null;
-                if (pDoc == null && docInfo != null && docInfo.paramTypes.containsKey(trimmedArg)) {
-                    pDoc = "Type: " + docInfo.paramTypes.get(trimmedArg);
+            displayLabel = baseIdentifier + "(" + signature.trim().replaceAll("\\s+", " ") + ")";
+            List<String> paramList = splitParameters(signature.trim());
+            for (String arg : paramList) {
+                String pDoc = (docInfo != null) ? docInfo.paramDocs.get(arg) : null;
+                if (pDoc == null && docInfo != null && docInfo.paramTypes.containsKey(arg)) {
+                    pDoc = "Type: " + docInfo.paramTypes.get(arg);
                 }
-                sig.parameters.add(new LspSignatureHelp.LspParameterInformation(trimmedArg, pDoc));
+                paramInfoList.add(new LspSignatureHelp.LspParameterInformation(arg, pDoc));
             }
+        } else {
+            displayLabel = baseIdentifier + "()";
         }
 
+        LspSignatureHelp.LspSignatureInformation sig = new LspSignatureHelp.LspSignatureInformation(
+                displayLabel,
+                docText,
+                paramInfoList
+        );
+
         return new LspSignatureHelp(Collections.singletonList(sig), 0, argIndex, activeOpenParen);
+    }
+
+    public static List<String> splitParameters(String paramsStr) {
+        List<String> result = new ArrayList<>();
+        if (paramsStr == null || paramsStr.trim().isEmpty()) {
+            return result;
+        }
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < paramsStr.length(); i++) {
+            char c = paramsStr.charAt(i);
+            if (c == '(' || c == '<' || c == '{' || c == '[') {
+                depth++;
+            } else if (c == ')' || c == '>' || c == '}' || c == ']') {
+                if (depth > 0) depth--;
+            } else if (c == ',' && depth == 0) {
+                String p = paramsStr.substring(start, i).trim();
+                if (!p.isEmpty()) result.add(p);
+                start = i + 1;
+            }
+        }
+        if (start < paramsStr.length()) {
+            String p = paramsStr.substring(start).trim();
+            if (!p.isEmpty()) result.add(p);
+        }
+        return result;
     }
 
     private static List<String> extractParamNames(JsSyntaxTree tree, int funcNode) {

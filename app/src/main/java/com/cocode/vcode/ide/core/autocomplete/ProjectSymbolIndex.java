@@ -18,6 +18,7 @@ import com.cocode.vcode.ide.core.lsp.index.IndexSymbolEntry;
 import com.cocode.vcode.ide.core.lsp.index.IndexingProgressListener;
 import com.cocode.vcode.ide.core.lsp.index.SegmentSearchQuery;
 import com.cocode.vcode.ide.core.lsp.index.SegmentedSymbolStore;
+import com.cocode.vcode.ide.core.autocomplete.types.TypeDefinitionIndexer;
 import com.cocode.vcode.ide.core.lsp.index.SymbolKey;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
@@ -62,6 +63,10 @@ public class ProjectSymbolIndex {
     private final Map<String, Map<String, CompletionItem>> fileJsSymbols = new HashMap<>();
     // Maps absolute file path to its exported CompletionItems
     private final Map<String, List<CompletionItem>> jsFileExports = new HashMap<>();
+    // Maps dependency package name → exported CompletionItems
+    private final Map<String, List<CompletionItem>> dependencyExports = new HashMap<>();
+    // Maps dependency package name → member CompletionItems
+    private final Map<String, List<CompletionItem>> dependencyMembers = new HashMap<>();
     // Guards against multiple concurrent buildIndex() calls for the same root.
     private final java.util.concurrent.atomic.AtomicBoolean isBuilding = new java.util.concurrent.atomic.AtomicBoolean(false);
     private String projectRoot = null;
@@ -109,6 +114,8 @@ public class ProjectSymbolIndex {
         cssIdItems.clear();
         htmlIdItems.clear();
         jsFileExports.clear();
+        dependencyExports.clear();
+        dependencyMembers.clear();
     }
 
     public static boolean isValidCssClassName(String name) {
@@ -1061,8 +1068,89 @@ public class ProjectSymbolIndex {
         return new HashSet<>(classMembers.keySet());
     }
 
+    public synchronized void registerDependencySymbols(String packageName, List<CompletionItem> members, List<CompletionItem> exports) {
+        if (packageName == null || packageName.isEmpty()) return;
+        if (members != null && !members.isEmpty()) {
+            classMembers.put(packageName, new ArrayList<>(members));
+            dependencyMembers.put(packageName, new ArrayList<>(members));
+            if ("lodash".equals(packageName)) {
+                classMembers.put("_", new ArrayList<>(members));
+                dependencyMembers.put("_", new ArrayList<>(members));
+            }
+        }
+        if (exports != null && !exports.isEmpty()) {
+            dependencyExports.put(packageName, new ArrayList<>(exports));
+        }
+    }
+
+    public synchronized void unregisterDependencySymbols(String packageName) {
+        if (packageName == null) return;
+        classMembers.remove(packageName);
+        dependencyMembers.remove(packageName);
+        if ("lodash".equals(packageName)) {
+            classMembers.remove("_");
+            dependencyMembers.remove("_");
+        }
+        dependencyExports.remove(packageName);
+    }
+
+    public synchronized Map<String, List<CompletionItem>> getDependencyMembers() {
+        return new HashMap<>(dependencyMembers);
+    }
+
+    public synchronized Map<String, List<CompletionItem>> getDependencyExports() {
+        return new HashMap<>(dependencyExports);
+    }
+
+    public synchronized void ensureDependencyLoaded(File currentFile, String packageName) {
+        if (packageName == null || packageName.isEmpty()) return;
+        if (dependencyExports.containsKey(packageName) || dependencyMembers.containsKey(packageName)) {
+            return;
+        }
+        File root = currentFile != null ? getProjectRoot(currentFile) : null;
+        if (root == null && projectRoot != null) {
+            root = new File(projectRoot);
+        }
+        if (root != null) {
+            TypeDefinitionIndexer.loadCachedDependencySymbols(root);
+            if (dependencyExports.containsKey(packageName) || dependencyMembers.containsKey(packageName)) {
+                return;
+            }
+            File pkgDir = new File(root, "node_modules/" + packageName);
+            if (pkgDir.exists()) {
+                TypeDefinitionIndexer.indexDependency(root, packageName);
+            }
+        }
+    }
+
+    public synchronized List<CompletionItem> getDependencyMembers(File currentFile, String packageName) {
+        if (packageName == null) return new ArrayList<>();
+        ensureDependencyLoaded(currentFile, packageName);
+        List<CompletionItem> members = dependencyMembers.get(packageName);
+        return members != null ? new ArrayList<>(members) : new ArrayList<>();
+    }
+
+    public synchronized List<CompletionItem> getExportsForPath(String importPath) {
+        return getExportsForPath(null, importPath);
+    }
+
     public synchronized List<CompletionItem> getExportsForPath(File currentFile, String importPath) {
-        if (currentFile == null || importPath == null) return new ArrayList<>();
+        if (importPath == null) return new ArrayList<>();
+
+        // If importPath refers directly to an npm package (e.g. "axios" or "lodash")
+        if (!importPath.startsWith(".") && !importPath.startsWith("/")) {
+            ensureDependencyLoaded(currentFile, importPath);
+            List<CompletionItem> depExports = dependencyExports.get(importPath);
+            if (depExports != null && !depExports.isEmpty()) {
+                return new ArrayList<>(depExports);
+            }
+            List<CompletionItem> depMembers = dependencyMembers.get(importPath);
+            if (depMembers != null && !depMembers.isEmpty()) {
+                return new ArrayList<>(depMembers);
+            }
+        }
+
+        if (currentFile == null) return new ArrayList<>();
 
         File parent = currentFile.getParentFile();
         if (parent == null) return new ArrayList<>();
@@ -1638,6 +1726,14 @@ public class ProjectSymbolIndex {
             jsFileExports.putAll(exportsMap);
             classMembers.clear();
             classMembers.putAll(classMembersMap);
+        }
+
+        if (projectRoot != null) {
+            File rootDir = new File(projectRoot);
+            boolean cached = TypeDefinitionIndexer.loadCachedDependencySymbols(rootDir);
+            if (!cached) {
+                TypeDefinitionIndexer.indexAllDependencies(rootDir);
+            }
         }
     }
 

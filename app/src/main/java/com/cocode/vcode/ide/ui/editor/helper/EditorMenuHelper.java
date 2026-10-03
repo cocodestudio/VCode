@@ -73,6 +73,14 @@ public class EditorMenuHelper {
 
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_terminal, activity.getString(R.string.vcode_terminal), () -> viewModel.openTerminal()));
 
+        options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_box, activity.getString(R.string.vcode_package_manager), () -> {
+            if (viewModel.getProjectRoot() != null) {
+                com.cocode.vcode.ide.ui.packages.PackageManagerActivity.start(activity, viewModel.getProjectRoot());
+            } else {
+                Toast.makeText(activity, R.string.vcode_error_project_directory_not_loaded, Toast.LENGTH_SHORT).show();
+            }
+        }));
+
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_globe, "API Tester", () -> viewModel.openApiTester()));
 
         options.add(new EditorOptionsBottomSheet.Option(R.drawable.ic_git, "Git", () -> callbacks.onNavigateWithUnsavedCheck(() -> {

@@ -816,7 +816,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         } else {
             exports = getExportsProjectWide(word);
         }
-        if (exports == null || exports.isEmpty()) return null;
+        if (exports == null || exports.isEmpty()) return new ArrayList<>();
 
         // Collect names already imported inside this import { ... } block
         int scanEnd = braceClose != -1 ? braceClose : cursorPos;
@@ -832,8 +832,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         List<CompletionItem> filtered = new ArrayList<>();
         int exportReplaceLen = word != null ? word.length() : 0;
         for (CompletionItem e : exports) {
-            if (!used.contains(e.getEffectiveInsertText())) {
-                CompletionItem copy = new CompletionItem(e);
+            if (!used.contains(e.getEffectiveInsertText()) && !used.contains(e.getLabel())) {
+                CompletionItem copy = new CompletionItem(e.getLabel(), e.getLabel(), e.getDetail(), e.getType(), 0, e.getSourceUri());
                 copy.setReplaceLength(exportReplaceLen);
                 filtered.add(copy);
             }
@@ -848,6 +848,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
      * parsed.
      */
     private List<CompletionItem> getExportsFromPath(String path) {
+        List<CompletionItem> depExports = ProjectSymbolIndex.getInstance().getExportsForPath(currentFile, path);
+        if (depExports != null && !depExports.isEmpty()) {
+            return depExports;
+        }
+        List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers().get(path);
+        if (depMembers != null && !depMembers.isEmpty()) {
+            return depMembers;
+        }
         if (currentFile == null) return null;
         com.cocode.vcode.ide.core.lsp.LspLocation loc =
                 com.cocode.vcode.ide.core.lsp.ModuleResolver.resolveModulePath(
@@ -916,20 +924,26 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
      */
     private List<CompletionItem> getExportsProjectWide(String word) {
         if (word == null) word = "";
+        List<CompletionItem> out = new ArrayList<>();
         java.util.List<com.cocode.vcode.ide.core.lsp.ProjectIndex.ExportRef> refs =
                 com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance().getExportsByPrefix(word);
-        if (refs == null || refs.isEmpty()) return new ArrayList<>();
-        List<CompletionItem> out = new ArrayList<>();
-        for (com.cocode.vcode.ide.core.lsp.ProjectIndex.ExportRef ref : refs) {
-            // Skip exports from the current file — those aren't
-            // cross-file completions. Local exports can be referenced
-            // directly without an import.
-            if (currentFile != null && ref.sourceUri != null
-                    && ref.sourceUri.equals(currentFile.getAbsolutePath())) {
-                continue;
+        if (refs != null) {
+            for (com.cocode.vcode.ide.core.lsp.ProjectIndex.ExportRef ref : refs) {
+                if (currentFile != null && ref.sourceUri != null
+                        && ref.sourceUri.equals(currentFile.getAbsolutePath())) {
+                    continue;
+                }
+                out.add(new CompletionItem(ref.name, ref.name, "Export",
+                        CompletionItem.Type.VALUE, 0, ref.sourceUri));
             }
-            out.add(new CompletionItem(ref.name, ref.name, "Export",
-                    CompletionItem.Type.VALUE, 0, ref.sourceUri));
+        }
+        Map<String, List<CompletionItem>> depExports = ProjectSymbolIndex.getInstance().getDependencyExports();
+        for (Map.Entry<String, List<CompletionItem>> entry : depExports.entrySet()) {
+            for (CompletionItem item : entry.getValue()) {
+                if (word.isEmpty() || item.getLabel().toLowerCase().startsWith(word.toLowerCase())) {
+                    out.add(new CompletionItem(item));
+                }
+            }
         }
         return out;
     }
@@ -1096,9 +1110,41 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // b. Functions that always return Promise (e.g. fetch)
-        if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(objectToken)) {
-            return buildMemberList("Promise", JsStandardLibrary.PROTOTYPE_METHODS.get("promise"), word, CompletionItem.Type.FUNCTION);
+        // b. Functions that always return Promise (e.g. fetch(), axios())
+        boolean isInvokedCall = objectToken.endsWith(")");
+        if (isInvokedCall) {
+            String callee = objectToken;
+            int openParen = objectToken.indexOf('(');
+            if (openParen > 0) callee = objectToken.substring(0, openParen).trim();
+            if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(callee)) {
+                return buildMemberList("Promise", JsStandardLibrary.PROTOTYPE_METHODS.get("promise"), word, CompletionItem.Type.FUNCTION);
+            }
+        }
+
+        // Direct npm dependency package member completions (e.g. `lodash.` or `axios.`)
+        if (!isInvokedCall) {
+            List<CompletionItem> depExports = ProjectSymbolIndex.getInstance().getExportsForPath(currentFile, objectToken);
+            if (depExports != null && !depExports.isEmpty()) {
+                int rLen = word != null ? word.length() : 0;
+                List<CompletionItem> res = new ArrayList<>(depExports.size());
+                for (CompletionItem ci : depExports) {
+                    CompletionItem copy = new CompletionItem(ci);
+                    copy.setReplaceLength(rLen);
+                    res.add(copy);
+                }
+                return fuzzyFilter(res, word);
+            }
+            List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers().get(objectToken);
+            if (depMembers != null && !depMembers.isEmpty()) {
+                int rLen = word != null ? word.length() : 0;
+                List<CompletionItem> res = new ArrayList<>(depMembers.size());
+                for (CompletionItem ci : depMembers) {
+                    CompletionItem copy = new CompletionItem(ci);
+                    copy.setReplaceLength(rLen);
+                    res.add(copy);
+                }
+                return fuzzyFilter(res, word);
+            }
         }
 
         // c. Chain return type — e.g. "arr.filter(...)" → array methods
@@ -1151,11 +1197,16 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     inferredType = resolveElementType(text, inferredType, dotPos);
                 }
                 if (inferredType == null) {
-                    if (JsStandardLibrary.PROMISE_FUNCTIONS.contains(baseToken)) {
+                    if (baseIsMethod && JsStandardLibrary.PROMISE_FUNCTIONS.contains(baseToken)) {
                         inferredType = "@PROMISE";
-                    } else {
+                    } else if (JsStandardLibrary.CHAIN_RETURN_TYPES.containsKey(baseToken)) {
                         String baseChainType = JsStandardLibrary.CHAIN_RETURN_TYPES.get(baseToken);
                         if (baseChainType != null) inferredType = "@" + baseChainType.toUpperCase();
+                    } else if (!baseIsMethod) {
+                        ProjectSymbolIndex symIdx = ProjectSymbolIndex.getInstance();
+                        if (symIdx.getDependencyMembers().containsKey(baseToken) || symIdx.getDependencyExports().containsKey(baseToken)) {
+                            inferredType = "module:" + baseToken;
+                        }
                     }
                 }
 
@@ -1252,6 +1303,20 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                     inferredType = activeTree.nodeTypeAnn[activeNodeId];
                                 }
                             }
+                        }
+                    } else {
+                        String depPkg = null;
+                        if (importAnn.startsWith("@IMPORT:")) {
+                            int colon = importAnn.indexOf(':', 8);
+                            if (colon != -1) depPkg = importAnn.substring(8, colon);
+                        } else if (importAnn.startsWith("@REQUIRE:")) {
+                            depPkg = importAnn.substring(9);
+                        } else if (importAnn.startsWith("@REQUIRE_PROP:")) {
+                            int colon = importAnn.indexOf(':', 14);
+                            if (colon != -1) depPkg = importAnn.substring(14, colon);
+                        }
+                        if (depPkg != null) {
+                            inferredType = "module:" + depPkg;
                         }
                     }
                 }
@@ -1689,7 +1754,30 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 if (inferredType.startsWith("module:")) {
                     String path = inferredType.substring(7);
                     List<CompletionItem> exports = ProjectSymbolIndex.getInstance().getExportsForPath(currentFile, path);
-                    if (!exports.isEmpty()) return fuzzyFilter(exports, word);
+                    List<CompletionItem> members = ProjectSymbolIndex.getInstance().getDependencyMembers().get(path);
+                    Map<String, CompletionItem> merged = new LinkedHashMap<>();
+                    int rLen = word != null ? word.length() : 0;
+                    if (exports != null) {
+                        for (CompletionItem ci : exports) {
+                            String key = getBaseMemberName(ci.getLabel());
+                            if (!key.isEmpty()) {
+                                CompletionItem copy = new CompletionItem(ci);
+                                copy.setReplaceLength(rLen);
+                                merged.put(key, copy);
+                            }
+                        }
+                    }
+                    if (members != null) {
+                        for (CompletionItem ci : members) {
+                            String key = getBaseMemberName(ci.getLabel());
+                            if (!key.isEmpty() && !merged.containsKey(key)) {
+                                CompletionItem copy = new CompletionItem(ci);
+                                copy.setReplaceLength(rLen);
+                                merged.put(key, copy);
+                            }
+                        }
+                    }
+                    if (!merged.isEmpty()) return fuzzyFilter(new ArrayList<>(merged.values()), word);
                 }
 
                 // Check if it's a class name — return class members
@@ -1737,6 +1825,16 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 }
             }
+        }
+
+        // Direct npm dependency package member completions (e.g. `lodash.` or `axios.`)
+        List<CompletionItem> depExports = ProjectSymbolIndex.getInstance().getExportsForPath(currentFile, objectToken);
+        if (depExports != null && !depExports.isEmpty()) {
+            return fuzzyFilter(depExports, word);
+        }
+        List<CompletionItem> depMembers = ProjectSymbolIndex.getInstance().getDependencyMembers().get(objectToken);
+        if (depMembers != null && !depMembers.isEmpty()) {
+            return fuzzyFilter(depMembers, word);
         }
 
         // e. Heuristic name-based guess

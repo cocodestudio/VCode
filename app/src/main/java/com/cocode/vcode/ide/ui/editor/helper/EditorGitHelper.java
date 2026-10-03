@@ -29,19 +29,19 @@ public class EditorGitHelper {
                 Map<String, FileStatus.Type> freshMap = new HashMap<>();
 
                 for (String path : workspaceStatus.getAdded())
-                    freshMap.put(path, FileStatus.Type.STAGED_ADDED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.STAGED_ADDED);
                 for (String path : workspaceStatus.getChanged())
-                    freshMap.put(path, FileStatus.Type.STAGED_MODIFIED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.STAGED_MODIFIED);
                 for (String path : workspaceStatus.getRemoved())
-                    freshMap.put(path, FileStatus.Type.STAGED_DELETED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.STAGED_DELETED);
                 for (String path : workspaceStatus.getModified())
-                    freshMap.put(path, FileStatus.Type.UNSTAGED_MODIFIED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.UNSTAGED_MODIFIED);
                 for (String path : workspaceStatus.getMissing())
-                    freshMap.put(path, FileStatus.Type.UNSTAGED_DELETED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.UNSTAGED_DELETED);
                 for (String path : workspaceStatus.getUntracked())
-                    freshMap.put(path, FileStatus.Type.UNTRACKED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.UNTRACKED);
                 for (String path : workspaceStatus.getConflicting())
-                    freshMap.put(path, FileStatus.Type.CONFLICTED);
+                    if (!path.startsWith("node_modules/")) freshMap.put(path, FileStatus.Type.CONFLICTED);
 
                 ExecutorProvider.getInstance().runOnMain(() -> gitStatusesLiveData.setValue(freshMap));
             } catch (Exception e) {

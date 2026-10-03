@@ -232,7 +232,7 @@ public class GitRepository {
     private void addFiles(List<GitFileItem> list, Set<String> paths, String status, boolean staged) {
         for (String path : paths) {
             String fileName = new File(path).getName();
-            if (path.startsWith(".vcode/")) {
+            if (path.startsWith(".vcode/") || path.startsWith("node_modules/")) {
                 continue;
             }
             list.add(new GitFileItem(path, fileName, status, staged));

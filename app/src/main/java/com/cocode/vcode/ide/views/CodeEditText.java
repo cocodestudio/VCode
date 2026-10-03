@@ -4223,6 +4223,13 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             // Check if this is a Markdown table snippet
             boolean isMarkdownTable = insertText.contains("| ---") || insertText.contains("|---");
 
+            boolean insideImport = isInsideImportStatement(flatCursor);
+            if (insideImport) {
+                if (item.getType() == CompletionItem.Type.FUNCTION || insertText.endsWith("()") || insertText.contains("(|)")) {
+                    insertText = item.getLabel();
+                }
+            }
+
             // Handle cursor marker or offset
             int pipeIdx = isMarkdownTable ? -1 : insertText.indexOf('|');
             String cleanInsert;
@@ -4323,6 +4330,43 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         } finally {
             isInsertingCompletion = false;
         }
+    }
+
+    private boolean isInsideImportStatement(int flatCursor) {
+        if (content == null || flatCursor <= 0 || flatCursor > content.totalLength()) return false;
+        int scanStart = Math.max(0, flatCursor - 400);
+        String textBefore = content.getSubstring(scanStart, flatCursor);
+
+        // Check if inside import { ... } block
+        int braceOpen = -1;
+        int depth = 0;
+        for (int i = textBefore.length() - 1; i >= 0; i--) {
+            char c = textBefore.charAt(i);
+            if (c == '}') depth++;
+            else if (c == '{') {
+                if (depth > 0) depth--;
+                else {
+                    braceOpen = i;
+                    break;
+                }
+            }
+        }
+        if (braceOpen >= 0) {
+            int p = braceOpen - 1;
+            while (p >= 0 && Character.isWhitespace(textBefore.charAt(p))) p--;
+            if (p >= 5) {
+                int end = p + 1;
+                while (p >= 0 && Character.isLetterOrDigit(textBefore.charAt(p))) p--;
+                String kw = textBefore.substring(p + 1, end);
+                if ("import".equals(kw)) return true;
+            }
+        }
+
+        // Check if on a statement/line starting with import (e.g. import debounce from 'lodash')
+        int lineStart = textBefore.lastIndexOf('\n');
+        String currentLine = lineStart >= 0 ? textBefore.substring(lineStart + 1) : textBefore;
+        String trimmed = currentLine.trim();
+        return trimmed.startsWith("import ") || trimmed.startsWith("import{") || trimmed.startsWith("import*");
     }
 
     private void handleAutoClose(CharSequence text, int insertFlatPos, char typed) {

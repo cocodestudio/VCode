@@ -710,4 +710,30 @@ public class CodeEditTextTest {
         assertTrue("wasAutoCompleteVisibleBeforeDelete must be true when popup was visible",
                 editor.wasAutoCompleteVisibleBeforeDelete());
     }
+
+    @Test
+    public void testInsertCompletion_insideImport_stripsParentheses() {
+        editor.setFileType(FileType.JAVASCRIPT);
+        editor.setText("import { d } from 'lodash';");
+        editor.setSelection(10);
+
+        CompletionItem item = new CompletionItem("debounce", "debounce(|)", "lodash (npm)", CompletionItem.Type.FUNCTION, 0);
+        item.setReplaceLength(1);
+        editor.insertCompletion(item);
+
+        assertEquals("import { debounce } from 'lodash';", editor.getText().toString());
+    }
+
+    @Test
+    public void testInsertCompletion_normalCode_retainsParentheses() {
+        editor.setFileType(FileType.JAVASCRIPT);
+        editor.setText("const fn = deb;");
+        editor.setSelection(14);
+
+        CompletionItem item = new CompletionItem("debounce", "debounce(|)", "lodash (npm)", CompletionItem.Type.FUNCTION, 0);
+        item.setReplaceLength(3);
+        editor.insertCompletion(item);
+
+        assertEquals("const fn = debounce();", editor.getText().toString());
+    }
 }

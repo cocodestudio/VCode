@@ -489,6 +489,11 @@ public class FileTreeAdapter extends RecyclerView.Adapter<FileTreeAdapter.FileVi
         private void handleDirectoryClick(FileNode node, int pos) {
             node.setExpanded(!node.isExpanded());
             if (node.isExpanded()) {
+                // Lazily load child nodes if folder was lazy-collapsed (e.g. node_modules)
+                if (node.getChildren() == null || node.getChildren().isEmpty()) {
+                    List<FileNode> directChildren = FileUtils.buildDirectoryChildren(node.getFile(), node.getDepth() + 1);
+                    node.setChildren(directChildren);
+                }
                 // Flatten child nodes and insert them below the parent
                 List<FileNode> toAdd = new ArrayList<>();
                 adapter.flatten(node.getChildren(), toAdd);

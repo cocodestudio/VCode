@@ -757,4 +757,39 @@
     <string name="vcode_indexing_status_format">%1$s (%2$d/%3$d)</string>
     <string name="vcode_indexing_in_progress">Indexing...</string>
     <string name="vcode_indexing_percent_format">%1$d%%</string>
+
+    <!-- Phase 4: Zero-Node Package Manager & Mobile Dependency Management -->
+    <string name="vcode_package_manager">Package Manager</string>
+    <string name="vcode_search_packages_hint">Search npm packages…</string>
+    <string name="vcode_tab_explore">Search</string>
+    <string name="vcode_tab_installed">Installed (%1$d)</string>
+    <string name="vcode_tab_installed_plain">Installed</string>
+    <string name="vcode_install">Install</string>
+    <string name="vcode_install_dev">+Dev</string>
+    <string name="vcode_installing">Installing…</string>
+    <string name="vcode_installed">Installed</string>
+    <string name="vcode_uninstall">Uninstall</string>
+    <string name="vcode_uninstalling">Uninstalling…</string>
+    <string name="vcode_update">Update</string>
+    <string name="vcode_package_installed_success">Installed %1$s successfully</string>
+    <string name="vcode_package_uninstalled_success">Uninstalled %1$s successfully</string>
+    <string name="vcode_package_install_failed">Failed to install %1$s: %2$s</string>
+    <string name="vcode_package_uninstall_failed">Failed to uninstall %1$s: %2$s</string>
+    <string name="vcode_no_packages_found">No packages found</string>
+    <string name="vcode_no_packages_found_desc">Try searching for a different library or framework</string>
+    <string name="vcode_no_installed_packages">No dependencies installed</string>
+    <string name="vcode_no_installed_packages_desc">Search npm packages and install with 1 tap</string>
+    <string name="vcode_author_format">By %1$s</string>
+    <string name="vcode_packages_selected">%1$d selected</string>
+    <string name="vcode_install_selected">Install (%1$d)</string>
+    <string name="vcode_install_dev_selected">+Dev (%1$d)</string>
+    <string name="vcode_uninstall_selected">Uninstall (%1$d)</string>
+    <string name="vcode_select_all">Select All</string>
+    <string name="vcode_clear_selection">Clear</string>
+    <string name="vcode_batch_install_progress">Installing %1$s (%2$d/%3$d)…</string>
+    <string name="vcode_batch_uninstall_progress">Uninstalling %1$s (%2$d/%3$d)…</string>
+    <string name="vcode_batch_install_complete">Successfully installed %1$d packages</string>
+    <string name="vcode_batch_uninstall_complete">Successfully uninstalled %1$d packages</string>
+    <string name="vcode_batch_install_partial">Installed %1$d packages (%2$d failed)</string>
+    <string name="vcode_batch_uninstall_partial">Uninstalled %1$d packages (%2$d failed)</string>
 </resources>

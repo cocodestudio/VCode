@@ -338,11 +338,21 @@ public class FileUtils {
 
             FileNode node = new FileNode(entry, depth);
             if (entry.isDirectory()) {
-                node.setChildren(buildFileTreeRecursive(entry, depth + 1));
+                // node_modules is lazy-collapsed: do not deeply recurse during initial tree build
+                if (!name.equals("node_modules")) {
+                    node.setChildren(buildFileTreeRecursive(entry, depth + 1));
+                }
             }
             nodes.add(node);
         }
         return nodes;
+    }
+
+    /**
+     * Lazily loads and builds child nodes for a specific directory.
+     */
+    public static List<FileNode> buildDirectoryChildren(File dir, int depth) {
+        return buildFileTreeRecursive(dir, depth);
     }
 
     /**

@@ -320,8 +320,14 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
                 });
                 addDivider(popupBinding.popupContainer);
             }
+            addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_box, getString(R.string.vcode_package_manager), this::showPackageManager);
+            addDivider(popupBinding.popupContainer);
             addFindInFilesPopupItem(popupBinding.popupContainer, popupWindow, file, node);
         } else {
+            if ("package.json".equals(file.getName())) {
+                addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_box, getString(R.string.vcode_package_manager), this::showPackageManager);
+                addDivider(popupBinding.popupContainer);
+            }
             addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_pen, getString(R.string.vcode_rename), () -> showRenameDialog(file));
             addPopupItem(popupBinding.popupContainer, popupWindow, R.drawable.ic_copy, getString(R.string.vcode_copy), () -> {
                 adapter.setClipboardState(file, false);
@@ -525,6 +531,12 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
     public void onAddFolderClick(File parentDir) {
         NewFolderBottomSheet sheet = NewFolderBottomSheet.newInstance(parentDir);
         sheet.show(getChildFragmentManager(), "NewFolderBottomSheet");
+    }
+
+    private void showPackageManager() {
+        if (viewModel != null && viewModel.getProjectRoot() != null && getContext() != null) {
+            com.cocode.vcode.ide.ui.packages.PackageManagerActivity.start(getContext(), viewModel.getProjectRoot());
+        }
     }
 
     @Override
