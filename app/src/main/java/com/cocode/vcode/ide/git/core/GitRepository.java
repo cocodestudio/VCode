@@ -63,14 +63,26 @@ public class GitRepository {
         return java.util.Collections.unmodifiableList(eventListeners);
     }
 
-    private void notifyPreCommit(String message) {
+    private void notifyPreCommit(String message) throws Exception {
         File root = repoDir != null ? repoDir : (git != null ? git.getRepository().getWorkTree() : null);
         if (root == null) return;
+        String commitMsg = message != null ? message : "";
         for (GitEventListener l : eventListeners) {
-            try { l.onPreCommit(root, message != null ? message : ""); } catch (Exception ignored) {}
+            try {
+                if (!l.shouldAllowCommit(root, commitMsg)) {
+                    throw new GitPreCommitVetoException("Commit rejected by pre-commit listener: " + l.getClass().getSimpleName());
+                }
+            } catch (GitPreCommitVetoException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new GitPreCommitVetoException("Pre-commit check failed in " + l.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+        }
+        for (GitEventListener l : eventListeners) {
+            try { l.onPreCommit(root, commitMsg); } catch (Exception ignored) {}
         }
         com.cocode.vcode.ide.core.events.IdeEventBus.getInstance().publish(
-                new com.cocode.vcode.ide.core.events.GitEvent.GitPreCommitEvent(root, message != null ? message : ""));
+                new com.cocode.vcode.ide.core.events.GitEvent.GitPreCommitEvent(root, commitMsg));
     }
 
     private void notifyPostCommit(String commitId, String message) {
@@ -1417,6 +1429,15 @@ public class GitRepository {
 
         public List<String> getConflictingFiles() {
             return conflictingFiles;
+        }
+    }
+
+    /**
+     * Thrown when a pre-commit lifecycle listener vetos the commit operation.
+     */
+    public static class GitPreCommitVetoException extends Exception {
+        public GitPreCommitVetoException(String message) {
+            super(message);
         }
     }
 }

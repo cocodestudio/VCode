@@ -87,6 +87,9 @@ public class SettingsHomeFragment extends Fragment {
 
         binding.tvCategoryGeneralTitle.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvCategoryGeneralDesc.setTypeface(fm.getUiFont(requireContext()));
+
+        binding.tvCategoryExtensionsTitle.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvCategoryExtensionsDesc.setTypeface(fm.getUiFont(requireContext()));
     }
 
     private void setupListeners() {
@@ -111,6 +114,9 @@ public class SettingsHomeFragment extends Fragment {
 
         binding.cardCategoryGeneral.setOnClickListener(v ->
                 navigateTo(GeneralSettingsFragment.newInstance()));
+
+        binding.cardCategoryExtensions.setOnClickListener(v ->
+                navigateTo(ExtensionSettingsFragment.newInstance()));
     }
 
     private void showSettingsOptionsMenu() {

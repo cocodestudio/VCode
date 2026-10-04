@@ -71,6 +71,9 @@
     <string name="vcode_settings_category_keyboard_desc">Custom keybindings, physical keyboard mappings</string>
     <string name="vcode_settings_category_general">General</string>
     <string name="vcode_settings_category_general_desc">In-app browser preview, background auto-save</string>
+    <string name="vcode_settings_category_extensions">Plugins &amp; Extensions</string>
+    <string name="vcode_settings_category_extensions_desc">Manage third-party plugins and dynamic configuration</string>
+    <string name="vcode_no_extension_settings">No extension settings registered</string>
 
     <!-- Settings Import / Export -->
     <string name="vcode_settings_actions">Settings Actions</string>

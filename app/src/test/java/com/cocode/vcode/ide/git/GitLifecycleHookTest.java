@@ -135,4 +135,37 @@ public class GitLifecycleHookTest {
         assertTrue(checkoutEventBus.get());
         assertTrue(dependencyEventBus.get());
     }
+
+    @Test
+    public void testPreCommitVetoAbortsCommit() throws Exception {
+        File repoDir = tempFolder.newFolder("git_veto_repo");
+        GitRepository repository = new GitRepository();
+        repository.openRepository(repoDir);
+
+        File testFile = new File(repoDir, "README.md");
+        try (FileWriter writer = new FileWriter(testFile)) {
+            writer.write("# Veto Test");
+        }
+        repository.stageAll();
+
+        GitEventListener vetoListener = new GitEventListener() {
+            @Override
+            public boolean shouldAllowCommit(@NonNull File repoRoot, @NonNull String commitMessage) {
+                return false; // Veto all commits
+            }
+        };
+
+        repository.addEventListener(vetoListener);
+
+        boolean exceptionThrown = false;
+        try {
+            repository.commit("feat: should be rejected", "Adeel", "adeel@test.com");
+        } catch (GitRepository.GitPreCommitVetoException e) {
+            exceptionThrown = true;
+            assertTrue(e.getMessage().contains("Commit rejected by pre-commit listener"));
+        }
+
+        assertTrue("Expected GitPreCommitVetoException to be thrown", exceptionThrown);
+        repository.removeEventListener(vetoListener);
+    }
 }

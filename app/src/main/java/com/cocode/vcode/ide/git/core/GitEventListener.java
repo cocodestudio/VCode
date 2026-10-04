@@ -11,6 +11,19 @@ import java.util.List;
 public interface GitEventListener {
 
     /**
+     * Evaluates whether the proposed commit should be allowed to proceed.
+     * Listeners can run pre-commit checks (e.g. diagnostics, formatters) and return false
+     * to veto the commit.
+     *
+     * @param repoRoot the repository working tree root
+     * @param commitMessage the proposed commit message
+     * @return true if the commit is permitted, false if vetoed
+     */
+    default boolean shouldAllowCommit(@NonNull File repoRoot, @NonNull String commitMessage) {
+        return true;
+    }
+
+    /**
      * Invoked immediately before a commit is created.
      */
     default void onPreCommit(@NonNull File repoRoot, @NonNull String commitMessage) {

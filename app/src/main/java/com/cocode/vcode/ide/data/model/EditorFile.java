@@ -24,6 +24,8 @@ public class EditorFile {
     private boolean manuallyDirty = false;
     private long lastDiskModified = -1;
     private long lastDiskSize = -1;
+    private String displayName;
+    private String virtualUri;
 
     /**
      * For files opened via a content:// URI: the original source URI string.
@@ -101,6 +103,9 @@ public class EditorFile {
     }
 
     public String getFileName() {
+        if (displayName != null && !displayName.isEmpty()) {
+            return displayName;
+        }
         if (fileType == FileType.API_TESTER) {
             return "API Tester";
         }
@@ -220,5 +225,37 @@ public class EditorFile {
 
     public void setLastDiskSize(long lastDiskSize) {
         this.lastDiskSize = lastDiskSize;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getVirtualUri() {
+        return virtualUri;
+    }
+
+    public void setVirtualUri(String virtualUri) {
+        this.virtualUri = virtualUri;
+    }
+
+    /**
+     * Creates a virtual document tab without requiring a physical backing file on disk.
+     */
+    public static EditorFile createVirtual(String id, String displayName, String virtualUri, String content, FileType fileType) {
+        EditorFile ef = new EditorFile();
+        ef.id = id != null ? id : (virtualUri != null ? virtualUri : java.util.UUID.randomUUID().toString());
+        ef.displayName = displayName;
+        ef.virtualUri = virtualUri;
+        ef.content = content != null ? content : "";
+        ef.savedContent = ef.content;
+        ef.fileType = fileType != null ? fileType : FileType.TEXT;
+        ef.isVirtual = true;
+        ef.isContentLoaded = true;
+        return ef;
     }
 }

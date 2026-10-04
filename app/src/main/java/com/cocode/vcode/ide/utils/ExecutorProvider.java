@@ -17,6 +17,8 @@ public class ExecutorProvider {
     private final ExecutorService ioExecutor;
     private final ExecutorService cpuExecutor;
     private final ExecutorService diagnosticExecutor;
+    private final ExecutorService packageExecutor;
+    private final ExecutorService extensionExecutor;
     private final Handler mainHandler;
 
     private ExecutorProvider() {
@@ -29,6 +31,20 @@ public class ExecutorProvider {
         int diagThreads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
         diagnosticExecutor = Executors.newFixedThreadPool(diagThreads, r -> {
             Thread t = new Thread(r, "vcode-diagnostic-worker");
+            t.setPriority(Thread.NORM_PRIORITY - 1);
+            t.setDaemon(true);
+            return t;
+        });
+        // Dedicated worker for package management (npm download/extraction/metadata)
+        packageExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "vcode-package-worker");
+            t.setPriority(Thread.NORM_PRIORITY - 1);
+            t.setDaemon(true);
+            return t;
+        });
+        // Dedicated thread pool for third-party extensions and plugins
+        extensionExecutor = Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "vcode-extension-worker");
             t.setPriority(Thread.NORM_PRIORITY - 1);
             t.setDaemon(true);
             return t;
@@ -48,6 +64,20 @@ public class ExecutorProvider {
             }
         }
         return instance;
+    }
+
+    /**
+     * Executes a task on the dedicated package management worker.
+     */
+    public void runOnPackage(Runnable r) {
+        if (r != null) packageExecutor.execute(r);
+    }
+
+    /**
+     * Executes a task on the isolated extension worker pool.
+     */
+    public void runOnExtension(Runnable r) {
+        if (r != null) extensionExecutor.execute(r);
     }
 
     /**
@@ -91,5 +121,7 @@ public class ExecutorProvider {
         ioExecutor.shutdown();
         cpuExecutor.shutdown();
         diagnosticExecutor.shutdown();
+        packageExecutor.shutdown();
+        extensionExecutor.shutdown();
     }
 }

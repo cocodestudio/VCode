@@ -62,7 +62,7 @@ public class PackageManagerService {
     public void searchPackages(@NonNull File projectRoot,
                                @NonNull String query,
                                @NonNull PackageListCallback callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnPackage(() -> {
             try {
                 List<NpmPackageInfo> results = NpmRegistryClient.searchPackages(query, 25);
                 Map<String, String> deps = PackageJsonSync.getDependencies(projectRoot);
@@ -92,7 +92,7 @@ public class PackageManagerService {
      */
     public void getInstalledPackages(@NonNull File projectRoot,
                                      @NonNull PackageListCallback callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnPackage(() -> {
             try {
                 List<NpmPackageInfo> installedList = new ArrayList<>();
                 Map<String, String> deps = PackageJsonSync.getDependencies(projectRoot);
@@ -137,7 +137,7 @@ public class PackageManagerService {
                                boolean isDev,
                                @Nullable PackageProgressCallback progress,
                                @NonNull PackageOperationCallback callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnPackage(() -> {
             try {
                 String resolvedVersion = installPackageSynchronously(projectRoot, packageName, targetVersion, isDev, progress);
                 ExecutorProvider.getInstance().runOnMain(() ->
@@ -156,7 +156,7 @@ public class PackageManagerService {
                                      @NonNull List<NpmPackageInfo> packagesToInstall,
                                      boolean isDev,
                                      @NonNull BatchOperationCallback callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnPackage(() -> {
             int total = packagesToInstall.size();
             int successCount = 0;
             int failCount = 0;
@@ -270,7 +270,7 @@ public class PackageManagerService {
     public void uninstallPackage(@NonNull File projectRoot,
                                  @NonNull String packageName,
                                  @NonNull PackageOperationCallback callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnPackage(() -> {
             try {
                 uninstallPackageSynchronously(projectRoot, packageName);
                 ExecutorProvider.getInstance().runOnMain(() ->
@@ -288,7 +288,7 @@ public class PackageManagerService {
     public void uninstallPackagesBatch(@NonNull File projectRoot,
                                        @NonNull List<NpmPackageInfo> packagesToUninstall,
                                        @NonNull BatchOperationCallback callback) {
-        ExecutorProvider.getInstance().runOnIo(() -> {
+        ExecutorProvider.getInstance().runOnPackage(() -> {
             int total = packagesToUninstall.size();
             int successCount = 0;
             int failCount = 0;

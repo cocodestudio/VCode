@@ -86,19 +86,29 @@ public class DiagnosticEngine {
      * Executes all applicable registered {@link DiagnosticProvider} instances.
      */
     public static List<Problem> runSemanticLint(File file, String text, FileType type, ProjectIndex index) {
+        return runSemanticLint(file, text, type, index, null);
+    }
+
+    /**
+     * Tier 2: Semantic checks executed after a typing pause with cooperative cancellation.
+     */
+    public static List<Problem> runSemanticLint(File file, String text, FileType type, ProjectIndex index, com.cocode.vcode.ide.core.lsp.CancellationToken token) {
         if (text == null || text.isEmpty()) return new ArrayList<>();
+        if (token != null && token.isCancelled()) return new ArrayList<>();
         List<Problem> problems = new ArrayList<>();
         String path = file != null ? file.getAbsolutePath() : null;
 
         for (DiagnosticProvider provider : providers) {
+            if (token != null && token.isCancelled()) break;
             try {
                 if (provider.canLint(type, path)) {
-                    List<Problem> results = provider.lint(file, text, type, index);
+                    List<Problem> results = provider.lint(file, text, type, index, token);
                     if (results != null) {
                         problems.addAll(results);
                     }
                 }
             } catch (Throwable e) {
+                if (token != null && token.isCancelled()) break;
                 problems.add(new Problem(file, 1, 1, 1,
                         "Internal Linter Error (" + provider.getId() + "): " + e.getMessage(),
                         Problem.Severity.ERROR));
@@ -109,15 +119,25 @@ public class DiagnosticEngine {
     }
 
     public static List<Problem> analyze(File file, String text, FileType type) {
-        return analyze(file, text, type, null);
+        return analyze(file, text, type, null, null);
     }
 
     public static List<Problem> analyze(File file, String text, FileType type, ProjectIndex index) {
+        return analyze(file, text, type, index, null);
+    }
+
+    public static List<Problem> analyze(File file, String text, FileType type, com.cocode.vcode.ide.core.lsp.CancellationToken token) {
+        return analyze(file, text, type, null, token);
+    }
+
+    public static List<Problem> analyze(File file, String text, FileType type, ProjectIndex index, com.cocode.vcode.ide.core.lsp.CancellationToken token) {
         if (text == null || text.isEmpty()) return new ArrayList<>();
+        if (token != null && token.isCancelled()) return new ArrayList<>();
 
         List<Problem> problems = new ArrayList<>();
         problems.addAll(runSyntacticLint(file, text, type));
-        problems.addAll(runSemanticLint(file, text, type, index));
+        if (token != null && token.isCancelled()) return problems;
+        problems.addAll(runSemanticLint(file, text, type, index, token));
 
         return deduplicateAndSort(file, problems);
     }

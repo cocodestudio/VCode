@@ -99,6 +99,11 @@ public class ConfigurationRegistry {
     }
 
     @NonNull
+    public List<ConfigurationItem> getAllItems() {
+        return new ArrayList<>(registeredItems.values());
+    }
+
+    @NonNull
     public List<ConfigurationItem> getItemsByCategory(@NonNull String category) {
         List<ConfigurationItem> list = new ArrayList<>();
         for (ConfigurationItem item : registeredItems.values()) {

@@ -1,10 +1,12 @@
 package com.cocode.vcode.ide.core.diagnostic;
 
+import com.cocode.vcode.ide.core.lsp.CancellationToken;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -37,4 +39,23 @@ public interface DiagnosticProvider {
      * @return list of diagnostics or problems found
      */
     List<Problem> lint(File file, String content, FileType fileType, ProjectIndex index);
+
+    /**
+     * Executes linting on the file content with cooperative cancellation support.
+     * Implementations should check {@code token.isCancelled()} between analysis passes
+     * and abort early when the user continues typing.
+     *
+     * @param file the target file (may be null for unsaved buffers)
+     * @param content the source code text
+     * @param fileType the detected file type
+     * @param index optional workspace symbol and parse index
+     * @param token optional cancellation token
+     * @return list of diagnostics or problems found
+     */
+    default List<Problem> lint(File file, String content, FileType fileType, ProjectIndex index, CancellationToken token) {
+        if (token != null && token.isCancelled()) {
+            return Collections.emptyList();
+        }
+        return lint(file, content, fileType, index);
+    }
 }
