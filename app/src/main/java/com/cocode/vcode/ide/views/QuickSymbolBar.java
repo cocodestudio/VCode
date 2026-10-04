@@ -24,6 +24,10 @@ import com.cocode.vcode.ide.utils.UiUtils;
 
 import com.cocode.vcode.ide.data.model.AppSettings;
 
+import com.cocode.vcode.ide.core.command.CommandItem;
+import com.cocode.vcode.ide.core.command.CommandRegistry;
+import com.cocode.vcode.ide.core.events.Disposable;
+
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +39,7 @@ import java.util.List;
 public class QuickSymbolBar extends LinearLayout {
 
     private List<String> currentSymbols = new ArrayList<>(AppSettings.DEFAULT_QUICK_SYMBOLS);
+    private final List<View> customChipViews = new ArrayList<>();
 
     private ImageView btnQuickFix;
     private View dividerQuickFix;
@@ -103,6 +108,86 @@ public class QuickSymbolBar extends LinearLayout {
             });
             layoutKeysContainer.addView(keyView);
         }
+
+        for (View customChip : customChipViews) {
+            if (customChip.getParent() == null) {
+                layoutKeysContainer.addView(customChip);
+            }
+        }
+    }
+
+    /**
+     * Adds a custom action chip dynamically to the symbol bar (e.g. contributed by an extension).
+     *
+     * @param label  Text label displayed on the chip
+     * @param action Action executed when the chip is tapped
+     * @return Disposable token to remove the chip when deactivated
+     */
+    @NonNull
+    public Disposable addCustomActionChip(@NonNull String label, @NonNull Runnable action) {
+        Context context = getContext();
+        FontManager fm = FontManager.getInstance();
+
+        int heightPx = UiUtils.dpToPx(context, 28);
+        int marginPx = UiUtils.dpToPx(context, 2);
+        int textColor = ContextCompat.getColor(context, R.color.vcode_text_primary);
+
+        TextView chipView = new TextView(context);
+        chipView.setText(label);
+        chipView.setGravity(Gravity.CENTER);
+        chipView.setTextColor(textColor);
+        chipView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        chipView.setTypeface(fm.getUiMedium(context));
+        chipView.setBackgroundResource(R.drawable.vcode_bg_symbol_key_interactive);
+        chipView.setClickable(true);
+        chipView.setFocusable(true);
+
+        int minWidth = UiUtils.dpToPx(context, 42);
+        chipView.setMinWidth(minWidth);
+        chipView.setPadding(UiUtils.dpToPx(context, 6), 0, UiUtils.dpToPx(context, 6), 0);
+
+        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, heightPx);
+        lp.setMargins(marginPx, 0, marginPx, 0);
+        chipView.setLayoutParams(lp);
+
+        chipView.setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+            if (action != null) {
+                action.run();
+            }
+        });
+
+        customChipViews.add(chipView);
+        layoutKeysContainer.addView(chipView);
+
+        return () -> {
+            customChipViews.remove(chipView);
+            layoutKeysContainer.removeView(chipView);
+        };
+    }
+
+    /**
+     * Queries {@link CommandRegistry} for commands categorized as "QuickSymbol" or "SymbolBar"
+     * and adds them as dynamic action chips.
+     */
+    @NonNull
+    public Disposable loadExtensionActionChips() {
+        List<Disposable> disposables = new ArrayList<>();
+        List<CommandItem> commands = CommandRegistry.getInstance().getAllCommands();
+        for (CommandItem cmd : commands) {
+            if ("QuickSymbol".equalsIgnoreCase(cmd.getCategory()) || "SymbolBar".equalsIgnoreCase(cmd.getCategory())) {
+                Disposable d = addCustomActionChip(cmd.getTitle(), () -> {
+                    CodeEditText editor = activeEditorRef != null ? activeEditorRef.get() : null;
+                    cmd.execute(editor);
+                });
+                disposables.add(d);
+            }
+        }
+        return () -> {
+            for (Disposable d : disposables) {
+                d.dispose();
+            }
+        };
     }
 
     /**

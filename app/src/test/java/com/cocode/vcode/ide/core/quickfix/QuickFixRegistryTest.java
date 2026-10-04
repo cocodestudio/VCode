@@ -85,4 +85,25 @@ public class QuickFixRegistryTest {
         assertTrue("Recognized pattern should have quick fix", QuickFixRegistry.hasFixes(pFixable));
         assertFalse(QuickFixRegistry.getFixesForProblem(pFixable).isEmpty());
     }
+
+    @Test
+    public void testCustomQuickFixDirectlyOnProblem() {
+        Problem p = new Problem(mockFile, 1, 1, 1, "Custom extension lint warning", Problem.Severity.WARNING, (ProblemCode) null);
+        assertFalse(QuickFixRegistry.hasFixes(p));
+
+        p.addCustomQuickFix(new QuickFix() {
+            @Override
+            public String getTitle() {
+                return "Apply Custom Extension Fix";
+            }
+
+            @Override
+            public void apply(CodeEditorTarget editor, Problem problem) {}
+        });
+
+        assertTrue(QuickFixRegistry.hasFixes(p));
+        java.util.List<QuickFix> fixes = QuickFixRegistry.getFixesForProblem(p);
+        org.junit.Assert.assertEquals(1, fixes.size());
+        org.junit.Assert.assertEquals("Apply Custom Extension Fix", fixes.get(0).getTitle());
+    }
 }

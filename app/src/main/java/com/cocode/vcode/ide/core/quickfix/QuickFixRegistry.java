@@ -44,6 +44,9 @@ public final class QuickFixRegistry {
         if (problem == null) return Collections.emptyList();
 
         List<QuickFix> fixes = new ArrayList<>();
+        if (problem.getCustomQuickFixes() != null && !problem.getCustomQuickFixes().isEmpty()) {
+            fixes.addAll(problem.getCustomQuickFixes());
+        }
         ProblemCode code = problem.getProblemCode();
         String msg = problem.getMessage() != null ? problem.getMessage() : "";
 

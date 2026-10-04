@@ -281,22 +281,36 @@ public class AutoCompletePopup {
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             CompletionItem item = items.get(position);
 
-            if (item.getType() == CompletionItem.Type.FILE || item.getType() == CompletionItem.Type.FOLDER) {
+            if (item.getIconDrawable() != null) {
+                holder.binding.tvTypeBadge.setVisibility(View.GONE);
+                holder.binding.ivTypeIcon.setVisibility(View.VISIBLE);
+                holder.binding.ivTypeIcon.setImageDrawable(item.getIconDrawable());
+                if (item.getCustomColor() != 0) {
+                    holder.binding.ivTypeIcon.setColorFilter(item.getCustomColor(), PorterDuff.Mode.SRC_IN);
+                } else {
+                    holder.binding.ivTypeIcon.clearColorFilter();
+                }
+            } else if (item.getType() == CompletionItem.Type.FILE || item.getType() == CompletionItem.Type.FOLDER) {
                 holder.binding.tvTypeBadge.setVisibility(View.GONE);
                 holder.binding.ivTypeIcon.setVisibility(View.VISIBLE);
 
                 if (item.getType() == CompletionItem.Type.FOLDER) {
                     holder.binding.ivTypeIcon.setImageResource(R.drawable.ic_folder);
-                    holder.binding.ivTypeIcon.setColorFilter(colorPrimary, PorterDuff.Mode.SRC_IN);
+                    int folderColor = item.getCustomColor() != 0 ? item.getCustomColor() : colorPrimary;
+                    holder.binding.ivTypeIcon.setColorFilter(folderColor, PorterDuff.Mode.SRC_IN);
                 } else {
                     FileIconHelper.setFileIconAndColor(holder.binding.ivTypeIcon, item.getLabel());
+                    if (item.getCustomColor() != 0) {
+                        holder.binding.ivTypeIcon.setColorFilter(item.getCustomColor(), PorterDuff.Mode.SRC_IN);
+                    }
                 }
             } else {
                 holder.binding.ivTypeIcon.setVisibility(View.GONE);
                 holder.binding.tvTypeBadge.setVisibility(View.VISIBLE);
                 GradientDrawable badgeBg = (GradientDrawable) holder.binding.tvTypeBadge.getBackground().mutate();
                 if (badgeBg != null) {
-                    badgeBg.setColor(getBadgeColor(item.getType()));
+                    int badgeColor = item.getCustomColor() != 0 ? item.getCustomColor() : getBadgeColor(item.getType());
+                    badgeBg.setColor(badgeColor);
                 }
                 holder.binding.tvTypeBadge.setText(getBadgeLetter(item.getType()));
                 holder.binding.tvTypeBadge.setTypeface(uiFontBold);

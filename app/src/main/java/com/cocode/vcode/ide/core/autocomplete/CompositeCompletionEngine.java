@@ -172,6 +172,119 @@ public class CompositeCompletionEngine extends AutoCompleteEngine {
         return fuzzyFilter(aggregatedItems, wordBeforeCursor);
     }
 
+    @Override
+    public List<CompletionItem> fuzzyFilter(List<CompletionItem> all, String prefix) {
+        if (all == null) return new ArrayList<>();
+
+        if (prefix == null || prefix.isEmpty()) {
+            return super.fuzzyFilter(all, prefix);
+        }
+
+        String lowerPrefix = prefix.toLowerCase();
+        List<CompletionItem> matched = new ArrayList<>();
+
+        for (CompletionItem item : all) {
+            if (item == null || item.getLabel() == null) continue;
+            int score = computeEnhancedFuzzyScore(item, lowerPrefix);
+            if (score > 0) {
+                item.setSortScore(score + item.getTypePriority() * 10);
+                matched.add(item);
+            }
+        }
+
+        Collections.sort(matched, (a, b) -> b.getSortScore() - a.getSortScore());
+        return matched.size() > MAX_SUGGESTIONS ? matched.subList(0, MAX_SUGGESTIONS) : matched;
+    }
+
+    /**
+     * Enhanced fuzzy scoring that evaluates the label, effective insertText, and acronym/boundary matches
+     * (e.g. "clg" matching "console.log", "rfce" matching "reactFunctionalComponentExport").
+     */
+    public int computeEnhancedFuzzyScore(CompletionItem item, String lowerQuery) {
+        if (item == null || lowerQuery == null || lowerQuery.isEmpty()) return 0;
+        String label = item.getLabel();
+        int baseScore = computeFuzzyScore(label, lowerQuery);
+
+        // Check acronym / boundary match for dotted/camel-cased words (e.g. "clg" -> "console.log")
+        int acronymScore = computeAcronymMatchScore(label, lowerQuery);
+        int bestScore = Math.max(baseScore, acronymScore);
+
+        // Check effective insertText if distinct from label
+        String insertText = item.getEffectiveInsertText();
+        if (insertText != null && !insertText.equals(label)) {
+            int insertScore = computeFuzzyScore(insertText, lowerQuery);
+            int insertAcronym = computeAcronymMatchScore(insertText, lowerQuery);
+            bestScore = Math.max(bestScore, Math.max(insertScore, insertAcronym));
+        }
+
+        return bestScore;
+    }
+
+    /**
+     * Checks if lowerQuery matches the initials or boundary characters of words within text.
+     * For example, "clg" matches "console.log" (c in console, l and g in log).
+     */
+    public static int computeAcronymMatchScore(String text, String lowerQuery) {
+        if (text == null || lowerQuery == null || lowerQuery.isEmpty()) return 0;
+        String lowerText = text.toLowerCase();
+        int queryLen = lowerQuery.length();
+        int textLen = lowerText.length();
+
+        // Extract word boundary indices
+        List<Integer> boundaries = new ArrayList<>();
+        for (int i = 0; i < textLen; i++) {
+            if (i == 0) {
+                boundaries.add(0);
+            } else {
+                char prev = text.charAt(i - 1);
+                char curr = text.charAt(i);
+                if (prev == '.' || prev == '_' || prev == '-' || prev == ' ' || prev == '/' ||
+                        (Character.isLowerCase(prev) && Character.isUpperCase(curr))) {
+                    boundaries.add(i);
+                }
+            }
+        }
+
+        int qi = 0;
+        int bi = 0;
+        int score = 0;
+
+        while (qi < queryLen && bi < boundaries.size()) {
+            int boundaryPos = boundaries.get(bi);
+            if (lowerText.charAt(boundaryPos) == lowerQuery.charAt(qi)) {
+                score += 100; // Boundary character match bonus
+                qi++;
+
+                // Determine whether to match in-word continuation characters within this word segment
+                boolean nextBoundaryMatches = (bi + 1 < boundaries.size()) && (qi < queryLen) &&
+                        (lowerText.charAt(boundaries.get(bi + 1)) == lowerQuery.charAt(qi));
+
+                if (!nextBoundaryMatches) {
+                    int nextBoundary = (bi + 1 < boundaries.size()) ? boundaries.get(bi + 1) : textLen;
+                    int curPos = boundaryPos + 1;
+                    while (qi < queryLen && curPos < nextBoundary) {
+                        if (lowerText.charAt(curPos) == lowerQuery.charAt(qi)) {
+                            score += 50; // In-word continuation match bonus
+                            qi++;
+                            if (bi + 1 < boundaries.size() && qi < queryLen &&
+                                    lowerText.charAt(boundaries.get(bi + 1)) == lowerQuery.charAt(qi)) {
+                                break; // Preserve next query character for the next boundary
+                            }
+                        }
+                        curPos++;
+                    }
+                }
+            }
+            bi++;
+        }
+
+        if (qi >= queryLen) {
+            return Math.max(score, 550); // Successfully matched all query characters across boundaries
+        }
+
+        return 0;
+    }
+
     /**
      * Provider wrapping the built-in language engine.
      */

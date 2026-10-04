@@ -107,6 +107,25 @@ public class EditorMenuHelper {
             }));
         }
 
+        // Extension and contributor commands
+        List<com.cocode.vcode.ide.core.command.CommandItem> commands =
+                com.cocode.vcode.ide.core.command.CommandRegistry.getInstance().getAllCommands();
+        if (commands != null && !commands.isEmpty()) {
+            for (com.cocode.vcode.ide.core.command.CommandItem cmd : commands) {
+                String cat = cmd.getCategory();
+                if ("Editor".equalsIgnoreCase(cat) || "General".equalsIgnoreCase(cat)) {
+                    int icon = cmd.getIconResId() != 0 ? cmd.getIconResId() : R.drawable.ic_wand_magic;
+                    options.add(new EditorOptionsBottomSheet.Option(icon, cmd.getTitle(), () -> {
+                        try {
+                            cmd.execute(activity, viewModel, activeFile);
+                        } catch (Throwable t) {
+                            android.util.Log.e("EditorMenuHelper", "Error executing command " + cmd.getId(), t);
+                        }
+                    }));
+                }
+            }
+        }
+
         EditorOptionsBottomSheet bottomSheet = new EditorOptionsBottomSheet();
         bottomSheet.setOptions(options);
         bottomSheet.show(fragmentManager, "EditorOptions");

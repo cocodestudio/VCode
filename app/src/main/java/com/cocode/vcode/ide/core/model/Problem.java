@@ -14,6 +14,7 @@ public class Problem {
     private final Severity severity;
     private final String code;
     private android.graphics.Path cachedPath;
+    private java.util.List<com.cocode.vcode.ide.core.quickfix.QuickFix> customQuickFixes;
 
     public Problem(File file, int line, int column, int length, String message, Severity severity, String code) {
         this.file = file;
@@ -80,6 +81,22 @@ public class Problem {
 
     public void setCachedPath(android.graphics.Path cachedPath) {
         this.cachedPath = cachedPath;
+    }
+
+    public java.util.List<com.cocode.vcode.ide.core.quickfix.QuickFix> getCustomQuickFixes() {
+        return customQuickFixes;
+    }
+
+    public void setCustomQuickFixes(java.util.List<com.cocode.vcode.ide.core.quickfix.QuickFix> customQuickFixes) {
+        this.customQuickFixes = customQuickFixes;
+    }
+
+    public void addCustomQuickFix(com.cocode.vcode.ide.core.quickfix.QuickFix quickFix) {
+        if (quickFix == null) return;
+        if (this.customQuickFixes == null) {
+            this.customQuickFixes = new java.util.ArrayList<>();
+        }
+        this.customQuickFixes.add(quickFix);
     }
 
     @Override

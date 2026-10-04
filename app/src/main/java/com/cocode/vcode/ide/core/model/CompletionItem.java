@@ -20,6 +20,8 @@ public class CompletionItem {
      * the relative path. {@code null} for non-cross-file completions.
      */
     private String sourceUri;
+    private android.graphics.drawable.Drawable iconDrawable;
+    private int customColor = 0;
 
     public CompletionItem(String label, String insertText, String detail, Type type, int cursorOffset) {
         this.label = label;
@@ -72,6 +74,8 @@ public class CompletionItem {
         this.replaceAfterLength = other.replaceAfterLength;
         this.sortScore = other.sortScore;
         this.sourceUri = other.sourceUri;
+        this.iconDrawable = other.iconDrawable;
+        this.customColor = other.customColor;
     }
 
     /**
@@ -149,6 +153,22 @@ public class CompletionItem {
      */
     public void setSourceUri(String sourceUri) {
         this.sourceUri = sourceUri;
+    }
+
+    public android.graphics.drawable.Drawable getIconDrawable() {
+        return iconDrawable;
+    }
+
+    public void setIconDrawable(android.graphics.drawable.Drawable iconDrawable) {
+        this.iconDrawable = iconDrawable;
+    }
+
+    public int getCustomColor() {
+        return customColor;
+    }
+
+    public void setCustomColor(int customColor) {
+        this.customColor = customColor;
     }
 
     /**

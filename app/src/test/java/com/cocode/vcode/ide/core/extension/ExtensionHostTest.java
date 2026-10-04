@@ -151,4 +151,64 @@ public class ExtensionHostTest {
         assertTrue(m1Deactivated.get());
         assertTrue(m2Deactivated.get());
     }
+
+    @Test
+    public void testScanAndLoadDirectoryExtensions() throws Exception {
+        File tempDir = File.createTempFile("vcode_test_exts", "");
+        tempDir.delete();
+        tempDir.mkdirs();
+
+        File extSubDir = new File(tempDir, "sample-extension");
+        extSubDir.mkdirs();
+
+        File manifestFile = new File(extSubDir, "vcode-extension.json");
+        String json = "{\n" +
+                "  \"id\": \"vcode.declarative.sample\",\n" +
+                "  \"name\": \"sample-extension\",\n" +
+                "  \"version\": \"1.0.0\",\n" +
+                "  \"displayName\": \"Sample Extension\",\n" +
+                "  \"description\": \"Tier 1 declarative extension\",\n" +
+                "  \"contributes\": {\n" +
+                "    \"configuration\": {\n" +
+                "      \"title\": \"Sample Settings\",\n" +
+                "      \"properties\": {\n" +
+                "        \"sample.enabled\": {\n" +
+                "          \"type\": \"boolean\",\n" +
+                "          \"default\": true,\n" +
+                "          \"description\": \"Enable sample\"\n" +
+                "        }\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"commands\": [\n" +
+                "      {\n" +
+                "        \"command\": \"sample.hello\",\n" +
+                "        \"title\": \"Sample: Say Hello\",\n" +
+                "        \"category\": \"General\"\n" +
+                "      }\n" +
+                "    ]\n" +
+                "  }\n" +
+                "}";
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(manifestFile, json);
+
+        List<ExtensionHost.ActiveExtension> loaded = host.scanAndLoadDirectoryExtensions(tempDir, null);
+        assertEquals(1, loaded.size());
+        assertTrue(host.isExtensionActive("vcode.declarative.sample"));
+
+        // Verify configuration was registered
+        assertTrue(com.cocode.vcode.ide.data.preferences.ConfigurationRegistry.getInstance().hasKey("sample.enabled"));
+
+        // Verify command was registered
+        assertTrue(CommandRegistry.getInstance().hasCommand("sample.hello"));
+
+        // Verify clean unloading
+        host.unloadExtension("vcode.declarative.sample");
+        assertFalse(host.isExtensionActive("vcode.declarative.sample"));
+        assertFalse(com.cocode.vcode.ide.data.preferences.ConfigurationRegistry.getInstance().hasKey("sample.enabled"));
+        assertFalse(CommandRegistry.getInstance().hasCommand("sample.hello"));
+
+        // Cleanup temp files
+        manifestFile.delete();
+        extSubDir.delete();
+        tempDir.delete();
+    }
 }

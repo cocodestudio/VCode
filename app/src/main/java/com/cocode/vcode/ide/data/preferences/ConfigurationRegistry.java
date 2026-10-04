@@ -84,6 +84,14 @@ public class ConfigurationRegistry {
         registerKey(key, type, defaultValue, title, description, "general");
     }
 
+    /**
+     * Unregisters a configuration key.
+     */
+    public synchronized void unregisterKey(@NonNull String key) {
+        registeredItems.remove(key);
+        memoryStore.remove(key);
+    }
+
     public boolean hasKey(@NonNull String key) {
         return registeredItems.containsKey(key);
     }

@@ -114,4 +114,35 @@ public class CompositeCompletionEngineTest {
         assertEquals("sharedItem", results.get(0).getLabel());
         assertEquals("High", results.get(0).getDetail());
     }
+
+    @Test
+    public void testFuzzyAcronymAndBoundaryMatching() {
+        int clgScore = CompositeCompletionEngine.computeAcronymMatchScore("console.log", "clg");
+        assertTrue("clg should match console.log acronym/boundary with high score", clgScore >= 550);
+
+        int gebiScore = CompositeCompletionEngine.computeAcronymMatchScore("getElementById", "gebi");
+        assertTrue("gebi should match getElementById acronym", gebiScore >= 550);
+
+        List<CompletionItem> candidates = new ArrayList<>();
+        candidates.add(new CompletionItem("clear", "clear()", "void", CompletionItem.Type.FUNCTION));
+        candidates.add(new CompletionItem("console.log", "console.log()", "void", CompletionItem.Type.FUNCTION));
+        candidates.add(new CompletionItem("cloneNode", "cloneNode()", "Node", CompletionItem.Type.FUNCTION));
+
+        List<CompletionItem> filtered = engine.fuzzyFilter(candidates, "clg");
+        assertFalse(filtered.isEmpty());
+        assertEquals("console.log", filtered.get(0).getLabel());
+    }
+
+    @Test
+    public void testCompletionItemCustomAttributes() {
+        CompletionItem item = new CompletionItem("pluginAction", "pluginAction()", "detail", CompletionItem.Type.FUNCTION);
+        assertEquals(0, item.getCustomColor());
+
+        item.setCustomColor(0xFF123456);
+        assertEquals(0xFF123456, item.getCustomColor());
+
+        CompletionItem copy = new CompletionItem(item);
+        assertEquals(0xFF123456, copy.getCustomColor());
+        assertEquals("pluginAction", copy.getLabel());
+    }
 }

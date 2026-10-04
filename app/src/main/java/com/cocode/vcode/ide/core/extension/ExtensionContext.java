@@ -72,6 +72,17 @@ public class ExtensionContext {
     }
 
     /**
+     * Registers a custom viewer factory and tracks its disposable token for automatic cleanup.
+     */
+    @NonNull
+    public Disposable registerViewer(@NonNull com.cocode.vcode.ide.ui.editor.viewer.ViewerManager.ViewerPredicate predicate,
+                                     @NonNull com.cocode.vcode.ide.ui.editor.viewer.ViewerManager.ViewerFactory factory) {
+        Disposable d = com.cocode.vcode.ide.ui.editor.viewer.ViewerManager.registerGlobalViewer(predicate, factory);
+        addDisposable(d);
+        return d;
+    }
+
+    /**
      * Cleans up all tracked subscriptions in reverse order.
      */
     public synchronized void dispose() {

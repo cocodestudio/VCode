@@ -373,6 +373,26 @@ public class FileTreeFragment extends Fragment implements FileTreeAdapter.FileTr
             if (ivIcon != null) ivIcon.setColorFilter(errorColor);
         }
 
+        List<com.cocode.vcode.ide.core.command.CommandItem> fileCommands =
+                com.cocode.vcode.ide.core.command.CommandRegistry.getInstance().getAllCommands();
+        boolean hasCustomFileCommand = false;
+        for (com.cocode.vcode.ide.core.command.CommandItem cmd : fileCommands) {
+            if ("File".equalsIgnoreCase(cmd.getCategory()) || "FileTree".equalsIgnoreCase(cmd.getCategory())) {
+                if (!hasCustomFileCommand) {
+                    addDivider(popupBinding.popupContainer);
+                    hasCustomFileCommand = true;
+                }
+                int icon = cmd.getIconResId() != 0 ? cmd.getIconResId() : R.drawable.ic_terminal;
+                addPopupItem(popupBinding.popupContainer, popupWindow, icon, cmd.getTitle(), () -> {
+                    try {
+                        cmd.execute(file, node);
+                    } catch (Throwable t) {
+                        android.util.Log.e("FileTreeFragment", "Error executing file command " + cmd.getId(), t);
+                    }
+                });
+            }
+        }
+
         popupBinding.getRoot().measure(
                 View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
