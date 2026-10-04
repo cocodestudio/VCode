@@ -102,6 +102,9 @@ public class CustomizeQuickSymbolsBottomSheet extends BaseBottomSheetDialogFragm
         binding.etCustomSymbol.setTypeface(fm.getCodeFont(context));
         binding.btnAddSymbol.setTypeface(fm.getUiMedium(context));
         binding.btnSaveSymbols.setTypeface(fm.getUiSemiBold(context));
+
+        UiUtils.setViewRounded(binding.etCustomSymbol, UiUtils.dpToPx(context, 10), ContextCompat.getColor(context, R.color.vcode_bg_elevated));
+        UiUtils.applyAccentToEditText(binding.etCustomSymbol);
     }
 
     private void setupListeners() {

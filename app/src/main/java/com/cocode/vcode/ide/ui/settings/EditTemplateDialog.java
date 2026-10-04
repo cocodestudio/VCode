@@ -103,13 +103,10 @@ public class EditTemplateDialog extends Dialog {
         binding.btnSave.setTypeface(fm.getUiSemiBold(ctx));
 
         int radius = UiUtils.dpToPx(ctx, 10);
-        int strokeWidth = UiUtils.dpToPx(ctx, 1);
-        int bgColor = ContextCompat.getColor(ctx, R.color.vcode_bg_deep);
-        int normalStrokeColor = ContextCompat.getColor(ctx, R.color.vcode_outline_variant);
-        int focusedStrokeColor = ContextCompat.getColor(ctx, R.color.vcode_accent_primary);
+        int bgColor = ContextCompat.getColor(ctx, R.color.vcode_bg_elevated);
 
-        UiUtils.setInputRounded(binding.etTemplateName, radius, bgColor, strokeWidth, normalStrokeColor, focusedStrokeColor);
-        UiUtils.setInputRounded(binding.etTemplateExtension, radius, bgColor, strokeWidth, normalStrokeColor, focusedStrokeColor);
+        UiUtils.setViewRounded(binding.etTemplateName, radius, bgColor);
+        UiUtils.setViewRounded(binding.etTemplateExtension, radius, bgColor);
         UiUtils.applyAccentToEditText(binding.etTemplateName);
         UiUtils.applyAccentToEditText(binding.etTemplateExtension);
     }

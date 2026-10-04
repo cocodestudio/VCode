@@ -132,7 +132,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:background="@drawable/vcode_bg_input_field"
+                    android:background="?attr/colorSurfaceContainerHigh"
                     android:hint="@string/vcode_customize_symbols_add_hint"
                     android:imeOptions="actionDone"
                     android:importantForAutofill="no"

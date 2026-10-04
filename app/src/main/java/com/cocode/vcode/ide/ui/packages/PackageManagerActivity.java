@@ -166,6 +166,9 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     }
 
     private void setupSearchInput() {
+        UiUtils.setViewRounded(binding.layoutSearchBar, UiUtils.dpToPx(this, 10), ContextCompat.getColor(this, R.color.vcode_bg_elevated));
+        UiUtils.applyAccentToEditText(binding.etSearch);
+
         binding.etSearch.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {

@@ -190,50 +190,6 @@ public class UiUtils {
     }
 
     /**
-     * Applies a rounded input field background with distinct resting and focused states,
-     * highlighting the outline stroke with the active accent color upon focus.
-     *
-     * @param view               the target view (EditText)
-     * @param radius             corner radius in pixels
-     * @param bgColor            fill color
-     * @param strokeWidth        stroke width in pixels
-     * @param normalStrokeColor  resting stroke color
-     * @param focusedStrokeColor focused stroke color
-     */
-    public static void setInputRounded(View view, float radius, int bgColor, int strokeWidth, int normalStrokeColor, int focusedStrokeColor) {
-        if (view == null) return;
-        int pl = view.getPaddingLeft();
-        int pt = view.getPaddingTop();
-        int pr = view.getPaddingRight();
-        int pb = view.getPaddingBottom();
-
-        GradientDrawable normalShape = new GradientDrawable();
-        normalShape.setShape(GradientDrawable.RECTANGLE);
-        normalShape.setCornerRadius(radius);
-        normalShape.setColor(bgColor);
-        if (strokeWidth > 0) {
-            normalShape.setStroke(strokeWidth, normalStrokeColor);
-        }
-
-        GradientDrawable focusedShape = new GradientDrawable();
-        focusedShape.setShape(GradientDrawable.RECTANGLE);
-        focusedShape.setCornerRadius(radius);
-        focusedShape.setColor(bgColor);
-        if (strokeWidth > 0) {
-            int focusedWidth = Math.max(strokeWidth, Math.round(strokeWidth * 1.5f));
-            focusedShape.setStroke(focusedWidth, focusedStrokeColor);
-        }
-
-        StateListDrawable states = new StateListDrawable();
-        states.addState(new int[]{android.R.attr.state_focused}, focusedShape);
-        states.addState(new int[]{}, normalShape);
-
-        view.setBackground(states);
-        view.setClipToOutline(true);
-        view.setPadding(pl, pt, pr, pb);
-    }
-
-    /**
      * Configures an EditText to use the application's primary accent color for its
      * cursor, selection handles, and highlight color.
      *
