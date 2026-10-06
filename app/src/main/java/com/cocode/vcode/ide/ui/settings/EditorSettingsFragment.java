@@ -10,10 +10,14 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.terminal.userland.HardwareCapabilityChecker;
+import com.cocode.vcode.ide.core.terminal.userland.UserlandBootstrapManager;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.databinding.FragmentSettingsEditorBinding;
 import com.cocode.vcode.ide.ui.sheets.settings.CustomizeQuickSymbolsBottomSheet;
 import com.cocode.vcode.ide.utils.FontManager;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.text.MessageFormat;
 
@@ -82,6 +86,8 @@ public class EditorSettingsFragment extends Fragment {
         binding.tvQuickSymbolBarDesc.setTypeface(fm.getUiFont(requireContext()));
         binding.tvCustomizeQuickSymbols.setTypeface(fm.getUiMedium(requireContext()));
         binding.tvCustomizeQuickSymbolsDesc.setTypeface(fm.getUiFont(requireContext()));
+        binding.tvDesktopTerminal.setTypeface(fm.getUiMedium(requireContext()));
+        binding.tvDesktopTerminalDesc.setTypeface(fm.getUiFont(requireContext()));
     }
 
     private void setupListeners() {
@@ -120,6 +126,21 @@ public class EditorSettingsFragment extends Fragment {
             if (binding.switchQuickSymbolBar.isChecked()) {
                 CustomizeQuickSymbolsBottomSheet sheet = CustomizeQuickSymbolsBottomSheet.newInstance();
                 sheet.show(getChildFragmentManager(), "CustomizeQuickSymbolsBottomSheet");
+            }
+        });
+
+        binding.opDesktopTerminal.setOnClickListener(_view ->
+                binding.switchDesktopTerminal.setChecked(!binding.switchDesktopTerminal.isChecked()));
+
+        binding.opCustomBootstrapMirror.setOnClickListener(_view -> showCustomMirrorDialog());
+
+        binding.switchDesktopTerminal.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (!isUpdatingUi) {
+                if (isChecked) {
+                    handleEnableDesktopTerminal();
+                } else {
+                    viewModel.updateDesktopTerminalEnabled(false);
+                }
             }
         });
 
@@ -220,6 +241,14 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchForceLargeFileHighlighting.setChecked(settings.forceLargeFileHighlighting);
                 binding.switchQuickSymbolBar.setChecked(settings.showQuickSymbolBar);
                 updateCustomizeSymbolsRowUi(settings.showQuickSymbolBar);
+                binding.switchDesktopTerminal.setChecked(settings.desktopTerminalEnabled ||
+                        UserlandBootstrapManager.getInstance().isInstalled(requireContext()));
+                String customMirror = settings.getCustomBootstrapUrl();
+                if (customMirror != null && !customMirror.trim().isEmpty()) {
+                    binding.tvCustomBootstrapMirrorValue.setText(customMirror);
+                } else {
+                    binding.tvCustomBootstrapMirrorValue.setText(R.string.vcode_setting_custom_bootstrap_mirror_default);
+                }
                 binding.tvFontSizeValue.setText(MessageFormat.format("{0}px", settings.getFontSize()));
                 isUpdatingUi = false;
             }
@@ -236,6 +265,80 @@ public class EditorSettingsFragment extends Fragment {
         binding.opShowSquigglyLines.setEnabled(diagnosticsEnabled);
         binding.opShowSquigglyLines.setAlpha(diagnosticsEnabled ? 1.0f : 0.4f);
         binding.switchShowSquigglyLines.setChecked(diagnosticsEnabled && squigglyChecked);
+    }
+
+    private void handleEnableDesktopTerminal() {
+        UserlandBootstrapManager manager = UserlandBootstrapManager.getInstance();
+        if (manager.isInstalled(requireContext())) {
+            viewModel.updateDesktopTerminalEnabled(true);
+            return;
+        }
+
+        HardwareCapabilityChecker.DeviceDiagnostic diag =
+                HardwareCapabilityChecker.checkDevice(requireContext());
+
+        if (diag.isLowRam) {
+            new MaterialAlertDialogBuilder(requireContext())
+                    .setTitle(R.string.vcode_desktop_terminal_dialog_title)
+                    .setMessage(getString(R.string.vcode_desktop_terminal_low_ram_warning, diag.getFormattedRam()))
+                    .setPositiveButton(R.string.vcode_desktop_terminal_proceed, (dialog, which) -> {
+                        installDesktopTerminal();
+                    })
+                    .setNegativeButton(R.string.vcode_desktop_terminal_cancel, (dialog, which) -> {
+                        binding.switchDesktopTerminal.setChecked(false);
+                    })
+                    .setCancelable(false)
+                    .show();
+        } else {
+            installDesktopTerminal();
+        }
+    }
+
+    private void installDesktopTerminal() {
+        android.widget.Toast.makeText(requireContext(), R.string.vcode_desktop_terminal_installing, android.widget.Toast.LENGTH_SHORT).show();
+        UserlandBootstrapManager.getInstance().installBootstrap(requireContext(), null,
+                new UserlandBootstrapManager.BootstrapCallback() {
+                    @Override
+                    public void onProgress(int stage, int totalStages, @NonNull String stageName, int percent, @Nullable String detail) {
+                    }
+
+                    @Override
+                    public void onSuccess() {
+                        if (getContext() != null) {
+                            viewModel.updateDesktopTerminalEnabled(true);
+                            android.widget.Toast.makeText(requireContext(), R.string.vcode_desktop_terminal_installed, android.widget.Toast.LENGTH_SHORT).show();
+                        }
+                    }
+
+                    @Override
+                    public void onError(@NonNull String error) {
+                        if (getContext() != null) {
+                            binding.switchDesktopTerminal.setChecked(false);
+                            android.widget.Toast.makeText(requireContext(), error, android.widget.Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+    }
+
+    private void showCustomMirrorDialog() {
+        AppSettings current = viewModel.getSettingsLiveData().getValue();
+        String currentUrl = current != null ? current.getCustomBootstrapUrl() : "";
+
+        android.widget.EditText input = new android.widget.EditText(requireContext());
+        input.setHint(R.string.vcode_setting_custom_bootstrap_mirror_hint);
+        input.setText(currentUrl);
+        input.setSingleLine(true);
+        input.setPadding(48, 32, 48, 32);
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.vcode_setting_custom_bootstrap_mirror_dialog_title)
+                .setView(input)
+                .setPositiveButton(R.string.vcode_setting_custom_bootstrap_mirror_save, (dialog, which) -> {
+                    String newUrl = input.getText() != null ? input.getText().toString().trim() : "";
+                    viewModel.updateCustomBootstrapUrl(newUrl);
+                })
+                .setNegativeButton(R.string.vcode_desktop_terminal_cancel, null)
+                .show();
     }
 
     @Override

@@ -230,6 +230,28 @@ public class SettingsViewModel extends ViewModel {
         }
     }
 
+    /**
+     * Toggles rootless desktop terminal environment.
+     */
+    public void updateDesktopTerminalEnabled(boolean value) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.desktopTerminalEnabled = value;
+            saveSettings(current);
+        }
+    }
+
+    /**
+     * Updates the custom rootless Linux userland bootstrap mirror URL.
+     */
+    public void updateCustomBootstrapUrl(String url) {
+        AppSettings current = settingsLiveData.getValue();
+        if (current != null) {
+            current.setCustomBootstrapUrl(url);
+            saveSettings(current);
+        }
+    }
+
 
     /**
      * Updates the global application theme (Light, Dark, or System).

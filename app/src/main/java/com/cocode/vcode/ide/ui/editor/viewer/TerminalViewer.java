@@ -83,28 +83,21 @@ public class TerminalViewer implements IFileViewer {
             @Override
             public void onInsertText(String text) {
                 if (session != null && text != null) {
-                    if (binding.terminalKeyBar.isCtrlActive() && text.length() == 1) {
-                        char c = text.charAt(0);
-                        char lower = Character.toLowerCase(c);
-                        if (lower == 'c') {
-                            session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_C);
-                            binding.terminalKeyBar.consumeCtrl();
-                            return;
-                        } else if (lower == 'l') {
-                            session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_L);
-                            binding.terminalKeyBar.consumeCtrl();
-                            return;
-                        } else if (lower == 'd') {
-                            session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_D);
-                            binding.terminalKeyBar.consumeCtrl();
-                            return;
-                        } else if (lower == 'z') {
-                            session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_Z);
-                            binding.terminalKeyBar.consumeCtrl();
-                            return;
-                        }
-                    }
                     session.handleInput(text);
+                }
+            }
+
+            @Override
+            public void onCtrlToggled(boolean active) {
+                if (session != null) {
+                    session.setCtrlActive(active);
+                }
+            }
+
+            @Override
+            public void onAltToggled(boolean active) {
+                if (session != null) {
+                    session.setAltActive(active);
                 }
             }
         });
@@ -124,6 +117,12 @@ public class TerminalViewer implements IFileViewer {
             session = new TerminalSession(context, projectRoot);
             int initialCols = TerminalView.calculateColumnsForDisplay(context);
             session.getEmulator().setColumns(initialCols);
+            session.setModifierResetListener(() -> {
+                if (binding != null) {
+                    binding.terminalKeyBar.consumeCtrl();
+                    binding.terminalKeyBar.consumeAlt();
+                }
+            });
             loadStateFromVirtualFile(file != null ? file.getContent() : null);
             session.setListener(new TerminalSession.TerminalSessionListener() {
                 @Override

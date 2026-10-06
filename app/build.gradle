@@ -6,6 +6,8 @@ android {
     namespace 'com.cocode.vcode.ide'
     compileSdk 36
 
+    ndkVersion '28.2.13676358'
+
     defaultConfig {
         applicationId "com.cocode.vcode.ide"
         minSdk 24
@@ -14,6 +16,22 @@ android {
         versionName "6.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=none"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
     }
 
     buildTypes {
@@ -35,6 +53,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += ['plugin.properties', 'about.html', 'META-INF/*','META-INF/*.kotlin_module']
         }

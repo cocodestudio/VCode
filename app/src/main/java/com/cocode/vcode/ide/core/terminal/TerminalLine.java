@@ -12,7 +12,7 @@ import java.util.List;
 public class TerminalLine {
 
     public static class StyleRun {
-        public final int start;
+        public int start;
         public int end;
         public final int fgColor;
         public final int bgColor;
@@ -78,10 +78,74 @@ public class TerminalLine {
         }
         if (index == text.length()) {
             text.append(c);
+            addStyle(index, index + 1, fgColor, bgColor, bold);
         } else {
             text.setCharAt(index, c);
+            setStyleAt(index, fgColor, bgColor, bold);
         }
-        addStyle(index, index + 1, fgColor, bgColor, bold);
+    }
+
+    private void setStyleAt(int index, int fgColor, int bgColor, boolean bold) {
+        if (styleRuns == null) {
+            styleRuns = new ArrayList<>(2);
+            styleRuns.add(new StyleRun(index, index + 1, fgColor, bgColor, bold));
+            return;
+        }
+
+        // 1. Remove or adjust any existing run covering index
+        for (int i = 0; i < styleRuns.size(); i++) {
+            StyleRun run = styleRuns.get(i);
+            if (run.start <= index && run.end > index) {
+                if (run.matches(fgColor, bgColor, bold)) {
+                    return; // Already has identical styling
+                }
+                if (run.start == index && run.end == index + 1) {
+                    styleRuns.remove(i);
+                } else if (run.start == index) {
+                    run.start = index + 1;
+                } else if (run.end == index + 1) {
+                    run.end = index;
+                } else {
+                    int oldEnd = run.end;
+                    run.end = index;
+                    styleRuns.add(i + 1, new StyleRun(index + 1, oldEnd, run.fgColor, run.bgColor, run.bold));
+                }
+                break;
+            }
+        }
+
+        // 2. Insert or merge the new styled segment [index, index + 1)
+        int insertIdx = 0;
+        while (insertIdx < styleRuns.size() && styleRuns.get(insertIdx).start < index) {
+            insertIdx++;
+        }
+
+        boolean mergedWithPrev = false;
+        if (insertIdx > 0) {
+            StyleRun prev = styleRuns.get(insertIdx - 1);
+            if (prev.end == index && prev.matches(fgColor, bgColor, bold)) {
+                prev.end = index + 1;
+                mergedWithPrev = true;
+            }
+        }
+
+        if (insertIdx < styleRuns.size()) {
+            StyleRun next = styleRuns.get(insertIdx);
+            if (next.start == index + 1 && next.matches(fgColor, bgColor, bold)) {
+                if (mergedWithPrev) {
+                    StyleRun prev = styleRuns.get(insertIdx - 1);
+                    prev.end = next.end;
+                    styleRuns.remove(insertIdx);
+                } else {
+                    next.start = index;
+                }
+                return;
+            }
+        }
+
+        if (!mergedWithPrev) {
+            styleRuns.add(insertIdx, new StyleRun(index, index + 1, fgColor, bgColor, bold));
+        }
     }
 
     public synchronized void deleteCharAt(int index) {
@@ -125,6 +189,13 @@ public class TerminalLine {
                     }
                 }
             }
+        }
+    }
+
+    public synchronized void clearTo(int endCol) {
+        int limit = Math.min(endCol, text.length());
+        for (int i = 0; i < limit; i++) {
+            setCharAt(i, ' ', TerminalEmulator.COLOR_DEFAULT_FG, TerminalEmulator.COLOR_DEFAULT_BG, false);
         }
     }
 

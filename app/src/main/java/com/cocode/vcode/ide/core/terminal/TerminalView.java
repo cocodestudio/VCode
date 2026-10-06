@@ -135,18 +135,23 @@ public class TerminalView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        updateColumns(w);
+        updateDimensions(w, h);
     }
 
-    private void updateColumns(int width) {
-        if (charWidth <= 0) {
+    private void updateDimensions(int width, int height) {
+        if (charWidth <= 0 || lineHeight <= 0) {
             recomputeFontMetrics();
         }
         if (charWidth > 0 && width > 0) {
-            float padding = getPaddingLeft() + getPaddingRight() + 24f;
-            int cols = (int) ((width - padding) / charWidth);
-            if (cols > 10 && session != null) {
+            float horizontalPadding = getPaddingLeft() + getPaddingRight() + 24f;
+            int cols = (int) ((width - horizontalPadding) / charWidth);
+            float verticalPadding = getPaddingTop() + getPaddingBottom() + 16f;
+            int rows = (lineHeight > 0 && height > 0) ? (int) ((height - verticalPadding) / lineHeight) : 24;
+            if (cols < 10) cols = TerminalEmulator.DEFAULT_COLUMNS;
+            if (rows < 2) rows = 24;
+            if (session != null) {
                 session.getEmulator().setColumns(cols);
+                session.setWindowSize(cols, rows);
             }
         }
     }
@@ -189,11 +194,14 @@ public class TerminalView extends View {
 
     public void attachSession(@NonNull TerminalSession session) {
         this.session = session;
-        if (getWidth() > 0) {
-            updateColumns(getWidth());
+        int w = getWidth();
+        int h = getHeight();
+        if (w > 0 && h > 0) {
+            updateDimensions(w, h);
         } else {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            updateColumns(screenWidth);
+            int screenHeight = getResources().getDisplayMetrics().heightPixels;
+            updateDimensions(screenWidth, screenHeight);
         }
         session.getEmulator().setDarkTheme(UiUtils.isNightMode(getContext()));
         session.setListener(new TerminalSession.TerminalSessionListener() {
@@ -348,7 +356,7 @@ public class TerminalView extends View {
             }
 
             // Draw cursor on active line
-            if (i == lineCount - 1) {
+            if (i == session.getEmulator().getCursorRow()) {
                 int cursorCol = session.getEmulator().getCursorCol();
                 float cursorX = paddingLeft + (cursorCol * charWidth);
                 float cursorYTop = y - fontAscent + 2;
@@ -493,6 +501,7 @@ public class TerminalView extends View {
     @Override
     public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
         outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE
                 | EditorInfo.IME_FLAG_NO_FULLSCREEN
@@ -501,19 +510,40 @@ public class TerminalView extends View {
         return new BaseInputConnection(this, false) {
             private String composingText = "";
 
+            private void handleComposingChange(CharSequence newText) {
+                if (session == null) return;
+                if (newText == null) newText = "";
+                String next = newText.toString();
+
+                int commonPrefix = 0;
+                int minLen = Math.min(composingText.length(), next.length());
+                while (commonPrefix < minLen && composingText.charAt(commonPrefix) == next.charAt(commonPrefix)) {
+                    commonPrefix++;
+                }
+
+                int charsToDelete = composingText.length() - commonPrefix;
+                for (int i = 0; i < charsToDelete; i++) {
+                    session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
+                }
+
+                if (commonPrefix < next.length()) {
+                    String added = next.substring(commonPrefix);
+                    session.handleInput(added);
+                }
+
+                composingText = next;
+            }
+
             @Override
             public boolean commitText(CharSequence text, int newCursorPosition) {
                 if (session != null && text != null) {
-                    int compLen = composingText.length();
-                    for (int i = 0; i < compLen; i++) {
-                        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
-                    }
-                    composingText = "";
                     String str = text.toString();
                     if ("\n".equals(str) || "\r\n".equals(str)) {
+                        composingText = "";
                         session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
                     } else {
-                        session.handleInput(str);
+                        handleComposingChange(str);
+                        composingText = "";
                     }
                 }
                 return true;
@@ -522,13 +552,7 @@ public class TerminalView extends View {
             @Override
             public boolean setComposingText(CharSequence text, int newCursorPosition) {
                 if (session != null && text != null) {
-                    int compLen = composingText.length();
-                    for (int i = 0; i < compLen; i++) {
-                        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
-                    }
-                    String newText = text.toString();
-                    composingText = newText;
-                    session.handleInput(newText);
+                    handleComposingChange(text);
                 }
                 return true;
             }

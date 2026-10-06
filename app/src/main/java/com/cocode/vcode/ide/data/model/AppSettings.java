@@ -1,5 +1,8 @@
 package com.cocode.vcode.ide.data.model;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 /**
  * Data model for global and project-level settings (editor preferences, Git defaults, appearance, preview, and auto-save).
  */
@@ -54,11 +57,32 @@ public class AppSettings {
     public boolean autoSave = false;
     public int autoSaveDelay = 2; // seconds
 
+    // Desktop Terminal & Rootless Userland
+    public boolean desktopTerminalEnabled = false;
+    public String customBootstrapUrl = "";
+
     // Safety and Confirmation Dialogs
     public boolean confirmOnTabClose = true;
     public boolean confirmOnProjectDelete = true;
 
     public AppSettings() {
+    }
+
+    public boolean isDesktopTerminalEnabled() {
+        return desktopTerminalEnabled;
+    }
+
+    public void setDesktopTerminalEnabled(boolean enabled) {
+        this.desktopTerminalEnabled = enabled;
+    }
+
+    @NonNull
+    public String getCustomBootstrapUrl() {
+        return customBootstrapUrl != null ? customBootstrapUrl : "";
+    }
+
+    public void setCustomBootstrapUrl(@Nullable String customBootstrapUrl) {
+        this.customBootstrapUrl = customBootstrapUrl != null ? customBootstrapUrl : "";
     }
 
     public int getFontSize() {

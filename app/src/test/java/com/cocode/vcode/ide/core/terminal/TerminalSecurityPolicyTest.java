@@ -378,4 +378,232 @@ public class TerminalSecurityPolicyTest {
     public void testEchoNotTreatedAsDelete() {
         assertTrue(TerminalSecurityPolicy.validateCommand("echo 'rm -rf .vcode'", projectRoot, projectRoot).isAllowed());
     }
+
+    // ==========================================
+    // 10. Fork Bomb Detection (Must be BLOCKED)
+    // ==========================================
+
+    @Test
+    public void testForkBombClassicBlocked() {
+        TerminalSecurityPolicy.ValidationResult result =
+                TerminalSecurityPolicy.validateCommand(":(){ :|:& };:", projectRoot, projectRoot);
+        assertFalse(result.isAllowed());
+        assertTrue(result.getErrorMessage().contains("fork bomb"));
+    }
+
+    @Test
+    public void testForkBombCompactBlocked() {
+        TerminalSecurityPolicy.ValidationResult result =
+                TerminalSecurityPolicy.validateCommand(":(){:|:&};:", projectRoot, projectRoot);
+        assertFalse(result.isAllowed());
+        assertTrue(result.getErrorMessage().contains("fork bomb"));
+    }
+
+    @Test
+    public void testForkBombGenericFunctionBlocked() {
+        TerminalSecurityPolicy.ValidationResult result =
+                TerminalSecurityPolicy.validateCommand("bomb() { bomb | bomb & }; bomb", projectRoot, projectRoot);
+        assertFalse(result.isAllowed());
+        assertTrue(result.getErrorMessage().contains("fork bomb"));
+    }
+
+    // ==========================================
+    // 11. Forbidden System & Hardware Commands (Must be BLOCKED)
+    // ==========================================
+
+    @Test
+    public void testForbiddenSystemCommandsBlocked() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("su", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("reboot", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("shutdown -h now", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("poweroff", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("mkfs.ext4 /dev/block/sda", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("fdisk /dev/block/mmcblk0", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("setenforce 0", projectRoot, projectRoot).isAllowed());
+    }
+
+    // ==========================================
+    // 12. Raw Device and Kernel Node Access (Must be BLOCKED)
+    // ==========================================
+
+    @Test
+    public void testRawDevicePathArgumentsBlocked() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("cat /dev/block/bootdevice", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("hexdump /dev/mem", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("cat /proc/kmsg", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testRawDeviceRedirectionBlocked() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 'malicious' > /dev/block/mmcblk0", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 'payload' >> /dev/mem", projectRoot, projectRoot).isAllowed());
+    }
+
+    // ==========================================
+    // 13. Specialized Commands (dd, truncate, cp, tee, chmod) Security
+    // ==========================================
+
+    @Test
+    public void testDdDestinationsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("dd if=/dev/zero of=/dev/block/sda", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("dd if=/dev/zero of=.vcode/config", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("dd if=/dev/zero of=/sdcard/hack", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("dd if=/dev/zero of=test.bin bs=1024 count=1", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testTruncateDestinationsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("truncate -s 0 .vcode/state/session.json", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("truncate -s 0 /sdcard/file.txt", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("truncate -s 0 /dev/block/sda", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("truncate -s 0 index.html", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testCpDestinationsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("cp index.html .vcode/", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("cp index.html /sdcard/", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("cp index.html /dev/block/sda", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("cp index.html index.backup.html", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("cp -r src dist", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testTeeDestinationsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 123 | tee .vcode/state/session.json", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 123 | tee /sdcard/out.txt", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 123 | tee /dev/mem", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("echo 123 | tee src/output.txt", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testChmodDestinationsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("chmod -R 000 /", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("chmod 777 .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("chmod 644 /dev/block/sda", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("chmod 644 /sdcard/file.txt", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("chmod 755 src/app.js", projectRoot, projectRoot).isAllowed());
+    }
+
+    // ==========================================
+    // 14. Command Substitution & Subshell Security
+    // ==========================================
+
+    @Test
+    public void testCommandSubstitutionRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo $(rm -rf .vcode)", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo $(reboot)", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo `su`", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("VAR=\"$(rm -rf .vcode)\"", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("cat <(rm -rf .vcode)", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("echo 'safe $(substitution)'", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testAndroidFrameworkAndDeviceCommandsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("pm uninstall com.example.app", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("am start -a android.intent.action.VIEW", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("content query --uri content://sms/", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("screencap /sdcard/screen.png", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("logcat -d", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("svc wifi disable", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("setprop persist.sys.evil 1", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testEnvFlagObfuscationRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("env -i rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("env -u FOO rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("env --null rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testXargsWrappingRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("xargs rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("xargs reboot", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("xargs -I {} rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testSubshellFlagsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("bash -lc \"rm -rf .vcode\"", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("sh -cl \"reboot\"", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("bash --command \"rm -rf .vcode\"", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testAdvancedRedirectionRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 1 >| .vcode/state.json", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("echo 1 &> /dev/mem", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("cat < /dev/block/bootdevice", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testExpandedDangerousCommandsRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("mount -o remount,rw /system", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("umount /data", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("chroot /", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("dmesg", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("locksettings clear", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("telecom call 911", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("uiautomator dump", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("monkey -p com.android.settings 100", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("ime enable evil.ime", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("bu backup", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("bmgr restore", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("run-as com.other.app", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("magisk --daemon", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("tcpdump -i any", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testCommandWrappersRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("nice -n 10 rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("timeout 5 reboot", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("timeout -s 9 5s rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("watch -n 1 rm -rf .vcode", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("eval \"rm -rf .vcode\"", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("eval reboot", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("eval \"echo hello\"", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testTouchAndMkdirAndLnRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("touch .vcode/state.json", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("touch /dev/block/sda", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("touch /sdcard/evil.txt", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("touch app.js", projectRoot, projectRoot).isAllowed());
+
+        assertFalse(TerminalSecurityPolicy.validateCommand("mkdir .vcode/backdoor", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("mkdir /sdcard/bad_folder", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("mkdir src", projectRoot, projectRoot).isAllowed());
+
+        assertFalse(TerminalSecurityPolicy.validateCommand("ln -s /etc .vcode/link", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("ln -s /dev/block link_dev", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("ln -s /dev/mem link_mem", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("ln -s index.html main.html", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testTargetDirectoryOptionRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("mv -t .vcode file.txt", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("mv -t /sdcard file.txt", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("mv --target-directory=.vcode file.txt", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("mv -t dist file.txt", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testFindExecSubcommandRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("find . -exec reboot \\;", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("find . -exec rm -rf .vcode \\;", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("find . -exec pm uninstall com.example \\;", projectRoot, projectRoot).isAllowed());
+        assertTrue(TerminalSecurityPolicy.validateCommand("find . -name \"*.js\" -exec grep -H \"foo\" {} \\;", projectRoot, projectRoot).isAllowed());
+    }
+
+    @Test
+    public void testDevicePathTraversalRestricted() {
+        assertFalse(TerminalSecurityPolicy.validateCommand("cat ../../dev/block/bootdevice", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("cat /workspace/../../dev/mem", projectRoot, projectRoot).isAllowed());
+        assertFalse(TerminalSecurityPolicy.validateCommand("dd if=/dev/zero of=../../dev/block/sda", projectRoot, projectRoot).isAllowed());
+    }
 }

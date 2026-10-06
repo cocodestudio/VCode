@@ -5,8 +5,10 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.cocode.vcode.ide.data.npm.PackageManagerService;
-import com.cocode.vcode.ide.data.npm.model.NpmPackageInfo;
+import com.cocode.vcode.ide.core.terminal.pty.PtyBridge;
+import com.cocode.vcode.ide.core.terminal.userland.HardwareCapabilityChecker;
+import com.cocode.vcode.ide.core.terminal.userland.UserlandBootstrapManager;
+import com.cocode.vcode.ide.core.terminal.userland.UserlandTarExtractor;
 import com.cocode.vcode.ide.data.repository.ProjectRepository;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.UiUtils;
@@ -18,12 +20,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
- * Manages the background shell process lifecycle, process streams, and environment variables.
- * Scoped strictly to the opened project root with real project name virtualization.
- * Provides interactive line discipline, local echo, command execution, and prompt loop.
+ * Manages the authentic desktop-grade pseudo-terminal (PTY) session, stream lifecycle,
+ * process signals, window resizing (SIGWINCH), and rootless Linux container environment.
  */
 public class TerminalSession {
 
@@ -50,11 +50,16 @@ public class TerminalSession {
     public static final int SPECIAL_KEY_END = 14;
     public static final int SPECIAL_KEY_DELETE = 15;
 
+    public static final int MAX_HISTORY_SIZE = 50;
+
     private final Context context;
     private final File projectRoot;
     private final String projectName;
     private final TerminalBuffer buffer;
     private final TerminalEmulator emulator;
+
+    private int initialCols = 80;
+    private int initialRows = 24;
 
     private final StringBuilder currentInput = new StringBuilder();
     private int inputCursorPos = 0;
@@ -63,13 +68,38 @@ public class TerminalSession {
     private File currentDir;
     private String initialBuffer;
 
-    private Process process;
+    private PtyBridge.PtyProcess ptyProcess;
+    private Process fallbackProcess;
+    private InputStream inputStream;
     private OutputStream outputStream;
     private volatile boolean isRunning = false;
-    private volatile boolean isExecutingCommand = false;
-    private volatile String activeSentinel = null;
+    private volatile boolean isAwaitingBootstrapConfirmation = false;
+    private volatile String pendingBootstrapCommand = null;
     private volatile String lastExecutedCommand = null;
+    private volatile boolean isCtrlActive = false;
+    private volatile boolean isAltActive = false;
+    private Runnable modifierResetListener = null;
     private TerminalSessionListener listener;
+
+    public void setModifierResetListener(@Nullable Runnable listener) {
+        this.modifierResetListener = listener;
+    }
+
+    public synchronized void setCtrlActive(boolean active) {
+        this.isCtrlActive = active;
+    }
+
+    public synchronized boolean isCtrlActive() {
+        return isCtrlActive;
+    }
+
+    public synchronized void setAltActive(boolean active) {
+        this.isAltActive = active;
+    }
+
+    public synchronized boolean isAltActive() {
+        return isAltActive;
+    }
 
     public TerminalSession(@NonNull Context context, @NonNull File projectRoot) {
         this.context = context.getApplicationContext();
@@ -87,7 +117,7 @@ public class TerminalSession {
 
     @NonNull
     public TerminalBuffer getBuffer() {
-        return buffer;
+        return emulator != null ? emulator.getActiveBuffer() : buffer;
     }
 
     @NonNull
@@ -104,11 +134,17 @@ public class TerminalSession {
         return currentInput.toString();
     }
 
+    public synchronized int getInputCursorPos() {
+        return inputCursorPos;
+    }
+
+    public synchronized void setInputCursorPos(int newPos) {
+        this.inputCursorPos = Math.max(0, newPos);
+    }
+
     public synchronized boolean isRunning() {
         return isRunning;
     }
-
-    public static final int MAX_HISTORY_SIZE = 50;
 
     public synchronized List<String> getHistory() {
         return new ArrayList<>(history);
@@ -140,13 +176,21 @@ public class TerminalSession {
         this.initialBuffer = buffer;
     }
 
+    public synchronized void setWindowSize(int cols, int rows) {
+        this.initialCols = cols;
+        this.initialRows = rows;
+        if (ptyProcess != null) {
+            ptyProcess.setWindowSize(rows, cols);
+        }
+    }
+
     private static String escapeShellArg(String arg) {
         if (arg == null) return "''";
         return "'" + arg.replace("'", "'\\''") + "'";
     }
 
     /**
-     * Spawns a shell process (/system/bin/sh) with the projectRoot or restored currentDir as working directory.
+     * Spawns an authentic POSIX shell process inside a master/slave PTY.
      */
     public synchronized void start() {
         if (isRunning) return;
@@ -156,25 +200,181 @@ public class TerminalSession {
                 currentDir = projectRoot;
             }
             currentInput.setLength(0);
-            isExecutingCommand = false;
-            activeSentinel = null;
+            inputCursorPos = 0;
 
-            ProcessBuilder pb = new ProcessBuilder("/system/bin/sh");
-            pb.directory(currentDir);
-            pb.redirectErrorStream(true);
+            UserlandBootstrapManager userlandManager = UserlandBootstrapManager.getInstance();
+            boolean isUserland = userlandManager.isInstalled(context);
+            String prefixPath = userlandManager.getPrefixDir(context).getAbsolutePath();
 
-            Map<String, String> env = pb.environment();
-            String filesDir = context.getFilesDir().getAbsolutePath();
-            // Scope HOME strictly to the project root to prevent exposing app private storage or SSH keys
+            Map<String, String> env = new java.util.HashMap<>();
+            String currentPath = System.getenv("PATH");
+            env.put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"
+                    + (currentPath != null ? currentPath : "/system/bin:/system/xbin") + ":" + prefixPath + "/bin");
             env.put("HOME", projectRoot.getAbsolutePath());
-            String currentPath = env.get("PATH");
-            // Prioritize standard system bins to avoid PATH hijacking from writable app storage
-            env.put("PATH", (currentPath != null ? currentPath : "/system/bin:/system/xbin") + ":" + filesDir + "/bin");
             env.put("TERM", "xterm-256color");
-            env.put("VCODE_PROJECT_NAME", projectName);
+            env.put("LANG", "en_US.UTF-8");
+            env.put("LC_ALL", "en_US.UTF-8");
+            String resolvedProjectName = (projectName != null && !projectName.trim().isEmpty())
+                    ? projectName.trim() : "vcode";
+            env.put("VCODE_PROJECT_NAME", resolvedProjectName);
+            env.put("PYTHONUNBUFFERED", "1");
+            env.put("PS1", "\033[01;32m" + resolvedProjectName + "\033[00m:\033[01;34m\\w\033[00m$ ");
 
-            process = pb.start();
-            outputStream = process.getOutputStream();
+            PtyBridge.PtyProcess p = null;
+            Process fallbackProc = null;
+
+            int rows = initialRows > 0 ? initialRows : 24;
+            int cols = initialCols > 0 ? initialCols : 80;
+
+            // Option A: Rootless Linux PRoot container execution inside PTY
+            if (isUserland && userlandManager.isProotAvailable(context)) {
+                try {
+                    userlandManager.ensureBaseEnvironment(context);
+
+                    File prootBin = userlandManager.getProotBinary(context);
+                    File prootLoader = userlandManager.getProotLoader(context);
+                    File homeDir = userlandManager.getHomeDir(context);
+                    if (!homeDir.exists()) {
+                        homeDir.mkdirs();
+                    }
+
+                    List<String> prootCmd = buildProotCommand(prootBin, prefixPath, projectRoot, homeDir);
+
+                    File libDir = userlandManager.getLibDir(context);
+                    if (!libDir.exists()) {
+                        libDir.mkdirs();
+                    }
+                    String nativeLibDir = context.getApplicationInfo().nativeLibraryDir;
+                    File nativeTalloc = new File(nativeLibDir, "libtalloc.so");
+                    if (nativeTalloc.exists()) {
+                        File tallocSo = new File(libDir, "libtalloc.so");
+                        File tallocSo2 = new File(libDir, "libtalloc.so.2");
+                        if (!tallocSo.exists()) {
+                            if (!UserlandTarExtractor.createSymlink(nativeTalloc.getAbsolutePath(), tallocSo)) {
+                                com.cocode.vcode.ide.utils.FileUtils.copyFile(nativeTalloc, tallocSo);
+                            }
+                        }
+                        if (!tallocSo2.exists()) {
+                            if (!UserlandTarExtractor.createSymlink(nativeTalloc.getAbsolutePath(), tallocSo2)) {
+                                com.cocode.vcode.ide.utils.FileUtils.copyFile(nativeTalloc, tallocSo2);
+                            }
+                        }
+                    }
+
+                    Map<String, String> prootEnv = new java.util.HashMap<>(env);
+                    if (prootLoader.exists()) {
+                        prootEnv.put("PROOT_LOADER", prootLoader.getAbsolutePath());
+                        prootEnv.put("PROOT_LOADER_32", prootLoader.getAbsolutePath());
+                    }
+                    File tmpDir = userlandManager.getTmpDir(context);
+                    if (!tmpDir.exists() && !tmpDir.mkdirs()) {
+                        tmpDir = new File(context.getCacheDir(), "tmp");
+                        tmpDir.mkdirs();
+                    }
+                    tmpDir.setReadable(true, false);
+                    tmpDir.setWritable(true, false);
+                    tmpDir.setExecutable(true, false);
+                    String tmpPath;
+                    try {
+                        tmpPath = tmpDir.getCanonicalPath();
+                    } catch (Exception e) {
+                        tmpPath = tmpDir.getAbsolutePath();
+                    }
+                    prootEnv.put("PROOT_TMP_DIR", tmpPath);
+                    prootEnv.put("TMPDIR", tmpPath);
+                    prootEnv.put("PROOT_IGNORE_MISSING_BINDINGS", "1");
+
+                    String systemLibDir = new File("/system/lib64").exists() ? "/system/lib64" : "/system/lib";
+                    prootEnv.put("LD_LIBRARY_PATH", nativeLibDir + ":" + systemLibDir);
+                    prootEnv.put("TERM", "xterm-256color");
+                    prootEnv.put("LANG", "C.UTF-8");
+                    prootEnv.put("HOME", "/workspace");
+                    prootEnv.put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/system/bin");
+                    prootEnv.put("VCODE_PROJECT_NAME", resolvedProjectName);
+                    prootEnv.put("PYTHONUNBUFFERED", "1");
+                    prootEnv.put("PS1", "\033[01;32m" + resolvedProjectName + "\033[00m:\033[01;34m\\w\033[00m$ ");
+                    prootEnv.put("ENV", "/etc/profile.d/vcode.sh");
+                    prootEnv.put("XDG_CACHE_HOME", "/root/.cache");
+                    prootEnv.put("XDG_CONFIG_HOME", "/root/.config");
+                    prootEnv.put("XDG_DATA_HOME", "/root/.local/share");
+                    prootEnv.put("NPM_CONFIG_CACHE", "/root/.npm");
+                    prootEnv.put("PIP_CACHE_DIR", "/root/.cache/pip");
+                    prootEnv.remove("LD_PRELOAD");
+
+                    String[] envArr = new String[prootEnv.size()];
+                    int idx = 0;
+                    for (Map.Entry<String, String> entry : prootEnv.entrySet()) {
+                        envArr[idx++] = entry.getKey() + "=" + entry.getValue();
+                    }
+
+                    p = PtyBridge.createSubprocess(
+                            prootCmd.toArray(new String[0]),
+                            currentDir.getAbsolutePath(),
+                            envArr,
+                            rows,
+                            cols
+                    );
+                } catch (Throwable t) {
+                    p = null;
+                }
+            }
+
+            // Option B: Native system shell inside PTY
+            if (p == null) {
+                String shellPath = "/system/bin/sh";
+                if (!new File(shellPath).exists()) {
+                    String osName = System.getProperty("os.name", "").toLowerCase();
+                    if (osName.contains("win")) {
+                        shellPath = "cmd.exe";
+                    } else if (new File("/bin/sh").exists()) {
+                        shellPath = "/bin/sh";
+                    }
+                }
+
+                String[] cmd = new String[]{ shellPath, "-l" };
+                if (!new File(shellPath).exists()) {
+                    cmd = new String[]{ shellPath };
+                }
+
+                String[] envArr = new String[env.size()];
+                int idx = 0;
+                for (Map.Entry<String, String> entry : env.entrySet()) {
+                    envArr[idx++] = entry.getKey() + "=" + entry.getValue();
+                }
+
+                p = PtyBridge.createSubprocess(
+                        cmd,
+                        currentDir.getAbsolutePath(),
+                        envArr,
+                        rows,
+                        cols
+                );
+            }
+
+            if (p != null) {
+                ptyProcess = p;
+                inputStream = ptyProcess.getInputStream();
+                outputStream = ptyProcess.getOutputStream();
+            } else {
+                // Secondary fallback if native PTY fails
+                String shellPath = "/system/bin/sh";
+                if (!new File(shellPath).exists()) {
+                    if (new File("/bin/sh").exists()) {
+                        shellPath = "/bin/sh";
+                    } else {
+                        shellPath = "sh";
+                    }
+                }
+                ProcessBuilder shPb = new ProcessBuilder(shellPath);
+                shPb.directory(currentDir);
+                shPb.redirectErrorStream(true);
+                shPb.environment().putAll(env);
+                fallbackProc = shPb.start();
+                fallbackProcess = fallbackProc;
+                inputStream = fallbackProc.getInputStream();
+                outputStream = fallbackProc.getOutputStream();
+            }
+
             isRunning = true;
 
             // Start background stream reader thread on a dedicated daemon thread
@@ -195,8 +395,6 @@ public class TerminalSession {
                 }
             }
 
-            // Print initial prompt
-            printPrompt();
             notifyOutput();
         } catch (Exception e) {
             isRunning = false;
@@ -205,105 +403,57 @@ public class TerminalSession {
         }
     }
 
-    private void printPrompt() {
-        String relPath = getDisplayPath();
-        String prompt = "\033[01;32m" + projectName + "\033[00m:\033[01;34m" + relPath + "\033[00m$ ";
-        emulator.appendOutput(prompt);
-        currentInput.setLength(0);
-        inputCursorPos = 0;
-    }
-
-    private String getDisplayPath() {
-        if (currentDir == null || projectRoot == null) return "~";
-        String rootPath = projectRoot.getAbsolutePath();
-        String curPath = currentDir.getAbsolutePath();
-        if (curPath.equals(rootPath)) {
-            return "~";
-        }
-        if (curPath.startsWith(rootPath)) {
-            String sub = curPath.substring(rootPath.length());
-            if (sub.startsWith(File.separator) || sub.startsWith("/")) {
-                sub = sub.substring(1);
-            }
-            return "~/" + sub.replace(File.separatorChar, '/');
-        }
-        return currentDir.getName();
-    }
-
     private void readProcessOutput() {
         try {
-            InputStream is = process.getInputStream();
-            byte[] buf = new byte[2048];
+            InputStream is = inputStream;
+            if (is == null) return;
+            java.io.Reader reader = new java.io.InputStreamReader(is, StandardCharsets.UTF_8);
+            char[] buf = new char[2048];
             int read;
-            StringBuilder pendingOutput = new StringBuilder();
 
-            while (isRunning && (read = is.read(buf)) != -1) {
-                String chunk = new String(buf, 0, read, StandardCharsets.UTF_8);
-                synchronized (this) {
-                    pendingOutput.append(chunk);
-
-                    String currentSentinel = activeSentinel;
-                    if (currentSentinel != null) {
-                        int sentinelIdx;
-                        while ((sentinelIdx = pendingOutput.indexOf(currentSentinel)) != -1) {
-                            int newlineIdx = pendingOutput.indexOf("\n", sentinelIdx);
-                            if (newlineIdx == -1) {
-                                // Sentinel line not yet fully read; wait for next read
-                                break;
-                            }
-                            int exitCode = 0;
-                            try {
-                                String sentinelLine = pendingOutput.substring(sentinelIdx, newlineIdx).trim();
-                                int colonIdx = sentinelLine.lastIndexOf(':');
-                                if (colonIdx != -1) {
-                                    exitCode = Integer.parseInt(sentinelLine.substring(colonIdx + 1).trim());
-                                }
-                            } catch (Exception ignored) {
-                            }
-                            String outputBefore = pendingOutput.substring(0, sentinelIdx);
-                            if (!outputBefore.isEmpty()) {
-                                emulator.appendOutput(outputBefore);
-                            }
-                            pendingOutput.delete(0, newlineIdx + 1);
-
-                            String finishedCmd = lastExecutedCommand;
-                            isExecutingCommand = false;
-                            activeSentinel = null;
-                            printPrompt();
-                            if (currentInput.length() > 0) {
-                                emulator.appendOutput(currentInput.toString());
-                            }
-                            notifyCommandFinished(finishedCmd, exitCode);
-                        }
+            while (isRunning && (read = reader.read(buf)) != -1) {
+                String chunk = new String(buf, 0, read);
+                chunk = filterLinkerWarning(chunk);
+                if (!chunk.isEmpty()) {
+                    synchronized (this) {
+                        emulator.appendOutput(chunk);
                     }
-
-                    int sentinelLen = activeSentinel != null ? activeSentinel.length() : 0;
-                    if (pendingOutput.length() > sentinelLen) {
-                        if (activeSentinel == null || pendingOutput.indexOf(activeSentinel) == -1) {
-                            int safeLen = pendingOutput.length() - sentinelLen;
-                            String safeChunk = pendingOutput.substring(0, safeLen);
-                            emulator.appendOutput(safeChunk);
-                            pendingOutput.delete(0, safeLen);
-                        }
-                    }
+                    notifyOutput();
                 }
-                notifyOutput();
             }
         } catch (Exception ignored) {
+        } finally {
+            isRunning = false;
+            notifyOutput();
         }
+    }
+
+    private static String filterLinkerWarning(String text) {
+        if (text == null || text.isEmpty()) return "";
+        if (text.contains("failed to find generated linker configuration")) {
+            text = text.replace("WARNING: linker: Warning: failed to find generated linker configuration from \"/linkerconfig/ld.config.txt\"\r\n", "")
+                       .replace("WARNING: linker: Warning: failed to find generated linker configuration from \"/linkerconfig/ld.config.txt\"\n", "")
+                       .replace("WARNING: linker: Warning: failed to find generated linker configuration from \"/linkerconfig/ld.config.txt\"", "");
+        }
+        return text;
     }
 
     private void waitForExit() {
         try {
-            if (process != null) {
-                int exitCode = process.waitFor();
-                isRunning = false;
-                ExecutorProvider.getInstance().runOnMain(() -> {
-                    if (listener != null) {
-                        listener.onProcessTerminated(exitCode);
-                    }
-                });
+            int exitCode;
+            if (ptyProcess != null) {
+                exitCode = ptyProcess.waitFor();
+            } else if (fallbackProcess != null) {
+                exitCode = fallbackProcess.waitFor();
+            } else {
+                exitCode = 0;
             }
+            isRunning = false;
+            ExecutorProvider.getInstance().runOnMain(() -> {
+                if (listener != null) {
+                    listener.onProcessTerminated(exitCode);
+                }
+            });
         } catch (Exception ignored) {
         } finally {
             isRunning = false;
@@ -318,40 +468,110 @@ public class TerminalSession {
         });
     }
 
+    /**
+     * Handles keyboard text input, streaming bytes directly down the PTY.
+     */
     public synchronized void handleInput(@NonNull String text) {
         if (!isRunning) return;
 
-        if (isExecutingCommand) {
-            writeToProcess(text);
+        if (isAwaitingBootstrapConfirmation) {
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                if (c == '\r' || c == '\n') {
+                    String answer = currentInput.toString().trim().toLowerCase(java.util.Locale.US);
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
+                    isAwaitingBootstrapConfirmation = false;
+                    String pending = pendingBootstrapCommand;
+                    pendingBootstrapCommand = null;
+                    if (answer.isEmpty() || answer.equals("y") || answer.equals("yes")) {
+                        startBootstrapInstallation(pending);
+                    } else {
+                        emulator.appendOutput("\r\nInstallation cancelled.\r\n");
+                        writeToProcess("\r");
+                        notifyOutput();
+                    }
+                    return;
+                } else if (c == '\b' || c == 127) {
+                    if (currentInput.length() > 0) {
+                        currentInput.deleteCharAt(currentInput.length() - 1);
+                        emulator.appendOutput("\b \b");
+                        notifyOutput();
+                    }
+                } else if (c >= 32) {
+                    currentInput.append(c);
+                    emulator.appendOutput(String.valueOf(c));
+                    notifyOutput();
+                }
+            }
             return;
         }
 
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '\r' || c == '\n') {
-                executeCurrentLine();
-            } else if (c == '\b' || c == 127) {
-                handleBackspace();
-            } else if (c == '\t') {
-                handleTabCompletion();
-            } else if (c >= 32) {
-                if (inputCursorPos == currentInput.length()) {
-                    currentInput.append(c);
-                    inputCursorPos++;
-                    emulator.appendOutput(String.valueOf(c));
+        if (isCtrlActive && text.length() > 0) {
+            char c = text.charAt(0);
+            byte[] ctrlBytes = null;
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '@' || (c >= '[' && c <= '_')) {
+                byte b = (byte) (Character.toUpperCase(c) - '@');
+                ctrlBytes = new byte[]{ b };
+            }
+            isCtrlActive = false;
+            if (modifierResetListener != null) {
+                ExecutorProvider.getInstance().runOnMain(modifierResetListener);
+            }
+            if (ctrlBytes != null) {
+                if (ctrlBytes[0] == 0x03) {
+                    sendSpecialKey(SPECIAL_KEY_CTRL_C);
+                } else if (ctrlBytes[0] == 0x04) {
+                    sendSpecialKey(SPECIAL_KEY_CTRL_D);
+                } else if (ctrlBytes[0] == 0x1A) {
+                    sendSpecialKey(SPECIAL_KEY_CTRL_Z);
+                } else if (ctrlBytes[0] == 0x0C) {
+                    sendSpecialKey(SPECIAL_KEY_CTRL_L);
                 } else {
-                    currentInput.insert(inputCursorPos, c);
-                    inputCursorPos++;
-                    String rest = currentInput.substring(inputCursorPos - 1);
-                    emulator.appendOutput(rest);
-                    int charsBack = currentInput.length() - inputCursorPos;
-                    if (charsBack > 0) {
-                        emulator.appendOutput("\033[" + charsBack + "D");
-                    }
+                    writeBytesToProcess(ctrlBytes);
                 }
-                notifyOutput();
+                if (text.length() > 1) {
+                    handleInput(text.substring(1));
+                }
+                return;
             }
         }
+
+        if (isAltActive && text.length() > 0) {
+            char c = text.charAt(0);
+            isAltActive = false;
+            if (modifierResetListener != null) {
+                ExecutorProvider.getInstance().runOnMain(modifierResetListener);
+            }
+            writeToProcess("\033" + c);
+            if (text.length() > 1) {
+                handleInput(text.substring(1));
+            }
+            return;
+        }
+
+        if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                if (c == '\r' || c == '\n') {
+                    String line = currentInput.toString().trim();
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
+                    if (line.startsWith("pkg ") || line.equals("pkg") || isUserlandCommand(line)) {
+                        promptUserlandInstallation(line);
+                        return;
+                    }
+                } else if (c == '\b' || c == 127) {
+                    if (currentInput.length() > 0) {
+                        currentInput.deleteCharAt(currentInput.length() - 1);
+                    }
+                } else if (c >= 32) {
+                    currentInput.append(c);
+                }
+            }
+        }
+
+        writeToProcess(text);
     }
 
     public synchronized void write(@NonNull String text) {
@@ -359,7 +579,7 @@ public class TerminalSession {
     }
 
     private void writeToProcess(String text) {
-        if (!isRunning || outputStream == null) return;
+        if (!isRunning || outputStream == null || text == null) return;
         try {
             outputStream.write(text.getBytes(StandardCharsets.UTF_8));
             outputStream.flush();
@@ -368,252 +588,136 @@ public class TerminalSession {
         }
     }
 
+    private void writeBytesToProcess(byte[] bytes) {
+        if (!isRunning || outputStream == null || bytes == null) return;
+        try {
+            outputStream.write(bytes);
+            outputStream.flush();
+        } catch (Exception e) {
+            destroy();
+        }
+    }
+
+    /**
+     * Dispatches standard VT100 / POSIX escape sequences and signals to the terminal.
+     */
     public synchronized void sendSpecialKey(int specialKey) {
-        if (!isRunning) return;
+        if (!isRunning || outputStream == null) return;
 
-        switch (specialKey) {
-            case SPECIAL_KEY_ENTER:
-                if (isExecutingCommand) {
-                    writeToProcess("\n");
-                } else {
-                    executeCurrentLine();
-                }
-                break;
-            case SPECIAL_KEY_BACKSPACE:
-                if (isExecutingCommand) {
-                    writeToProcess("\b");
-                } else {
-                    handleBackspace();
-                }
-                break;
-            case SPECIAL_KEY_ARROW_UP:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[A");
-                } else {
-                    navigateHistory(-1);
-                }
-                break;
-            case SPECIAL_KEY_ARROW_DOWN:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[B");
-                } else {
-                    navigateHistory(1);
-                }
-                break;
-            case SPECIAL_KEY_ARROW_LEFT:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[D");
-                } else {
-                    if (inputCursorPos > 0) {
-                        inputCursorPos--;
-                        emulator.appendOutput("\033[D");
-                        notifyOutput();
-                    }
-                }
-                break;
-            case SPECIAL_KEY_ARROW_RIGHT:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[C");
-                } else {
-                    if (inputCursorPos < currentInput.length()) {
-                        inputCursorPos++;
-                        emulator.appendOutput("\033[C");
-                        notifyOutput();
-                    }
-                }
-                break;
-            case SPECIAL_KEY_HOME:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[H");
-                } else {
-                    if (inputCursorPos > 0) {
-                        emulator.appendOutput("\033[" + inputCursorPos + "D");
+        try {
+            switch (specialKey) {
+                case SPECIAL_KEY_ENTER:
+                    if (isAwaitingBootstrapConfirmation) {
+                        handleInput("\r");
+                    } else if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
+                        String line = currentInput.toString().trim();
+                        currentInput.setLength(0);
                         inputCursorPos = 0;
-                        notifyOutput();
+                        if (line.startsWith("pkg ") || line.equals("pkg") || isUserlandCommand(line)) {
+                            promptUserlandInstallation(line);
+                        } else {
+                            outputStream.write("\r".getBytes(StandardCharsets.UTF_8));
+                            outputStream.flush();
+                        }
+                    } else {
+                        outputStream.write("\r".getBytes(StandardCharsets.UTF_8));
+                        outputStream.flush();
                     }
-                }
-                break;
-            case SPECIAL_KEY_END:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[F");
-                } else {
-                    int forward = currentInput.length() - inputCursorPos;
-                    if (forward > 0) {
-                        emulator.appendOutput("\033[" + forward + "C");
-                        inputCursorPos = currentInput.length();
-                        notifyOutput();
+                    break;
+                case SPECIAL_KEY_BACKSPACE:
+                    if (isAwaitingBootstrapConfirmation) {
+                        handleInput("\b");
+                    } else {
+                        if (!UserlandBootstrapManager.getInstance().isInstalled(context) && currentInput.length() > 0) {
+                            currentInput.deleteCharAt(currentInput.length() - 1);
+                        }
+                        outputStream.write(new byte[]{ 0x7F }); // ASCII 127 DEL
+                        outputStream.flush();
                     }
-                }
-                break;
-            case SPECIAL_KEY_DELETE:
-                if (isExecutingCommand) {
-                    writeToProcess("\033[3~");
-                } else {
-                    handleDelete();
-                }
-                break;
-            case SPECIAL_KEY_CTRL_C:
-                handleCtrlC();
-                break;
-            case SPECIAL_KEY_CTRL_L:
-                clearScreen();
-                break;
-            case SPECIAL_KEY_CTRL_D:
-                if (isExecutingCommand) {
-                    writeToProcess("\u0004");
-                } else if (currentInput.length() == 0) {
-                    destroy();
-                    emulator.appendOutput("[Session terminated]\r\n");
-                    notifyOutput();
-                }
-                break;
-            case SPECIAL_KEY_CTRL_Z:
-                if (isExecutingCommand) {
-                    writeToProcess("\u001A");
-                }
-                break;
-            case SPECIAL_KEY_TAB:
-                if (isExecutingCommand) {
-                    writeToProcess("\t");
-                } else {
-                    handleTabCompletion();
-                }
-                break;
-            case SPECIAL_KEY_ESC:
-                if (isExecutingCommand) {
-                    writeToProcess("\033");
-                }
-                break;
-        }
-    }
-
-    public synchronized int getInputCursorPos() {
-        return inputCursorPos;
-    }
-
-    public synchronized void setInputCursorPos(int newPos) {
-        if (isExecutingCommand) return;
-        newPos = Math.max(0, Math.min(newPos, currentInput.length()));
-        int diff = newPos - inputCursorPos;
-        if (diff > 0) {
-            emulator.appendOutput("\033[" + diff + "C");
-            inputCursorPos = newPos;
-            notifyOutput();
-        } else if (diff < 0) {
-            emulator.appendOutput("\033[" + (-diff) + "D");
-            inputCursorPos = newPos;
-            notifyOutput();
-        }
-    }
-
-    private void handleDelete() {
-        if (inputCursorPos < currentInput.length()) {
-            currentInput.deleteCharAt(inputCursorPos);
-            String rest = currentInput.substring(inputCursorPos);
-            emulator.appendOutput(rest + " ");
-            int charsBack = currentInput.length() - inputCursorPos + 1;
-            emulator.appendOutput("\033[" + charsBack + "D");
-            notifyOutput();
-        }
-    }
-
-    private void handleCtrlC() {
-        if (isExecutingCommand) {
-            writeToProcess("\u0003");
-        }
-        emulator.appendOutput("^C\r\n");
-        currentInput.setLength(0);
-        inputCursorPos = 0;
-        isExecutingCommand = false;
-        activeSentinel = null;
-        printPrompt();
-        notifyOutput();
-    }
-
-    private void handleBackspace() {
-        if (inputCursorPos > 0) {
-            if (inputCursorPos == currentInput.length()) {
-                currentInput.deleteCharAt(currentInput.length() - 1);
-                inputCursorPos--;
-                emulator.appendOutput("\b");
-            } else {
-                currentInput.deleteCharAt(inputCursorPos - 1);
-                inputCursorPos--;
-                emulator.appendOutput("\033[D");
-                String rest = currentInput.substring(inputCursorPos);
-                emulator.appendOutput(rest + " ");
-                int charsBack = currentInput.length() - inputCursorPos + 1;
-                emulator.appendOutput("\033[" + charsBack + "D");
+                    break;
+                case SPECIAL_KEY_ARROW_UP:
+                    outputStream.write("\033[A".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_ARROW_DOWN:
+                    outputStream.write("\033[B".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_ARROW_LEFT:
+                    outputStream.write("\033[D".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_ARROW_RIGHT:
+                    outputStream.write("\033[C".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_HOME:
+                    outputStream.write("\033[H".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_END:
+                    outputStream.write("\033[F".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_DELETE:
+                    outputStream.write("\033[3~".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_CTRL_C:
+                    if (ptyProcess != null) {
+                        ptyProcess.sendSignal(2); // SIGINT
+                    }
+                    outputStream.write(new byte[]{ 0x03 });
+                    outputStream.flush();
+                    isAwaitingBootstrapConfirmation = false;
+                    pendingBootstrapCommand = null;
+                    break;
+                case SPECIAL_KEY_CTRL_D:
+                    outputStream.write(new byte[]{ 0x04 });
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_CTRL_Z:
+                    if (ptyProcess != null) {
+                        ptyProcess.sendSignal(20); // SIGTSTP
+                    }
+                    outputStream.write(new byte[]{ 0x1A });
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_CTRL_L:
+                    clearScreen();
+                    break;
+                case SPECIAL_KEY_TAB:
+                    outputStream.write("\t".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
+                case SPECIAL_KEY_ESC:
+                    outputStream.write("\033".getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                    break;
             }
-            notifyOutput();
+        } catch (Exception e) {
+            destroy();
         }
     }
 
-    private void navigateHistory(int direction) {
-        if (history.isEmpty()) return;
-        int newIndex = historyIndex + direction;
-        if (newIndex < 0) newIndex = 0;
-        if (newIndex > history.size()) newIndex = history.size();
-
-        if (newIndex == historyIndex) return;
-        historyIndex = newIndex;
-
-        // Move cursor to end of current input if needed
-        int forward = currentInput.length() - inputCursorPos;
-        if (forward > 0) {
-            emulator.appendOutput("\033[" + forward + "C");
-        }
-
-        // Erase current input from screen
-        for (int i = 0; i < currentInput.length(); i++) {
-            emulator.appendOutput("\b");
-        }
-        currentInput.setLength(0);
-        inputCursorPos = 0;
-
-        if (historyIndex < history.size()) {
-            String histCmd = history.get(historyIndex);
-            currentInput.append(histCmd);
-            inputCursorPos = histCmd.length();
-            emulator.appendOutput(histCmd);
-        }
-        notifyOutput();
-    }
-
-    private void executeCurrentLine() {
-        emulator.appendOutput("\r\n");
-        String cmd = currentInput.toString().trim();
-        currentInput.setLength(0);
-        inputCursorPos = 0;
-
+    public synchronized void executeCommand(@NonNull String cmd) {
         if (cmd.isEmpty()) {
-            printPrompt();
+            writeToProcess("\r");
+            return;
+        }
+
+        // Validate command security
+        TerminalSecurityPolicy.ValidationResult securityResult =
+                TerminalSecurityPolicy.validateCommand(cmd, projectRoot, currentDir);
+        if (!securityResult.isAllowed()) {
+            emulator.appendOutput(securityResult.getErrorMessage() + "\r\n");
             notifyOutput();
+            notifyCommandExecuted(cmd);
             return;
         }
 
         if (cmd.equals("clear")) {
             clearScreen();
-            return;
-        }
-
-        if (cmd.equals("history")) {
-            if (history.isEmpty()) {
-                emulator.appendOutput("No command history.\r\n");
-            } else {
-                for (int i = 0; i < history.size(); i++) {
-                    String line = String.format(java.util.Locale.US, "  %4d  %s\r\n", i + 1, history.get(i));
-                    emulator.appendOutput(line);
-                }
-            }
-            printPrompt();
-            notifyOutput();
-            notifyCommandExecuted("history");
-            return;
-        }
-
-        if (cmd.startsWith("cd ") || cmd.equals("cd")) {
-            handleCd(cmd);
             return;
         }
 
@@ -624,19 +728,33 @@ public class TerminalSession {
             return;
         }
 
-        if (cmd.startsWith("vpm") || cmd.equals("vpm") || cmd.startsWith("npm") || cmd.equals("npm")) {
-            handleVpmCommand(cmd);
+        if (cmd.startsWith("vpm") || cmd.equals("vpm")) {
+            emulator.appendOutput("vpm is deprecated. Use 'npm' in the desktop terminal environment.\r\n");
+            notifyOutput();
             return;
         }
 
-        // Validate command security (restricts deleting .vcode or out-of-scope paths)
-        TerminalSecurityPolicy.ValidationResult securityResult =
-                TerminalSecurityPolicy.validateCommand(cmd, projectRoot, currentDir);
-        if (!securityResult.isAllowed()) {
-            emulator.appendOutput(securityResult.getErrorMessage() + "\r\n");
-            printPrompt();
-            notifyOutput();
-            notifyCommandExecuted(cmd);
+        if (cmd.equals("pkg bootstrap") || cmd.startsWith("pkg bootstrap ")) {
+            if (UserlandBootstrapManager.getInstance().isInstalled(context)) {
+                emulator.appendOutput("Desktop terminal environment is already installed and active.\r\n");
+                notifyOutput();
+                notifyCommandFinished(cmd, 0);
+                return;
+            }
+            promptUserlandInstallation(cmd);
+            return;
+        }
+
+        if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
+            if (cmd.startsWith("pkg ") || cmd.equals("pkg") || isUserlandCommand(cmd)) {
+                promptUserlandInstallation(cmd);
+                return;
+            }
+        }
+
+        if (cmd.startsWith("cd ") || cmd.equals("cd")) {
+            handleCd(cmd);
+            writeToProcess(cmd + "\r");
             return;
         }
 
@@ -650,21 +768,7 @@ public class TerminalSession {
         lastExecutedCommand = cmd;
         notifyCommandExecuted(cmd);
 
-        isExecutingCommand = true;
-        activeSentinel = "__VCODE_CMD_" + UUID.randomUUID().toString().replace("-", "") + "__";
-        try {
-            if (outputStream != null) {
-                String script = cmd + "\necho \"" + activeSentinel + ":$?\"\n";
-                outputStream.write(script.getBytes(StandardCharsets.UTF_8));
-                outputStream.flush();
-            }
-        } catch (Exception e) {
-            emulator.appendOutput("Error writing to shell: " + e.getMessage() + "\r\n");
-            isExecutingCommand = false;
-            activeSentinel = null;
-            printPrompt();
-            notifyOutput();
-        }
+        writeToProcess(cmd + "\r");
     }
 
     private void handleCd(String cmd) {
@@ -684,137 +788,15 @@ public class TerminalSession {
             newDir = newDir.getAbsoluteFile();
         }
 
-        // Strict project root boundary enforcement
-        try {
-            String rootCanonical = projectRoot.getCanonicalPath();
-            String newCanonical = newDir.getCanonicalPath();
-            if (!newCanonical.equals(rootCanonical) && !newCanonical.startsWith(rootCanonical + File.separator)) {
-                emulator.appendOutput("cd: permission denied: directory navigation is restricted to project workspace\r\n");
-                printPrompt();
-                notifyOutput();
-                return;
-            }
-        } catch (Exception e) {
-            emulator.appendOutput("cd: permission denied: cannot resolve path: " + target + "\r\n");
-            printPrompt();
-            notifyOutput();
-            return;
+        if (newDir.exists() && newDir.isDirectory()) {
+            currentDir = newDir;
         }
-
-        if (TerminalSecurityPolicy.isVCodePath(newDir, projectRoot)) {
-            emulator.appendOutput("cd: permission denied: .vcode directory is restricted\r\n");
-            printPrompt();
-            notifyOutput();
-            return;
-        }
-
-        if (!newDir.exists()) {
-            emulator.appendOutput("cd: no such file or directory: " + target + "\r\n");
-            printPrompt();
-            notifyOutput();
-            return;
-        }
-        if (!newDir.isDirectory()) {
-            emulator.appendOutput("cd: not a directory: " + target + "\r\n");
-            printPrompt();
-            notifyOutput();
-            return;
-        }
-
-        currentDir = newDir;
         notifyCommandExecuted("cd");
-        try {
-            if (outputStream != null) {
-                activeSentinel = "__VCODE_CMD_" + UUID.randomUUID().toString().replace("-", "") + "__";
-                String script = "cd " + escapeShellArg(currentDir.getAbsolutePath()) + "\necho \"" + activeSentinel + ":$?\"\n";
-                isExecutingCommand = true;
-                outputStream.write(script.getBytes(StandardCharsets.UTF_8));
-                outputStream.flush();
-            }
-        } catch (Exception ignored) {
-            isExecutingCommand = false;
-            activeSentinel = null;
-            printPrompt();
-            notifyOutput();
-        }
-    }
-
-    private void handleTabCompletion() {
-        String input = currentInput.toString();
-        int lastSpace = input.lastIndexOf(' ');
-        String token = lastSpace >= 0 ? input.substring(lastSpace + 1) : input;
-
-        File searchDir = currentDir;
-        String prefix = token;
-        int slashIdx = token.lastIndexOf('/');
-        if (slashIdx >= 0) {
-            String dirPart = token.substring(0, slashIdx + 1);
-            prefix = token.substring(slashIdx + 1);
-            File subDir = dirPart.startsWith("/") ? new File(dirPart) : new File(currentDir, dirPart);
-            if (subDir.exists() && subDir.isDirectory()) {
-                searchDir = subDir;
-            }
-        }
-
-        // Strict project boundary check for autocompletion
-        try {
-            String rootCanonical = projectRoot.getCanonicalPath();
-            String searchCanonical = searchDir.getCanonicalPath();
-            if (!searchCanonical.equals(rootCanonical) && !searchCanonical.startsWith(rootCanonical + File.separator)) {
-                return;
-            }
-        } catch (Exception ignored) {
-            return;
-        }
-
-        if (TerminalSecurityPolicy.isVCodePath(searchDir, projectRoot)) {
-            return;
-        }
-
-        final String filterPrefix = prefix;
-        File[] files = searchDir.listFiles((dir, name) -> {
-            if (".vcode".equals(name)) return false;
-            return name.startsWith(filterPrefix);
-        });
-        if (files == null || files.length == 0) return;
-
-        if (files.length == 1) {
-            String matchName = files[0].getName();
-            String completion = matchName.substring(filterPrefix.length());
-            if (files[0].isDirectory()) {
-                completion += "/";
-            } else {
-                completion += " ";
-            }
-            currentInput.append(completion);
-            inputCursorPos = currentInput.length();
-            emulator.appendOutput(completion);
-            notifyOutput();
-        } else {
-            emulator.appendOutput("\r\n");
-            int maxDisplay = Math.min(files.length, 50);
-            for (int i = 0; i < maxDisplay; i++) {
-                emulator.appendOutput(files[i].getName());
-                if (files[i].isDirectory()) emulator.appendOutput("/");
-                if (i < maxDisplay - 1) emulator.appendOutput("  ");
-            }
-            if (files.length > maxDisplay) {
-                emulator.appendOutput("  ... (" + (files.length - maxDisplay) + " more)");
-            }
-            emulator.appendOutput("\r\n");
-            printPrompt();
-            emulator.appendOutput(currentInput.toString());
-            notifyOutput();
-        }
     }
 
     public synchronized void clearScreen() {
         emulator.clear();
-        printPrompt();
-        if (currentInput.length() > 0) {
-            emulator.appendOutput(currentInput.toString());
-            inputCursorPos = currentInput.length();
-        }
+        writeToProcess("\033[H\033[2J");
         notifyOutput();
         notifyCommandExecuted("clear");
     }
@@ -832,252 +814,220 @@ public class TerminalSession {
     }
 
     public synchronized void restart() {
+        restart(true);
+    }
+
+    public synchronized void restart(boolean clearScreen) {
         destroy();
-        emulator.clear();
+        if (clearScreen) {
+            emulator.clear();
+        }
         start();
     }
 
     public synchronized void destroy() {
         isRunning = false;
-        isExecutingCommand = false;
-        activeSentinel = null;
-        if (process != null) {
-            try {
-                InputStream is = process.getInputStream();
-                if (is != null) is.close();
-            } catch (Exception ignored) {
+        try {
+            if (ptyProcess != null) {
+                ptyProcess.destroy();
+                ptyProcess = null;
             }
-            try {
-                process.destroy();
-                process.destroyForcibly();
-            } catch (Exception ignored) {
-            }
-            process = null;
+        } catch (Exception ignored) {
         }
-        if (outputStream != null) {
-            try {
-                outputStream.close();
-            } catch (Exception ignored) {
+        try {
+            if (fallbackProcess != null) {
+                fallbackProcess.destroy();
+                fallbackProcess.destroyForcibly();
+                fallbackProcess = null;
             }
-            outputStream = null;
+        } catch (Exception ignored) {
+        }
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+                inputStream = null;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (outputStream != null) {
+                outputStream.close();
+                outputStream = null;
+            }
+        } catch (Exception ignored) {
         }
     }
 
-    private void handleVpmCommand(@NonNull String cmd) {
-        if (history.isEmpty() || !history.get(history.size() - 1).equals(cmd)) {
-            history.add(cmd);
-            while (history.size() > MAX_HISTORY_SIZE) {
-                history.remove(0);
-            }
-        }
-        historyIndex = history.size();
-        lastExecutedCommand = cmd;
-        notifyCommandExecuted(cmd);
+    private boolean isUserlandCommand(@NonNull String cmd) {
+        if (cmd.trim().isEmpty()) return false;
+        String firstWord = cmd.trim().split("\\s+")[0].toLowerCase(java.util.Locale.US);
+        return firstWord.equals("pkg") ||
+                firstWord.equals("python") ||
+                firstWord.equals("python3") ||
+                firstWord.equals("pip") ||
+                firstWord.equals("pip3") ||
+                firstWord.equals("git") ||
+                firstWord.equals("node") ||
+                firstWord.equals("nodejs") ||
+                firstWord.equals("npm") ||
+                firstWord.equals("npx") ||
+                firstWord.equals("curl") ||
+                firstWord.equals("wget") ||
+                firstWord.equals("gcc") ||
+                firstWord.equals("g++") ||
+                firstWord.equals("clang") ||
+                firstWord.equals("make") ||
+                firstWord.equals("bash") ||
+                firstWord.equals("setup-userland");
+    }
 
-        String[] parts = cmd.trim().split("\\s+");
-        if (parts.length <= 1 || "help".equals(parts[1]) || "-h".equals(parts[1]) || "--help".equals(parts[1])) {
-            emulator.appendOutput("VCode Package Manager (vpm) - Zero-Node Mobile Package System\r\n\r\n");
-            emulator.appendOutput("Usage:\r\n");
-            emulator.appendOutput("  vpm install <package>[@version] [-D|--save-dev]\r\n");
-            emulator.appendOutput("  vpm uninstall <package>\r\n");
-            emulator.appendOutput("  vpm list\r\n");
-            emulator.appendOutput("  vpm search <query>\r\n");
-            emulator.appendOutput("  vpm help\r\n\r\n");
-            emulator.appendOutput("Aliases:\r\n");
-            emulator.appendOutput("  npm i, npm install, npm uninstall, npm rm, npm ls, npm search\r\n");
-            printPrompt();
+    private void promptUserlandInstallation(@NonNull String triggeringCommand) {
+        if (UserlandBootstrapManager.getInstance().isInstalled(context)) {
+            emulator.appendOutput("\r\n\033[01;32mDesktop terminal environment is already installed and active.\033[00m\r\n");
             notifyOutput();
-            notifyCommandFinished(cmd, 0);
             return;
         }
 
-        String subCmd = parts[1];
-        if ("install".equals(subCmd) || "i".equals(subCmd) || "add".equals(subCmd)) {
-            boolean isDev = false;
-            String pkgSpec = null;
-            for (int i = 2; i < parts.length; i++) {
-                if ("-D".equals(parts[i]) || "--save-dev".equals(parts[i]) || "-d".equals(parts[i])) {
-                    isDev = true;
-                } else if ("-S".equals(parts[i]) || "--save".equals(parts[i])) {
-                    isDev = false;
-                } else if (pkgSpec == null && !parts[i].startsWith("-")) {
-                    pkgSpec = parts[i];
-                }
-            }
+        HardwareCapabilityChecker.DeviceDiagnostic diag = HardwareCapabilityChecker.checkDevice(context);
 
-            if (pkgSpec == null) {
-                emulator.appendOutput("vpm: specify a package name to install: vpm install <package>\r\n");
-                printPrompt();
-                notifyOutput();
-                notifyCommandFinished(cmd, 1);
-                return;
-            }
+        emulator.appendOutput("\r\n\033[01;36m======================================================================\033[00m\r\n");
+        emulator.appendOutput("\033[01;36m                  VCode Desktop Terminal Environment                  \033[00m\r\n");
+        emulator.appendOutput("\033[01;36m======================================================================\033[00m\r\n");
+        emulator.appendOutput("Initializing rootless Linux userland (bash, coreutils, pkg manager)...\r\n");
+        emulator.appendOutput("Archive Download: ~45 MB | Installed Footprint: ~140 MB\r\n\r\n");
 
-            String packageName = pkgSpec;
-            String targetVersion = null;
-            int atIdx = pkgSpec.lastIndexOf('@');
-            if (atIdx > 0) {
-                packageName = pkgSpec.substring(0, atIdx);
-                targetVersion = pkgSpec.substring(atIdx + 1);
-            }
-
-            isExecutingCommand = true;
-            emulator.appendOutput("vpm: resolving " + packageName + (targetVersion != null ? "@" + targetVersion : "") + "...\r\n");
-            notifyOutput();
-
-            PackageManagerService.getInstance().installPackage(projectRoot, packageName, targetVersion, isDev,
-                    (status, percent) -> {
-                        emulator.appendOutput("vpm: " + status + " (" + percent + "%)\r\n");
-                        notifyOutput();
-                    },
-                    new PackageManagerService.PackageOperationCallback() {
-                        @Override
-                        public void onSuccess(@NonNull String message) {
-                            isExecutingCommand = false;
-                            emulator.appendOutput("vpm: " + message + "\r\n");
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 0);
-                        }
-
-                        @Override
-                        public void onError(@NonNull String error) {
-                            isExecutingCommand = false;
-                            emulator.appendOutput("vpm: error: " + error + "\r\n");
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 1);
-                        }
-                    });
-            return;
+        if (diag.isLowRam) {
+            emulator.appendOutput("\033[01;33m⚠️ Low-End Device Advisory:\033[00m\r\n");
+            emulator.appendOutput("  • Device Memory: " + diag.getFormattedRam() + " RAM (Low-spec device)\r\n");
+            emulator.appendOutput("  • Free Storage: " + diag.getFormattedStorage() + " Available\r\n\r\n");
+            emulator.appendOutput("Running full language runtimes (Python/Node/Git CLI) on devices with\r\n");
+            emulator.appendOutput("≤2GB RAM may trigger Android OS background tab killing during heavy tasks.\r\n\r\n");
+        } else {
+            emulator.appendOutput("Device Diagnostics:\r\n");
+            emulator.appendOutput("  • Device Memory: " + diag.getFormattedRam() + " RAM\r\n");
+            emulator.appendOutput("  • Free Storage: " + diag.getFormattedStorage() + " Available\r\n\r\n");
         }
 
-        if ("uninstall".equals(subCmd) || "remove".equals(subCmd) || "rm".equals(subCmd) || "un".equals(subCmd)) {
-            if (parts.length < 3) {
-                emulator.appendOutput("vpm: specify a package name to uninstall: vpm uninstall <package>\r\n");
-                printPrompt();
-                notifyOutput();
-                notifyCommandFinished(cmd, 1);
-                return;
-            }
-            String packageName = parts[2];
-            isExecutingCommand = true;
-            emulator.appendOutput("vpm: uninstalling " + packageName + "...\r\n");
-            notifyOutput();
-
-            PackageManagerService.getInstance().uninstallPackage(projectRoot, packageName,
-                    new PackageManagerService.PackageOperationCallback() {
-                        @Override
-                        public void onSuccess(@NonNull String message) {
-                            isExecutingCommand = false;
-                            emulator.appendOutput("vpm: " + message + "\r\n");
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 0);
-                        }
-
-                        @Override
-                        public void onError(@NonNull String error) {
-                            isExecutingCommand = false;
-                            emulator.appendOutput("vpm: error: " + error + "\r\n");
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 1);
-                        }
-                    });
-            return;
-        }
-
-        if ("list".equals(subCmd) || "ls".equals(subCmd)) {
-            isExecutingCommand = true;
-            emulator.appendOutput("vpm: reading dependencies from package.json...\r\n");
-            notifyOutput();
-
-            PackageManagerService.getInstance().getInstalledPackages(projectRoot,
-                    new PackageManagerService.PackageListCallback() {
-                        @Override
-                        public void onResult(@NonNull List<NpmPackageInfo> packages) {
-                            isExecutingCommand = false;
-                            if (packages.isEmpty()) {
-                                emulator.appendOutput("No packages installed.\r\n");
-                            } else {
-                                emulator.appendOutput("Installed dependencies (" + packages.size() + "):\r\n");
-                                for (NpmPackageInfo p : packages) {
-                                    String devTag = p.isDev() ? " (dev)" : "";
-                                    emulator.appendOutput("  ├── " + p.getName() + "@" + p.getInstalledVersion() + devTag + "\r\n");
-                                }
-                            }
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 0);
-                        }
-
-                        @Override
-                        public void onError(@NonNull String error) {
-                            isExecutingCommand = false;
-                            emulator.appendOutput("vpm: " + error + "\r\n");
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 1);
-                        }
-                    });
-            return;
-        }
-
-        if ("search".equals(subCmd) || "s".equals(subCmd)) {
-            if (parts.length < 3) {
-                emulator.appendOutput("vpm: specify a search query: vpm search <query>\r\n");
-                printPrompt();
-                notifyOutput();
-                notifyCommandFinished(cmd, 1);
-                return;
-            }
-            StringBuilder queryBuilder = new StringBuilder();
-            for (int i = 2; i < parts.length; i++) {
-                if (queryBuilder.length() > 0) queryBuilder.append(" ");
-                queryBuilder.append(parts[i]);
-            }
-            String query = queryBuilder.toString();
-            isExecutingCommand = true;
-            emulator.appendOutput("vpm: searching npm registry for \"" + query + "\"...\r\n");
-            notifyOutput();
-
-            PackageManagerService.getInstance().searchPackages(projectRoot, query,
-                    new PackageManagerService.PackageListCallback() {
-                        @Override
-                        public void onResult(@NonNull List<NpmPackageInfo> packages) {
-                            isExecutingCommand = false;
-                            if (packages.isEmpty()) {
-                                emulator.appendOutput("No packages found matching \"" + query + "\".\r\n");
-                            } else {
-                                for (NpmPackageInfo p : packages) {
-                                    String installedTag = p.isInstalled() ? " [installed: " + p.getInstalledVersion() + "]" : "";
-                                    emulator.appendOutput(p.getName() + "@" + p.getVersion() + installedTag + "\r\n");
-                                    if (p.getDescription() != null && !p.getDescription().isEmpty()) {
-                                        emulator.appendOutput("  " + p.getDescription() + "\r\n");
-                                    }
-                                }
-                            }
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 0);
-                        }
-
-                        @Override
-                        public void onError(@NonNull String error) {
-                            isExecutingCommand = false;
-                            emulator.appendOutput("vpm: search error: " + error + "\r\n");
-                            printPrompt();
-                            notifyOutput();
-                            notifyCommandFinished(cmd, 1);
-                        }
-                    });
-            return;
-        }
-
-        emulator.appendOutput("vpm: unknown command: " + subCmd + ". Run 'vpm help' for available commands.\r\n");
-        printPrompt();
+        emulator.appendOutput("Proceed with desktop environment installation? [Y/n]: ");
+        isAwaitingBootstrapConfirmation = true;
+        pendingBootstrapCommand = triggeringCommand;
         notifyOutput();
-        notifyCommandFinished(cmd, 1);
+    }
+
+    private void startBootstrapInstallation(@Nullable String pendingCmd) {
+        emulator.appendOutput("Downloading and configuring rootless desktop environment...\r\n");
+        notifyOutput();
+
+        UserlandBootstrapManager.getInstance().installBootstrap(context, null,
+                new UserlandBootstrapManager.BootstrapCallback() {
+                    @Override
+                    public void onProgress(int stage, int totalStages, @NonNull String stageName, int percent, @Nullable String detail) {
+                        String msg = "[" + stage + "/" + totalStages + "] " + stageName + " (" + percent + "%)";
+                        if (detail != null && !detail.isEmpty()) {
+                            msg += " - " + detail;
+                        }
+                        emulator.appendOutput(msg + "\r\n");
+                        notifyOutput();
+                    }
+
+                    @Override
+                    public void onSuccess() {
+                        emulator.appendOutput("\r\n\033[01;32mDesktop terminal environment initialized successfully!\033[00m\r\n\r\n");
+                        notifyOutput();
+                        restart(false);
+                        if (pendingCmd != null && !pendingCmd.trim().isEmpty() && !pendingCmd.trim().equals("pkg") && !pendingCmd.trim().equals("setup-userland") && !pendingCmd.trim().equals("pkg bootstrap")) {
+                            executeCommand(pendingCmd.trim());
+                        }
+                    }
+
+                    @Override
+                    public void onError(@NonNull String error) {
+                        emulator.appendOutput("\r\n\033[01;31mError initializing desktop environment: " + error + "\033[00m\r\n");
+                        notifyOutput();
+                    }
+                });
+    }
+
+    static List<String> buildProotCommand(@NonNull File prootBin,
+                                          @NonNull String prefixPath,
+                                          @NonNull File projectRoot,
+                                          @NonNull File homeDir) {
+        List<String> prootCmd = new ArrayList<>();
+        prootCmd.add(prootBin.getAbsolutePath());
+        prootCmd.add("--link2symlink"); // link2symlink extension for emulating hardlinks on Android storage
+        prootCmd.add("-r");
+        prootCmd.add(prefixPath);
+        prootCmd.add("-0"); // root emulation
+        prootCmd.add("-w");
+        prootCmd.add("/workspace");
+        prootCmd.add("-b");
+        prootCmd.add("/dev");
+        prootCmd.add("-b");
+        prootCmd.add("/dev/pts");
+        prootCmd.add("-b");
+        prootCmd.add("/proc");
+        prootCmd.add("-b");
+        prootCmd.add("/sys");
+        if (new File("/system").exists()) {
+            prootCmd.add("-b");
+            prootCmd.add("/system");
+        }
+        if (new File("/apex").exists()) {
+            prootCmd.add("-b");
+            prootCmd.add("/apex");
+        }
+        if (new File("/vendor").exists()) {
+            prootCmd.add("-b");
+            prootCmd.add("/vendor");
+        }
+        if (new File("/linkerconfig").exists()) {
+            File guestLinkerConfig = new File(prefixPath, "linkerconfig");
+            if (!guestLinkerConfig.exists()) {
+                guestLinkerConfig.mkdirs();
+            }
+            prootCmd.add("-b");
+            prootCmd.add("/linkerconfig");
+        }
+        prootCmd.add("-b");
+        prootCmd.add(projectRoot.getAbsolutePath() + ":/workspace");
+        prootCmd.add("-b");
+        prootCmd.add(homeDir.getAbsolutePath() + ":/root");
+        if (new File("/storage").exists()) {
+            File guestStorage = new File(prefixPath, "storage");
+            if (!guestStorage.exists()) {
+                guestStorage.mkdirs();
+            }
+            prootCmd.add("-b");
+            prootCmd.add("/storage");
+        }
+        if (new File("/sdcard").exists()) {
+            File guestSdcard = new File(prefixPath, "sdcard");
+            if (!guestSdcard.exists()) {
+                guestSdcard.mkdirs();
+            }
+            prootCmd.add("-b");
+            prootCmd.add("/sdcard");
+        }
+
+        // Prefer /bin/sh — Alpine's BusyBox sh is musl-linked with zero external host dependencies
+        File containerSh = new File(prefixPath, "bin/sh");
+        File containerBash = new File(prefixPath, "bin/bash");
+        if (isElfBinary(containerSh)) {
+            prootCmd.add("/bin/sh");
+            prootCmd.add("-l");
+        } else if (isElfBinary(containerBash)) {
+            prootCmd.add("/bin/bash");
+            prootCmd.add("-l");
+        } else if (containerSh.exists()) {
+            prootCmd.add("/bin/sh");
+            prootCmd.add("-l");
+        } else {
+            prootCmd.add("/bin/sh");
+        }
+        return prootCmd;
+    }
+
+    private static boolean isElfBinary(File file) {
+        return com.cocode.vcode.ide.core.terminal.userland.UserlandBootstrapManager.isElfBinary(file);
     }
 }

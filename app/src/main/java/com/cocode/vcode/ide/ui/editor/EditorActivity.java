@@ -1597,6 +1597,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         if (localWebServer != null) localWebServer.stop();
         ServerNotificationHelper.cancelServerNotification(this);
         if (viewerManager != null) viewerManager.destroyAll();
+        com.cocode.vcode.ide.core.terminal.pty.PtyBridge.reapDeadProcesses();
     }
 
     @Override

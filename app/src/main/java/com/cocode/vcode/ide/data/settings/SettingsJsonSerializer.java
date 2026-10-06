@@ -85,6 +85,8 @@ public final class SettingsJsonSerializer {
         JSONObject general = new JSONObject();
         general.put("openPreviewInApp", s.openPreviewInApp);
         general.put("autoSave", s.autoSave);
+        general.put("desktopTerminalEnabled", s.desktopTerminalEnabled);
+        general.put("customBootstrapUrl", s.getCustomBootstrapUrl());
         root.put("general", general);
 
         return root;
@@ -175,6 +177,10 @@ public final class SettingsJsonSerializer {
                 if (gen.has("openPreviewInApp"))
                     s.openPreviewInApp = gen.optBoolean("openPreviewInApp", s.openPreviewInApp);
                 if (gen.has("autoSave")) s.autoSave = gen.optBoolean("autoSave", s.autoSave);
+                if (gen.has("desktopTerminalEnabled"))
+                    s.desktopTerminalEnabled = gen.optBoolean("desktopTerminalEnabled", s.desktopTerminalEnabled);
+                if (gen.has("customBootstrapUrl"))
+                    s.setCustomBootstrapUrl(gen.optString("customBootstrapUrl", s.getCustomBootstrapUrl()));
             }
         }
 
@@ -238,6 +244,14 @@ public final class SettingsJsonSerializer {
             s.openPreviewInApp = root.optBoolean("general.openPreviewInApp", s.openPreviewInApp);
         if (root.has("general.autoSave"))
             s.autoSave = root.optBoolean("general.autoSave", s.autoSave);
+        if (root.has("general.desktopTerminalEnabled"))
+            s.desktopTerminalEnabled = root.optBoolean("general.desktopTerminalEnabled", s.desktopTerminalEnabled);
+        if (root.has("desktopTerminalEnabled"))
+            s.desktopTerminalEnabled = root.optBoolean("desktopTerminalEnabled", s.desktopTerminalEnabled);
+        if (root.has("general.customBootstrapUrl"))
+            s.setCustomBootstrapUrl(root.optString("general.customBootstrapUrl", s.getCustomBootstrapUrl()));
+        if (root.has("customBootstrapUrl"))
+            s.setCustomBootstrapUrl(root.optString("customBootstrapUrl", s.getCustomBootstrapUrl()));
 
         if (!s.enableDiagnostics) {
             s.showSquigglyLines = false;

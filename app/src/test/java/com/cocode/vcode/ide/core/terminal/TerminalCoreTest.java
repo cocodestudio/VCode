@@ -327,4 +327,40 @@ public class TerminalCoreTest {
         assertTrue(allAnsi.contains("Error line"));
         assertTrue(allAnsi.contains("Success line"));
     }
+
+    @Test
+    public void testTerminalBufferAdvanceBeyondMaxLinesClampsCursorAndScrolls() {
+        int maxLines = 10;
+        TerminalBuffer buffer = new TerminalBuffer(maxLines);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        for (int i = 0; i < 25; i++) {
+            emulator.appendOutput("Line " + i + "\n");
+        }
+
+        assertEquals(maxLines, buffer.getLineCount());
+        assertEquals(maxLines - 1, emulator.getCursorRow());
+        // Line 24 followed by \n advanced the cursor, so Line 24 is at getLineCount() - 2
+        assertTrue("Latest output line must be preserved",
+                buffer.getLine(buffer.getLineCount() - 2).getText().contains("Line 24"));
+        assertEquals("", buffer.getLine(buffer.getLineCount() - 1).getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorAlternateBufferSwitching() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        emulator.appendOutput("Primary Screen\n");
+        assertEquals("Primary Screen", buffer.getLine(0).getText());
+
+        // Switch to alternate buffer: \033[?1049h
+        emulator.appendOutput("\033[?1049h");
+        emulator.appendOutput("Alternate Screen\n");
+        assertEquals("Alternate Screen", emulator.getActiveBuffer().getLine(0).getText());
+
+        // Switch back to primary buffer: \033[?1049l
+        emulator.appendOutput("\033[?1049l");
+        assertEquals("Primary Screen", emulator.getActiveBuffer().getLine(0).getText());
+    }
 }

@@ -26,6 +26,8 @@ public class TerminalKeyBar extends HorizontalScrollView {
     public interface OnKeyActionListener {
         void onSpecialKey(int specialKey);
         void onInsertText(String text);
+        default void onCtrlToggled(boolean active) {}
+        default void onAltToggled(boolean active) {}
     }
 
     private LinearLayout container;
@@ -109,6 +111,10 @@ public class TerminalKeyBar extends HorizontalScrollView {
         return isCtrlActive;
     }
 
+    public boolean isAltActive() {
+        return isAltActive;
+    }
+
     public void consumeCtrl() {
         if (isCtrlActive) {
             isCtrlActive = false;
@@ -116,21 +122,37 @@ public class TerminalKeyBar extends HorizontalScrollView {
         }
     }
 
+    public void consumeAlt() {
+        if (isAltActive) {
+            isAltActive = false;
+            updateModifierButton(btnAlt, false);
+        }
+    }
+
     private void buildKeys(Context context) {
         btnCtrl = createKeyButton("CTRL", v -> {
             isCtrlActive = !isCtrlActive;
             updateModifierButton(btnCtrl, isCtrlActive);
+            if (actionListener != null) {
+                actionListener.onCtrlToggled(isCtrlActive);
+            }
         });
         container.addView(btnCtrl);
 
         btnAlt = createKeyButton("ALT", v -> {
             isAltActive = !isAltActive;
             updateModifierButton(btnAlt, isAltActive);
+            if (actionListener != null) {
+                actionListener.onAltToggled(isAltActive);
+            }
         });
         container.addView(btnAlt);
 
         container.addView(createKeyButton("ESC", v -> sendSpecial(TerminalSession.SPECIAL_KEY_ESC)));
         container.addView(createKeyButton("TAB", v -> sendSpecial(TerminalSession.SPECIAL_KEY_TAB)));
+
+        container.addView(createKeyButton("HOME", v -> sendSpecial(TerminalSession.SPECIAL_KEY_HOME)));
+        container.addView(createKeyButton("END", v -> sendSpecial(TerminalSession.SPECIAL_KEY_END)));
 
         container.addView(createKeyButton("↑", v -> sendSpecial(TerminalSession.SPECIAL_KEY_ARROW_UP)));
         container.addView(createKeyButton("↓", v -> sendSpecial(TerminalSession.SPECIAL_KEY_ARROW_DOWN)));
@@ -141,6 +163,10 @@ public class TerminalKeyBar extends HorizontalScrollView {
         container.addView(createKeyButton("~", v -> sendText("~")));
         container.addView(createKeyButton("/", v -> sendText("/")));
         container.addView(createKeyButton("-", v -> sendText("-")));
+        container.addView(createKeyButton("_", v -> sendText("_")));
+        container.addView(createKeyButton(";", v -> sendText(";")));
+        container.addView(createKeyButton("&", v -> sendText("&")));
+        container.addView(createKeyButton(">", v -> sendText(">")));
         container.addView(createKeyButton("C-c", v -> sendSpecial(TerminalSession.SPECIAL_KEY_CTRL_C)));
         container.addView(createKeyButton("C-d", v -> sendSpecial(TerminalSession.SPECIAL_KEY_CTRL_D)));
         container.addView(createKeyButton("C-l", v -> sendSpecial(TerminalSession.SPECIAL_KEY_CTRL_L)));
@@ -189,6 +215,7 @@ public class TerminalKeyBar extends HorizontalScrollView {
 
     private void sendSpecial(int specialKey) {
         consumeCtrl();
+        consumeAlt();
         if (actionListener != null) {
             actionListener.onSpecialKey(specialKey);
         }
@@ -196,6 +223,7 @@ public class TerminalKeyBar extends HorizontalScrollView {
 
     private void sendText(String text) {
         consumeCtrl();
+        consumeAlt();
         if (actionListener != null) {
             actionListener.onInsertText(text);
         }

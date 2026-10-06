@@ -45,16 +45,22 @@ public class TerminalBuffer {
         return lines.get(lines.size() - 1);
     }
 
+    public synchronized int getMaxLines() {
+        return maxLines;
+    }
+
     public synchronized void ensureLineCapacity(int requiredIndex) {
-        while (lines.size() <= requiredIndex) {
+        int target = Math.min(requiredIndex, maxLines - 1);
+        while (lines.size() <= target) {
             lines.add(new TerminalLine());
-            enforceCeiling();
         }
     }
 
     public synchronized void newLine() {
+        if (lines.size() >= maxLines) {
+            lines.remove(0);
+        }
         lines.add(new TerminalLine());
-        enforceCeiling();
     }
 
     private void enforceCeiling() {

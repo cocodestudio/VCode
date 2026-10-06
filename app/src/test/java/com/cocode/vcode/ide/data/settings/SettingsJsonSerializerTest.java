@@ -83,11 +83,13 @@ public class SettingsJsonSerializerTest {
         assertEquals("Dev User", git.getString("authorName"));
         assertEquals("dev@example.com", git.getString("authorEmail"));
 
-        // General: 2 fields
+        // General: 4 fields
         JSONObject general = root.getJSONObject("general");
-        assertEquals("General must have 2 fields", 2, general.length());
+        assertEquals("General must have 4 fields", 4, general.length());
         assertTrue(general.getBoolean("openPreviewInApp"));
         assertFalse(general.getBoolean("autoSave"));
+        assertFalse(general.getBoolean("desktopTerminalEnabled"));
+        assertEquals("", general.getString("customBootstrapUrl"));
     }
 
     @Test
