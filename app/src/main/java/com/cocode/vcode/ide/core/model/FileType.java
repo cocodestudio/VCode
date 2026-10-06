@@ -27,6 +27,8 @@ public enum FileType {
     LOG(R.drawable.ic_log_icon, R.color.vcode_file_log, "Log", true, "log"),
     BAK(R.drawable.ic_clock_rotate, R.color.vcode_file_bak, "Backup", true, "bak"),
     GITIGNORE(R.drawable.ic_git, R.color.vcode_file_git, "Git Ignore", true, "gitignore"),
+    GITCONFIG(R.drawable.ic_git, R.color.vcode_file_git, "Git Config", true, "gitconfig"),
+    GITATTRIBUTES(R.drawable.ic_git, R.color.vcode_file_git, "Git Attributes", true, "gitattributes"),
     SVG(R.drawable.ic_bezier_curve, R.color.vcode_file_svg, "SVG", true, "svg"),
 
     // Binary Assets
