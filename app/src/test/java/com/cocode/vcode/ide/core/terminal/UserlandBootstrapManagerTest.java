@@ -164,4 +164,19 @@ public class UserlandBootstrapManagerTest {
         assertTrue("vcode.sh must export GIT_DISCOVERY_ACROSS_FILESYSTEM=1", profileContent.contains("export GIT_DISCOVERY_ACROSS_FILESYSTEM=1"));
         assertTrue("vcode.sh must export GIT_CONFIG_PARAMETERS safe.directory=*", profileContent.contains("export GIT_CONFIG_PARAMETERS=\"'safe.directory=*'\""));
     }
+
+    @Test
+    public void testUninstallBootstrapAndCancelInstallation() throws IOException {
+        manager.initializeMinimalEnvironment(context);
+        assertTrue("Environment must be installed", manager.isInstalled(context));
+
+        boolean uninstalled = manager.uninstallBootstrap(context);
+        assertTrue("uninstallBootstrap must return true", uninstalled);
+        assertFalse("Environment must not be installed after uninstall", manager.isInstalled(context));
+        assertFalse("Prefix directory must be cleaned up", manager.getPrefixDir(context).exists());
+        assertFalse("Home directory must be cleaned up", manager.getHomeDir(context).exists());
+
+        // Cancel test on inactive token should not throw
+        manager.cancelInstall();
+    }
 }

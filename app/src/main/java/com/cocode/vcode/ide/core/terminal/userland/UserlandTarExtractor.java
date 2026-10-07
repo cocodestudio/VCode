@@ -63,13 +63,22 @@ public final class UserlandTarExtractor {
                                      @NonNull File destinationDir,
                                      @Nullable String expectedSha256,
                                      @Nullable ExtractionProgressListener listener) throws IOException {
-        return extractFromUrl(archiveUrl, destinationDir, expectedSha256, listener, 0);
+        return extractFromUrl(archiveUrl, destinationDir, expectedSha256, listener, null, 0);
+    }
+
+    public static int extractFromUrl(@NonNull String archiveUrl,
+                                     @NonNull File destinationDir,
+                                     @Nullable String expectedSha256,
+                                     @Nullable ExtractionProgressListener listener,
+                                     @Nullable com.cocode.vcode.ide.core.lsp.CancellationToken cancellationToken) throws IOException {
+        return extractFromUrl(archiveUrl, destinationDir, expectedSha256, listener, cancellationToken, 0);
     }
 
     private static int extractFromUrl(@NonNull String archiveUrl,
                                       @NonNull File destinationDir,
                                       @Nullable String expectedSha256,
                                       @Nullable ExtractionProgressListener listener,
+                                      @Nullable com.cocode.vcode.ide.core.lsp.CancellationToken cancellationToken,
                                       int redirectCount) throws IOException {
         if (redirectCount > 5) {
             throw new IOException("Too many redirects fetching userland archive: " + archiveUrl);
@@ -98,7 +107,7 @@ public final class UserlandTarExtractor {
             conn.disconnect();
             if (newUrl != null && !newUrl.trim().isEmpty()) {
                 URL targetUrl = new URL(url, newUrl);
-                return extractFromUrl(targetUrl.toString(), destinationDir, expectedSha256, listener, redirectCount + 1);
+                return extractFromUrl(targetUrl.toString(), destinationDir, expectedSha256, listener, cancellationToken, redirectCount + 1);
             }
         }
 
@@ -120,10 +129,10 @@ public final class UserlandTarExtractor {
         }
 
         try (InputStream rawIn = conn.getInputStream();
-             ProgressInputStream progressIn = new ProgressInputStream(rawIn, totalBytes, sha256Digest, listener);
+             ProgressInputStream progressIn = new ProgressInputStream(rawIn, totalBytes, sha256Digest, listener, cancellationToken);
              BufferedInputStream bufferedIn = new BufferedInputStream(progressIn, BUFFER_SIZE);
              GZIPInputStream gzipIn = new GZIPInputStream(bufferedIn)) {
-            int extracted = extractTarStream(gzipIn, destinationDir, listener, progressIn);
+            int extracted = extractTarStream(gzipIn, destinationDir, listener, progressIn, cancellationToken);
             if (expectedSha256 != null && sha256Digest != null) {
                 String actualHex = progressIn.getHexDigest();
                 if (actualHex != null && !expectedSha256.trim().equalsIgnoreCase(actualHex)) {
@@ -144,7 +153,7 @@ public final class UserlandTarExtractor {
                                        @NonNull File destinationDir,
                                        @Nullable ExtractionProgressListener listener) throws IOException {
         try (GZIPInputStream gzipIn = new GZIPInputStream(new BufferedInputStream(in, BUFFER_SIZE))) {
-            return extractTarStream(gzipIn, destinationDir, listener, null);
+            return extractTarStream(gzipIn, destinationDir, listener, null, null);
         }
     }
 
@@ -154,13 +163,14 @@ public final class UserlandTarExtractor {
     public static int extractTarStream(@NonNull InputStream in,
                                        @NonNull File destinationDir,
                                        @Nullable ExtractionProgressListener listener) throws IOException {
-        return extractTarStream(in, destinationDir, listener, null);
+        return extractTarStream(in, destinationDir, listener, null, null);
     }
 
     private static int extractTarStream(@NonNull InputStream in,
                                         @NonNull File destinationDir,
                                         @Nullable ExtractionProgressListener listener,
-                                        @Nullable ProgressInputStream progressStream) throws IOException {
+                                        @Nullable ProgressInputStream progressStream,
+                                        @Nullable com.cocode.vcode.ide.core.lsp.CancellationToken cancellationToken) throws IOException {
         if (!destinationDir.exists()) {
             destinationDir.mkdirs();
         }
@@ -174,6 +184,9 @@ public final class UserlandTarExtractor {
         int consecutiveZeroBlocks = 0;
 
         while (true) {
+            if (cancellationToken != null && cancellationToken.isCancelled()) {
+                throw new java.io.InterruptedIOException("Extraction cancelled by user");
+            }
             int read = readFully(in, headerBlock, 0, BLOCK_SIZE);
             if (read < BLOCK_SIZE) {
                 break;
@@ -540,14 +553,18 @@ public final class UserlandTarExtractor {
         private final long totalBytes;
         private final ExtractionProgressListener listener;
         private final MessageDigest digest;
+        private final com.cocode.vcode.ide.core.lsp.CancellationToken cancellationToken;
         private long bytesRead = 0;
         private long lastReported = 0;
 
-        ProgressInputStream(InputStream in, long totalBytes, @Nullable MessageDigest digest, @Nullable ExtractionProgressListener listener) {
+        ProgressInputStream(InputStream in, long totalBytes, @Nullable MessageDigest digest,
+                            @Nullable ExtractionProgressListener listener,
+                            @Nullable com.cocode.vcode.ide.core.lsp.CancellationToken cancellationToken) {
             super(in);
             this.totalBytes = totalBytes;
             this.digest = digest;
             this.listener = listener;
+            this.cancellationToken = cancellationToken;
         }
 
         long getBytesRead() {
@@ -571,6 +588,9 @@ public final class UserlandTarExtractor {
 
         @Override
         public int read() throws IOException {
+            if (cancellationToken != null && cancellationToken.isCancelled()) {
+                throw new java.io.InterruptedIOException("Download cancelled by user");
+            }
             int b = super.read();
             if (b != -1) {
                 bytesRead++;
@@ -584,6 +604,9 @@ public final class UserlandTarExtractor {
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
+            if (cancellationToken != null && cancellationToken.isCancelled()) {
+                throw new java.io.InterruptedIOException("Download cancelled by user");
+            }
             int read = super.read(b, off, len);
             if (read > 0) {
                 bytesRead += read;

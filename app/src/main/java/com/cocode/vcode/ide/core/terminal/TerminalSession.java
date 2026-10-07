@@ -73,8 +73,6 @@ public class TerminalSession {
     private InputStream inputStream;
     private OutputStream outputStream;
     private volatile boolean isRunning = false;
-    private volatile boolean isAwaitingBootstrapConfirmation = false;
-    private volatile String pendingBootstrapCommand = null;
     private volatile String lastExecutedCommand = null;
     private volatile boolean isCtrlActive = false;
     private volatile boolean isAltActive = false;
@@ -582,46 +580,6 @@ public class TerminalSession {
     public synchronized void handleInput(@NonNull String text) {
         if (!isRunning) return;
 
-        if (isAwaitingBootstrapConfirmation) {
-            for (int i = 0; i < text.length(); i++) {
-                char c = text.charAt(i);
-                if (c == '\r' || c == '\n') {
-                    String answer = currentInput.toString().trim().toLowerCase(java.util.Locale.US);
-                    currentInput.setLength(0);
-                    inputCursorPos = 0;
-                    isAwaitingBootstrapConfirmation = false;
-                    String pending = pendingBootstrapCommand;
-                    pendingBootstrapCommand = null;
-                    if (answer.isEmpty() || answer.equals("y") || answer.equals("yes")) {
-                        startBootstrapInstallation(pending);
-                    } else {
-                        emulator.appendOutput("\r\nInstallation cancelled.\r\n");
-                        writeToProcess("\r");
-                        notifyOutput();
-                    }
-                    return;
-                } else if (c == '\b' || c == 127) {
-                    if (currentInput.length() > 0 && inputCursorPos > 0) {
-                        int deleteIndex = Math.min(inputCursorPos - 1, currentInput.length() - 1);
-                        currentInput.deleteCharAt(deleteIndex);
-                        inputCursorPos = Math.max(0, inputCursorPos - 1);
-                        emulator.appendOutput("\b \b");
-                        notifyOutput();
-                    }
-                } else if (c >= 32) {
-                    if (inputCursorPos >= currentInput.length()) {
-                        currentInput.append(c);
-                    } else {
-                        currentInput.insert(inputCursorPos, c);
-                    }
-                    inputCursorPos++;
-                    emulator.appendOutput(String.valueOf(c));
-                    notifyOutput();
-                }
-            }
-            return;
-        }
-
         if (isCtrlActive && text.length() > 0) {
             char c = text.charAt(0);
             byte[] ctrlBytes = null;
@@ -672,8 +630,8 @@ public class TerminalSession {
                 currentInput.setLength(0);
                 inputCursorPos = 0;
                 if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
-                    if (line.startsWith("pkg ") || line.equals("pkg") || isUserlandCommand(line)) {
-                        promptUserlandInstallation(line);
+                    if (line.startsWith("pkg ") || line.equals("pkg") || line.equals("pkg bootstrap") || isUserlandCommand(line)) {
+                        showUserlandSettingsRedirection();
                         return;
                     }
                 }
@@ -732,11 +690,11 @@ public class TerminalSession {
                     String enterLine = currentInput.toString().trim();
                     currentInput.setLength(0);
                     inputCursorPos = 0;
-                    if (isAwaitingBootstrapConfirmation) {
-                        handleInput("\r");
-                    } else if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
-                        if (enterLine.startsWith("pkg ") || enterLine.equals("pkg") || isUserlandCommand(enterLine)) {
-                            promptUserlandInstallation(enterLine);
+                    if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
+                        if (enterLine.startsWith("pkg ") || enterLine.equals("pkg") || enterLine.equals("pkg bootstrap") || isUserlandCommand(enterLine)) {
+                            showUserlandSettingsRedirection();
+                            outputStream.write("\r".getBytes(StandardCharsets.UTF_8));
+                            outputStream.flush();
                         } else {
                             outputStream.write("\r".getBytes(StandardCharsets.UTF_8));
                             outputStream.flush();
@@ -747,17 +705,13 @@ public class TerminalSession {
                     }
                     break;
                 case SPECIAL_KEY_BACKSPACE:
-                    if (isAwaitingBootstrapConfirmation) {
-                        handleInput("\b");
-                    } else {
-                        if (inputCursorPos > 0 && currentInput.length() > 0) {
-                            int deleteIndex = Math.min(inputCursorPos - 1, currentInput.length() - 1);
-                            currentInput.deleteCharAt(deleteIndex);
-                            inputCursorPos = Math.max(0, inputCursorPos - 1);
-                        }
-                        outputStream.write(new byte[]{ 0x7F }); // ASCII 127 DEL
-                        outputStream.flush();
+                    if (inputCursorPos > 0 && currentInput.length() > 0) {
+                        int deleteIndex = Math.min(inputCursorPos - 1, currentInput.length() - 1);
+                        currentInput.deleteCharAt(deleteIndex);
+                        inputCursorPos = Math.max(0, inputCursorPos - 1);
                     }
+                    outputStream.write(new byte[]{ 0x7F }); // ASCII 127 DEL
+                    outputStream.flush();
                     break;
                 case SPECIAL_KEY_ARROW_UP:
                     if (emulator != null) {
@@ -816,8 +770,6 @@ public class TerminalSession {
                     }
                     outputStream.write(new byte[]{ 0x03 });
                     outputStream.flush();
-                    isAwaitingBootstrapConfirmation = false;
-                    pendingBootstrapCommand = null;
                     break;
                 case SPECIAL_KEY_CTRL_D:
                     outputStream.write(new byte[]{ 0x04 });
@@ -892,13 +844,15 @@ public class TerminalSession {
                 notifyCommandFinished(cmd, 0);
                 return;
             }
-            promptUserlandInstallation(cmd);
+            showUserlandSettingsRedirection();
+            notifyCommandFinished(cmd, 1);
             return;
         }
 
         if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
             if (cmd.startsWith("pkg ") || cmd.equals("pkg") || isUserlandCommand(cmd)) {
-                promptUserlandInstallation(cmd);
+                showUserlandSettingsRedirection();
+                notifyCommandFinished(cmd, 1);
                 return;
             }
         }
@@ -1000,8 +954,6 @@ public class TerminalSession {
         destroy();
         currentInput.setLength(0);
         inputCursorPos = 0;
-        isAwaitingBootstrapConfirmation = false;
-        pendingBootstrapCommand = null;
         lastExecutedCommand = null;
         isCtrlActive = false;
         isAltActive = false;
@@ -1069,78 +1021,11 @@ public class TerminalSession {
                 firstWord.equals("setup-userland");
     }
 
-    private void promptUserlandInstallation(@NonNull String triggeringCommand) {
-        if (UserlandBootstrapManager.getInstance().isInstalled(context)) {
-            emulator.appendOutput("\r\n\033[01;32mDesktop terminal environment is already installed and active.\033[00m\r\n");
-            notifyOutput();
-            return;
-        }
-
-        HardwareCapabilityChecker.DeviceDiagnostic diag = HardwareCapabilityChecker.checkDevice(context);
-
-        emulator.appendOutput("\r\n\033[01;36m======================================================================\033[00m\r\n");
-        emulator.appendOutput("\033[01;36m                  VCode Desktop Terminal Environment                  \033[00m\r\n");
-        emulator.appendOutput("\033[01;36m======================================================================\033[00m\r\n");
-        emulator.appendOutput("Initializing rootless Linux userland (bash, coreutils, pkg manager)...\r\n");
-        emulator.appendOutput("Archive Download: ~45 MB | Installed Footprint: ~140 MB\r\n\r\n");
-
-        if (diag.isLowRam) {
-            emulator.appendOutput("\033[01;33m⚠️ Low-End Device Advisory:\033[00m\r\n");
-            emulator.appendOutput("  • Device Memory: " + diag.getFormattedRam() + " RAM (Low-spec device)\r\n");
-            emulator.appendOutput("  • Free Storage: " + diag.getFormattedStorage() + " Available\r\n\r\n");
-            emulator.appendOutput("Running full language runtimes (Python/Node/Git CLI) on devices with\r\n");
-            emulator.appendOutput("≤2GB RAM may trigger Android OS background tab killing during heavy tasks.\r\n\r\n");
-        } else {
-            emulator.appendOutput("Device Diagnostics:\r\n");
-            emulator.appendOutput("  • Device Memory: " + diag.getFormattedRam() + " RAM\r\n");
-            emulator.appendOutput("  • Free Storage: " + diag.getFormattedStorage() + " Available\r\n\r\n");
-        }
-
-        emulator.appendOutput("Proceed with desktop environment installation? [Y/n]: ");
-        isAwaitingBootstrapConfirmation = true;
-        pendingBootstrapCommand = triggeringCommand;
+    private void showUserlandSettingsRedirection() {
+        emulator.appendOutput("\r\n\033[01;33mDesktop Linux Environment is not installed.\033[00m\r\n" +
+                "To enable packages, runtimes, and the desktop shell,\r\n" +
+                "go to \033[01;36mSettings > Editor > Desktop Linux Environment\033[00m.\r\n\r\n");
         notifyOutput();
-    }
-
-    private void startBootstrapInstallation(@Nullable String pendingCmd) {
-        emulator.appendOutput("Downloading and configuring rootless desktop environment...\r\n");
-        notifyOutput();
-
-        UserlandBootstrapManager.getInstance().installBootstrap(context, null,
-                new UserlandBootstrapManager.BootstrapCallback() {
-                    private int lastStage = -1;
-
-                    @Override
-                    public void onProgress(int stage, int totalStages, @NonNull String stageName, int percent, @Nullable String detail) {
-                        if (lastStage != -1 && stage != lastStage) {
-                            emulator.appendOutput("\r\n");
-                        }
-                        lastStage = stage;
-
-                        String msg = "[" + stage + "/" + totalStages + "] " + stageName + " (" + percent + "%)";
-                        if (detail != null && !detail.isEmpty()) {
-                            msg += " - " + detail;
-                        }
-                        emulator.appendOutput("\r\033[K" + msg);
-                        notifyOutput();
-                    }
-
-                    @Override
-                    public void onSuccess() {
-                        emulator.appendOutput("\r\n\033[01;32mDesktop terminal environment initialized successfully!\033[00m\r\n\r\n");
-                        notifyOutput();
-                        restart(false);
-                        if (pendingCmd != null && !pendingCmd.trim().isEmpty() && !pendingCmd.trim().equals("pkg") && !pendingCmd.trim().equals("setup-userland") && !pendingCmd.trim().equals("pkg bootstrap")) {
-                            executeCommand(pendingCmd.trim());
-                        }
-                    }
-
-                    @Override
-                    public void onError(@NonNull String error) {
-                        emulator.appendOutput("\r\n\033[01;31mError initializing desktop environment: " + error + "\033[00m\r\n");
-                        notifyOutput();
-                    }
-                });
     }
 
     static List<String> buildProotCommand(@NonNull File prootBin,

@@ -258,21 +258,59 @@ public final class UserlandBootstrapManager {
         return null;
     }
 
+    private volatile com.cocode.vcode.ide.core.lsp.CancellationToken activeInstallToken = null;
+
     /**
-     * Installs or bootstraps the rootless desktop userland asynchronously.
+     * Cancels an ongoing bootstrap installation, aborting network downloads
+     * and triggering immediate cleanup of temporary and incomplete filesystem structures.
+     */
+    public void cancelInstall() {
+        com.cocode.vcode.ide.core.lsp.CancellationToken token = activeInstallToken;
+        if (token != null) {
+            token.cancel();
+        }
+    }
+
+    /**
+     * Uninstalls and removes all rootless desktop environment files, binaries,
+     * packages, and cache from the device to reclaim storage space.
      *
-     * @param context   Android context
+     * @param context the Android context
+     * @return true if both prefix and home directories were successfully cleaned up
+     */
+    public boolean uninstallBootstrap(@NonNull Context context) {
+        cancelInstall();
+        File prefixDir = getPrefixDir(context);
+        cleanBootstrapSystemDirectories(prefixDir);
+        boolean prefixDeleted = deleteRecursively(prefixDir);
+        File homeDir = getHomeDir(context);
+        boolean homeDeleted = deleteRecursively(homeDir);
+        return prefixDeleted && homeDeleted;
+    }
+
+    /**
+     * Downloads, extracts, and configures the rootless desktop userland environment.
+     *
+     * @param context   the Android context
      * @param customUrl optional custom tarball URL; null to use architecture default
      * @param callback  progress and lifecycle callback
      */
     public void installBootstrap(@NonNull Context context,
                                  @Nullable String customUrl,
                                  @Nullable BootstrapCallback callback) {
+        final com.cocode.vcode.ide.core.lsp.CancellationToken token =
+                new com.cocode.vcode.ide.core.lsp.CancellationToken();
+        this.activeInstallToken = token;
         ExecutorProvider.getInstance().runOnIo(() -> {
+            File prefixDir = getPrefixDir(context);
             try {
+                if (token.isCancelled()) {
+                    cleanBootstrapSystemDirectories(prefixDir);
+                    notifyError(callback, "Installation cancelled.");
+                    return;
+                }
                 notifyProgress(callback, 1, 4, "Preparing rootless directory structure", 10, null);
 
-                File prefixDir = getPrefixDir(context);
                 cleanBootstrapSystemDirectories(prefixDir);
 
                 File binDir = getBinDir(context);
@@ -289,6 +327,12 @@ public final class UserlandBootstrapManager {
                 tmpDir.mkdirs();
                 dpkgDir.mkdirs();
                 homeDir.mkdirs();
+
+                if (token.isCancelled()) {
+                    cleanBootstrapSystemDirectories(prefixDir);
+                    notifyError(callback, "Installation cancelled.");
+                    return;
+                }
 
                 String configuredMirror = null;
                 try {
@@ -309,13 +353,19 @@ public final class UserlandBootstrapManager {
                     notifyProgress(callback, 2, 4, "Downloading userland bootstrap archive", 25, downloadUrl);
                     String expectedSha256 = fetchExpectedSha256(downloadUrl);
 
+                    if (token.isCancelled()) {
+                        cleanBootstrapSystemDirectories(prefixDir);
+                        notifyError(callback, "Installation cancelled.");
+                        return;
+                    }
+
                     notifyProgress(callback, 3, 4, "Extracting rootless filesystem ($PREFIX)", 60, null);
 
                     int count = UserlandTarExtractor.extractFromUrl(downloadUrl, prefixDir, expectedSha256,
                             (bytesRead, totalBytes, currentItem) -> {
                                 int pct = totalBytes > 0 ? (int) Math.min(90, (bytesRead * 70 / totalBytes) + 20) : 50;
                                 notifyProgress(callback, 3, 4, "Extracting rootless filesystem", pct, currentItem);
-                            });
+                            }, token);
                     if (count > 0) {
                         downloadSucceeded = true;
                     } else {
@@ -324,19 +374,18 @@ public final class UserlandBootstrapManager {
                 } catch (Exception e) {
                     downloadSucceeded = false;
                     String errorMsg = e.getMessage() != null ? e.getMessage() : e.toString();
-                    if (e instanceof java.io.FileNotFoundException || errorMsg.contains("404")) {
+                    if (token.isCancelled() || e instanceof java.io.InterruptedIOException) {
+                        errorMsg = "Installation cancelled.";
+                    } else if (e instanceof java.io.FileNotFoundException || errorMsg.contains("404")) {
                         errorMsg = "Bootstrap archive not found (HTTP 404) at:\n" + downloadUrl +
                                 "\nPlease check https://github.com/cocodestudio/vcode-userland-bootstrap/releases or configure a custom mirror.";
                     }
                     downloadErrorMsg = errorMsg;
                 }
 
-                if (!downloadSucceeded) {
-                    File marker = new File(prefixDir, ".installed");
-                    if (marker.exists()) marker.delete();
-                    File versionFile = new File(prefixDir, ".version");
-                    if (versionFile.exists()) versionFile.delete();
-                    notifyError(callback, "Bootstrap installation failed: " + (downloadErrorMsg != null ? downloadErrorMsg : "Unknown error"));
+                if (token.isCancelled() || !downloadSucceeded) {
+                    cleanBootstrapSystemDirectories(prefixDir);
+                    notifyError(callback, downloadErrorMsg != null ? downloadErrorMsg : "Installation cancelled.");
                     return;
                 }
 
@@ -358,7 +407,12 @@ public final class UserlandBootstrapManager {
                 notifyProgress(callback, 4, 4, "Installation complete", 100, null);
                 notifySuccess(callback);
             } catch (Exception e) {
+                cleanBootstrapSystemDirectories(prefixDir);
                 notifyError(callback, "Bootstrap installation failed: " + e.getMessage());
+            } finally {
+                if (activeInstallToken == token) {
+                    activeInstallToken = null;
+                }
             }
         });
     }

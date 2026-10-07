@@ -11,11 +11,13 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.cocode.vcode.ide.R;
-import com.cocode.vcode.ide.core.terminal.userland.HardwareCapabilityChecker;
 import com.cocode.vcode.ide.core.terminal.userland.UserlandBootstrapManager;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.databinding.FragmentSettingsEditorBinding;
+import com.cocode.vcode.ide.ui.dialogs.RemoveBootstrapConfirmDialog;
 import com.cocode.vcode.ide.ui.sheets.settings.CustomizeQuickSymbolsBottomSheet;
+import com.cocode.vcode.ide.ui.sheets.settings.DesktopTerminalInstallBottomSheet;
+import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -139,7 +141,7 @@ public class EditorSettingsFragment extends Fragment {
                 if (isChecked) {
                     handleEnableDesktopTerminal();
                 } else {
-                    viewModel.updateDesktopTerminalEnabled(false);
+                    handleDisableDesktopTerminal();
                 }
             }
         });
@@ -241,7 +243,7 @@ public class EditorSettingsFragment extends Fragment {
                 binding.switchForceLargeFileHighlighting.setChecked(settings.forceLargeFileHighlighting);
                 binding.switchQuickSymbolBar.setChecked(settings.showQuickSymbolBar);
                 updateCustomizeSymbolsRowUi(settings.showQuickSymbolBar);
-                binding.switchDesktopTerminal.setChecked(settings.desktopTerminalEnabled ||
+                binding.switchDesktopTerminal.setChecked(settings.desktopTerminalEnabled &&
                         UserlandBootstrapManager.getInstance().isInstalled(requireContext()));
                 String customMirror = settings.getCustomBootstrapUrl();
                 if (customMirror != null && !customMirror.trim().isEmpty()) {
@@ -274,50 +276,67 @@ public class EditorSettingsFragment extends Fragment {
             return;
         }
 
-        HardwareCapabilityChecker.DeviceDiagnostic diag =
-                HardwareCapabilityChecker.checkDevice(requireContext());
+        // Keep switch visual state false until installation succeeds
+        isUpdatingUi = true;
+        binding.switchDesktopTerminal.setChecked(false);
+        isUpdatingUi = false;
 
-        if (diag.isLowRam) {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(R.string.vcode_desktop_terminal_dialog_title)
-                    .setMessage(getString(R.string.vcode_desktop_terminal_low_ram_warning, diag.getFormattedRam()))
-                    .setPositiveButton(R.string.vcode_desktop_terminal_proceed, (dialog, which) -> {
-                        installDesktopTerminal();
-                    })
-                    .setNegativeButton(R.string.vcode_desktop_terminal_cancel, (dialog, which) -> {
-                        binding.switchDesktopTerminal.setChecked(false);
-                    })
-                    .setCancelable(false)
-                    .show();
-        } else {
-            installDesktopTerminal();
-        }
-    }
-
-    private void installDesktopTerminal() {
-        android.widget.Toast.makeText(requireContext(), R.string.vcode_desktop_terminal_installing, android.widget.Toast.LENGTH_SHORT).show();
-        UserlandBootstrapManager.getInstance().installBootstrap(requireContext(), null,
-                new UserlandBootstrapManager.BootstrapCallback() {
+        DesktopTerminalInstallBottomSheet.show(getParentFragmentManager(),
+                new DesktopTerminalInstallBottomSheet.InstallListener() {
                     @Override
-                    public void onProgress(int stage, int totalStages, @NonNull String stageName, int percent, @Nullable String detail) {
+                    public void onInstallSuccess() {
+                        viewModel.updateDesktopTerminalEnabled(true);
                     }
 
                     @Override
-                    public void onSuccess() {
-                        if (getContext() != null) {
-                            viewModel.updateDesktopTerminalEnabled(true);
-                            android.widget.Toast.makeText(requireContext(), R.string.vcode_desktop_terminal_installed, android.widget.Toast.LENGTH_SHORT).show();
-                        }
-                    }
-
-                    @Override
-                    public void onError(@NonNull String error) {
-                        if (getContext() != null) {
+                    public void onInstallCancelled() {
+                        if (isAdded()) {
+                            isUpdatingUi = true;
                             binding.switchDesktopTerminal.setChecked(false);
-                            android.widget.Toast.makeText(requireContext(), error, android.widget.Toast.LENGTH_LONG).show();
+                            isUpdatingUi = false;
                         }
                     }
                 });
+    }
+
+    private void handleDisableDesktopTerminal() {
+        UserlandBootstrapManager manager = UserlandBootstrapManager.getInstance();
+        if (!manager.isInstalled(requireContext())) {
+            viewModel.updateDesktopTerminalEnabled(false);
+            return;
+        }
+
+        // Keep switch visual state true until user confirms removal
+        isUpdatingUi = true;
+        binding.switchDesktopTerminal.setChecked(true);
+        isUpdatingUi = false;
+
+        RemoveBootstrapConfirmDialog.show(requireContext(), new RemoveBootstrapConfirmDialog.RemoveBootstrapListener() {
+            @Override
+            public void onConfirmed() {
+                ExecutorProvider.getInstance().runOnIo(() -> {
+                    manager.uninstallBootstrap(requireContext().getApplicationContext());
+                    ExecutorProvider.getInstance().runOnMain(() -> {
+                        viewModel.updateDesktopTerminalEnabled(false);
+                        if (isAdded()) {
+                            isUpdatingUi = true;
+                            binding.switchDesktopTerminal.setChecked(false);
+                            isUpdatingUi = false;
+                            android.widget.Toast.makeText(requireContext(), R.string.vcode_desktop_terminal_removed, android.widget.Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                });
+            }
+
+            @Override
+            public void onCancelled() {
+                if (isAdded()) {
+                    isUpdatingUi = true;
+                    binding.switchDesktopTerminal.setChecked(true);
+                    isUpdatingUi = false;
+                }
+            }
+        });
     }
 
     private void showCustomMirrorDialog() {
