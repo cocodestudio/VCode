@@ -219,7 +219,9 @@ public class TerminalSession {
                  java.io.BufferedWriter writer = new java.io.BufferedWriter(osw)) {
                 writer.write("export COLUMNS=1000\n");
                 writer.write("export VCODE_PROJECT_NAME=\"" + projectName.replace("\"", "\\\"") + "\"\n");
-                writer.write("export HOME=\"" + projectRoot.getAbsolutePath() + "\"\n\n");
+                writer.write("export HOME=\"" + projectRoot.getAbsolutePath() + "\"\n");
+                writer.write("export GIT_DISCOVERY_ACROSS_FILESYSTEM=1\n");
+                writer.write("export GIT_CONFIG_PARAMETERS=\"'safe.directory=*'\"\n\n");
                 writer.write("_vcode_prompt_dir() {\n");
                 writer.write("    pname=\"${VCODE_PROJECT_NAME:-vcode}\"\n");
                 writer.write("    case \"$PWD\" in\n");
@@ -305,6 +307,8 @@ public class TerminalSession {
                     ? projectName.trim() : "vcode";
             env.put("VCODE_PROJECT_NAME", resolvedProjectName);
             env.put("PYTHONUNBUFFERED", "1");
+            env.put("GIT_DISCOVERY_ACROSS_FILESYSTEM", "1");
+            env.put("GIT_CONFIG_PARAMETERS", "'safe.directory=*'");
             env.put("PS1", "\u0001\u001B[01;32m\u0002" + resolvedProjectName + ":~\u0001\u001B[00m\u0002$ ");
             ensureHostProfile(context, resolvedProjectName, projectRoot, env);
 

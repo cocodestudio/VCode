@@ -140,4 +140,28 @@ public class UserlandBootstrapManagerTest {
         assertTrue("etc/profile must hook vcode.sh or profile.d", profileContent.contains("vcode.sh") || profileContent.contains("profile.d"));
         assertFalse("etc/profile must not export raw unconfigured prompt", profileContent.contains("export PS1='\\h:\\w\\$ '"));
     }
+
+    @Test
+    public void testGitSafeDirectoryAndDiscoveryAcrossFilesystemProvisioning() throws IOException {
+        manager.ensureBaseEnvironment(context);
+
+        File etcDir = manager.getEtcDir(context);
+        File gitConfig = new File(etcDir, "gitconfig");
+        assertTrue("etc/gitconfig must be created", gitConfig.exists());
+        String gitConfigContent = com.cocode.vcode.ide.utils.FileUtils.readFile(gitConfig);
+        assertTrue("etc/gitconfig must configure safe.directory", gitConfigContent.contains("[safe]"));
+        assertTrue("etc/gitconfig safe directory must match wildcard", gitConfigContent.contains("directory = *"));
+
+        File homeGitConfig = new File(manager.getHomeDir(context), ".gitconfig");
+        assertTrue("root home .gitconfig must be created", homeGitConfig.exists());
+        String homeGitContent = com.cocode.vcode.ide.utils.FileUtils.readFile(homeGitConfig);
+        assertTrue("root .gitconfig must configure safe.directory", homeGitContent.contains("[safe]"));
+        assertTrue("root .gitconfig safe directory must match wildcard", homeGitContent.contains("directory = *"));
+
+        File vcodeProfile = new File(new File(etcDir, "profile.d"), "vcode.sh");
+        assertTrue(vcodeProfile.exists());
+        String profileContent = com.cocode.vcode.ide.utils.FileUtils.readFile(vcodeProfile);
+        assertTrue("vcode.sh must export GIT_DISCOVERY_ACROSS_FILESYSTEM=1", profileContent.contains("export GIT_DISCOVERY_ACROSS_FILESYSTEM=1"));
+        assertTrue("vcode.sh must export GIT_CONFIG_PARAMETERS safe.directory=*", profileContent.contains("export GIT_CONFIG_PARAMETERS=\"'safe.directory=*'\""));
+    }
 }

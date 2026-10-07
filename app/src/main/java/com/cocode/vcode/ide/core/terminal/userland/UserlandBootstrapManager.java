@@ -459,6 +459,26 @@ public final class UserlandBootstrapManager {
             }
         }
 
+        // Ensure container system-wide git config considers all workspaces safe across PRoot UID translation
+        File gitConfigFile = new File(etcDir, "gitconfig");
+        try (FileWriter writer = new FileWriter(gitConfigFile)) {
+            writer.write("[safe]\n");
+            writer.write("\tdirectory = *\n");
+        } catch (IOException ignored) {
+        }
+
+        // Ensure container root home git config also considers all workspaces safe
+        File homeDir = getHomeDir(context);
+        if (!homeDir.exists()) {
+            homeDir.mkdirs();
+        }
+        File rootGitConfig = new File(homeDir, ".gitconfig");
+        try (FileWriter writer = new FileWriter(rootGitConfig)) {
+            writer.write("[safe]\n");
+            writer.write("\tdirectory = *\n");
+        } catch (IOException ignored) {
+        }
+
         // 1. etc/profile.d/vcode.sh (Sourced by login and interactive shells)
         File profileD = new File(etcDir, "profile.d");
         if (!profileD.exists()) {
@@ -479,7 +499,9 @@ public final class UserlandBootstrapManager {
             writer.write("export XDG_CONFIG_HOME=\"/root/.config\"\n");
             writer.write("export XDG_DATA_HOME=\"/root/.local/share\"\n");
             writer.write("export NPM_CONFIG_CACHE=\"/root/.npm\"\n");
-            writer.write("export PIP_CACHE_DIR=\"/root/.cache/pip\"\n\n");
+            writer.write("export PIP_CACHE_DIR=\"/root/.cache/pip\"\n");
+            writer.write("export GIT_DISCOVERY_ACROSS_FILESYSTEM=1\n");
+            writer.write("export GIT_CONFIG_PARAMETERS=\"'safe.directory=*'\"\n\n");
             writer.write("# Desktop Terminal Prompt: <Project Name>:~$ and <Project Name>/subdir:~$ \n");
             writer.write("_vcode_prompt_dir() {\n");
             writer.write("    pname=\"${VCODE_PROJECT_NAME:-vcode}\"\n");
