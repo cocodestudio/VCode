@@ -781,7 +781,7 @@
     <string name="vcode_tab_installed">Installed (%1$d)</string>
     <string name="vcode_tab_installed_plain">Installed</string>
     <string name="vcode_install">Install</string>
-    <string name="vcode_install_dev">+Dev</string>
+    <string name="vcode_install_dev">Dev</string>
     <string name="vcode_installing">Installing…</string>
     <string name="vcode_installed">Installed</string>
     <string name="vcode_uninstall">Uninstall</string>
@@ -808,4 +808,18 @@
     <string name="vcode_batch_uninstall_complete">Successfully uninstalled %1$d packages</string>
     <string name="vcode_batch_install_partial">Installed %1$d packages (%2$d failed)</string>
     <string name="vcode_batch_uninstall_partial">Uninstalled %1$d packages (%2$d failed)</string>
+    <string name="vcode_tab_explore_npm">Explore NPM</string>
+    <string name="vcode_scope_prod">prod</string>
+    <string name="vcode_scope_dev">dev</string>
+    <string name="vcode_scope_registry">registry</string>
+    <string name="vcode_update_available">Update available</string>
+    <string name="vcode_up_to_date">Up to date</string>
+    <string name="vcode_not_installed">Not installed</string>
+    <string name="vcode_update_to">Update to %1$s</string>
+    <string name="vcode_direct_dependency">Direct Dependency</string>
+    <string name="vcode_dev_dependency">devDependency</string>
+    <string name="vcode_batch_update">Update (%1$d)</string>
+    <string name="vcode_copy_package_name">Copy package name</string>
+    <string name="vcode_copy_import_statement">Copy import statement</string>
+    <string name="vcode_package_options">Package options</string>
 </resources>

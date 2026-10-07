@@ -1,13 +1,16 @@
 package com.cocode.vcode.ide.ui.packages;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
-import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -53,7 +56,6 @@ public class PackagesAdapter extends RecyclerView.Adapter<PackagesAdapter.ViewHo
     public void setPackages(@NonNull List<NpmPackageInfo> newPackages) {
         packages.clear();
         packages.addAll(newPackages);
-        // Prune selections that no longer exist in new list if needed, or retain them
         notifyDataSetChanged();
     }
 
@@ -148,21 +150,83 @@ public class PackagesAdapter extends RecyclerView.Adapter<PackagesAdapter.ViewHo
             Context context = itemView.getContext();
             FontManager fm = FontManager.getInstance();
 
-            // Apply custom typography
+            // Apply unified custom typography
             binding.tvPackageName.setTypeface(fm.getCodeFontBold(context));
-            binding.tvVersionBadge.setTypeface(fm.getCodeFont(context));
+            binding.tvScopeBadge.setTypeface(fm.getCodeFontBold(context));
+            binding.tvLatestVersion.setTypeface(fm.getCodeFontBold(context));
+            binding.tvInstalledVersion.setTypeface(fm.getCodeFont(context));
+            binding.tvStatusBadge.setTypeface(fm.getCodeFont(context));
             binding.tvPackageDescription.setTypeface(fm.getUiFont(context));
             binding.tvAuthor.setTypeface(fm.getUiFont(context));
             binding.tvLicense.setTypeface(fm.getUiFont(context));
             binding.tvSize.setTypeface(fm.getUiFont(context));
-            binding.tvInstalledStatus.setTypeface(fm.getUiMedium(context));
-            binding.btnUpdate.setTypeface(fm.getUiSemiBold(context));
+            binding.tvDependencyType.setTypeface(fm.getUiFont(context));
+            binding.tvItemStatus.setTypeface(fm.getCodeFontBold(context));
             binding.btnInstall.setTypeface(fm.getUiSemiBold(context));
             binding.btnInstallDev.setTypeface(fm.getUiSemiBold(context));
+            binding.btnUpdate.setTypeface(fm.getUiSemiBold(context));
 
             binding.tvPackageName.setText(pkg.getName());
-            binding.tvVersionBadge.setText("v" + pkg.getVersion());
 
+            // Scope Badge (prod vs dev vs registry)
+            if (pkg.isInstalled()) {
+                if (pkg.isDev()) {
+                    binding.tvScopeBadge.setText(R.string.vcode_scope_dev);
+                    binding.tvScopeBadge.setBackgroundResource(R.drawable.vcode_bg_badge_neutral);
+                    binding.tvScopeBadge.setTextColor(ContextCompat.getColor(context, R.color.vcode_text_secondary));
+                    binding.tvDependencyType.setText(R.string.vcode_dev_dependency);
+                } else {
+                    binding.tvScopeBadge.setText(R.string.vcode_scope_prod);
+                    binding.tvScopeBadge.setBackgroundResource(R.drawable.vcode_bg_badge_success);
+                    binding.tvScopeBadge.setTextColor(ContextCompat.getColor(context, R.color.vcode_accent_success));
+                    binding.tvDependencyType.setText(R.string.vcode_direct_dependency);
+                }
+            } else {
+                binding.tvScopeBadge.setText(R.string.vcode_scope_registry);
+                binding.tvScopeBadge.setBackgroundResource(R.drawable.vcode_bg_badge_neutral);
+                binding.tvScopeBadge.setTextColor(ContextCompat.getColor(context, R.color.vcode_text_hint));
+                binding.tvDependencyType.setText(R.string.vcode_direct_dependency);
+            }
+
+            // Version Flow and Status Badge
+            if (pkg.isInstalled()) {
+                binding.tvInstalledVersion.setVisibility(View.VISIBLE);
+                binding.tvInstalledVersion.setText("v" + pkg.getInstalledVersion());
+
+                if (pkg.isUpdateAvailable()) {
+                    binding.ivVersionArrow.setVisibility(View.VISIBLE);
+                    binding.tvLatestVersion.setVisibility(View.VISIBLE);
+                    binding.tvLatestVersion.setText("v" + pkg.getVersion());
+                    binding.tvLatestVersion.setTextColor(ContextCompat.getColor(context, R.color.vcode_accent_warning));
+
+                    binding.tvStatusBadge.setVisibility(View.VISIBLE);
+                    binding.tvStatusBadge.setText(R.string.vcode_update_available);
+                    binding.tvStatusBadge.setBackgroundResource(R.drawable.vcode_bg_badge_warning);
+                    binding.tvStatusBadge.setTextColor(ContextCompat.getColor(context, R.color.vcode_accent_warning));
+                } else {
+                    binding.ivVersionArrow.setVisibility(View.GONE);
+                    binding.tvLatestVersion.setVisibility(View.GONE);
+
+                    binding.tvStatusBadge.setVisibility(View.VISIBLE);
+                    binding.tvStatusBadge.setText(R.string.vcode_up_to_date);
+                    binding.tvStatusBadge.setBackgroundResource(R.drawable.vcode_bg_badge_success);
+                    binding.tvStatusBadge.setTextColor(ContextCompat.getColor(context, R.color.vcode_accent_success));
+                }
+            } else {
+                binding.tvInstalledVersion.setVisibility(View.GONE);
+                binding.ivVersionArrow.setVisibility(View.GONE);
+
+                binding.tvLatestVersion.setVisibility(View.VISIBLE);
+                binding.tvLatestVersion.setText("v" + pkg.getVersion());
+                binding.tvLatestVersion.setTextColor(ContextCompat.getColor(context, R.color.vcode_accent_primary));
+
+                binding.tvStatusBadge.setVisibility(View.VISIBLE);
+                binding.tvStatusBadge.setText(R.string.vcode_not_installed);
+                binding.tvStatusBadge.setBackgroundResource(R.drawable.vcode_bg_badge_neutral);
+                binding.tvStatusBadge.setTextColor(ContextCompat.getColor(context, R.color.vcode_text_hint));
+            }
+
+            // Description
             String desc = pkg.getDescription();
             if (desc != null && !desc.isEmpty()) {
                 binding.tvPackageDescription.setVisibility(View.VISIBLE);
@@ -175,7 +239,7 @@ public class PackagesAdapter extends RecyclerView.Adapter<PackagesAdapter.ViewHo
             String author = pkg.getAuthor();
             if (author != null && !author.isEmpty()) {
                 binding.tvAuthor.setVisibility(View.VISIBLE);
-                binding.tvAuthor.setText(author);
+                binding.tvAuthor.setText(context.getString(R.string.vcode_author_format, author));
             } else {
                 binding.tvAuthor.setVisibility(View.GONE);
             }
@@ -220,39 +284,37 @@ public class PackagesAdapter extends RecyclerView.Adapter<PackagesAdapter.ViewHo
 
             binding.cardPackage.setOnClickListener(v -> toggleSelection(pkg.getName()));
 
-            // Action progress spinner vs buttons
+            // Action progress indicator vs buttons
             if (pkg.isActionInProgress()) {
-                binding.progressAction.setVisibility(View.VISIBLE);
+                binding.layoutItemProgress.setVisibility(View.VISIBLE);
+                binding.tvItemStatus.setText(pkg.isInstalled()
+                        ? context.getString(R.string.vcode_uninstalling)
+                        : context.getString(R.string.vcode_installing));
                 binding.layoutActionButtons.setVisibility(View.INVISIBLE);
             } else {
-                binding.progressAction.setVisibility(View.GONE);
+                binding.layoutItemProgress.setVisibility(View.GONE);
                 binding.layoutActionButtons.setVisibility(View.VISIBLE);
-            }
 
-            // Installation state and button visibility
-            if (pkg.isInstalled()) {
-                binding.tvInstalledStatus.setVisibility(View.VISIBLE);
-                String installedText = pkg.isDev() ? "dev: " + pkg.getInstalledVersion() : "v" + pkg.getInstalledVersion();
-                binding.tvInstalledStatus.setText(installedText);
+                if (pkg.isInstalled()) {
+                    binding.btnInstall.setVisibility(View.GONE);
+                    binding.btnInstallDev.setVisibility(View.GONE);
+                    binding.btnUninstall.setVisibility(View.VISIBLE);
 
-                binding.btnInstall.setVisibility(View.GONE);
-                binding.btnInstallDev.setVisibility(View.GONE);
-                binding.btnUninstall.setVisibility(View.VISIBLE);
-
-                if (pkg.isUpdateAvailable()) {
-                    binding.btnUpdate.setVisibility(View.VISIBLE);
+                    if (pkg.isUpdateAvailable()) {
+                        binding.btnUpdate.setVisibility(View.VISIBLE);
+                        binding.btnUpdate.setText(context.getString(R.string.vcode_update_to, "v" + pkg.getVersion()));
+                    } else {
+                        binding.btnUpdate.setVisibility(View.GONE);
+                    }
                 } else {
+                    binding.btnInstall.setVisibility(View.VISIBLE);
+                    binding.btnInstallDev.setVisibility(View.VISIBLE);
+                    binding.btnUninstall.setVisibility(View.GONE);
                     binding.btnUpdate.setVisibility(View.GONE);
                 }
-            } else {
-                binding.tvInstalledStatus.setVisibility(View.GONE);
-                binding.btnInstall.setVisibility(View.VISIBLE);
-                binding.btnInstallDev.setVisibility(View.VISIBLE);
-                binding.btnUninstall.setVisibility(View.GONE);
-                binding.btnUpdate.setVisibility(View.GONE);
             }
 
-            // Action button click handlers (prevent card click)
+            // Button click handlers
             binding.btnInstall.setOnClickListener(v -> {
                 if (listener != null) listener.onInstallClick(pkg, false);
             });
@@ -268,6 +330,70 @@ public class PackagesAdapter extends RecyclerView.Adapter<PackagesAdapter.ViewHo
             binding.btnUninstall.setOnClickListener(v -> {
                 if (listener != null) listener.onUninstallClick(pkg);
             });
+
+            // More Options menu
+            binding.btnMoreOptions.setOnClickListener(v -> showPopupMenu(v, pkg));
+        }
+
+        private void showPopupMenu(@NonNull View anchor, @NonNull NpmPackageInfo pkg) {
+            Context context = anchor.getContext();
+            PopupMenu popup = new PopupMenu(context, anchor);
+
+            final int MENU_COPY_NAME = 1;
+            final int MENU_COPY_IMPORT = 2;
+            final int MENU_INSTALL_PROD = 3;
+            final int MENU_INSTALL_DEV = 4;
+            final int MENU_UPDATE = 5;
+            final int MENU_UNINSTALL = 6;
+
+            popup.getMenu().add(0, MENU_COPY_NAME, 0, R.string.vcode_copy_package_name);
+            popup.getMenu().add(0, MENU_COPY_IMPORT, 1, R.string.vcode_copy_import_statement);
+
+            if (pkg.isInstalled()) {
+                if (pkg.isUpdateAvailable()) {
+                    popup.getMenu().add(0, MENU_UPDATE, 2, context.getString(R.string.vcode_update_to, "v" + pkg.getVersion()));
+                }
+                popup.getMenu().add(0, MENU_UNINSTALL, 3, R.string.vcode_uninstall);
+            } else {
+                popup.getMenu().add(0, MENU_INSTALL_PROD, 2, R.string.vcode_install);
+                popup.getMenu().add(0, MENU_INSTALL_DEV, 3, R.string.vcode_install_dev);
+            }
+
+            popup.setOnMenuItemClickListener(item -> {
+                int id = item.getItemId();
+                if (id == MENU_COPY_NAME) {
+                    copyToClipboard(context, pkg.getName());
+                    return true;
+                } else if (id == MENU_COPY_IMPORT) {
+                    String cleanName = pkg.getName().replaceAll("[^a-zA-Z0-9_]", "");
+                    if (cleanName.isEmpty()) cleanName = "pkg";
+                    String importStmt = "import " + cleanName + " from '" + pkg.getName() + "';";
+                    copyToClipboard(context, importStmt);
+                    return true;
+                } else if (id == MENU_INSTALL_PROD) {
+                    if (listener != null) listener.onInstallClick(pkg, false);
+                    return true;
+                } else if (id == MENU_INSTALL_DEV) {
+                    if (listener != null) listener.onInstallClick(pkg, true);
+                    return true;
+                } else if (id == MENU_UPDATE) {
+                    if (listener != null) listener.onUpdateClick(pkg);
+                    return true;
+                } else if (id == MENU_UNINSTALL) {
+                    if (listener != null) listener.onUninstallClick(pkg);
+                    return true;
+                }
+                return false;
+            });
+            popup.show();
+        }
+
+        private void copyToClipboard(@NonNull Context context, @NonNull String text) {
+            ClipboardManager cm = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText("text", text));
+                Toast.makeText(context, R.string.vcode_copied, Toast.LENGTH_SHORT).show();
+            }
         }
     }
 }

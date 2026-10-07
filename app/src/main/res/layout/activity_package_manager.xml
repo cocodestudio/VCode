@@ -7,7 +7,7 @@
     android:background="?attr/colorSurface"
     android:orientation="vertical">
 
-    <!-- Toolbar: Back Button, Title, Subtitle, and Select All -->
+    <!-- Toolbar: Back Navigation, Title, Subtitle, and Select All -->
     <LinearLayout
         android:id="@+id/layout_toolbar"
         android:layout_width="match_parent"
@@ -25,33 +25,16 @@
             android:focusable="true"
             android:importantForAccessibility="no"
             android:padding="12dp"
-            android:src="@drawable/ic_arrow_left"
+            android:src="@drawable/ic_chevron_left"
             app:tint="?attr/colorOnSurface" />
 
-        <LinearLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/tv_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/vcode_package_manager"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                android:textColor="?attr/colorOnSurface"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tv_subtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                tools:text="VCode • node_modules" />
-        </LinearLayout>
+            android:text="@string/vcode_package_manager"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="?attr/colorOnSurface"/>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_select_all"
@@ -68,11 +51,11 @@
             tools:visibility="visible" />
     </LinearLayout>
 
-    <!-- Pill Tabs: Search | Installed -->
+    <!-- Segmented Tab Track: Installed (Count) | Explore NPM -->
     <LinearLayout
         android:id="@+id/layout_tab_track"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="38dp"
         android:layout_marginHorizontal="16dp"
         android:layout_marginTop="2dp"
         android:layout_marginBottom="8dp"
@@ -81,30 +64,6 @@
         android:orientation="horizontal"
         android:padding="3dp"
         android:weightSum="2">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_tab_search"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:insetLeft="0dp"
-            android:insetTop="0dp"
-            android:insetRight="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingHorizontal="4dp"
-            android:paddingVertical="0dp"
-            android:stateListAnimator="@null"
-            android:text="@string/vcode_tab_explore"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
-            app:backgroundTint="@color/vcode_accent_primary"
-            app:cornerRadius="999dp"
-            app:elevation="0dp"
-            app:icon="@drawable/ic_magnifying_glass"
-            app:iconSize="14dp"
-            app:iconTint="@color/vcode_on_primary" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_tab_installed"
@@ -118,27 +77,50 @@
             android:insetBottom="0dp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingHorizontal="4dp"
+            android:paddingHorizontal="6dp"
             android:paddingVertical="0dp"
             android:stateListAnimator="@null"
             android:text="@string/vcode_tab_installed_plain"
             android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             app:backgroundTint="@android:color/transparent"
-            app:cornerRadius="999dp"
             app:elevation="0dp"
-            app:icon="@drawable/ic_check"
+            app:icon="@drawable/ic_circle_check"
             app:iconSize="14dp"
             app:iconTint="?attr/colorOnSurfaceVariant" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_tab_search"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="0dp"
+            android:stateListAnimator="@null"
+            android:text="@string/vcode_tab_explore_npm"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="@color/vcode_on_primary"
+            app:backgroundTint="@color/vcode_accent_primary"
+            app:elevation="0dp"
+            app:icon="@drawable/ic_globe"
+            app:iconSize="14dp"
+            app:iconTint="@color/vcode_on_primary" />
     </LinearLayout>
 
-    <!-- Search Input Bar -->
+    <!-- Search & Filter Bar -->
     <LinearLayout
         android:id="@+id/layout_search_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="44dp"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginBottom="8dp"
         android:background="?attr/colorSurfaceContainerHigh"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -154,7 +136,7 @@
         <EditText
             android:id="@+id/et_search"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="match_parent"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:background="@null"
@@ -180,33 +162,83 @@
             tools:visibility="visible" />
     </LinearLayout>
 
-    <!-- Loading Indicator -->
-    <com.google.android.material.progressindicator.LinearProgressIndicator
-        android:id="@+id/loading_indicator"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:indeterminate="true"
-        android:visibility="gone"
-        app:indicatorColor="@color/vcode_accent_primary"
-        app:trackColor="@android:color/transparent"
-        tools:visibility="visible" />
-
-    <!-- Status message pill (e.g. "Downloading axios-1.7.9.tgz...") -->
-    <TextView
-        android:id="@+id/tv_status_message"
+    <!-- Live Operation Status Banner (High-Density Status Container) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/layout_status_banner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="4dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
-        android:textColor="@color/vcode_accent_primary"
+        android:layout_marginBottom="8dp"
         android:visibility="gone"
-        tools:text="Downloading axios-1.7.9.tgz (42%)…"
-        tools:visibility="visible" />
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+        app:cardCornerRadius="10dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/vcode_outline"
+        app:strokeWidth="1dp"
+        tools:visibility="visible">
 
-    <!-- Content: Recycler View & Empty State Container -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ProgressBar
+                    android:id="@+id/progress_status_spinner"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:indeterminateTint="@color/vcode_accent_primary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tv_status_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textStyle="bold"
+                        tools:text="Downloading axios-1.7.9.tgz" />
+
+                    <TextView
+                        android:id="@+id/tv_status_message"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        tools:text="42% completed • unpacking tree" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/loading_indicator"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="8dp"
+                android:indeterminate="true"
+                app:indicatorColor="@color/vcode_accent_primary"
+                app:trackColor="@color/vcode_surface_variant" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Main Content: RecyclerView & Empty State -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -233,11 +265,11 @@
 
             <ImageView
                 android:id="@+id/iv_empty_icon"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="@dimen/vcode_empty_state_icon_size"
+                android:layout_height="@dimen/vcode_empty_state_icon_size"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_box"
-                app:tint="?attr/colorOnSurfaceVariant" />
+                app:tint="?attr/colorOutlineVariant" />
 
             <TextView
                 android:id="@+id/tv_empty_title"
@@ -261,7 +293,7 @@
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Batch Action Bar: Docked at bottom when items are selected -->
+    <!-- Batch Selection Header / Action Bar: Docked at bottom when items are selected -->
     <LinearLayout
         android:id="@+id/layout_batch_bar"
         android:layout_width="match_parent"
@@ -271,7 +303,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp"
+        android:paddingVertical="10dp"
         android:visibility="gone"
         tools:visibility="visible">
 
@@ -282,43 +314,44 @@
             android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
             android:textColor="?attr/colorOnSurface"
             android:textStyle="bold"
-            tools:text="3 selected" />
-
-        <TextView
-            android:id="@+id/btn_clear_selection"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:focusable="true"
-            android:padding="4dp"
-            android:text="@string/vcode_clear_selection"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant" />
+            tools:text="2 selected" />
 
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
 
+        <!-- Batch Update Button (Installed tab) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_batch_update"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginEnd="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="12dp"
+            android:text="@string/vcode_batch_update"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="@color/vcode_accent_warning"
+            android:visibility="gone"
+            app:backgroundTint="@color/vcode_warning_tint"
+            tools:visibility="visible" />
+
         <!-- Batch Uninstall Button (Installed tab) -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_batch_uninstall"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="14dp"
+            android:paddingHorizontal="12dp"
             android:text="@string/vcode_uninstall_selected"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
             android:textColor="@color/vcode_accent_error"
             android:visibility="gone"
             app:backgroundTint="@color/vcode_error_container"
-            app:cornerRadius="8dp"
-            app:icon="@drawable/ic_trash"
-            app:iconSize="14dp"
-            app:iconTint="@color/vcode_accent_error"
             tools:visibility="visible" />
 
         <!-- Batch Dev Install Button (Search tab) -->
@@ -326,14 +359,13 @@
             android:id="@+id/btn_batch_install_dev"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginEnd="8dp"
+            android:layout_height="38dp"
+            android:layout_marginEnd="6dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:paddingHorizontal="10dp"
             android:text="@string/vcode_install_dev_selected"
-            android:textSize="12sp"
-            app:cornerRadius="8dp"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
             app:strokeColor="@color/vcode_outline" />
 
         <!-- Batch Install Button (Search tab) -->
@@ -341,17 +373,13 @@
             android:id="@+id/btn_batch_install"
             style="@style/Widget.Material3.Button"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:paddingHorizontal="14dp"
             android:text="@string/vcode_install_selected"
-            android:textSize="12sp"
-            app:backgroundTint="@color/vcode_accent_primary"
-            app:cornerRadius="8dp"
-            app:icon="@drawable/ic_plus"
-            app:iconSize="14dp"
-            app:iconTint="@color/vcode_on_primary" />
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            app:backgroundTint="@color/vcode_accent_primary" />
     </LinearLayout>
 
 </LinearLayout>

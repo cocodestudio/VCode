@@ -38,15 +38,15 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
 
     public static final String EXTRA_PROJECT_ROOT = "extra_project_root";
 
-    private static final int TAB_SEARCH = 0;
-    private static final int TAB_INSTALLED = 1;
+    private static final int TAB_INSTALLED = 0;
+    private static final int TAB_SEARCH = 1;
     private static final long SEARCH_DEBOUNCE_MS = 400L;
 
     private ActivityPackageManagerBinding binding;
     private PackagesAdapter adapter;
     private File projectRoot;
 
-    private int activeTab = TAB_SEARCH;
+    private int activeTab = TAB_INSTALLED;
     private final Handler searchHandler = new Handler(Looper.getMainLooper());
     private Runnable searchRunnable = null;
     private final List<NpmPackageInfo> currentPackages = new ArrayList<>();
@@ -79,7 +79,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         setupSearchInput();
         setupBatchActions();
 
-        loadInstalledDependencies(false);
+        switchTab(TAB_INSTALLED);
     }
 
     private void setupTypefaces() {
@@ -90,14 +90,16 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         binding.btnTabSearch.setTypeface(fm.getUiMedium(this));
         binding.btnTabInstalled.setTypeface(fm.getUiMedium(this));
         binding.etSearch.setTypeface(fm.getUiMedium(this));
-        binding.tvStatusMessage.setTypeface(fm.getUiMedium(this));
+        binding.tvStatusTitle.setTypeface(fm.getCodeFontBold(this));
+        binding.tvStatusMessage.setTypeface(fm.getCodeFont(this));
         binding.tvEmptyTitle.setTypeface(fm.getUiSemiBold(this));
         binding.tvEmptyDesc.setTypeface(fm.getUiFont(this));
-        binding.tvSelectedCount.setTypeface(fm.getUiSemiBold(this));
+        binding.tvSelectedCount.setTypeface(fm.getCodeFontBold(this));
         binding.btnClearSelection.setTypeface(fm.getUiMedium(this));
         binding.btnBatchInstall.setTypeface(fm.getUiSemiBold(this));
         binding.btnBatchInstallDev.setTypeface(fm.getUiSemiBold(this));
         binding.btnBatchUninstall.setTypeface(fm.getUiSemiBold(this));
+        binding.btnBatchUpdate.setTypeface(fm.getUiSemiBold(this));
     }
 
     private void setupToolbar() {
@@ -121,8 +123,8 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     }
 
     private void setupTabs() {
-        binding.btnTabSearch.setOnClickListener(v -> switchTab(TAB_SEARCH));
         binding.btnTabInstalled.setOnClickListener(v -> switchTab(TAB_INSTALLED));
+        binding.btnTabSearch.setOnClickListener(v -> switchTab(TAB_SEARCH));
     }
 
     private void switchTab(int tab) {
@@ -206,6 +208,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         binding.btnBatchInstall.setOnClickListener(v -> executeBatchInstall(false));
         binding.btnBatchInstallDev.setOnClickListener(v -> executeBatchInstall(true));
         binding.btnBatchUninstall.setOnClickListener(v -> executeBatchUninstall());
+        binding.btnBatchUpdate.setOnClickListener(v -> executeBatchUpdate());
     }
 
     private void updateBatchActionBar(int selectedCount) {
@@ -218,8 +221,20 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                 binding.btnBatchUninstall.setText(getString(R.string.vcode_uninstall_selected, selectedCount));
                 binding.btnBatchInstall.setVisibility(View.GONE);
                 binding.btnBatchInstallDev.setVisibility(View.GONE);
+
+                int updateCount = 0;
+                for (NpmPackageInfo p : adapter.getSelectedPackages()) {
+                    if (p.isUpdateAvailable()) updateCount++;
+                }
+                if (updateCount > 0) {
+                    binding.btnBatchUpdate.setVisibility(View.VISIBLE);
+                    binding.btnBatchUpdate.setText(getString(R.string.vcode_batch_update, updateCount));
+                } else {
+                    binding.btnBatchUpdate.setVisibility(View.GONE);
+                }
             } else {
                 binding.btnBatchUninstall.setVisibility(View.GONE);
+                binding.btnBatchUpdate.setVisibility(View.GONE);
                 binding.btnBatchInstall.setVisibility(View.VISIBLE);
                 binding.btnBatchInstall.setText(getString(R.string.vcode_install_selected, selectedCount));
                 binding.btnBatchInstallDev.setVisibility(View.VISIBLE);
@@ -241,8 +256,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         if (selected.isEmpty()) return;
 
         setBatchOperating(true);
-        binding.tvStatusMessage.setVisibility(View.VISIBLE);
-        binding.loadingIndicator.setVisibility(View.VISIBLE);
+        showStatusBanner(getString(R.string.vcode_install), getString(R.string.vcode_batch_install_progress, selected.get(0).getName(), 1, selected.size()));
 
         PackageManagerService.getInstance().installPackagesBatch(
                 projectRoot,
@@ -252,7 +266,54 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                     @Override
                     public void onProgress(int current, int total, @NonNull String currentPackage, @NonNull String message, int percent) {
                         if (isFinishing() || isDestroyed()) return;
-                        binding.tvStatusMessage.setText(getString(R.string.vcode_batch_install_progress, currentPackage, current, total));
+                        showStatusBanner(getString(R.string.vcode_install), getString(R.string.vcode_batch_install_progress, currentPackage, current, total));
+                    }
+
+                    @Override
+                    public void onComplete(int successCount, int failCount, @NonNull List<String> errors) {
+                        if (isFinishing() || isDestroyed()) return;
+                        setBatchOperating(false);
+                        adapter.clearSelection();
+
+                        if (failCount == 0) {
+                            Toast.makeText(PackageManagerActivity.this,
+                                    getString(R.string.vcode_batch_install_complete, successCount),
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(PackageManagerActivity.this,
+                                    getString(R.string.vcode_batch_install_partial, successCount, failCount),
+                                    Toast.LENGTH_LONG).show();
+                        }
+
+                        refreshCurrentView();
+                    }
+                }
+        );
+    }
+
+    private void executeBatchUpdate() {
+        if (projectRoot == null || isBatchOperating) return;
+        List<NpmPackageInfo> selected = adapter.getSelectedPackages();
+        List<NpmPackageInfo> toUpdate = new ArrayList<>();
+        for (NpmPackageInfo pkg : selected) {
+            if (pkg.isUpdateAvailable()) {
+                toUpdate.add(pkg);
+            }
+        }
+        if (toUpdate.isEmpty()) return;
+
+        setBatchOperating(true);
+        showStatusBanner(getString(R.string.vcode_update), getString(R.string.vcode_batch_install_progress, toUpdate.get(0).getName(), 1, toUpdate.size()));
+
+        PackageManagerService.getInstance().installPackagesBatch(
+                projectRoot,
+                toUpdate,
+                false,
+                new PackageManagerService.BatchOperationCallback() {
+                    @Override
+                    public void onProgress(int current, int total, @NonNull String currentPackage, @NonNull String message, int percent) {
+                        if (isFinishing() || isDestroyed()) return;
+                        showStatusBanner(getString(R.string.vcode_update), getString(R.string.vcode_batch_install_progress, currentPackage, current, total));
                     }
 
                     @Override
@@ -283,8 +344,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         if (selected.isEmpty()) return;
 
         setBatchOperating(true);
-        binding.tvStatusMessage.setVisibility(View.VISIBLE);
-        binding.loadingIndicator.setVisibility(View.VISIBLE);
+        showStatusBanner(getString(R.string.vcode_uninstall), getString(R.string.vcode_batch_uninstall_progress, selected.get(0).getName(), 1, selected.size()));
 
         PackageManagerService.getInstance().uninstallPackagesBatch(
                 projectRoot,
@@ -293,7 +353,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                     @Override
                     public void onProgress(int current, int total, @NonNull String currentPackage, @NonNull String message, int percent) {
                         if (isFinishing() || isDestroyed()) return;
-                        binding.tvStatusMessage.setText(getString(R.string.vcode_batch_uninstall_progress, currentPackage, current, total));
+                        showStatusBanner(getString(R.string.vcode_uninstall), getString(R.string.vcode_batch_uninstall_progress, currentPackage, current, total));
                     }
 
                     @Override
@@ -323,12 +383,22 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         binding.btnBatchInstall.setEnabled(!operating);
         binding.btnBatchInstallDev.setEnabled(!operating);
         binding.btnBatchUninstall.setEnabled(!operating);
+        binding.btnBatchUpdate.setEnabled(!operating);
         binding.btnClearSelection.setEnabled(!operating);
         binding.btnSelectAll.setEnabled(!operating);
         if (!operating) {
-            binding.tvStatusMessage.setVisibility(View.GONE);
-            binding.loadingIndicator.setVisibility(View.GONE);
+            hideStatusBanner();
         }
+    }
+
+    private void showStatusBanner(String title, String message) {
+        binding.layoutStatusBanner.setVisibility(View.VISIBLE);
+        binding.tvStatusTitle.setText(title);
+        binding.tvStatusMessage.setText(message);
+    }
+
+    private void hideStatusBanner() {
+        binding.layoutStatusBanner.setVisibility(View.GONE);
     }
 
     private void performSearch(@NonNull String query) {
@@ -417,7 +487,11 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     }
 
     private void setLoading(boolean loading) {
-        binding.loadingIndicator.setVisibility(loading ? View.VISIBLE : View.GONE);
+        if (loading) {
+            showStatusBanner(getString(R.string.vcode_package_manager), getString(R.string.vcode_search_packages_hint));
+        } else if (!isBatchOperating) {
+            hideStatusBanner();
+        }
     }
 
     private void showEmptyState(String title, String desc) {
@@ -436,8 +510,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     public void onInstallClick(@NonNull NpmPackageInfo pkg, boolean isDev) {
         if (projectRoot == null) return;
         adapter.updatePackageState(pkg.getName(), true);
-        binding.tvStatusMessage.setVisibility(View.VISIBLE);
-        binding.tvStatusMessage.setText(getString(R.string.vcode_installing) + " " + pkg.getName());
+        showStatusBanner(getString(R.string.vcode_installing) + " " + pkg.getName(), getString(R.string.vcode_installing));
 
         PackageManagerService.getInstance().installPackage(
                 projectRoot,
@@ -446,14 +519,14 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                 isDev,
                 (status, percent) -> {
                     if (!isFinishing() && !isDestroyed()) {
-                        binding.tvStatusMessage.setText(status);
+                        showStatusBanner(getString(R.string.vcode_installing) + " " + pkg.getName(), status);
                     }
                 },
                 new PackageManagerService.PackageOperationCallback() {
                     @Override
                     public void onSuccess(@NonNull String message) {
                         if (isFinishing() || isDestroyed()) return;
-                        binding.tvStatusMessage.setVisibility(View.GONE);
+                        hideStatusBanner();
                         adapter.updatePackageState(pkg.getName(), false);
                         Toast.makeText(PackageManagerActivity.this,
                                 getString(R.string.vcode_package_installed_success, pkg.getName()),
@@ -464,7 +537,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                     @Override
                     public void onError(@NonNull String error) {
                         if (isFinishing() || isDestroyed()) return;
-                        binding.tvStatusMessage.setVisibility(View.GONE);
+                        hideStatusBanner();
                         adapter.updatePackageState(pkg.getName(), false);
                         Toast.makeText(PackageManagerActivity.this,
                                 getString(R.string.vcode_package_install_failed, pkg.getName(), error),
@@ -483,8 +556,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     public void onUninstallClick(@NonNull NpmPackageInfo pkg) {
         if (projectRoot == null) return;
         adapter.updatePackageState(pkg.getName(), true);
-        binding.tvStatusMessage.setVisibility(View.VISIBLE);
-        binding.tvStatusMessage.setText(getString(R.string.vcode_uninstalling) + " " + pkg.getName());
+        showStatusBanner(getString(R.string.vcode_uninstalling) + " " + pkg.getName(), getString(R.string.vcode_uninstalling));
 
         PackageManagerService.getInstance().uninstallPackage(
                 projectRoot,
@@ -493,7 +565,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                     @Override
                     public void onSuccess(@NonNull String message) {
                         if (isFinishing() || isDestroyed()) return;
-                        binding.tvStatusMessage.setVisibility(View.GONE);
+                        hideStatusBanner();
                         adapter.updatePackageState(pkg.getName(), false);
                         Toast.makeText(PackageManagerActivity.this,
                                 getString(R.string.vcode_package_uninstalled_success, pkg.getName()),
@@ -504,7 +576,7 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
                     @Override
                     public void onError(@NonNull String error) {
                         if (isFinishing() || isDestroyed()) return;
-                        binding.tvStatusMessage.setVisibility(View.GONE);
+                        hideStatusBanner();
                         adapter.updatePackageState(pkg.getName(), false);
                         Toast.makeText(PackageManagerActivity.this,
                                 getString(R.string.vcode_package_uninstall_failed, pkg.getName(), error),
