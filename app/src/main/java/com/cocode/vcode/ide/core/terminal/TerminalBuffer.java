@@ -2,8 +2,6 @@ package com.cocode.vcode.ide.core.terminal;
 
 import androidx.annotation.NonNull;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Memory-bounded circular buffer for terminal lines.
@@ -14,7 +12,9 @@ public class TerminalBuffer {
     public static final int DEFAULT_MAX_LINES = 1000;
 
     private final int maxLines;
-    private final List<TerminalLine> lines = new ArrayList<>();
+    private final TerminalLine[] buffer;
+    private int head = 0;
+    private int size = 0;
 
     public TerminalBuffer() {
         this(DEFAULT_MAX_LINES);
@@ -22,27 +22,36 @@ public class TerminalBuffer {
 
     public TerminalBuffer(int maxLines) {
         this.maxLines = Math.max(1, maxLines);
-        lines.add(new TerminalLine());
+        this.buffer = new TerminalLine[this.maxLines];
+        this.buffer[0] = new TerminalLine();
+        this.size = 1;
+        this.head = 0;
     }
 
     public synchronized int getLineCount() {
-        return lines.size();
+        return size;
     }
 
     @NonNull
     public synchronized TerminalLine getLine(int index) {
-        if (index >= 0 && index < lines.size()) {
-            return lines.get(index);
+        if (index >= 0 && index < size) {
+            int actualIdx = (head + index) % maxLines;
+            TerminalLine line = buffer[actualIdx];
+            return line != null ? line : new TerminalLine();
         }
         return new TerminalLine();
     }
 
     @NonNull
     public synchronized TerminalLine getCurrentLine() {
-        if (lines.isEmpty()) {
-            lines.add(new TerminalLine());
+        if (size == 0) {
+            buffer[0] = new TerminalLine();
+            size = 1;
+            head = 0;
+            return buffer[0];
         }
-        return lines.get(lines.size() - 1);
+        int lastIdx = (head + size - 1) % maxLines;
+        return buffer[lastIdx];
     }
 
     public synchronized int getMaxLines() {
@@ -51,44 +60,50 @@ public class TerminalBuffer {
 
     public synchronized void ensureLineCapacity(int requiredIndex) {
         int target = Math.min(requiredIndex, maxLines - 1);
-        while (lines.size() <= target) {
-            lines.add(new TerminalLine());
+        while (size <= target) {
+            int nextIdx = (head + size) % maxLines;
+            buffer[nextIdx] = new TerminalLine();
+            size++;
         }
     }
 
     public synchronized void newLine() {
-        if (lines.size() >= maxLines) {
-            lines.remove(0);
-        }
-        lines.add(new TerminalLine());
-    }
-
-    private void enforceCeiling() {
-        while (lines.size() > maxLines) {
-            lines.remove(0);
+        if (size < maxLines) {
+            int nextIdx = (head + size) % maxLines;
+            buffer[nextIdx] = new TerminalLine();
+            size++;
+        } else {
+            buffer[head] = new TerminalLine();
+            head = (head + 1) % maxLines;
         }
     }
 
     public synchronized boolean removeLastLine() {
-        if (lines.size() > 1) {
-            lines.remove(lines.size() - 1);
+        if (size > 1) {
+            int lastIdx = (head + size - 1) % maxLines;
+            buffer[lastIdx] = null;
+            size--;
             return true;
         }
         return false;
     }
 
     public synchronized void clear() {
-        lines.clear();
-        lines.add(new TerminalLine());
+        for (int i = 0; i < maxLines; i++) {
+            buffer[i] = null;
+        }
+        head = 0;
+        buffer[0] = new TerminalLine();
+        size = 1;
     }
 
     @NonNull
     public synchronized String getAllText() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < lines.size(); i++) {
-            TerminalLine line = lines.get(i);
+        for (int i = 0; i < size; i++) {
+            TerminalLine line = getLine(i);
             sb.append(line.getText());
-            if (i < lines.size() - 1 && !line.isWrapped()) {
+            if (i < size - 1 && !line.isWrapped()) {
                 sb.append('\n');
             }
         }
@@ -97,10 +112,10 @@ public class TerminalBuffer {
 
     public synchronized String getAllAnsiText() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < lines.size(); i++) {
-            TerminalLine line = lines.get(i);
+        for (int i = 0; i < size; i++) {
+            TerminalLine line = getLine(i);
             sb.append(line.toAnsiString());
-            if (i < lines.size() - 1 && !line.isWrapped()) {
+            if (i < size - 1 && !line.isWrapped()) {
                 sb.append('\n');
             }
         }

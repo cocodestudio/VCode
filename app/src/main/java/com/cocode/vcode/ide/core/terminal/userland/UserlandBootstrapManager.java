@@ -304,6 +304,7 @@ public final class UserlandBootstrapManager {
                         customUrl : configuredMirror);
 
                 boolean downloadSucceeded = false;
+                String downloadErrorMsg = null;
                 try {
                     notifyProgress(callback, 2, 4, "Downloading userland bootstrap archive", 25, downloadUrl);
                     String expectedSha256 = fetchExpectedSha256(downloadUrl);
@@ -317,6 +318,8 @@ public final class UserlandBootstrapManager {
                             });
                     if (count > 0) {
                         downloadSucceeded = true;
+                    } else {
+                        downloadErrorMsg = "No files were extracted from the archive.";
                     }
                 } catch (Exception e) {
                     downloadSucceeded = false;
@@ -325,7 +328,16 @@ public final class UserlandBootstrapManager {
                         errorMsg = "Bootstrap archive not found (HTTP 404) at:\n" + downloadUrl +
                                 "\nPlease check https://github.com/cocodestudio/vcode-userland-bootstrap/releases or configure a custom mirror.";
                     }
-                    notifyProgress(callback, 3, 4, "Network download failed, falling back to minimal offline environment", 50, errorMsg);
+                    downloadErrorMsg = errorMsg;
+                }
+
+                if (!downloadSucceeded) {
+                    File marker = new File(prefixDir, ".installed");
+                    if (marker.exists()) marker.delete();
+                    File versionFile = new File(prefixDir, ".version");
+                    if (versionFile.exists()) versionFile.delete();
+                    notifyError(callback, "Bootstrap installation failed: " + (downloadErrorMsg != null ? downloadErrorMsg : "Unknown error"));
+                    return;
                 }
 
                 notifyProgress(callback, 4, 4, "Configuring shell environment and permissions", 90, null);
@@ -468,13 +480,56 @@ public final class UserlandBootstrapManager {
             writer.write("export XDG_DATA_HOME=\"/root/.local/share\"\n");
             writer.write("export NPM_CONFIG_CACHE=\"/root/.npm\"\n");
             writer.write("export PIP_CACHE_DIR=\"/root/.cache/pip\"\n\n");
-            writer.write("# Desktop Terminal Prompt: <Project Name>:~$ \n");
-            writer.write("if [ -n \"$BASH_VERSION\" ]; then\n");
-            writer.write("    PS1='\\[\\033[01;32m\\]${VCODE_PROJECT_NAME:-vcode}\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]$ '\n");
-            writer.write("else\n");
-            writer.write("    PS1='\\033[01;32m${VCODE_PROJECT_NAME:-vcode}\\033[00m:\\033[01;34m\\w\\033[00m$ '\n");
-            writer.write("fi\n");
-            writer.write("export PS1\n\n");
+            writer.write("# Desktop Terminal Prompt: <Project Name>:~$ and <Project Name>/subdir:~$ \n");
+            writer.write("_vcode_prompt_dir() {\n");
+            writer.write("    pname=\"${VCODE_PROJECT_NAME:-vcode}\"\n");
+            writer.write("    case \"$PWD\" in\n");
+            writer.write("        \"$HOME\")\n");
+            writer.write("            printf \"%s:~\" \"$pname\"\n");
+            writer.write("            ;;\n");
+            writer.write("        \"$HOME\"/*)\n");
+            writer.write("            sub=\"${PWD#$HOME/}\"\n");
+            writer.write("            printf \"%s/%s:~\" \"$pname\" \"$sub\"\n");
+            writer.write("            ;;\n");
+            writer.write("        *)\n");
+            writer.write("            printf \"%s:%s\" \"$pname\" \"$PWD\"\n");
+            writer.write("            ;;\n");
+            writer.write("    esac\n");
+            writer.write("}\n\n");
+            writer.write("_vcode_update_prompt() {\n");
+            writer.write("    if [ -n \"$BASH_VERSION\" ]; then\n");
+            writer.write("        PS1='\\[\\033[01;32m\\]$(_vcode_prompt_dir)\\[\\033[00m\\]$ '\n");
+            writer.write("    elif [ -n \"$KSH_VERSION\" ]; then\n");
+            writer.write("        export COLUMNS=1000\n");
+            writer.write("        PS1='$(printf \"\\001\\033[01;32m\\002$(_vcode_prompt_dir)\\001\\033[00m\\002$ \")'\n");
+            writer.write("    else\n");
+            writer.write("        export COLUMNS=1000\n");
+            writer.write("        PS1='$(printf \"\\001\\033[01;32m\\002$(_vcode_prompt_dir)\\001\\033[00m\\002$ \")'\n");
+            writer.write("    fi\n");
+            writer.write("    export PS1\n");
+            writer.write("}\n");
+            writer.write("_vcode_update_prompt\n\n");
+            writer.write("# Confine cd builtin to project workspace scope\n");
+            writer.write("cd() {\n");
+            writer.write("    target=\"${1:-$HOME}\"\n");
+            writer.write("    newdir=\"$(builtin cd \"$target\" 2>/dev/null && pwd -P)\"\n");
+            writer.write("    if [ -z \"$newdir\" ]; then\n");
+            writer.write("        echo \"cd: $target: No such file or directory\" >&2\n");
+            writer.write("        return 1\n");
+            writer.write("    fi\n");
+            writer.write("    case \"$newdir\" in\n");
+            writer.write("        \"$HOME\"|\"$HOME\"/*)\n");
+            writer.write("            builtin cd \"$newdir\"\n");
+            writer.write("            _vcode_update_prompt\n");
+            writer.write("            ;;\n");
+            writer.write("        *)\n");
+            writer.write("            echo \"cd: permission denied: directory navigation is restricted to project workspace\" >&2\n");
+            writer.write("            builtin cd \"$HOME\"\n");
+            writer.write("            _vcode_update_prompt\n");
+            writer.write("            return 1\n");
+            writer.write("            ;;\n");
+            writer.write("    esac\n");
+            writer.write("}\n\n");
             writer.write("alias python='python3 2>/dev/null || python'\n");
             writer.write("alias pip='pip3 2>/dev/null || pip'\n");
             writer.write("alias ls='ls --color=auto 2>/dev/null || ls'\n");

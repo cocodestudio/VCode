@@ -290,7 +290,8 @@ public final class TerminalSecurityPolicy {
     /**
      * Checks if a target file or directory is within the project workspace scope.
      */
-    public static boolean isWithinScope(@NonNull File target, @NonNull File projectRoot) {
+    public static boolean isWithinScope(@Nullable File target, @Nullable File projectRoot) {
+        if (target == null || projectRoot == null) return false;
         try {
             String rootCanonical = projectRoot.getCanonicalPath();
             String targetCanonical = target.getCanonicalPath();

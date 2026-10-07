@@ -56,6 +56,7 @@ public class TerminalViewer implements IFileViewer {
                 session.clearScreen();
                 if (binding != null) {
                     binding.terminalView.resetScroll();
+                    binding.terminalView.requestFocus();
                 }
                 saveStateToVirtualFile();
             }
@@ -66,8 +67,10 @@ public class TerminalViewer implements IFileViewer {
                 session.restart();
                 if (binding != null) {
                     binding.terminalView.resetScroll();
+                    binding.terminalView.updateTheme();
+                    binding.terminalView.requestFocus();
                 }
-                updateStatusIndicator(true);
+                updateStatusIndicator(session.isRunning());
                 saveStateToVirtualFile();
             }
         });
@@ -124,7 +127,7 @@ public class TerminalViewer implements IFileViewer {
                 }
             });
             loadStateFromVirtualFile(file != null ? file.getContent() : null);
-            session.setListener(new TerminalSession.TerminalSessionListener() {
+            session.addListener(new TerminalSession.TerminalSessionListener() {
                 @Override
                 public void onOutput() {
                     if (binding != null) {

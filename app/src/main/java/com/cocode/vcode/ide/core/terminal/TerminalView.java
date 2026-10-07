@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.text.Editable;
 import android.text.InputType;
 import android.util.AttributeSet;
 import android.view.GestureDetector;
@@ -41,10 +42,12 @@ public class TerminalView extends View {
     private float charWidth;
     private float lineHeight;
     private float fontAscent;
+    private final RectF reusableBgRect = new RectF();
 
     private OverScroller scroller;
     private GestureDetector gestureDetector;
     private boolean autoScrollToBottom = true;
+    private TerminalSession.TerminalSessionListener internalSessionListener = null;
 
     private int defaultBgColor;
     private int defaultFgColor;
@@ -151,6 +154,7 @@ public class TerminalView extends View {
             if (rows < 2) rows = 24;
             if (session != null) {
                 session.getEmulator().setColumns(cols);
+                session.getEmulator().setRows(rows);
                 session.setWindowSize(cols, rows);
             }
         }
@@ -193,6 +197,9 @@ public class TerminalView extends View {
     }
 
     public void attachSession(@NonNull TerminalSession session) {
+        if (this.session != null && internalSessionListener != null) {
+            this.session.removeListener(internalSessionListener);
+        }
         this.session = session;
         int w = getWidth();
         int h = getHeight();
@@ -204,10 +211,11 @@ public class TerminalView extends View {
             updateDimensions(screenWidth, screenHeight);
         }
         session.getEmulator().setDarkTheme(UiUtils.isNightMode(getContext()));
-        session.setListener(new TerminalSession.TerminalSessionListener() {
+        internalSessionListener = new TerminalSession.TerminalSessionListener() {
             @Override
             public void onOutput() {
-                if (autoScrollToBottom) {
+                int maxScrollY = getMaxScrollY();
+                if (autoScrollToBottom || getScrollY() > maxScrollY) {
                     scrollToBottom();
                 }
                 invalidate();
@@ -217,9 +225,18 @@ public class TerminalView extends View {
             public void onProcessTerminated(int exitCode) {
                 invalidate();
             }
-        });
+        };
+        session.addListener(internalSessionListener);
         scrollToBottom();
         invalidate();
+    }
+
+    public void detachSession() {
+        if (this.session != null && internalSessionListener != null) {
+            this.session.removeListener(internalSessionListener);
+        }
+        this.session = null;
+        this.internalSessionListener = null;
     }
 
     private void recomputeFontMetrics() {
@@ -269,8 +286,10 @@ public class TerminalView extends View {
     @Override
     public void computeScroll() {
         if (scroller.computeScrollOffset()) {
-            scrollTo(0, scroller.getCurrY());
-            autoScrollToBottom = (scroller.getCurrY() >= getMaxScrollY());
+            int maxScrollY = getMaxScrollY();
+            int currY = Math.min(scroller.getCurrY(), maxScrollY);
+            scrollTo(0, currY);
+            autoScrollToBottom = (currY >= maxScrollY);
             postInvalidateOnAnimation();
         }
     }
@@ -294,6 +313,11 @@ public class TerminalView extends View {
         TerminalBuffer buffer = session.getBuffer();
         int lineCount = buffer.getLineCount();
         if (lineCount == 0) return;
+
+        int maxScrollY = getMaxScrollY();
+        if (getScrollY() > maxScrollY) {
+            scrollTo(0, maxScrollY);
+        }
 
         int scrollY = getScrollY();
         int viewHeight = getHeight();
@@ -329,13 +353,13 @@ public class TerminalView extends View {
 
                         if (style.bgColor != 0) {
                             bgPaint.setColor(style.bgColor);
-                            RectF bgRect = new RectF(
+                            reusableBgRect.set(
                                     paddingLeft + (style.start * charWidth),
                                     y - fontAscent,
                                     paddingLeft + (runEnd * charWidth),
                                     y - fontAscent + lineHeight
                             );
-                            canvas.drawRect(bgRect, bgPaint);
+                            canvas.drawRect(reusableBgRect, bgPaint);
                         }
 
                         int fgColor = (style.fgColor == TerminalEmulator.COLOR_DEFAULT_FG || style.fgColor == 0)
@@ -362,6 +386,15 @@ public class TerminalView extends View {
                 float cursorYTop = y - fontAscent + 2;
                 cursorPaint.setAlpha(isFocused() ? 255 : 120);
                 canvas.drawRect(cursorX, cursorYTop, cursorX + charWidth, cursorYTop + lineHeight - 4, cursorPaint);
+                if (cursorCol >= 0 && cursorCol < lineText.length()) {
+                    int originalColor = textPaint.getColor();
+                    boolean originalBold = textPaint.isFakeBoldText();
+                    textPaint.setColor(defaultBgColor);
+                    textPaint.setFakeBoldText(true);
+                    canvas.drawText(lineText.substring(cursorCol, cursorCol + 1), cursorX, y, textPaint);
+                    textPaint.setColor(originalColor);
+                    textPaint.setFakeBoldText(originalBold);
+                }
             }
 
             y += lineHeight;
@@ -503,83 +536,55 @@ public class TerminalView extends View {
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
-        outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE
-                | EditorInfo.IME_FLAG_NO_FULLSCREEN
-                | EditorInfo.IME_FLAG_NO_EXTRACT_UI;
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN;
 
-        return new BaseInputConnection(this, false) {
-            private String composingText = "";
-
-            private void handleComposingChange(CharSequence newText) {
-                if (session == null) return;
-                if (newText == null) newText = "";
-                String next = newText.toString();
-
-                int commonPrefix = 0;
-                int minLen = Math.min(composingText.length(), next.length());
-                while (commonPrefix < minLen && composingText.charAt(commonPrefix) == next.charAt(commonPrefix)) {
-                    commonPrefix++;
-                }
-
-                int charsToDelete = composingText.length() - commonPrefix;
-                for (int i = 0; i < charsToDelete; i++) {
-                    session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
-                }
-
-                if (commonPrefix < next.length()) {
-                    String added = next.substring(commonPrefix);
-                    session.handleInput(added);
-                }
-
-                composingText = next;
-            }
-
+        return new BaseInputConnection(this, true) {
             @Override
-            public boolean commitText(CharSequence text, int newCursorPosition) {
-                if (session != null && text != null) {
-                    String str = text.toString();
-                    if ("\n".equals(str) || "\r\n".equals(str)) {
-                        composingText = "";
-                        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
-                    } else {
-                        handleComposingChange(str);
-                        composingText = "";
+            public boolean finishComposingText() {
+                super.finishComposingText();
+                if (session != null) {
+                    Editable editable = getEditable();
+                    if (editable != null && editable.length() > 0) {
+                        session.handleInput(editable.toString());
+                        editable.clear();
                     }
                 }
                 return true;
             }
 
             @Override
-            public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                if (session != null && text != null) {
-                    handleComposingChange(text);
+            public boolean commitText(CharSequence text, int newCursorPosition) {
+                super.commitText(text, newCursorPosition);
+                if (session != null) {
+                    Editable editable = getEditable();
+                    if (editable != null && editable.length() > 0) {
+                        String str = editable.toString();
+                        if ("\n".equals(str) || "\r\n".equals(str)) {
+                            session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
+                        } else {
+                            session.handleInput(str);
+                        }
+                        editable.clear();
+                    } else if (text != null && text.length() > 0) {
+                        String str = text.toString();
+                        if ("\n".equals(str) || "\r\n".equals(str)) {
+                            session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
+                        } else {
+                            session.handleInput(str);
+                        }
+                    }
                 }
-                return true;
-            }
-
-            @Override
-            public boolean finishComposingText() {
-                composingText = "";
                 return true;
             }
 
             @Override
             public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-                if (session != null) {
-                    composingText = "";
-                    for (int i = 0; i < beforeLength; i++) {
-                        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
-                    }
-                    for (int i = 0; i < afterLength; i++) {
-                        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_DELETE);
-                    }
-                }
-                return true;
+                return super.deleteSurroundingText(beforeLength, afterLength);
             }
 
             @Override
             public boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
-                return deleteSurroundingText(beforeLength, afterLength);
+                return super.deleteSurroundingTextInCodePoints(beforeLength, afterLength);
             }
 
             @Override

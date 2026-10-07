@@ -126,10 +126,49 @@ static void free_string_array(char **arr, jsize len) {
     free(arr);
 }
 
-static void reap_all_zombies(void) {
-    while (waitpid(-1, NULL, WNOHANG) > 0) {
-        // Non-blocking reap of any defunct processes
+#include <pthread.h>
+
+#define MAX_TRACKED_PIDS 64
+static pid_t g_tracked_pids[MAX_TRACKED_PIDS];
+static pthread_mutex_t g_pids_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void track_child_pid(pid_t pid) {
+    if (pid <= 1) return;
+    pthread_mutex_lock(&g_pids_mutex);
+    for (int i = 0; i < MAX_TRACKED_PIDS; i++) {
+        if (g_tracked_pids[i] == 0) {
+            g_tracked_pids[i] = pid;
+            break;
+        }
     }
+    pthread_mutex_unlock(&g_pids_mutex);
+}
+
+static void untrack_child_pid(pid_t pid) {
+    if (pid <= 1) return;
+    pthread_mutex_lock(&g_pids_mutex);
+    for (int i = 0; i < MAX_TRACKED_PIDS; i++) {
+        if (g_tracked_pids[i] == pid) {
+            g_tracked_pids[i] = 0;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_pids_mutex);
+}
+
+static void reap_tracked_zombies(void) {
+    pthread_mutex_lock(&g_pids_mutex);
+    for (int i = 0; i < MAX_TRACKED_PIDS; i++) {
+        pid_t p = g_tracked_pids[i];
+        if (p > 1) {
+            int status = 0;
+            pid_t res = waitpid(p, &status, WNOHANG);
+            if (res > 0 || (res < 0 && errno == ECHILD)) {
+                g_tracked_pids[i] = 0;
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_pids_mutex);
 }
 
 JNIEXPORT jintArray JNICALL
@@ -316,6 +355,8 @@ Java_com_cocode_vcode_ide_core_terminal_pty_PtyBridge_createSubprocessNative(
         return NULL;
     }
 
+    track_child_pid((pid_t) pid);
+
     jint data[2] = { (jint) pid, (jint) master };
     (*env)->SetIntArrayRegion(env, result, 0, 2, data);
     return result;
@@ -345,8 +386,11 @@ Java_com_cocode_vcode_ide_core_terminal_pty_PtyBridge_sendSignalNative(
         kill(pid, sig);
 
         if (sig == SIGKILL || sig == SIGTERM) {
-            waitpid(pid, NULL, WNOHANG);
-            reap_all_zombies();
+            int status = 0;
+            pid_t res = waitpid((pid_t) pid, &status, WNOHANG);
+            if (res > 0 || (res < 0 && errno == ECHILD)) {
+                untrack_child_pid((pid_t) pid);
+            }
         }
     }
 }
@@ -366,8 +410,8 @@ Java_com_cocode_vcode_ide_core_terminal_pty_PtyBridge_destroyProcessNative(
     int reaped = 0;
     int status = 0;
     for (int i = 0; i < 5; i++) {
-        pid_t res = waitpid(pid, &status, WNOHANG);
-        if (res == pid || (res < 0 && errno == ECHILD)) {
+        pid_t res = waitpid((pid_t) pid, &status, WNOHANG);
+        if (res == (pid_t) pid || (res < 0 && errno == ECHILD)) {
             reaped = 1;
             break;
         }
@@ -378,11 +422,11 @@ Java_com_cocode_vcode_ide_core_terminal_pty_PtyBridge_destroyProcessNative(
     if (!reaped) {
         kill(-pid, SIGKILL);
         kill(pid, SIGKILL);
-        waitpid(pid, &status, WNOHANG);
+        waitpid((pid_t) pid, &status, WNOHANG);
     }
 
-    // 4. Sweep process table for any defunct children
-    reap_all_zombies();
+    // Untrack specifically without touching global process table
+    untrack_child_pid((pid_t) pid);
 }
 
 JNIEXPORT jint JNICALL
@@ -393,18 +437,19 @@ Java_com_cocode_vcode_ide_core_terminal_pty_PtyBridge_waitForNative(
     if (pid <= 1) return -1;
 
     int status = 0;
-    while (waitpid(pid, &status, 0) < 0) {
+    while (waitpid((pid_t) pid, &status, 0) < 0) {
         if (errno == ECHILD) {
-            // Already reaped by destroyProcessNative or another thread
-            return 0;
+            // Already reaped or not a valid child process
+            untrack_child_pid((pid_t) pid);
+            return -1;
         }
         if (errno != EINTR) {
+            untrack_child_pid((pid_t) pid);
             return -1;
         }
     }
 
-    // Clean up any remaining zombie child processes
-    reap_all_zombies();
+    untrack_child_pid((pid_t) pid);
 
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
@@ -429,5 +474,5 @@ Java_com_cocode_vcode_ide_core_terminal_pty_PtyBridge_reapZombiesNative(
     JNIEnv *env, jclass clazz) {
     (void) env;
     (void) clazz;
-    reap_all_zombies();
+    reap_tracked_zombies();
 }

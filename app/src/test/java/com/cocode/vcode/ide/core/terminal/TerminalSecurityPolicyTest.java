@@ -606,4 +606,20 @@ public class TerminalSecurityPolicyTest {
         assertFalse(TerminalSecurityPolicy.validateCommand("cat /workspace/../../dev/mem", projectRoot, projectRoot).isAllowed());
         assertFalse(TerminalSecurityPolicy.validateCommand("dd if=/dev/zero of=../../dev/block/sda", projectRoot, projectRoot).isAllowed());
     }
+
+    @Test
+    public void testIsWithinScopeValidation() {
+        assertTrue(TerminalSecurityPolicy.isWithinScope(projectRoot, projectRoot));
+        File subDir = new File(projectRoot, "src/components");
+        assertTrue(TerminalSecurityPolicy.isWithinScope(subDir, projectRoot));
+
+        File parentDir = projectRoot.getParentFile();
+        assertFalse(TerminalSecurityPolicy.isWithinScope(parentDir, projectRoot));
+
+        File rootTraversal = new File(projectRoot, "../../..");
+        assertFalse(TerminalSecurityPolicy.isWithinScope(rootTraversal, projectRoot));
+
+        assertFalse(TerminalSecurityPolicy.isWithinScope(null, projectRoot));
+        assertFalse(TerminalSecurityPolicy.isWithinScope(subDir, null));
+    }
 }

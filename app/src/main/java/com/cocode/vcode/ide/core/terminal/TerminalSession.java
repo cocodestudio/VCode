@@ -79,7 +79,10 @@ public class TerminalSession {
     private volatile boolean isCtrlActive = false;
     private volatile boolean isAltActive = false;
     private Runnable modifierResetListener = null;
-    private TerminalSessionListener listener;
+    private final java.util.List<TerminalSessionListener> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private TerminalSessionListener legacyListener = null;
+    private final java.util.concurrent.atomic.AtomicInteger sessionGeneration = new java.util.concurrent.atomic.AtomicInteger(0);
+    private volatile boolean isUserlandSession = false;
 
     public void setModifierResetListener(@Nullable Runnable listener) {
         this.modifierResetListener = listener;
@@ -109,10 +112,29 @@ public class TerminalSession {
         this.buffer = new TerminalBuffer();
         this.emulator = new TerminalEmulator(buffer);
         this.emulator.setDarkTheme(UiUtils.isNightMode(context));
+        this.emulator.setCprListener(this::writeToProcess);
+    }
+
+    public void addListener(@NonNull TerminalSessionListener listener) {
+        if (!listeners.contains(listener)) {
+            listeners.add(listener);
+        }
+    }
+
+    public void removeListener(@Nullable TerminalSessionListener listener) {
+        if (listener != null) {
+            listeners.remove(listener);
+        }
     }
 
     public void setListener(@Nullable TerminalSessionListener listener) {
-        this.listener = listener;
+        if (this.legacyListener != null) {
+            listeners.remove(this.legacyListener);
+        }
+        this.legacyListener = listener;
+        if (listener != null && !listeners.contains(listener)) {
+            listeners.add(listener);
+        }
     }
 
     @NonNull
@@ -139,7 +161,7 @@ public class TerminalSession {
     }
 
     public synchronized void setInputCursorPos(int newPos) {
-        this.inputCursorPos = Math.max(0, newPos);
+        this.inputCursorPos = Math.max(0, Math.min(newPos, currentInput.length()));
     }
 
     public synchronized boolean isRunning() {
@@ -179,8 +201,73 @@ public class TerminalSession {
     public synchronized void setWindowSize(int cols, int rows) {
         this.initialCols = cols;
         this.initialRows = rows;
+        if (emulator != null) {
+            emulator.setColumns(cols);
+            emulator.setRows(rows);
+        }
         if (ptyProcess != null) {
-            ptyProcess.setWindowSize(rows, cols);
+            int ptyCols = 1000;
+            ptyProcess.setWindowSize(rows, ptyCols);
+        }
+    }
+
+    private void ensureHostProfile(@NonNull Context context, @NonNull String projectName, @NonNull File projectRoot, @NonNull Map<String, String> env) {
+        try {
+            File hostScript = new File(context.getFilesDir(), "vcode_host.sh");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(hostScript);
+                 java.io.OutputStreamWriter osw = new java.io.OutputStreamWriter(fos, StandardCharsets.UTF_8);
+                 java.io.BufferedWriter writer = new java.io.BufferedWriter(osw)) {
+                writer.write("export COLUMNS=1000\n");
+                writer.write("export VCODE_PROJECT_NAME=\"" + projectName.replace("\"", "\\\"") + "\"\n");
+                writer.write("export HOME=\"" + projectRoot.getAbsolutePath() + "\"\n\n");
+                writer.write("_vcode_prompt_dir() {\n");
+                writer.write("    pname=\"${VCODE_PROJECT_NAME:-vcode}\"\n");
+                writer.write("    case \"$PWD\" in\n");
+                writer.write("        \"$HOME\")\n");
+                writer.write("            printf \"%s:~\" \"$pname\"\n");
+                writer.write("            ;;\n");
+                writer.write("        \"$HOME\"/*)\n");
+                writer.write("            sub=\"${PWD#$HOME/}\"\n");
+                writer.write("            printf \"%s/%s:~\" \"$pname\" \"$sub\"\n");
+                writer.write("            ;;\n");
+                writer.write("        *)\n");
+                writer.write("            printf \"%s:%s\" \"$pname\" \"$PWD\"\n");
+                writer.write("            ;;\n");
+                writer.write("    esac\n");
+                writer.write("}\n\n");
+                writer.write("_vcode_update_prompt() {\n");
+                writer.write("    if [ -n \"$BASH_VERSION\" ]; then\n");
+                writer.write("        PS1='\\[\\033[01;32m\\]$(_vcode_prompt_dir)\\[\\033[00m\\]$ '\n");
+                writer.write("    else\n");
+                writer.write("        export COLUMNS=1000\n");
+                writer.write("        PS1='$(printf \"\\001\\033[01;32m\\002$(_vcode_prompt_dir)\\001\\033[00m\\002$ \")'\n");
+                writer.write("    fi\n");
+                writer.write("    export PS1\n");
+                writer.write("}\n");
+                writer.write("_vcode_update_prompt\n\n");
+                writer.write("cd() {\n");
+                writer.write("    target=\"${1:-$HOME}\"\n");
+                writer.write("    newdir=\"$(builtin cd \"$target\" 2>/dev/null && pwd -P)\"\n");
+                writer.write("    if [ -z \"$newdir\" ]; then\n");
+                writer.write("        echo \"cd: $target: No such file or directory\" >&2\n");
+                writer.write("        return 1\n");
+                writer.write("    fi\n");
+                writer.write("    case \"$newdir\" in\n");
+                writer.write("        \"$HOME\"|\"$HOME\"/*)\n");
+                writer.write("            builtin cd \"$newdir\"\n");
+                writer.write("            _vcode_update_prompt\n");
+                writer.write("            ;;\n");
+                writer.write("        *)\n");
+                writer.write("            echo \"cd: permission denied: directory navigation is restricted to project workspace\" >&2\n");
+                writer.write("            builtin cd \"$HOME\"\n");
+                writer.write("            _vcode_update_prompt\n");
+                writer.write("            return 1\n");
+                writer.write("            ;;\n");
+                writer.write("    esac\n");
+                writer.write("}\n");
+            }
+            env.put("ENV", hostScript.getAbsolutePath());
+        } catch (Throwable ignored) {
         }
     }
 
@@ -218,7 +305,8 @@ public class TerminalSession {
                     ? projectName.trim() : "vcode";
             env.put("VCODE_PROJECT_NAME", resolvedProjectName);
             env.put("PYTHONUNBUFFERED", "1");
-            env.put("PS1", "\033[01;32m" + resolvedProjectName + "\033[00m:\033[01;34m\\w\033[00m$ ");
+            env.put("PS1", "\u0001\u001B[01;32m\u0002" + resolvedProjectName + ":~\u0001\u001B[00m\u0002$ ");
+            ensureHostProfile(context, resolvedProjectName, projectRoot, env);
 
             PtyBridge.PtyProcess p = null;
             Process fallbackProc = null;
@@ -292,7 +380,8 @@ public class TerminalSession {
                     prootEnv.put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/system/bin");
                     prootEnv.put("VCODE_PROJECT_NAME", resolvedProjectName);
                     prootEnv.put("PYTHONUNBUFFERED", "1");
-                    prootEnv.put("PS1", "\033[01;32m" + resolvedProjectName + "\033[00m:\033[01;34m\\w\033[00m$ ");
+                    prootEnv.put("COLUMNS", "1000");
+                    prootEnv.put("PS1", "\u0001\u001B[01;32m\u0002" + resolvedProjectName + ":~\u0001\u001B[00m\u0002$ ");
                     prootEnv.put("ENV", "/etc/profile.d/vcode.sh");
                     prootEnv.put("XDG_CACHE_HOME", "/root/.cache");
                     prootEnv.put("XDG_CONFIG_HOME", "/root/.config");
@@ -312,8 +401,11 @@ public class TerminalSession {
                             currentDir.getAbsolutePath(),
                             envArr,
                             rows,
-                            cols
+                            1000
                     );
+                    if (p != null) {
+                        isUserlandSession = true;
+                    }
                 } catch (Throwable t) {
                     p = null;
                 }
@@ -321,6 +413,7 @@ public class TerminalSession {
 
             // Option B: Native system shell inside PTY
             if (p == null) {
+                isUserlandSession = false;
                 String shellPath = "/system/bin/sh";
                 if (!new File(shellPath).exists()) {
                     String osName = System.getProperty("os.name", "").toLowerCase();
@@ -336,18 +429,22 @@ public class TerminalSession {
                     cmd = new String[]{ shellPath };
                 }
 
+                env.put("COLUMNS", "1000");
+                env.put("LINES", String.valueOf(rows));
+
                 String[] envArr = new String[env.size()];
                 int idx = 0;
                 for (Map.Entry<String, String> entry : env.entrySet()) {
                     envArr[idx++] = entry.getKey() + "=" + entry.getValue();
                 }
 
+                // Pass 1000 virtual columns to host mksh to prevent single-line horizontal scrolling and '<' overflow indicator
                 p = PtyBridge.createSubprocess(
                         cmd,
                         currentDir.getAbsolutePath(),
                         envArr,
                         rows,
-                        cols
+                        1000
                 );
             }
 
@@ -376,14 +473,15 @@ public class TerminalSession {
             }
 
             isRunning = true;
+            final int currentGen = sessionGeneration.incrementAndGet();
 
             // Start background stream reader thread on a dedicated daemon thread
-            Thread readerThread = new Thread(this::readProcessOutput, "vcode-terminal-reader");
+            Thread readerThread = new Thread(() -> readProcessOutput(currentGen), "vcode-terminal-reader");
             readerThread.setDaemon(true);
             readerThread.start();
 
             // Wait for exit on a dedicated daemon thread
-            Thread exitThread = new Thread(this::waitForExit, "vcode-terminal-exit");
+            Thread exitThread = new Thread(() -> waitForExit(currentGen), "vcode-terminal-exit");
             exitThread.setDaemon(true);
             exitThread.start();
 
@@ -403,7 +501,7 @@ public class TerminalSession {
         }
     }
 
-    private void readProcessOutput() {
+    private void readProcessOutput(int expectedGen) {
         try {
             InputStream is = inputStream;
             if (is == null) return;
@@ -411,7 +509,7 @@ public class TerminalSession {
             char[] buf = new char[2048];
             int read;
 
-            while (isRunning && (read = reader.read(buf)) != -1) {
+            while (isRunning && sessionGeneration.get() == expectedGen && (read = reader.read(buf)) != -1) {
                 String chunk = new String(buf, 0, read);
                 chunk = filterLinkerWarning(chunk);
                 if (!chunk.isEmpty()) {
@@ -423,8 +521,10 @@ public class TerminalSession {
             }
         } catch (Exception ignored) {
         } finally {
-            isRunning = false;
-            notifyOutput();
+            if (sessionGeneration.get() == expectedGen) {
+                isRunning = false;
+                notifyOutput();
+            }
         }
     }
 
@@ -438,7 +538,7 @@ public class TerminalSession {
         return text;
     }
 
-    private void waitForExit() {
+    private void waitForExit(int expectedGen) {
         try {
             int exitCode;
             if (ptyProcess != null) {
@@ -448,22 +548,26 @@ public class TerminalSession {
             } else {
                 exitCode = 0;
             }
-            isRunning = false;
-            ExecutorProvider.getInstance().runOnMain(() -> {
-                if (listener != null) {
-                    listener.onProcessTerminated(exitCode);
-                }
-            });
+            if (sessionGeneration.get() == expectedGen) {
+                isRunning = false;
+                ExecutorProvider.getInstance().runOnMain(() -> {
+                    for (TerminalSessionListener l : listeners) {
+                        l.onProcessTerminated(exitCode);
+                    }
+                });
+            }
         } catch (Exception ignored) {
         } finally {
-            isRunning = false;
+            if (sessionGeneration.get() == expectedGen) {
+                isRunning = false;
+            }
         }
     }
 
     private void notifyOutput() {
         ExecutorProvider.getInstance().runOnMain(() -> {
-            if (listener != null) {
-                listener.onOutput();
+            for (TerminalSessionListener l : listeners) {
+                l.onOutput();
             }
         });
     }
@@ -493,13 +597,20 @@ public class TerminalSession {
                     }
                     return;
                 } else if (c == '\b' || c == 127) {
-                    if (currentInput.length() > 0) {
-                        currentInput.deleteCharAt(currentInput.length() - 1);
+                    if (currentInput.length() > 0 && inputCursorPos > 0) {
+                        int deleteIndex = Math.min(inputCursorPos - 1, currentInput.length() - 1);
+                        currentInput.deleteCharAt(deleteIndex);
+                        inputCursorPos = Math.max(0, inputCursorPos - 1);
                         emulator.appendOutput("\b \b");
                         notifyOutput();
                     }
                 } else if (c >= 32) {
-                    currentInput.append(c);
+                    if (inputCursorPos >= currentInput.length()) {
+                        currentInput.append(c);
+                    } else {
+                        currentInput.insert(inputCursorPos, c);
+                    }
+                    inputCursorPos++;
                     emulator.appendOutput(String.valueOf(c));
                     notifyOutput();
                 }
@@ -550,24 +661,31 @@ public class TerminalSession {
             return;
         }
 
-        if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
-            for (int i = 0; i < text.length(); i++) {
-                char c = text.charAt(i);
-                if (c == '\r' || c == '\n') {
-                    String line = currentInput.toString().trim();
-                    currentInput.setLength(0);
-                    inputCursorPos = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\r' || c == '\n') {
+                String line = currentInput.toString().trim();
+                currentInput.setLength(0);
+                inputCursorPos = 0;
+                if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
                     if (line.startsWith("pkg ") || line.equals("pkg") || isUserlandCommand(line)) {
                         promptUserlandInstallation(line);
                         return;
                     }
-                } else if (c == '\b' || c == 127) {
-                    if (currentInput.length() > 0) {
-                        currentInput.deleteCharAt(currentInput.length() - 1);
-                    }
-                } else if (c >= 32) {
-                    currentInput.append(c);
                 }
+            } else if (c == '\b' || c == 127) {
+                if (inputCursorPos > 0 && currentInput.length() > 0) {
+                    int deleteIndex = Math.min(inputCursorPos - 1, currentInput.length() - 1);
+                    currentInput.deleteCharAt(deleteIndex);
+                    inputCursorPos = Math.max(0, inputCursorPos - 1);
+                }
+            } else if (c >= 32) {
+                if (inputCursorPos >= currentInput.length()) {
+                    currentInput.append(c);
+                } else {
+                    currentInput.insert(inputCursorPos, c);
+                }
+                inputCursorPos++;
             }
         }
 
@@ -578,7 +696,7 @@ public class TerminalSession {
         handleInput(text);
     }
 
-    private void writeToProcess(String text) {
+    private synchronized void writeToProcess(String text) {
         if (!isRunning || outputStream == null || text == null) return;
         try {
             outputStream.write(text.getBytes(StandardCharsets.UTF_8));
@@ -588,7 +706,7 @@ public class TerminalSession {
         }
     }
 
-    private void writeBytesToProcess(byte[] bytes) {
+    private synchronized void writeBytesToProcess(byte[] bytes) {
         if (!isRunning || outputStream == null || bytes == null) return;
         try {
             outputStream.write(bytes);
@@ -607,14 +725,14 @@ public class TerminalSession {
         try {
             switch (specialKey) {
                 case SPECIAL_KEY_ENTER:
+                    String enterLine = currentInput.toString().trim();
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
                     if (isAwaitingBootstrapConfirmation) {
                         handleInput("\r");
                     } else if (!UserlandBootstrapManager.getInstance().isInstalled(context)) {
-                        String line = currentInput.toString().trim();
-                        currentInput.setLength(0);
-                        inputCursorPos = 0;
-                        if (line.startsWith("pkg ") || line.equals("pkg") || isUserlandCommand(line)) {
-                            promptUserlandInstallation(line);
+                        if (enterLine.startsWith("pkg ") || enterLine.equals("pkg") || isUserlandCommand(enterLine)) {
+                            promptUserlandInstallation(enterLine);
                         } else {
                             outputStream.write("\r".getBytes(StandardCharsets.UTF_8));
                             outputStream.flush();
@@ -628,42 +746,67 @@ public class TerminalSession {
                     if (isAwaitingBootstrapConfirmation) {
                         handleInput("\b");
                     } else {
-                        if (!UserlandBootstrapManager.getInstance().isInstalled(context) && currentInput.length() > 0) {
-                            currentInput.deleteCharAt(currentInput.length() - 1);
+                        if (inputCursorPos > 0 && currentInput.length() > 0) {
+                            int deleteIndex = Math.min(inputCursorPos - 1, currentInput.length() - 1);
+                            currentInput.deleteCharAt(deleteIndex);
+                            inputCursorPos = Math.max(0, inputCursorPos - 1);
                         }
                         outputStream.write(new byte[]{ 0x7F }); // ASCII 127 DEL
                         outputStream.flush();
                     }
                     break;
                 case SPECIAL_KEY_ARROW_UP:
+                    if (emulator != null) {
+                        emulator.rewindWrappedContinuation();
+                    }
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
                     outputStream.write("\033[A".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_ARROW_DOWN:
+                    if (emulator != null) {
+                        emulator.rewindWrappedContinuation();
+                    }
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
                     outputStream.write("\033[B".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_ARROW_LEFT:
+                    if (inputCursorPos > 0) {
+                        inputCursorPos--;
+                    }
                     outputStream.write("\033[D".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_ARROW_RIGHT:
+                    if (inputCursorPos < currentInput.length()) {
+                        inputCursorPos++;
+                    }
                     outputStream.write("\033[C".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_HOME:
+                    inputCursorPos = 0;
                     outputStream.write("\033[H".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_END:
+                    inputCursorPos = currentInput.length();
                     outputStream.write("\033[F".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_DELETE:
+                    if (inputCursorPos < currentInput.length()) {
+                        currentInput.deleteCharAt(inputCursorPos);
+                    }
                     outputStream.write("\033[3~".getBytes(StandardCharsets.UTF_8));
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_CTRL_C:
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
                     if (ptyProcess != null) {
                         ptyProcess.sendSignal(2); // SIGINT
                     }
@@ -677,6 +820,8 @@ public class TerminalSession {
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_CTRL_Z:
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
                     if (ptyProcess != null) {
                         ptyProcess.sendSignal(20); // SIGTSTP
                     }
@@ -684,6 +829,8 @@ public class TerminalSession {
                     outputStream.flush();
                     break;
                 case SPECIAL_KEY_CTRL_L:
+                    currentInput.setLength(0);
+                    inputCursorPos = 0;
                     clearScreen();
                     break;
                 case SPECIAL_KEY_TAB:
@@ -753,8 +900,9 @@ public class TerminalSession {
         }
 
         if (cmd.startsWith("cd ") || cmd.equals("cd")) {
-            handleCd(cmd);
-            writeToProcess(cmd + "\r");
+            if (handleCd(cmd)) {
+                writeToProcess(cmd + "\r");
+            }
             return;
         }
 
@@ -771,7 +919,7 @@ public class TerminalSession {
         writeToProcess(cmd + "\r");
     }
 
-    private void handleCd(String cmd) {
+    private boolean handleCd(String cmd) {
         String target = cmd.length() > 2 ? cmd.substring(2).trim() : "";
         File newDir;
         if (target.isEmpty() || target.equals("~")) {
@@ -788,29 +936,48 @@ public class TerminalSession {
             newDir = newDir.getAbsoluteFile();
         }
 
+        if (projectRoot != null && !TerminalSecurityPolicy.isWithinScope(newDir, projectRoot)) {
+            emulator.appendOutput("cd: permission denied: directory navigation is restricted to project workspace\r\n");
+            notifyOutput();
+            return false;
+        }
+
         if (newDir.exists() && newDir.isDirectory()) {
             currentDir = newDir;
         }
         notifyCommandExecuted("cd");
+        return true;
     }
 
     public synchronized void clearScreen() {
         emulator.clear();
-        writeToProcess("\033[H\033[2J");
+        currentInput.setLength(0);
+        inputCursorPos = 0;
+        if (isRunning && outputStream != null) {
+            try {
+                outputStream.write(new byte[]{ 0x0C }); // POSIX Form Feed (Ctrl+L / 0x0C): instructs shell readline to clear screen & reprint prompt
+                outputStream.flush();
+            } catch (Exception ignored) {
+            }
+        }
         notifyOutput();
         notifyCommandExecuted("clear");
     }
 
     private void notifyCommandExecuted(@NonNull String command) {
-        if (listener != null) {
-            listener.onCommandExecuted(command);
-        }
+        ExecutorProvider.getInstance().runOnMain(() -> {
+            for (TerminalSessionListener l : listeners) {
+                l.onCommandExecuted(command);
+            }
+        });
     }
 
     private void notifyCommandFinished(@Nullable String command, int exitCode) {
-        if (listener != null) {
-            listener.onCommandFinished(command, exitCode);
-        }
+        ExecutorProvider.getInstance().runOnMain(() -> {
+            for (TerminalSessionListener l : listeners) {
+                l.onCommandFinished(command, exitCode);
+            }
+        });
     }
 
     public synchronized void restart() {
@@ -818,7 +985,23 @@ public class TerminalSession {
     }
 
     public synchronized void restart(boolean clearScreen) {
+        if (emulator != null) {
+            if (emulator.getColumns() > 0) {
+                this.initialCols = emulator.getColumns();
+            }
+            if (emulator.getRows() > 0) {
+                this.initialRows = emulator.getRows();
+            }
+        }
         destroy();
+        currentInput.setLength(0);
+        inputCursorPos = 0;
+        isAwaitingBootstrapConfirmation = false;
+        pendingBootstrapCommand = null;
+        lastExecutedCommand = null;
+        isCtrlActive = false;
+        isAltActive = false;
+        historyIndex = history.size();
         if (clearScreen) {
             emulator.clear();
         }
@@ -826,6 +1009,7 @@ public class TerminalSession {
     }
 
     public synchronized void destroy() {
+        sessionGeneration.incrementAndGet();
         isRunning = false;
         try {
             if (ptyProcess != null) {
@@ -920,13 +1104,20 @@ public class TerminalSession {
 
         UserlandBootstrapManager.getInstance().installBootstrap(context, null,
                 new UserlandBootstrapManager.BootstrapCallback() {
+                    private int lastStage = -1;
+
                     @Override
                     public void onProgress(int stage, int totalStages, @NonNull String stageName, int percent, @Nullable String detail) {
+                        if (lastStage != -1 && stage != lastStage) {
+                            emulator.appendOutput("\r\n");
+                        }
+                        lastStage = stage;
+
                         String msg = "[" + stage + "/" + totalStages + "] " + stageName + " (" + percent + "%)";
                         if (detail != null && !detail.isEmpty()) {
                             msg += " - " + detail;
                         }
-                        emulator.appendOutput(msg + "\r\n");
+                        emulator.appendOutput("\r\033[K" + msg);
                         notifyOutput();
                     }
 
@@ -1009,20 +1200,22 @@ public class TerminalSession {
             prootCmd.add("/sdcard");
         }
 
-        // Prefer /bin/sh — Alpine's BusyBox sh is musl-linked with zero external host dependencies
+        // Prefer /bin/bash if installed for full Readline and desktop-grade multiline editing,
+        // otherwise fall back to Alpine's BusyBox /bin/sh.
         File containerSh = new File(prefixPath, "bin/sh");
         File containerBash = new File(prefixPath, "bin/bash");
-        if (isElfBinary(containerSh)) {
-            prootCmd.add("/bin/sh");
-            prootCmd.add("-l");
-        } else if (isElfBinary(containerBash)) {
+        if (isElfBinary(containerBash)) {
             prootCmd.add("/bin/bash");
             prootCmd.add("-l");
-        } else if (containerSh.exists()) {
+        } else if (isElfBinary(containerSh)) {
             prootCmd.add("/bin/sh");
+            prootCmd.add("-l");
+        } else if (containerBash.exists()) {
+            prootCmd.add("/bin/bash");
             prootCmd.add("-l");
         } else {
             prootCmd.add("/bin/sh");
+            prootCmd.add("-l");
         }
         return prootCmd;
     }

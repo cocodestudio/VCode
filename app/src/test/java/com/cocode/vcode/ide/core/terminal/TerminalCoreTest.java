@@ -149,11 +149,14 @@ public class TerminalCoreTest {
         emulator.appendOutput("echo test");
         assertEquals("echo test", buffer.getCurrentLine().getText());
 
+        // In standard VT100/POSIX, \b is non-destructive cursor backward movement.
+        // It moves the cursor left without erasing the character cells.
         emulator.appendOutput("\b\b\b\b");
-        assertEquals("echo ", buffer.getCurrentLine().getText());
+        assertEquals(5, emulator.getCursorCol());
+        assertEquals("echo test", buffer.getCurrentLine().getText());
 
         emulator.appendOutput("123");
-        assertEquals("echo 123", buffer.getCurrentLine().getText());
+        assertEquals("echo 123t", buffer.getCurrentLine().getText());
     }
 
     @Test
@@ -239,15 +242,79 @@ public class TerminalCoreTest {
         assertEquals("kl", buffer.getLine(1).getText());
         assertTrue(buffer.getLine(0).isWrapped());
 
-        // Backspace twice deletes 'l' and 'k' on line 1
+        // Backspace twice moves cursor left across line 1
         emulator.appendOutput("\b\b");
-        assertEquals("", buffer.getLine(1).getText());
+        assertEquals(1, emulator.getCursorRow());
+        assertEquals(0, emulator.getCursorCol());
+        assertEquals("kl", buffer.getLine(1).getText());
 
-        // Next backspace crosses line boundary back to line 0 and deletes 'j'
+        // Next backspace crosses line boundary back to line 0 at column 9 without deleting text
         emulator.appendOutput("\b");
-        assertEquals(1, buffer.getLineCount());
-        assertEquals("abcdefghi", buffer.getLine(0).getText());
-        assertFalse(buffer.getLine(0).isWrapped());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(9, emulator.getCursorCol());
+        assertEquals("abcdefghij", buffer.getLine(0).getText());
+        assertTrue(buffer.getLine(0).isWrapped());
+    }
+
+    @Test
+    public void testTerminalEmulatorLeftArrowMovesCursorWithoutDeletingTextAfterCursor() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        // Type git status
+        emulator.appendOutput("git status");
+        assertEquals("git status", buffer.getCurrentLine().getText());
+        assertEquals(10, emulator.getCursorCol());
+
+        // When user presses left arrow in shell, shell line editor moves cursor left via \b or \033[D
+        // Move back 3 positions (over 's', 'u', 't')
+        emulator.appendOutput("\b\b\b");
+        assertEquals(7, emulator.getCursorCol());
+        assertEquals("git status", buffer.getCurrentLine().getText());
+
+        // Also test ANSI cursor backward \033[D
+        emulator.appendOutput("\033[D");
+        assertEquals(6, emulator.getCursorCol());
+        assertEquals("git status", buffer.getCurrentLine().getText());
+
+        // Move cursor forward \033[C
+        emulator.appendOutput("\033[C\033[C");
+        assertEquals(8, emulator.getCursorCol());
+        assertEquals("git status", buffer.getCurrentLine().getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorDeleteCharacterAnsi() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        emulator.appendOutput("git status");
+        // Move cursor back to 's' in status
+        emulator.appendOutput("\033[6D");
+        assertEquals(4, emulator.getCursorCol());
+
+        // ANSI DCH \033[P deletes character at cursor
+        emulator.appendOutput("\033[P");
+        assertEquals("git tatus", buffer.getCurrentLine().getText());
+
+        // Delete 2 more characters \033[2P
+        emulator.appendOutput("\033[2P");
+        assertEquals("git tus", buffer.getCurrentLine().getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorEraseLineAnsi() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        emulator.appendOutput("git status");
+        // Move cursor back to column 4
+        emulator.appendOutput("\033[6D");
+        assertEquals(4, emulator.getCursorCol());
+
+        // \033[K erases from cursor to end of line
+        emulator.appendOutput("\033[K");
+        assertEquals("git ", buffer.getCurrentLine().getText());
     }
 
     @Test
@@ -363,4 +430,417 @@ public class TerminalCoreTest {
         emulator.appendOutput("\033[?1049l");
         assertEquals("Primary Screen", emulator.getActiveBuffer().getLine(0).getText());
     }
+
+    @Test
+    public void testTerminalEmulatorProgressUpdateInPlaceWithoutLineBloat() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        // Multiple updates separated by carriage returns
+        emulator.appendOutput("Downloading: 10%\rDownloading: 50%\rDownloading: 100%\r\n");
+
+        // Stays on a single line; advances to line 2 only after \r\n
+        assertEquals(2, buffer.getLineCount());
+        assertEquals("Downloading: 100%", buffer.getLine(0).getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorMultiLinePromptPreservesLine0PromptOnCarriageReturn() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(30);
+
+        // Prompt + command wraps onto line 1
+        String prompt = "\033[01;32mMy Awesome Project\033[00m:\033[01;34m~\033[00m$ ";
+        emulator.appendOutput(prompt);
+        emulator.appendOutput("git commit -m \"very long commit message here\"");
+
+        // Prompt + command is wrapped across line 0, 1, and 2
+        assertEquals(3, buffer.getLineCount());
+        assertTrue(buffer.getLine(0).isWrapped());
+        assertTrue("Line 0 must retain prompt", buffer.getLine(0).getText().contains("My Awesome Project:~$"));
+
+        // Shell line editor sends \r to reposition or redraw
+        emulator.appendOutput("\r");
+
+        // Line 0 prompt MUST NOT be erased or cleared
+        assertEquals(3, buffer.getLineCount());
+        assertTrue("Line 0 must remain intact after \\r", buffer.getLine(0).getText().contains("My Awesome Project:~$"));
+    }
+
+    @Test
+    public void testTerminalEmulatorNormalWrappedLineWithCrlfPreservesContent() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(10);
+
+        // Long line followed by standard CRLF line break
+        emulator.appendOutput("1234567890abcdef\r\n");
+
+        assertEquals(3, buffer.getLineCount());
+        assertEquals("1234567890", buffer.getLine(0).getText());
+        assertEquals("abcdef", buffer.getLine(1).getText());
+        assertTrue(buffer.getLine(0).isWrapped());
+    }
+
+    @Test
+    public void testTerminalEmulatorAnsiCursorSaveRestore() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        // ANSI SCP / RCP: \033[s and \033[u
+        emulator.appendOutput("Initial: \033[s10%\033[u50%\033[u100%\n");
+        assertEquals("Initial: 100%", buffer.getLine(0).getText());
+
+        // DEC DECSC / DECRC: \0337 and \0338
+        emulator.appendOutput("Stage: \03371\03382\03383\n");
+        assertEquals("Stage: 3", buffer.getLine(1).getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorClearLineAnsi() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        // \r\033[K clears from column 0
+        emulator.appendOutput("Long text line here\r\033[KShort\n");
+        assertEquals("Short", buffer.getLine(0).getText());
+
+        // \033[2K clears entire line
+        emulator.appendOutput("Another text line\033[2KCleared\n");
+        assertEquals("Cleared", buffer.getLine(1).getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorCursorPreviousLine() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        emulator.appendOutput("Line 1\nLine 2\033[1FUpdated Line 1\n");
+        assertEquals("Updated Line 1", buffer.getLine(0).getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorEraseCharacters() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        emulator.appendOutput("Hello World\r\033[5X");
+        // Erases first 5 characters (Hello) to spaces
+        assertEquals("      World", buffer.getLine(0).getText());
+    }
+
+    @Test
+    public void testTerminalBufferCircularRingRotation() {
+        int maxLines = 5;
+        TerminalBuffer buffer = new TerminalBuffer(maxLines);
+
+        for (int i = 1; i <= 15; i++) {
+            TerminalLine line = buffer.getCurrentLine();
+            String s = "Line " + i;
+            for (int c = 0; c < s.length(); c++) {
+                line.append(s.charAt(c), 0, 0, false);
+            }
+            if (i < 15) {
+                buffer.newLine();
+            }
+        }
+
+        assertEquals(5, buffer.getLineCount());
+        // Old lines 1-10 should have dropped out of circular window. Lines 11-15 remain.
+        assertEquals("Line 11", buffer.getLine(0).getText());
+        assertEquals("Line 12", buffer.getLine(1).getText());
+        assertEquals("Line 13", buffer.getLine(2).getText());
+        assertEquals("Line 14", buffer.getLine(3).getText());
+        assertEquals("Line 15", buffer.getLine(4).getText());
+        assertEquals("Line 15", buffer.getCurrentLine().getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorEraseDisplayModes() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        // Populate 3 lines
+        emulator.appendOutput("Line 1: prompt$ foo\nLine 2: bar\nLine 3: baz");
+        assertEquals(3, buffer.getLineCount());
+
+        // Mode 0: \033[J or \033[0J on Line 2, col 8
+        emulator.appendOutput("\r\033[A\033[8C\033[J");
+        // Line 0 ("Line 1: prompt$ foo") must remain untouched
+        assertEquals("Line 1: prompt$ foo", buffer.getLine(0).getText());
+        // Line 1 should only retain chars up to col 8 ("Line 2: ")
+        assertEquals("Line 2: ", buffer.getLine(1).getText());
+        // Line 2 ("Line 3: baz") should be truncated/removed
+        assertEquals(2, buffer.getLineCount());
+
+        // Mode 2: \033[2J clears screen
+        emulator.appendOutput("\033[2J");
+        assertEquals("", buffer.getLine(0).getText());
+        assertEquals(0, emulator.getCursorCol());
+
+        // Mode 3: \033[3J clears entire buffer
+        emulator.appendOutput("New text\nSecond text\033[3J");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals("", buffer.getLine(0).getText());
+    }
+
+    @Test
+    public void testTerminalEmulatorCursorPositionReport() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        final String[] receivedResponse = new String[1];
+
+        emulator.setCprListener(response -> receivedResponse[0] = response);
+
+        // Move cursor to row 3 (0-indexed 2), col 7 (0-indexed 6)
+        emulator.appendOutput("Hello\nWorld\nFooBar");
+        emulator.appendOutput("\033[6n");
+
+        assertNotNull(receivedResponse[0]);
+        // CPR response format: \033[<row>;<col>R (1-indexed)
+        // cursor is on line 2 (row 3) at col 6 (col 7)
+        assertEquals("\033[3;7R", receivedResponse[0]);
+    }
+
+    @Test
+    public void testTerminalEmulatorDelayedAutoWrap() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(10);
+
+        // Type exactly 10 characters: fills line 0 without immediate wrap
+        emulator.appendOutput("0123456789");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals("0123456789", buffer.getLine(0).getText());
+        assertEquals(9, emulator.getCursorCol());
+
+        // 11th character triggers the delayed wrap
+        emulator.appendOutput("A");
+        assertEquals(2, buffer.getLineCount());
+        assertTrue(buffer.getLine(0).isWrapped());
+        assertEquals("A", buffer.getLine(1).getText());
+        assertEquals(1, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testMultilineWrappedInputAndSeamlessBackspaceUnwrap() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(20);
+
+        // Prompt (13 chars) + Command (12 chars) = 25 chars -> Line 0 (20 chars), Line 1 (5 chars)
+        String prompt = "<Project>:~$ ";
+        String command = "hello world!";
+        emulator.appendOutput(prompt + command);
+
+        assertEquals(2, buffer.getLineCount());
+        assertTrue(buffer.getLine(0).isWrapped());
+        assertEquals(5, emulator.getCursorCol());
+        assertEquals(1, emulator.getCursorRow());
+
+        // Backspace characters on line 1 ("world!")
+        // Each backspace is \b \b (0x08, 0x20, 0x08)
+        for (int i = 0; i < 5; i++) {
+            emulator.appendOutput("\b \b");
+        }
+
+        // Now cursor is at line 1, col 0, and line 1 is cleared
+        assertEquals(0, emulator.getCursorCol());
+        assertEquals(1, emulator.getCursorRow());
+
+        // Next backspace must unwrap to line 0, column 19, and prune the empty line 1 from buffer
+        emulator.appendOutput("\b \b");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(19, emulator.getCursorCol());
+
+        // Further backspace continues naturally deleting characters on line 0
+        emulator.appendOutput("\b \b");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(18, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testMultilineWrappedInputWithCsiK() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(15);
+
+        // 15 chars on line 0 + 3 chars on line 1
+        emulator.appendOutput("0123456789ABCDExyz");
+        assertEquals(2, buffer.getLineCount());
+        assertTrue(buffer.getLine(0).isWrapped());
+        assertEquals(1, emulator.getCursorRow());
+        assertEquals(3, emulator.getCursorCol());
+
+        // Delete 'z', 'y', 'x' via \b\033[K
+        emulator.appendOutput("\b\033[K");
+        emulator.appendOutput("\b\033[K");
+        emulator.appendOutput("\b\033[K");
+
+        assertEquals(0, emulator.getCursorCol());
+        assertEquals(1, emulator.getCursorRow());
+
+        // Unwrap back to line 0
+        emulator.appendOutput("\b\033[K");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(14, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testMultilineHistoryNavigationRewindsContinuationLines() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(20);
+
+        // Multi-line wrapped command: Prompt (13 chars) + Long Command (17 chars) = 30 chars
+        // Line 0: 20 chars, wrapped=true
+        // Line 1: 10 chars, wrapped=false
+        String prompt = "<Project>:~$ ";
+        String longCommand = "echo 1234567890";
+        emulator.appendOutput(prompt + longCommand);
+
+        assertEquals(2, buffer.getLineCount());
+        assertTrue(buffer.getLine(0).isWrapped());
+        assertEquals(1, emulator.getCursorRow());
+        assertEquals(8, emulator.getCursorCol());
+
+        // User clicks Up Arrow to fetch previous history command.
+        // rewindWrappedContinuation must prune line 1, unwrap line 0, and move cursor to line 0, col 0.
+        emulator.rewindWrappedContinuation();
+
+        assertEquals(1, buffer.getLineCount());
+        assertFalse(buffer.getLine(0).isWrapped());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(0, emulator.getCursorCol());
+
+        // Shell redraws line with shorter history command (e.g., "ls")
+        emulator.appendOutput("\r" + prompt + "ls\033[K");
+
+        // Verify that exactly ONE line and ONE prompt exists, with the new command displayed cleanly
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals("<Project>:~$ ls", buffer.getLine(0).getText());
+        assertEquals(15, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testSingleLineHistoryNavigationPreservesState() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setColumns(80);
+
+        String prompt = "<Project>:~$ ";
+        emulator.appendOutput(prompt + "ls");
+
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(15, emulator.getCursorCol());
+
+        // Single-line command was not wrapped; rewindWrappedContinuation must touch nothing
+        emulator.rewindWrappedContinuation();
+
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(15, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testClearScreenSequenceWithScrollbackWipesBufferAndHomesCursor() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setRows(24);
+        emulator.setColumns(80);
+
+        // Fill buffer with 40 lines
+        for (int i = 0; i < 40; i++) {
+            emulator.appendOutput("Line " + i + "\r\n");
+        }
+        assertTrue(buffer.getLineCount() > 24);
+
+        // Emulate Toybox / Linux POSIX `clear` binary output: \033[H\033[J
+        emulator.appendOutput("\033[H\033[J");
+
+        // Entire buffer must be cleared, cursor homed to (0, 0)
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(0, emulator.getCursorCol());
+
+        // Subsequent prompt must appear cleanly at line 0
+        emulator.appendOutput("vcode:~$ ");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals("vcode:~$ ", buffer.getLine(0).getText());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(9, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testEraseInDisplayMode2And3WipesBufferAndHomesCursor() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setRows(24);
+        emulator.setColumns(80);
+
+        // Fill buffer
+        for (int i = 0; i < 30; i++) {
+            emulator.appendOutput("Line " + i + "\r\n");
+        }
+        assertEquals(31, buffer.getLineCount());
+
+        // Test mode 2: \033[2J
+        emulator.appendOutput("\033[2J");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(0, emulator.getCursorCol());
+
+        // Refill and test mode 3: \033[3J
+        for (int i = 0; i < 30; i++) {
+            emulator.appendOutput("Line " + i + "\r\n");
+        }
+        assertEquals(31, buffer.getLineCount());
+
+        emulator.appendOutput("\033[3J");
+        assertEquals(1, buffer.getLineCount());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(0, emulator.getCursorCol());
+    }
+
+    @Test
+    public void testPartialEraseInDisplayPreservesPrecedingLines() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+        emulator.setRows(24);
+        emulator.setColumns(80);
+
+        emulator.appendOutput("Line 0\r\nLine 1\r\nLine 2\r\nLine 3");
+        assertEquals(4, buffer.getLineCount());
+
+        // Position cursor on row 2, col 3 and emit \033[J (partial clear from cursor)
+        emulator.appendOutput("\033[2;3H\033[J");
+
+        // Lines 0 and 1 must be preserved
+        assertEquals("Line 0", buffer.getLine(0).getText());
+        assertTrue(buffer.getLine(1).getText().startsWith("Li"));
+    }
+
+    @Test
+    public void testTerminalEmulatorClearMethodDirectlyResetsState() {
+        TerminalBuffer buffer = new TerminalBuffer(100);
+        TerminalEmulator emulator = new TerminalEmulator(buffer);
+
+        for (int i = 0; i < 20; i++) {
+            emulator.appendOutput("Output " + i + "\r\n");
+        }
+        assertEquals(21, buffer.getLineCount());
+
+        emulator.clear();
+
+        assertEquals(1, buffer.getLineCount());
+        assertEquals("", buffer.getLine(0).getText());
+        assertEquals(0, emulator.getCursorRow());
+        assertEquals(0, emulator.getCursorCol());
+    }
 }
+

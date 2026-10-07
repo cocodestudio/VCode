@@ -1,6 +1,8 @@
 package com.cocode.vcode.ide.core.terminal;
 
 import android.content.Context;
+import android.text.InputType;
+import android.view.inputmethod.EditorInfo;
 
 import com.cocode.vcode.ide.core.terminal.userland.UserlandBootstrapManager;
 
@@ -211,5 +213,163 @@ public class UserlandTerminalSessionTest {
         session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
         session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_C);
         session.destroy();
+    }
+
+    @Test
+    public void testTerminalSessionMultiListenerDispatch() {
+        TerminalSession session = new TerminalSession(context, projectRoot);
+        final boolean[] listener1Notified = new boolean[]{false};
+        final boolean[] listener2Notified = new boolean[]{false};
+
+        TerminalSession.TerminalSessionListener l1 = new TerminalSession.TerminalSessionListener() {
+            @Override public void onOutput() { listener1Notified[0] = true; }
+            @Override public void onProcessTerminated(int exitCode) {}
+        };
+        TerminalSession.TerminalSessionListener l2 = new TerminalSession.TerminalSessionListener() {
+            @Override public void onOutput() { listener2Notified[0] = true; }
+            @Override public void onProcessTerminated(int exitCode) {}
+        };
+
+        session.addListener(l1);
+        session.addListener(l2);
+
+        session.clearScreen();
+        org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertTrue("Listener 1 should receive onOutput", listener1Notified[0]);
+        assertTrue("Listener 2 should receive onOutput", listener2Notified[0]);
+
+        // Test remove listener
+        listener1Notified[0] = false;
+        listener2Notified[0] = false;
+        session.removeListener(l1);
+
+        session.clearScreen();
+        org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertFalse("Listener 1 was removed and should not receive onOutput", listener1Notified[0]);
+        assertTrue("Listener 2 should still receive onOutput", listener2Notified[0]);
+    }
+
+    @Test
+    public void testTerminalSessionLegacyListenerNonClobber() {
+        TerminalSession session = new TerminalSession(context, projectRoot);
+        final boolean[] viewerListenerNotified = new boolean[]{false};
+        final boolean[] legacyListenerNotified = new boolean[]{false};
+
+        // Viewer registers via addListener
+        session.addListener(new TerminalSession.TerminalSessionListener() {
+            @Override public void onOutput() { viewerListenerNotified[0] = true; }
+            @Override public void onProcessTerminated(int exitCode) {}
+        });
+
+        // Another component calls legacy setListener
+        session.setListener(new TerminalSession.TerminalSessionListener() {
+            @Override public void onOutput() { legacyListenerNotified[0] = true; }
+            @Override public void onProcessTerminated(int exitCode) {}
+        });
+
+        session.clearScreen();
+        org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertTrue("Viewer listener must NOT be clobbered by setListener", viewerListenerNotified[0]);
+        assertTrue("Legacy listener should also be notified", legacyListenerNotified[0]);
+    }
+
+    @Test
+    public void testTerminalSessionInputCursorPositionAndTracking() {
+        TerminalSession session = new TerminalSession(context, projectRoot);
+        assertEquals("", session.getCurrentInput());
+        assertEquals(0, session.getInputCursorPos());
+
+        // Type characters
+        session.handleInput("ls -la");
+        assertEquals("ls -la", session.getCurrentInput());
+        assertEquals(6, session.getInputCursorPos());
+
+        // Move left
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ARROW_LEFT);
+        assertEquals("ls -la", session.getCurrentInput());
+        assertEquals(5, session.getInputCursorPos());
+
+        // Home key moves cursor to start
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_HOME);
+        assertEquals(0, session.getInputCursorPos());
+
+        // Left arrow at beginning cannot underflow below 0
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ARROW_LEFT);
+        assertEquals(0, session.getInputCursorPos());
+
+        // Insert at beginning
+        session.handleInput("sudo ");
+        assertEquals("sudo ls -la", session.getCurrentInput());
+        assertEquals(5, session.getInputCursorPos());
+
+        // End key moves cursor to length
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_END);
+        assertEquals(11, session.getInputCursorPos());
+
+        // Right arrow at end cannot exceed length
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ARROW_RIGHT);
+        assertEquals(11, session.getInputCursorPos());
+
+        // Backspace deletes char before cursor
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_BACKSPACE);
+        assertEquals("sudo ls -l", session.getCurrentInput());
+        assertEquals(10, session.getInputCursorPos());
+
+        // Move left twice
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ARROW_LEFT);
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ARROW_LEFT);
+        assertEquals(8, session.getInputCursorPos());
+
+        // Delete key deletes char at cursor ('-')
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_DELETE);
+        assertEquals("sudo ls l", session.getCurrentInput());
+        assertEquals(8, session.getInputCursorPos());
+
+        // Enter key resets input tracking
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_ENTER);
+        assertEquals("", session.getCurrentInput());
+        assertEquals(0, session.getInputCursorPos());
+    }
+
+    @Test
+    public void testTerminalSessionCtrlKeysResetInputTracking() {
+        TerminalSession session = new TerminalSession(context, projectRoot);
+        session.handleInput("npm run dev");
+        assertEquals("npm run dev", session.getCurrentInput());
+        assertEquals(11, session.getInputCursorPos());
+
+        // Ctrl+C resets input tracking
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_C);
+        assertEquals("", session.getCurrentInput());
+        assertEquals(0, session.getInputCursorPos());
+
+        session.handleInput("long running script");
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_Z);
+        assertEquals("", session.getCurrentInput());
+        assertEquals(0, session.getInputCursorPos());
+
+        session.handleInput("clear attempt");
+        session.sendSpecialKey(TerminalSession.SPECIAL_KEY_CTRL_L);
+        assertEquals("", session.getCurrentInput());
+        assertEquals(0, session.getInputCursorPos());
+    }
+
+    @Test
+    public void testTerminalViewInputConnectionAttrsForIme() {
+        TerminalView terminalView = new TerminalView(context);
+        EditorInfo outAttrs = new EditorInfo();
+        terminalView.onCreateInputConnection(outAttrs);
+
+        assertEquals("TerminalView must include TYPE_CLASS_TEXT",
+                InputType.TYPE_CLASS_TEXT, outAttrs.inputType & InputType.TYPE_MASK_CLASS);
+        assertTrue("Password variation must be present for direct streaming",
+                (outAttrs.inputType & InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) != 0);
+        assertTrue("No-suggestions flag must be present",
+                (outAttrs.inputType & InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0);
+        assertEquals("IME flag should be no fullscreen",
+                EditorInfo.IME_FLAG_NO_FULLSCREEN, outAttrs.imeOptions);
     }
 }

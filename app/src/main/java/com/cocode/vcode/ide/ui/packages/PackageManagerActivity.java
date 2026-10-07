@@ -85,7 +85,6 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     private void setupTypefaces() {
         FontManager fm = FontManager.getInstance();
         binding.tvTitle.setTypeface(fm.getUiSemiBold(this));
-        binding.tvSubtitle.setTypeface(fm.getUiMedium(this));
         binding.btnSelectAll.setTypeface(fm.getUiSemiBold(this));
         binding.btnTabSearch.setTypeface(fm.getUiMedium(this));
         binding.btnTabInstalled.setTypeface(fm.getUiMedium(this));
@@ -95,7 +94,6 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         binding.tvEmptyTitle.setTypeface(fm.getUiSemiBold(this));
         binding.tvEmptyDesc.setTypeface(fm.getUiFont(this));
         binding.tvSelectedCount.setTypeface(fm.getCodeFontBold(this));
-        binding.btnClearSelection.setTypeface(fm.getUiMedium(this));
         binding.btnBatchInstall.setTypeface(fm.getUiSemiBold(this));
         binding.btnBatchInstallDev.setTypeface(fm.getUiSemiBold(this));
         binding.btnBatchUninstall.setTypeface(fm.getUiSemiBold(this));
@@ -104,7 +102,6 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
 
     private void setupToolbar() {
         binding.btnBack.setOnClickListener(v -> finish());
-        updateSubtitle();
 
         binding.btnSelectAll.setOnClickListener(v -> {
             if (adapter.areAllSelected()) {
@@ -203,7 +200,6 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
     }
 
     private void setupBatchActions() {
-        binding.btnClearSelection.setOnClickListener(v -> adapter.clearSelection());
 
         binding.btnBatchInstall.setOnClickListener(v -> executeBatchInstall(false));
         binding.btnBatchInstallDev.setOnClickListener(v -> executeBatchInstall(true));
@@ -384,7 +380,6 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
         binding.btnBatchInstallDev.setEnabled(!operating);
         binding.btnBatchUninstall.setEnabled(!operating);
         binding.btnBatchUpdate.setEnabled(!operating);
-        binding.btnClearSelection.setEnabled(!operating);
         binding.btnSelectAll.setEnabled(!operating);
         if (!operating) {
             hideStatusBanner();
@@ -476,13 +471,6 @@ public class PackageManagerActivity extends BaseActivity implements PackagesAdap
             binding.btnTabInstalled.setText(getString(R.string.vcode_tab_installed, count));
         } else {
             binding.btnTabInstalled.setText(R.string.vcode_tab_installed_plain);
-        }
-    }
-
-    private void updateSubtitle() {
-        if (projectRoot != null) {
-            String projectName = com.cocode.vcode.ide.data.repository.ProjectRepository.getProjectName(projectRoot);
-            binding.tvSubtitle.setText(projectName + " • node_modules");
         }
     }
 

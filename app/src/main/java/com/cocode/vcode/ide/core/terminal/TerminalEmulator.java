@@ -67,15 +67,30 @@ public class TerminalEmulator {
 
     private int cursorCol = 0;
     private int cursorRow = 0;
+    private int savedCursorCol = 0;
+    private int savedCursorRow = 0;
     private int currentFgColor = COLOR_DEFAULT_FG;
     private int currentBgColor = COLOR_DEFAULT_BG;
     private boolean isBold = false;
 
+    public interface CprListener {
+        void onCursorPositionReport(String response);
+    }
+
+    private CprListener cprListener = null;
+
     public static final int DEFAULT_COLUMNS = 80;
+    public static final int DEFAULT_ROWS = 24;
     private int columns = DEFAULT_COLUMNS;
+    private int rows = DEFAULT_ROWS;
+    private boolean wrapPending = false;
 
     public TerminalEmulator(@NonNull TerminalBuffer buffer) {
         this.buffer = buffer;
+    }
+
+    public synchronized void setCprListener(CprListener listener) {
+        this.cprListener = listener;
     }
 
     @NonNull
@@ -91,6 +106,16 @@ public class TerminalEmulator {
 
     public synchronized int getColumns() {
         return columns;
+    }
+
+    public synchronized void setRows(int rows) {
+        if (rows > 0) {
+            this.rows = rows;
+        }
+    }
+
+    public synchronized int getRows() {
+        return rows;
     }
 
     public synchronized void setDarkTheme(boolean darkTheme) {
@@ -170,6 +195,17 @@ public class TerminalEmulator {
                 if (c == '[') {
                     state = STATE_CSI;
                     csiBuffer.setLength(0);
+                } else if (c == '7') {
+                    // DECSC: Save cursor
+                    savedCursorRow = cursorRow;
+                    savedCursorCol = cursorCol;
+                    state = STATE_NORMAL;
+                } else if (c == '8') {
+                    // DECRC: Restore cursor
+                    cursorRow = Math.min(savedCursorRow, Math.max(0, getActiveBuffer().getLineCount() - 1));
+                    cursorCol = Math.min(savedCursorCol, MAX_CURSOR_COL);
+                    getActiveBuffer().ensureLineCapacity(cursorRow);
+                    state = STATE_NORMAL;
                 } else {
                     state = STATE_NORMAL;
                 }
@@ -211,49 +247,86 @@ public class TerminalEmulator {
         }
     }
 
+    public synchronized void rewindWrappedContinuation() {
+        if (isAlternateBuffer) return;
+        TerminalBuffer buf = getActiveBuffer();
+        boolean rewound = false;
+        while (cursorRow > 0 && buf.getLine(cursorRow - 1) != null && buf.getLine(cursorRow - 1).isWrapped()) {
+            if (cursorRow == buf.getLineCount() - 1) {
+                buf.removeLastLine();
+            } else {
+                buf.getLine(cursorRow).clear();
+            }
+            cursorRow--;
+            buf.getLine(cursorRow).setWrapped(false);
+            rewound = true;
+        }
+        if (rewound) {
+            cursorCol = 0;
+            wrapPending = false;
+        }
+    }
+
     private void handleNormalChar(char c) {
         if (c == '\033') {
             state = STATE_ESCAPE;
         } else if (c == '\r') {
             cursorCol = 0;
+            wrapPending = false;
         } else if (c == '\n') {
             advanceLine();
+            wrapPending = false;
         } else if (c == '\b') {
-            if (cursorCol > 0) {
+            if (wrapPending) {
+                wrapPending = false;
+            } else if (cursorCol > 0) {
                 cursorCol--;
-                TerminalLine line = getActiveLine();
-                line.deleteCharAt(cursorCol);
-            } else if (getActiveBuffer().getLineCount() > 1) {
-                TerminalLine current = getActiveLine();
-                if (current.length() == 0) {
-                    TerminalLine prev = getActiveBuffer().getLine(getActiveBuffer().getLineCount() - 2);
-                    if (prev.isWrapped()) {
-                        getActiveBuffer().removeLastLine();
-                        prev.setWrapped(false);
-                        cursorRow = Math.max(0, getActiveBuffer().getLineCount() - 1);
-                        cursorCol = prev.length();
-                        if (cursorCol > 0) {
-                            cursorCol--;
-                            prev.deleteCharAt(cursorCol);
+            } else if (cursorRow > 0) {
+                TerminalBuffer buf = getActiveBuffer();
+                TerminalLine prev = buf.getLine(cursorRow - 1);
+                if (prev != null && prev.isWrapped()) {
+                    TerminalLine currentLine = buf.getLine(cursorRow);
+                    boolean currentEmpty = (currentLine == null || currentLine.getText().trim().isEmpty());
+
+                    cursorRow--;
+                    int prevLen = (columns > 0) ? columns : prev.length();
+                    cursorCol = Math.max(0, prevLen - 1);
+
+                    if (currentEmpty) {
+                        if (cursorRow == buf.getLineCount() - 2) {
+                            buf.removeLastLine();
                         }
+                        prev.setWrapped(false);
                     }
                 }
             }
         } else if (c == '\t') {
             int spaces = 4 - (cursorCol % 4);
             for (int i = 0; i < spaces; i++) {
-                if (columns > 0 && cursorCol >= columns) {
+                if (wrapPending) {
                     getActiveLine().setWrapped(true);
                     advanceLine();
+                    wrapPending = false;
                 }
-                getActiveLine().setCharAt(cursorCol++, ' ', currentFgColor, currentBgColor, isBold);
+                getActiveLine().setCharAt(cursorCol, ' ', currentFgColor, currentBgColor, isBold);
+                if (columns > 0 && cursorCol >= columns - 1) {
+                    wrapPending = true;
+                } else {
+                    cursorCol++;
+                }
             }
         } else if (c >= 32) {
-            if (columns > 0 && cursorCol >= columns) {
+            if (wrapPending) {
                 getActiveLine().setWrapped(true);
                 advanceLine();
+                wrapPending = false;
             }
-            getActiveLine().setCharAt(cursorCol++, c, currentFgColor, currentBgColor, isBold);
+            getActiveLine().setCharAt(cursorCol, c, currentFgColor, currentBgColor, isBold);
+            if (columns > 0 && cursorCol >= columns - 1) {
+                wrapPending = true;
+            } else {
+                cursorCol++;
+            }
         }
     }
 
@@ -290,43 +363,114 @@ public class TerminalEmulator {
             // SGR color & formatting
             parseSgr(params);
         } else if (command == 'J') {
-            // Clear screen
-            if ("2".equals(params) || "".equals(params)) {
+            // Erase in Display (ED)
+            String trimmedParams = params != null ? params.trim() : "";
+            int mode = 0;
+            if ("1".equals(trimmedParams)) mode = 1;
+            else if ("2".equals(trimmedParams) || trimmedParams.startsWith("2")) mode = 2;
+            else if ("3".equals(trimmedParams) || trimmedParams.startsWith("3")) mode = 3;
+
+            if (mode == 0) {
+                int screenBase = isAlternateBuffer ? 0 : Math.max(0, getActiveBuffer().getLineCount() - rows);
+                if (cursorRow <= screenBase && cursorCol == 0) {
+                    // Full screen clear from top-left (e.g. \033[H\033[J emitted by /system/bin/clear or busybox)
+                    getActiveBuffer().clear();
+                    cursorCol = 0;
+                    cursorRow = 0;
+                } else {
+                    // Erase from cursor to end of screen (ECMA-48 ED 0)
+                    getActiveLine().clearFrom(cursorCol);
+                    if (columns > 0 && getActiveLine().length() < columns) {
+                        getActiveLine().setWrapped(false);
+                    }
+                    TerminalBuffer buf = getActiveBuffer();
+                    while (buf.getLineCount() > cursorRow + 1) {
+                        if (!buf.removeLastLine()) break;
+                    }
+                }
+            } else if (mode == 1) {
+                // Erase from beginning of screen to cursor (ECMA-48 ED 1)
+                getActiveLine().clearTo(cursorCol);
+            } else if (mode == 2 || mode == 3) {
+                // Erase entire screen / scrollback (ECMA-48 ED 2 / xterm ED 3)
                 getActiveBuffer().clear();
                 cursorCol = 0;
                 cursorRow = 0;
             }
+            wrapPending = false;
         } else if (command == 'K') {
             // Clear line
             if ("".equals(params) || "0".equals(params)) {
                 getActiveLine().clearFrom(cursorCol);
+                if (columns > 0 && getActiveLine().length() < columns) {
+                    getActiveLine().setWrapped(false);
+                }
             } else if ("1".equals(params)) {
                 getActiveLine().clearTo(cursorCol);
             } else if ("2".equals(params)) {
                 getActiveLine().clear();
+                getActiveLine().setWrapped(false);
                 cursorCol = 0;
             }
+            wrapPending = false;
         } else if (command == 'A') {
             // Cursor Up
             int count = parseCount(params);
             cursorRow = Math.max(0, cursorRow - count);
+            wrapPending = false;
         } else if (command == 'B') {
             // Cursor Down
             int count = parseCount(params);
             cursorRow = Math.min(Math.max(0, getActiveBuffer().getLineCount() - 1), cursorRow + count);
             cursorRow = Math.min(cursorRow, getActiveBuffer().getMaxLines() - 1);
+            wrapPending = false;
         } else if (command == 'C') {
             // Cursor Forward
             int count = parseCount(params);
-            cursorCol = Math.min(cursorCol + count, MAX_CURSOR_COL);
+            if (columns > 0 && cursorCol + count >= columns && getActiveLine().isWrapped() && cursorRow < getActiveBuffer().getLineCount() - 1) {
+                cursorRow++;
+                cursorCol = (cursorCol + count) - columns;
+            } else {
+                cursorCol = Math.min(cursorCol + count, MAX_CURSOR_COL);
+            }
+            wrapPending = false;
         } else if (command == 'D') {
             // Cursor Backward
             int count = parseCount(params);
-            cursorCol = Math.max(0, cursorCol - count);
+            if (wrapPending) {
+                wrapPending = false;
+                count--;
+            }
+            if (count > 0) {
+                if (cursorCol - count < 0 && cursorRow > 0 && getActiveBuffer().getLine(cursorRow - 1).isWrapped()) {
+                    TerminalLine prev = getActiveBuffer().getLine(cursorRow - 1);
+                    cursorRow--;
+                    int prevLen = (columns > 0) ? columns : prev.length();
+                    cursorCol = Math.max(0, prevLen + (cursorCol - count));
+                } else {
+                    cursorCol = Math.max(0, cursorCol - count);
+                }
+            }
+            wrapPending = false;
+        } else if (command == 'E') {
+            // Cursor Next Line (CNL: moves cursor to beginning of line n lines down)
+            int count = parseCount(params);
+            cursorRow = Math.min(Math.max(0, getActiveBuffer().getLineCount() - 1), cursorRow + count);
+            cursorRow = Math.min(cursorRow, getActiveBuffer().getMaxLines() - 1);
+            getActiveBuffer().ensureLineCapacity(cursorRow);
+            cursorCol = 0;
+            wrapPending = false;
+        } else if (command == 'F') {
+            // Cursor Previous Line (CPL: moves cursor to beginning of line n lines up)
+            int count = parseCount(params);
+            cursorRow = Math.max(0, cursorRow - count);
+            cursorCol = 0;
+            wrapPending = false;
         } else if (command == 'G') {
             // Cursor Horizontal Absolute (column n, 1-indexed)
             int col = parseCount(params);
             cursorCol = Math.max(0, col - 1);
+            wrapPending = false;
         } else if (command == 'H' || command == 'f') {
             // Cursor Position (CUP: row;col, 1-indexed)
             int row = 1;
@@ -337,8 +481,47 @@ public class TerminalEmulator {
                 if (parts.length > 1 && !parts[1].isEmpty()) col = parseCount(parts[1]);
             }
             cursorCol = Math.max(0, col - 1);
-            cursorRow = Math.min(Math.max(0, row - 1), getActiveBuffer().getMaxLines() - 1);
+            if (isAlternateBuffer) {
+                cursorRow = Math.min(Math.max(0, row - 1), getActiveBuffer().getMaxLines() - 1);
+            } else {
+                int screenBase = Math.max(0, getActiveBuffer().getLineCount() - rows);
+                cursorRow = Math.min(screenBase + Math.max(0, row - 1), getActiveBuffer().getMaxLines() - 1);
+            }
             getActiveBuffer().ensureLineCapacity(cursorRow);
+            wrapPending = false;
+        } else if (command == 'n' && "6".equals(params)) {
+            // CPR: Cursor Position Report (\033[6n)
+            int screenBase = isAlternateBuffer ? 0 : Math.max(0, getActiveBuffer().getLineCount() - rows);
+            int reportRow = Math.max(1, Math.min(cursorRow - screenBase + 1, rows));
+            int reportCol = Math.max(1, cursorCol + 1);
+            String response = "\033[" + reportRow + ";" + reportCol + "R";
+            if (cprListener != null) {
+                cprListener.onCursorPositionReport(response);
+            }
+        } else if (command == 's') {
+            // Save cursor position (ANSI SCP)
+            savedCursorRow = cursorRow;
+            savedCursorCol = cursorCol;
+        } else if (command == 'u') {
+            // Restore cursor position (ANSI RCP)
+            cursorRow = Math.min(savedCursorRow, Math.max(0, getActiveBuffer().getLineCount() - 1));
+            cursorCol = Math.min(savedCursorCol, MAX_CURSOR_COL);
+            getActiveBuffer().ensureLineCapacity(cursorRow);
+            wrapPending = false;
+        } else if (command == 'X') {
+            // Erase Character (ECH)
+            int count = parseCount(params);
+            TerminalLine line = getActiveLine();
+            for (int i = 0; i < count && (cursorCol + i) < TerminalLine.MAX_LINE_LENGTH; i++) {
+                line.setCharAt(cursorCol + i, ' ', COLOR_DEFAULT_FG, COLOR_DEFAULT_BG, false);
+            }
+        } else if (command == 'P') {
+            // Delete Character (DCH: \033[P or \033[<n>P)
+            int count = parseCount(params);
+            TerminalLine line = getActiveLine();
+            for (int i = 0; i < count && cursorCol < line.length(); i++) {
+                line.deleteCharAt(cursorCol);
+            }
         } else if (command == 'h' && ("?1049".equals(params) || "?47".equals(params))) {
             // Switch to alternate screen buffer
             if (!isAlternateBuffer) {
@@ -352,6 +535,7 @@ public class TerminalEmulator {
                 }
                 cursorCol = 0;
                 cursorRow = 0;
+                wrapPending = false;
             }
         } else if (command == 'l' && ("?1049".equals(params) || "?47".equals(params))) {
             // Switch back to primary screen buffer
@@ -359,6 +543,7 @@ public class TerminalEmulator {
                 isAlternateBuffer = false;
                 cursorCol = savedCol;
                 cursorRow = Math.min(savedRow, Math.max(0, buffer.getLineCount() - 1));
+                wrapPending = false;
             }
         }
     }
@@ -440,6 +625,7 @@ public class TerminalEmulator {
     public synchronized void resetCursor() {
         cursorCol = 0;
         cursorRow = Math.max(0, getActiveBuffer().getLineCount() - 1);
+        wrapPending = false;
         state = STATE_NORMAL;
         csiBuffer.setLength(0);
         resetStyles();
@@ -449,6 +635,7 @@ public class TerminalEmulator {
         getActiveBuffer().clear();
         cursorCol = 0;
         cursorRow = 0;
+        wrapPending = false;
         state = STATE_NORMAL;
         csiBuffer.setLength(0);
         resetStyles();

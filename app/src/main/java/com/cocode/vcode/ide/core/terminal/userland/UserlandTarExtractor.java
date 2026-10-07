@@ -63,6 +63,17 @@ public final class UserlandTarExtractor {
                                      @NonNull File destinationDir,
                                      @Nullable String expectedSha256,
                                      @Nullable ExtractionProgressListener listener) throws IOException {
+        return extractFromUrl(archiveUrl, destinationDir, expectedSha256, listener, 0);
+    }
+
+    private static int extractFromUrl(@NonNull String archiveUrl,
+                                      @NonNull File destinationDir,
+                                      @Nullable String expectedSha256,
+                                      @Nullable ExtractionProgressListener listener,
+                                      int redirectCount) throws IOException {
+        if (redirectCount > 5) {
+            throw new IOException("Too many redirects fetching userland archive: " + archiveUrl);
+        }
         if (!destinationDir.exists()) {
             destinationDir.mkdirs();
         }
@@ -76,11 +87,18 @@ public final class UserlandTarExtractor {
         conn.setRequestProperty("User-Agent", "VCode-Desktop-Terminal-Userland/1.0");
 
         int responseCode = conn.getResponseCode();
-        if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
+        boolean isRedirect = (responseCode == HttpURLConnection.HTTP_MOVED_PERM
+                           || responseCode == HttpURLConnection.HTTP_MOVED_TEMP
+                           || responseCode == HttpURLConnection.HTTP_SEE_OTHER
+                           || responseCode == 307
+                           || responseCode == 308);
+
+        if (isRedirect) {
             String newUrl = conn.getHeaderField("Location");
             conn.disconnect();
-            if (newUrl != null) {
-                return extractFromUrl(newUrl, destinationDir, expectedSha256, listener);
+            if (newUrl != null && !newUrl.trim().isEmpty()) {
+                URL targetUrl = new URL(url, newUrl);
+                return extractFromUrl(targetUrl.toString(), destinationDir, expectedSha256, listener, redirectCount + 1);
             }
         }
 
