@@ -832,14 +832,14 @@ public class TerminalSession {
         }
 
         if (cmd.startsWith("vpm") || cmd.equals("vpm")) {
-            emulator.appendOutput("vpm is deprecated. Use 'npm' in the desktop terminal environment.\r\n");
+            emulator.appendOutput("vpm is deprecated. Use 'npm' in the Linux environment.\r\n");
             notifyOutput();
             return;
         }
 
         if (cmd.equals("pkg bootstrap") || cmd.startsWith("pkg bootstrap ")) {
             if (UserlandBootstrapManager.getInstance().isInstalled(context)) {
-                emulator.appendOutput("Desktop terminal environment is already installed and active.\r\n");
+                emulator.appendOutput("Linux terminal environment is already installed and active.\r\n");
                 notifyOutput();
                 notifyCommandFinished(cmd, 0);
                 return;
@@ -1022,9 +1022,9 @@ public class TerminalSession {
     }
 
     private void showUserlandSettingsRedirection() {
-        emulator.appendOutput("\r\n\033[01;33mDesktop Linux Environment is not installed.\033[00m\r\n" +
+        emulator.appendOutput("\r\n\033[01;33mLinux Environment is not installed.\033[00m\r\n" +
                 "To enable packages, runtimes, and the desktop shell,\r\n" +
-                "go to \033[01;36mSettings > Editor > Desktop Linux Environment\033[00m.\r\n\r\n");
+                "go to \033[01;36mSettings > Editor > Linux Environment\033[00m.\r\n\r\n");
         notifyOutput();
     }
 

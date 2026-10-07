@@ -24,7 +24,7 @@ import java.util.Locale;
 
 /**
  * Modal bottom sheet displaying device hardware capabilities and real-time installation
- * progress for the rootless desktop terminal environment.
+ * progress for the rootless Linux environment.
  */
 public class DesktopTerminalInstallBottomSheet extends BaseBottomSheetDialogFragment {
 

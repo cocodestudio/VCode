@@ -17,7 +17,7 @@ import com.cocode.vcode.ide.utils.FontManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 /**
- * Custom confirmation dialog shown when the user toggles off the Desktop Linux Environment.
+ * Custom confirmation dialog shown when the user toggles off the Linux Environment.
  * Informs the user that userland binaries and files (~140 MB) will be deleted to reclaim storage.
  */
 public final class RemoveBootstrapConfirmDialog {

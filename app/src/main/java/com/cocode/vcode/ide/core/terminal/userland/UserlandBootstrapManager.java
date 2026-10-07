@@ -696,7 +696,7 @@ public final class UserlandBootstrapManager {
             writer.write("STATUS_FILE=\"/var/lib/dpkg/status\"\n\n");
                 writer.write("case \"$1\" in\n");
                 writer.write("  bootstrap)\n");
-                writer.write("    echo \"Desktop terminal environment is already installed and active.\"\n");
+                writer.write("    echo \"Linux terminal environment is already installed and active.\"\n");
                 writer.write("    exit 0\n");
                 writer.write("    ;;\n");
                 writer.write("  install|add|i)\n");
@@ -800,7 +800,7 @@ public final class UserlandBootstrapManager {
                 writer.write("    echo \"  pkg search <query>       Search available packages\"\n");
                 writer.write("    echo \"  pkg update               Update package index\"\n");
                 writer.write("    echo \"  pkg upgrade              Upgrade installed packages\"\n");
-                writer.write("    echo \"  pkg bootstrap            Install full rootless desktop Linux environment\"\n");
+                writer.write("    echo \"  pkg bootstrap            Install full rootless Linux environment\"\n");
                 writer.write("    ;;\n");
                 writer.write("  *)\n");
                 writer.write("    echo \"[pkg] Unknown command: $1. Run 'pkg help' for usage.\"\n");
