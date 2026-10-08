@@ -65,11 +65,6 @@
     <string name="vcode_remove_desktop_terminal_title">Remove Linux Environment?</string>
     <string name="vcode_remove_desktop_terminal_desc">This will disable the rootless Linux terminal and permanently delete all installed Linux userland files, packages, and binaries (~140 MB) from your device to free up storage space. Your project workspace files will not be affected.</string>
     <string name="vcode_remove_desktop_terminal_confirm">Delete &amp; Disable</string>
-    <string name="vcode_setting_custom_bootstrap_mirror">Bootstrap Mirror URL</string>
-    <string name="vcode_setting_custom_bootstrap_mirror_default">Default (Official GitHub Releases)</string>
-    <string name="vcode_setting_custom_bootstrap_mirror_dialog_title">Custom Bootstrap Mirror</string>
-    <string name="vcode_setting_custom_bootstrap_mirror_hint">https://example.com/bootstrap-%s.tar.gz</string>
-    <string name="vcode_setting_custom_bootstrap_mirror_save">Save</string>
     <string name="auto_save">Auto save</string>
     <string name="automatically_save_file">Automatically save the file as you stopped typing</string>
     <string name="git_settings">GIT SETTINGS</string>

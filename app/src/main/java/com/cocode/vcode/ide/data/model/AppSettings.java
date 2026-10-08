@@ -59,7 +59,6 @@ public class AppSettings {
 
     // Desktop Terminal & Rootless Userland
     public boolean desktopTerminalEnabled = false;
-    public String customBootstrapUrl = "";
 
     // Safety and Confirmation Dialogs
     public boolean confirmOnTabClose = true;
@@ -74,15 +73,6 @@ public class AppSettings {
 
     public void setDesktopTerminalEnabled(boolean enabled) {
         this.desktopTerminalEnabled = enabled;
-    }
-
-    @NonNull
-    public String getCustomBootstrapUrl() {
-        return customBootstrapUrl != null ? customBootstrapUrl : "";
-    }
-
-    public void setCustomBootstrapUrl(@Nullable String customBootstrapUrl) {
-        this.customBootstrapUrl = customBootstrapUrl != null ? customBootstrapUrl : "";
     }
 
     public int getFontSize() {

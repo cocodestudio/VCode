@@ -241,16 +241,6 @@ public class SettingsViewModel extends ViewModel {
         }
     }
 
-    /**
-     * Updates the custom rootless Linux userland bootstrap mirror URL.
-     */
-    public void updateCustomBootstrapUrl(String url) {
-        AppSettings current = settingsLiveData.getValue();
-        if (current != null) {
-            current.setCustomBootstrapUrl(url);
-            saveSettings(current);
-        }
-    }
 
 
     /**

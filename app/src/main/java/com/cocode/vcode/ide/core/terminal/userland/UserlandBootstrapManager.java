@@ -334,18 +334,7 @@ public final class UserlandBootstrapManager {
                     return;
                 }
 
-                String configuredMirror = null;
-                try {
-                    com.cocode.vcode.ide.data.model.AppSettings settings =
-                            new com.cocode.vcode.ide.data.repository.SettingsRepository(context).loadSettings();
-                    if (settings != null) {
-                        configuredMirror = settings.getCustomBootstrapUrl();
-                    }
-                } catch (Exception ignored) {
-                }
-
-                String downloadUrl = resolveDownloadUrl(customUrl != null && !customUrl.trim().isEmpty() ?
-                        customUrl : configuredMirror);
+                String downloadUrl = resolveDownloadUrl(customUrl);
 
                 boolean downloadSucceeded = false;
                 String downloadErrorMsg = null;

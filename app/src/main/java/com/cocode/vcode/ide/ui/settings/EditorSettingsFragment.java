@@ -134,8 +134,6 @@ public class EditorSettingsFragment extends Fragment {
         binding.opDesktopTerminal.setOnClickListener(_view ->
                 binding.switchDesktopTerminal.setChecked(!binding.switchDesktopTerminal.isChecked()));
 
-        binding.opCustomBootstrapMirror.setOnClickListener(_view -> showCustomMirrorDialog());
-
         binding.switchDesktopTerminal.setOnCheckedChangeListener((btn, isChecked) -> {
             if (!isUpdatingUi) {
                 if (isChecked) {
@@ -245,12 +243,6 @@ public class EditorSettingsFragment extends Fragment {
                 updateCustomizeSymbolsRowUi(settings.showQuickSymbolBar);
                 binding.switchDesktopTerminal.setChecked(settings.desktopTerminalEnabled &&
                         UserlandBootstrapManager.getInstance().isInstalled(requireContext()));
-                String customMirror = settings.getCustomBootstrapUrl();
-                if (customMirror != null && !customMirror.trim().isEmpty()) {
-                    binding.tvCustomBootstrapMirrorValue.setText(customMirror);
-                } else {
-                    binding.tvCustomBootstrapMirrorValue.setText(R.string.vcode_setting_custom_bootstrap_mirror_default);
-                }
                 binding.tvFontSizeValue.setText(MessageFormat.format("{0}px", settings.getFontSize()));
                 isUpdatingUi = false;
             }
@@ -339,26 +331,6 @@ public class EditorSettingsFragment extends Fragment {
         });
     }
 
-    private void showCustomMirrorDialog() {
-        AppSettings current = viewModel.getSettingsLiveData().getValue();
-        String currentUrl = current != null ? current.getCustomBootstrapUrl() : "";
-
-        android.widget.EditText input = new android.widget.EditText(requireContext());
-        input.setHint(R.string.vcode_setting_custom_bootstrap_mirror_hint);
-        input.setText(currentUrl);
-        input.setSingleLine(true);
-        input.setPadding(48, 32, 48, 32);
-
-        new MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.vcode_setting_custom_bootstrap_mirror_dialog_title)
-                .setView(input)
-                .setPositiveButton(R.string.vcode_setting_custom_bootstrap_mirror_save, (dialog, which) -> {
-                    String newUrl = input.getText() != null ? input.getText().toString().trim() : "";
-                    viewModel.updateCustomBootstrapUrl(newUrl);
-                })
-                .setNegativeButton(R.string.vcode_desktop_terminal_cancel, null)
-                .show();
-    }
 
     @Override
     public void onDestroyView() {
