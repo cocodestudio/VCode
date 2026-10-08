@@ -831,12 +831,6 @@ public class TerminalSession {
             return;
         }
 
-        if (cmd.startsWith("vpm") || cmd.equals("vpm")) {
-            emulator.appendOutput("vpm is deprecated. Use 'npm' in the Linux environment.\r\n");
-            notifyOutput();
-            return;
-        }
-
         if (cmd.equals("pkg bootstrap") || cmd.startsWith("pkg bootstrap ")) {
             if (UserlandBootstrapManager.getInstance().isInstalled(context)) {
                 emulator.appendOutput("Linux terminal environment is already installed and active.\r\n");

@@ -51,7 +51,7 @@ public class UserlandTerminalSessionTest {
     }
 
     @Test
-    public void testUserlandCommandTriggersAdvisoryPromptWhenNotInstalled() {
+    public void testUserlandCommandTriggersRedirectionWhenNotInstalled() {
         TerminalSession session = new TerminalSession(context, projectRoot);
         session.start();
 
@@ -59,31 +59,10 @@ public class UserlandTerminalSessionTest {
         session.handleInput("python\n");
 
         String bufferText = session.getBuffer().getAllText();
-        assertTrue("Output should contain Desktop Terminal Environment banner",
-                bufferText.contains("VCode Desktop Terminal Environment"));
-        assertTrue("Output should contain Proceed prompt",
-                bufferText.contains("Proceed with desktop environment installation? [Y/n]:"));
-
-        // User enters 'n' to cancel
-        session.handleInput("n\n");
-        String afterCancel = session.getBuffer().getAllText();
-        assertTrue("Should report installation cancelled",
-                afterCancel.contains("cancelled"));
-
-        session.destroy();
-    }
-
-    @Test
-    public void testUserlandConfirmationTriggersInstallation() throws IOException {
-        TerminalSession session = new TerminalSession(context, projectRoot);
-        session.start();
-
-        session.handleInput("pkg\n");
-        assertTrue(session.getBuffer().getAllText().contains("Proceed with desktop environment installation?"));
-
-        // User enters 'y' to proceed
-        session.handleInput("y\n");
-        assertTrue(session.getBuffer().getAllText().contains("Downloading and configuring rootless desktop environment"));
+        assertTrue("Output should indicate Linux Environment is not installed",
+                bufferText.contains("Linux Environment is not installed."));
+        assertTrue("Output should redirect to Settings > Editor > Linux Environment",
+                bufferText.contains("Settings > Editor > Linux Environment"));
 
         session.destroy();
     }
@@ -144,27 +123,16 @@ public class UserlandTerminalSessionTest {
     }
 
     @Test
-    public void testVpmDeprecatedNotice() {
-        TerminalSession session = new TerminalSession(context, projectRoot);
-        session.start();
-
-        session.handleInput("vpm install express\n");
-        String output = session.getBuffer().getAllText();
-        assertTrue("vpm should show deprecation message",
-                output.contains("vpm is deprecated. Use 'npm' in the desktop terminal environment."));
-
-        session.destroy();
-    }
-
-    @Test
-    public void testNpmTriggersAdvisoryPromptWhenNotInstalled() {
+    public void testNpmTriggersSettingsRedirectionWhenNotInstalled() {
         TerminalSession session = new TerminalSession(context, projectRoot);
         session.start();
 
         session.handleInput("npm\n");
         String output = session.getBuffer().getAllText();
-        assertTrue("Output should contain Proceed prompt for npm",
-                output.contains("Proceed with desktop environment installation? [Y/n]:"));
+        assertTrue("Output should indicate Linux Environment is not installed for npm",
+                output.contains("Linux Environment is not installed."));
+        assertTrue("Output should redirect to Settings > Editor > Linux Environment",
+                output.contains("Settings > Editor > Linux Environment"));
 
         session.destroy();
     }
