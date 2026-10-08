@@ -83,6 +83,29 @@ public class ExtensionContext {
     }
 
     /**
+     * Registers a preview request handler (e.g. for module rewriting, dev server proxies, synthetic routing)
+     * and tracks its disposable token for automatic cleanup upon deactivation.
+     */
+    @NonNull
+    public Disposable registerPreviewHandler(@NonNull com.cocode.vcode.ide.ui.preview.PreviewRequestHandler handler) {
+        com.cocode.vcode.ide.ui.preview.PreviewRequestHandler.registerHandler(handler);
+        Disposable d = () -> com.cocode.vcode.ide.ui.preview.PreviewRequestHandler.unregisterHandler(handler);
+        addDisposable(d);
+        return d;
+    }
+
+    /**
+     * Registers a custom diagnostic provider and tracks its disposable token for automatic cleanup.
+     */
+    @NonNull
+    public Disposable registerDiagnosticProvider(@NonNull com.cocode.vcode.ide.core.diagnostic.DiagnosticProvider provider) {
+        com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.registerProvider(provider);
+        Disposable d = () -> com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.unregisterProvider(provider);
+        addDisposable(d);
+        return d;
+    }
+
+    /**
      * Cleans up all tracked subscriptions in reverse order.
      */
     public synchronized void dispose() {
