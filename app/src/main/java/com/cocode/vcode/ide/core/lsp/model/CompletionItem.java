@@ -57,12 +57,24 @@ public final class CompletionItem {
         this.data = data;
     }
 
+    public CompletionItem(String label) {
+        this(label, null, CompletionItemKind.TEXT, null, null, null, null, null, label, InsertTextFormat.PLAIN_TEXT, null, null, null);
+    }
+
     public CompletionItem(String label, CompletionItemKind kind) {
         this(label, null, kind, null, null, null, null, null, label, InsertTextFormat.PLAIN_TEXT, null, null, null);
     }
 
     public CompletionItem(String label, String detail, CompletionItemKind kind) {
         this(label, null, kind, null, detail, null, null, null, label, InsertTextFormat.PLAIN_TEXT, null, null, null);
+    }
+
+    public CompletionItem(String label, String insertText, CompletionItemKind kind, String detail) {
+        this(label, null, kind, null, detail, null, null, null, insertText, InsertTextFormat.PLAIN_TEXT, null, null, null);
+    }
+
+    public CompletionItem(String label, String insertText, CompletionItemKind kind, String detail, MarkupContent documentation) {
+        this(label, null, kind, null, detail, documentation, null, null, insertText, InsertTextFormat.PLAIN_TEXT, null, null, null);
     }
 
     @NonNull

@@ -91,4 +91,19 @@ public final class LspDocument {
     public LspPosition toPosition(int offset) {
         return indexCache.toPosition(offset);
     }
+
+    /**
+     * Converts a flat character offset to a model LspPosition.
+     */
+    public com.cocode.vcode.ide.core.lsp.model.LspPosition toModelPosition(int offset) {
+        LspPosition p = toPosition(offset);
+        return new com.cocode.vcode.ide.core.lsp.model.LspPosition(p.line, p.character);
+    }
+
+    /**
+     * Converts start and end flat offsets to a model LspRange.
+     */
+    public com.cocode.vcode.ide.core.lsp.model.LspRange toModelRange(int startOffset, int endOffset) {
+        return new com.cocode.vcode.ide.core.lsp.model.LspRange(toModelPosition(startOffset), toModelPosition(endOffset));
+    }
 }

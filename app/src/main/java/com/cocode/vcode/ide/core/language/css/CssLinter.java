@@ -76,12 +76,26 @@ public class CssLinter {
         return tokens;
     }
 
+    public static boolean isValidHexColor(String text) {
+        if (text == null || !text.startsWith("#")) return false;
+        int len = text.length();
+        if (len != 4 && len != 5 && len != 7 && len != 9) return false;
+        for (int i = 1; i < len; i++) {
+            char c = text.charAt(i);
+            boolean isHex = (c >= '0' && c <= '9')
+                    || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            if (!isHex) return false;
+        }
+        return true;
+    }
+
     private static boolean isSingleColor(String lo) {
         if (lo == null || lo.isEmpty()) return false;
         if (CSS_GLOBAL_VALUES.contains(lo)) return true;
         if ("transparent".equals(lo) || "currentcolor".equals(lo)) return true;
         if (CSS_SYSTEM_COLORS.contains(lo)) return true;
-        if (lo.startsWith("#") || lo.startsWith("rgb(") || lo.startsWith("rgba(")
+        if (isValidHexColor(lo) || lo.startsWith("rgb(") || lo.startsWith("rgba(")
                 || lo.startsWith("hsl(") || lo.startsWith("hsla(") || lo.startsWith("oklch(")
                 || lo.startsWith("oklab(") || lo.startsWith("lch(") || lo.startsWith("lab(")
                 || lo.startsWith("color(") || lo.startsWith("color-mix(") || lo.startsWith("var(")
@@ -560,22 +574,38 @@ public class CssLinter {
                     ProblemCode.CSS_VAR_NO_FALLBACK));
         }
 
-        // Color & Shorthand validation
+        // Hex color & shorthand validation
         String valWithoutImportant = valTrimmed.replaceAll("(?i)\\s*!\\s*important\\s*$", "").trim();
+        boolean hasInvalidHex = false;
         if (!valWithoutImportant.isEmpty()) {
-            if (KnownElements.isPureColorProperty(pLo) || KnownElements.isMultiColorProperty(pLo)) {
-                if (!isValidColor(valWithoutImportant, pLo)) {
-                    problems.add(new Problem(file, valLine, valCol, valWithoutImportant.length(),
-                            "Invalid color value '" + valWithoutImportant + "' for '" + prop + "'",
+            List<String> declTokens = splitParenAwareTokens(valWithoutImportant);
+            for (String token : declTokens) {
+                if (token.startsWith("#") && !isValidHexColor(token)) {
+                    hasInvalidHex = true;
+                    int hexIdx = (text != null && valStart >= 0) ? text.indexOf(token, valStart) : -1;
+                    int line = hexIdx != -1 ? LinterUtils.getLine(text, hexIdx) : valLine;
+                    int col = hexIdx != -1 ? LinterUtils.getColumn(text, hexIdx) : valCol;
+                    problems.add(new Problem(file, line, col, token.length(),
+                            "Invalid hexadecimal color '" + token + "'. Hex colors must have 3, 4, 6, or 8 hex digits.",
                             Problem.Severity.ERROR,
-                            ProblemCode.SYNTAX_ERROR));
+                            ProblemCode.CSS_INVALID_HEX_COLOR));
                 }
-            } else if (KnownElements.isBorderShorthandProperty(pLo)) {
-                if (!isBorderShorthandValid(valWithoutImportant, pLo)) {
-                    problems.add(new Problem(file, valLine, valCol, valWithoutImportant.length(),
-                            "Invalid border value '" + valWithoutImportant + "' for '" + prop + "'",
-                            Problem.Severity.ERROR,
-                            ProblemCode.SYNTAX_ERROR));
+            }
+            if (!hasInvalidHex) {
+                if (KnownElements.isPureColorProperty(pLo) || KnownElements.isMultiColorProperty(pLo)) {
+                    if (!isValidColor(valWithoutImportant, pLo)) {
+                        problems.add(new Problem(file, valLine, valCol, valWithoutImportant.length(),
+                                "Invalid color value '" + valWithoutImportant + "' for '" + prop + "'",
+                                Problem.Severity.ERROR,
+                                ProblemCode.SYNTAX_ERROR));
+                    }
+                } else if (KnownElements.isBorderShorthandProperty(pLo)) {
+                    if (!isBorderShorthandValid(valWithoutImportant, pLo)) {
+                        problems.add(new Problem(file, valLine, valCol, valWithoutImportant.length(),
+                                "Invalid border value '" + valWithoutImportant + "' for '" + prop + "'",
+                                Problem.Severity.ERROR,
+                                ProblemCode.SYNTAX_ERROR));
+                    }
                 }
             }
         }

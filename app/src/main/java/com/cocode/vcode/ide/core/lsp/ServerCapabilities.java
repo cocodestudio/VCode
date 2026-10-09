@@ -23,6 +23,7 @@ public final class ServerCapabilities {
             .setFoldingRangeProvider(true)
             .setSignatureHelpProvider(true)
             .setSemanticTokensProvider(true)
+            .setColorProvider(true)
             .build();
 
     private final boolean hoverProvider;
@@ -39,6 +40,7 @@ public final class ServerCapabilities {
     private final boolean foldingRangeProvider;
     private final boolean signatureHelpProvider;
     private final boolean semanticTokensProvider;
+    private final boolean colorProvider;
 
     private ServerCapabilities(Builder builder) {
         this.hoverProvider = builder.hoverProvider;
@@ -55,6 +57,7 @@ public final class ServerCapabilities {
         this.foldingRangeProvider = builder.foldingRangeProvider;
         this.signatureHelpProvider = builder.signatureHelpProvider;
         this.semanticTokensProvider = builder.semanticTokensProvider;
+        this.colorProvider = builder.colorProvider;
     }
 
     public boolean hasHover() { return hoverProvider; }
@@ -71,6 +74,7 @@ public final class ServerCapabilities {
     public boolean hasFoldingRange() { return foldingRangeProvider; }
     public boolean hasSignatureHelp() { return signatureHelpProvider; }
     public boolean hasSemanticTokens() { return semanticTokensProvider; }
+    public boolean hasColor() { return colorProvider; }
 
     public static class Builder {
         private boolean hoverProvider;
@@ -87,6 +91,7 @@ public final class ServerCapabilities {
         private boolean foldingRangeProvider;
         private boolean signatureHelpProvider;
         private boolean semanticTokensProvider;
+        private boolean colorProvider;
 
         public Builder setHoverProvider(boolean enabled) {
             this.hoverProvider = enabled;
@@ -155,6 +160,11 @@ public final class ServerCapabilities {
 
         public Builder setSemanticTokensProvider(boolean enabled) {
             this.semanticTokensProvider = enabled;
+            return this;
+        }
+
+        public Builder setColorProvider(boolean enabled) {
+            this.colorProvider = enabled;
             return this;
         }
 

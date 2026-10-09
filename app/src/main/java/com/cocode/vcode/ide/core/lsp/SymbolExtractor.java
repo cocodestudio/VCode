@@ -278,6 +278,20 @@ public final class SymbolExtractor {
                         j++;
                     }
                 }
+            } else if (tree.nodeType[i] == CssSyntaxTree.N_PROPERTY) {
+                String propName = tree.nodeName[i];
+                if (propName != null && propName.startsWith("--")) {
+                    int propStart = tree.nodeStart[i];
+                    LspPosition pos = offsetToPosition(text, propStart);
+                    LspRange range = new LspRange(pos, new LspPosition(pos.line, pos.character + propName.length()));
+
+                    String valText = null;
+                    int sib = tree.nodeSibling[i];
+                    if (sib > 0 && sib < tree.nodeCount && tree.nodeType[sib] == CssSyntaxTree.N_VALUE) {
+                        valText = tree.nodeValue[sib];
+                    }
+                    results.add(new SymbolEntry(propName, doc.uri, range, SymbolEntry.KIND_CSS_VARIABLE, valText));
+                }
             }
         }
 

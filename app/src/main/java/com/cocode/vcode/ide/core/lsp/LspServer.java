@@ -2,10 +2,14 @@ package com.cocode.vcode.ide.core.lsp;
 
 import com.cocode.vcode.ide.core.lsp.model.CodeAction;
 import com.cocode.vcode.ide.core.lsp.model.CodeActionParams;
+import com.cocode.vcode.ide.core.lsp.model.ColorInformation;
+import com.cocode.vcode.ide.core.lsp.model.ColorPresentation;
+import com.cocode.vcode.ide.core.lsp.model.ColorPresentationParams;
 import com.cocode.vcode.ide.core.lsp.model.CompletionItem;
 import com.cocode.vcode.ide.core.lsp.model.CompletionParams;
 import com.cocode.vcode.ide.core.lsp.model.DefinitionParams;
 import com.cocode.vcode.ide.core.lsp.model.Diagnostic;
+import com.cocode.vcode.ide.core.lsp.model.DocumentColorParams;
 import com.cocode.vcode.ide.core.lsp.model.DocumentDiagnosticParams;
 import com.cocode.vcode.ide.core.lsp.model.DocumentFormattingParams;
 import com.cocode.vcode.ide.core.lsp.model.DocumentHighlight;
@@ -170,6 +174,14 @@ public interface LspServer {
 
     default SemanticTokens semanticTokens(SemanticTokensParams params, CancellationToken token) {
         return null;
+    }
+
+    default List<ColorInformation> documentColor(DocumentColorParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<ColorPresentation> colorPresentation(ColorPresentationParams params, CancellationToken token) {
+        return Collections.emptyList();
     }
 
     // -------------------------------------------------------------------------
