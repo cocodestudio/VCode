@@ -88,7 +88,14 @@ public final class LspServerRegistry {
 
         // Markdown
         registerServer("markdown", MarkdownLspServer::new, new ServerCapabilities.Builder()
+                .setHoverProvider(true)
                 .setCompletionProvider(true)
+                .setDefinitionProvider(true)
+                .setReferencesProvider(true)
+                .setDocumentSymbolProvider(true)
+                .setCodeActionProvider(true)
+                .setFormattingProvider(true)
+                .setFoldingRangeProvider(true)
                 .build());
     }
 

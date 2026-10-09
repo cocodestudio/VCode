@@ -171,7 +171,16 @@ public final class MdParser {
                     hashes++;
                     k++;
                 }
-                int id = tree.addNode(MdSyntaxTree.N_HEADER, start, end, currentParent, null);
+                while (k < end && (source.charAt(k) == ' ' || source.charAt(k) == '\t')) {
+                    k++;
+                }
+                String headingTitle = source.substring(k, end).trim();
+                int hEnd = headingTitle.length();
+                while (hEnd > 0 && headingTitle.charAt(hEnd - 1) == '#') hEnd--;
+                while (hEnd > 0 && Character.isWhitespace(headingTitle.charAt(hEnd - 1))) hEnd--;
+                headingTitle = headingTitle.substring(0, hEnd).trim();
+
+                int id = tree.addNode(MdSyntaxTree.N_HEADER, start, end, currentParent, headingTitle);
                 tree.nodeExtra[id] = hashes;
                 updateParentBounds(tree, stackIds, stackSize, end);
                 i++;
@@ -484,5 +493,19 @@ public final class MdParser {
         }
 
         return MdLineStream.L_PARAGRAPH;
+    }
+
+    /**
+     * Converts a heading title string into a GitHub/CommonMark-compatible anchor slug.
+     * Lowercases text, strips special punctuation characters, replaces whitespace with hyphens,
+     * and trims leading/trailing hyphens.
+     */
+    public static String toSlug(String title) {
+        if (title == null) return "";
+        String s = title.trim().toLowerCase();
+        s = s.replaceAll("[^a-z0-9 _-]", "");
+        s = s.replaceAll("\\s+", "-");
+        s = s.replaceAll("^-+|-+$", "");
+        return s;
     }
 }

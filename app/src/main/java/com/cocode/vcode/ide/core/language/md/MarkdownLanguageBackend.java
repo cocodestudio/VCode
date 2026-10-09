@@ -45,7 +45,7 @@ public class MarkdownLanguageBackend implements LanguageBackend {
 
     @Override
     public BaseFormatter getFormatter() {
-        return null;
+        return new MarkdownFormatter();
     }
 
     @Override
@@ -56,7 +56,14 @@ public class MarkdownLanguageBackend implements LanguageBackend {
     @Override
     public ServerCapabilities getServerCapabilities() {
         return new ServerCapabilities.Builder()
+                .setHoverProvider(true)
                 .setCompletionProvider(true)
+                .setDefinitionProvider(true)
+                .setReferencesProvider(true)
+                .setDocumentSymbolProvider(true)
+                .setCodeActionProvider(true)
+                .setFormattingProvider(true)
+                .setFoldingRangeProvider(true)
                 .build();
     }
 
