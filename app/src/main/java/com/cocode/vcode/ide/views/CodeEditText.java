@@ -4857,6 +4857,11 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         return content.flatOffset(new ContentPosition(pos.line, pos.character));
     }
 
+    public int toOffset(com.cocode.vcode.ide.core.lsp.model.LspPosition pos) {
+        if (pos == null) return -1;
+        return content.flatOffset(new ContentPosition(pos.line, pos.character));
+    }
+
     public interface OnContentChangeListener {
         void onContentChanged();
     }

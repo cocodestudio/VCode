@@ -1,113 +1,193 @@
 package com.cocode.vcode.ide.core.lsp;
 
+import com.cocode.vcode.ide.core.lsp.model.CodeAction;
+import com.cocode.vcode.ide.core.lsp.model.CodeActionParams;
+import com.cocode.vcode.ide.core.lsp.model.CompletionItem;
+import com.cocode.vcode.ide.core.lsp.model.CompletionParams;
+import com.cocode.vcode.ide.core.lsp.model.DefinitionParams;
+import com.cocode.vcode.ide.core.lsp.model.Diagnostic;
+import com.cocode.vcode.ide.core.lsp.model.DocumentDiagnosticParams;
+import com.cocode.vcode.ide.core.lsp.model.DocumentFormattingParams;
+import com.cocode.vcode.ide.core.lsp.model.DocumentHighlight;
+import com.cocode.vcode.ide.core.lsp.model.DocumentHighlightParams;
+import com.cocode.vcode.ide.core.lsp.model.DocumentRangeFormattingParams;
+import com.cocode.vcode.ide.core.lsp.model.DocumentSymbol;
+import com.cocode.vcode.ide.core.lsp.model.DocumentSymbolParams;
+import com.cocode.vcode.ide.core.lsp.model.FoldingRange;
+import com.cocode.vcode.ide.core.lsp.model.FoldingRangeParams;
+import com.cocode.vcode.ide.core.lsp.model.Hover;
+import com.cocode.vcode.ide.core.lsp.model.HoverParams;
+import com.cocode.vcode.ide.core.lsp.model.InitializeParams;
+import com.cocode.vcode.ide.core.lsp.model.PrepareRenameParams;
+import com.cocode.vcode.ide.core.lsp.model.ReferenceParams;
+import com.cocode.vcode.ide.core.lsp.model.RenameParams;
+import com.cocode.vcode.ide.core.lsp.model.SemanticTokens;
+import com.cocode.vcode.ide.core.lsp.model.SemanticTokensParams;
+import com.cocode.vcode.ide.core.lsp.model.SignatureHelp;
+import com.cocode.vcode.ide.core.lsp.model.SignatureHelpParams;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentContentChangeEvent;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
+import com.cocode.vcode.ide.core.lsp.model.TextEdit;
+import com.cocode.vcode.ide.core.lsp.model.TypeDefinitionParams;
+import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
+import com.cocode.vcode.ide.core.lsp.model.WorkspaceEdit;
 import com.cocode.vcode.ide.core.model.Problem;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
  * Contract that every in-process language server must fulfil.
  * <p>
- * Servers are instantiated lazily (when the first file of their language is opened) and run
- * exclusively on background threads supplied by {@link com.cocode.vcode.ide.utils.ExecutorProvider}.
- * All return values are plain Java objects — no JSON-RPC transport is used.
+ * Implements the full LSP 3.17 capability surface. All calls are in-process, strongly-typed
+ * invocations executed off the Android UI thread (on CPU / IO thread pools).
+ * Default methods provide safe no-op / fallback implementations for all LSP 3.17 methods,
+ * preserving 100% backward compatibility with existing language server adapters.
  */
 public interface LspServer {
 
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
+
     /**
-     * Called once after construction.
-     * The server should use this opportunity to warm up internal indexes using the
-     * supplied {@link ProjectIndex}, which already contains a snapshot of every file
-     * in the project.
-     *
-     * @param index shared project-wide symbol index
+     * Legacy initialization hook using {@link ProjectIndex}.
      */
     void initialize(ProjectIndex index);
 
     /**
+     * Modern LSP 3.17 initialize request hook.
+     */
+    default void initialize(InitializeParams params) {
+    }
+
+    /**
      * Called when the server is no longer needed (project closed / app going to background).
-     * The server should release all resources it holds.
      */
     void shutdown();
 
     /**
-     * @return true once {@link #initialize(ProjectIndex)} has finished and the server is
-     * ready to service requests.
+     * @return true once the server has initialized and is ready to service requests.
      */
     boolean isReady();
 
     /**
      * The LSP language identifier string (e.g. {@code "html"}, {@code "javascript"}).
-     * Must match the value returned by
-     * {@link com.cocode.vcode.ide.core.model.FileType#getLspLanguageId()}.
      */
     String getLanguageId();
 
+    /**
+     * Declares the server capabilities for capability negotiation.
+     */
+    default ServerCapabilities getCapabilities() {
+        return ServerCapabilities.DEFAULT_WEB;
+    }
+
     // -------------------------------------------------------------------------
-    // Core LSP capability methods
+    // Document Synchronization Notifications
     // -------------------------------------------------------------------------
 
-    /**
-     * Compute completion items at the given caret position in the document.
-     *
-     * @param doc current document snapshot
-     * @param pos zero-based line/character position of the caret
-     * @return list of completion items, never null
-     */
+    default void didOpen(TextDocumentItem document) {
+    }
+
+    default void didChange(VersionedTextDocumentIdentifier document, List<TextDocumentContentChangeEvent> changes) {
+    }
+
+    default void didSave(TextDocumentIdentifier document) {
+    }
+
+    default void didClose(TextDocumentIdentifier document) {
+    }
+
+    // -------------------------------------------------------------------------
+    // LSP 3.17 Language Features
+    // -------------------------------------------------------------------------
+
+    default List<CompletionItem> completion(CompletionParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default CompletionItem resolveCompletion(CompletionItem item, CancellationToken token) {
+        return item;
+    }
+
+    default List<Diagnostic> diagnostics(DocumentDiagnosticParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<CodeAction> codeAction(CodeActionParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<LspLocation> definition(DefinitionParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<LspLocation> typeDefinition(TypeDefinitionParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<LspLocation> references(ReferenceParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<DocumentHighlight> documentHighlight(DocumentHighlightParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default Hover hover(HoverParams params, CancellationToken token) {
+        return null;
+    }
+
+    default SignatureHelp signatureHelp(SignatureHelpParams params, CancellationToken token) {
+        return null;
+    }
+
+    default List<DocumentSymbol> documentSymbol(DocumentSymbolParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<TextEdit> formatting(DocumentFormattingParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default List<TextEdit> rangeFormatting(DocumentRangeFormattingParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default LspRange prepareRename(PrepareRenameParams params, CancellationToken token) {
+        return null;
+    }
+
+    default WorkspaceEdit rename(RenameParams params, CancellationToken token) {
+        return null;
+    }
+
+    default List<FoldingRange> foldingRange(FoldingRangeParams params, CancellationToken token) {
+        return Collections.emptyList();
+    }
+
+    default SemanticTokens semanticTokens(SemanticTokensParams params, CancellationToken token) {
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Legacy in-process capability methods (retained for backward compatibility)
+    // -------------------------------------------------------------------------
+
     List<LspCompletionItem> completion(LspDocument doc, LspPosition pos);
 
-    /**
-     * Compute all diagnostics (errors / warnings) for the given document.
-     *
-     * @param doc current document snapshot
-     * @return list of diagnostics, never null
-     */
     List<Problem> diagnostics(LspDocument doc);
 
-    /**
-     * Resolve the definition location for the symbol at the given position.
-     *
-     * @param doc current document snapshot
-     * @param pos caret position
-     * @return location of the definition, or null if not found
-     */
     LspLocation definition(LspDocument doc, LspPosition pos);
 
-    /**
-     * Find all references to the symbol at the given position across the project.
-     *
-     * @param doc current document snapshot
-     * @param pos caret position
-     * @return list of reference locations, never null
-     */
     List<LspLocation> references(LspDocument doc, LspPosition pos);
 
-    /**
-     * Compute all reference locations for the symbol at the given position, specifically for renaming.
-     * Unlike references(), this only returns locations in the same scope chain.
-     *
-     * @param doc current document
-     * @param pos caret position
-     * @return list of locations to replace, never null
-     */
     List<LspLocation> rename(LspDocument doc, LspPosition pos);
 
-    /**
-     * Compute signature help (parameter hints) at the given position.
-     * Typically triggered when the user types {@code (} or {@code ,}.
-     *
-     * @param doc current document snapshot
-     * @param pos caret position
-     * @return signature help result, or null if not applicable
-     */
     LspSignatureHelp signatureHelp(LspDocument doc, LspPosition pos);
 
-    /**
-     * Compute rich hover documentation for the symbol at the given position.
-     *
-     * @param doc current document snapshot
-     * @param pos caret position
-     * @return hover info with markdown documentation, or null if not applicable
-     */
     default HoverInfo hover(LspDocument doc, LspPosition pos) {
         return null;
     }
