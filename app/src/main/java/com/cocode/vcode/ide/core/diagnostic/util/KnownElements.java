@@ -122,7 +122,11 @@ public final class KnownElements {
                 "DOMParser", "XMLSerializer", "Worker", "SharedWorker", "ServiceWorker",
                 "MessageChannel", "MessagePort", "indexedDB", "AudioContext", "Audio",
                 "Notification", "DOMException", "Range", "Selection", "CSSStyleDeclaration",
-                "setImmediate", "clearImmediate");
+                "setImmediate", "clearImmediate",
+                "ReadableStream", "WritableStream", "TransformStream", "BroadcastChannel",
+                "CompressionStream", "DecompressionStream", "PerformanceObserver", "SubtleCrypto",
+                "ByteLengthQueuingStrategy", "CountQueuingStrategy", "TextEncoderStream", "TextDecoderStream",
+                "crypto.randomUUID");
 
         Collections.addAll(NODE_GLOBALS,
                 "require", "module", "exports", "process", "global", "Buffer",

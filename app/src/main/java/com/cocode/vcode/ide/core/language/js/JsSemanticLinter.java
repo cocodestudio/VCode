@@ -571,6 +571,29 @@ public class JsSemanticLinter {
         return null;
     }
 
+    private static boolean isRestParam(JsSyntaxTree t, int pNode, String src) {
+        if (t == null || pNode <= 0 || pNode >= t.nodeCount) return false;
+        if ((t.nodeExtra[pNode] & JsSyntaxTree.FLAG_REST) != 0) return true;
+        String name = t.nodeName[pNode];
+        if (name != null && name.startsWith("...")) return true;
+        if (src != null) {
+            int start = t.nodeStart[pNode];
+            int p = start - 1;
+            while (p >= 0 && Character.isWhitespace(src.charAt(p))) p--;
+            if (p >= 2 && src.charAt(p) == '.' && src.charAt(p - 1) == '.' && src.charAt(p - 2) == '.') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isDefaultParam(JsSyntaxTree t, int pNode) {
+        if (t == null || pNode <= 0 || pNode >= t.nodeCount) return false;
+        if ((t.nodeExtra[pNode] & JsSyntaxTree.FLAG_DEFAULT) != 0) return true;
+        String name = t.nodeName[pNode];
+        return name != null && name.contains("=");
+    }
+
     private static void checkArity(File file, String text, TokenStream mask, ProjectIndex index, ScopeTree scopeTree, JsSyntaxTree tree, List<Problem> problems) {
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == JsSyntaxTree.N_CALL_EXPR) {
@@ -605,11 +628,11 @@ public class JsSemanticLinter {
                         int childLoop = 0;
                         while (child > 0 && child < rm.tree.nodeCount && ++childLoop <= rm.tree.nodeCount) {
                             if (rm.tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
-                                if ((rm.tree.nodeExtra[child] & JsSyntaxTree.FLAG_REST) != 0) {
+                                if (isRestParam(rm.tree, child, null)) {
                                     isVariadic = true;
                                 } else {
                                     totalParams++;
-                                    if ((rm.tree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                    if (!isDefaultParam(rm.tree, child)) {
                                         minParams++;
                                     }
                                     String pName = rm.tree.nodeName[child];
@@ -665,11 +688,11 @@ public class JsSemanticLinter {
                                 int childLoop = 0;
                                 while (child > 0 && child < tTree.nodeCount && ++childLoop <= tTree.nodeCount) {
                                     if (tTree.nodeType[child] == JsSyntaxTree.N_PARAM) {
-                                        if ((tTree.nodeExtra[child] & JsSyntaxTree.FLAG_REST) != 0) {
+                                        if (isRestParam(tTree, child, null)) {
                                             isVariadic = true;
                                         } else {
                                             totalParams++;
-                                            if ((tTree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                            if (!isDefaultParam(tTree, child)) {
                                                 minParams++;
                                             }
                                             String pName = tTree.nodeName[child];
@@ -686,11 +709,11 @@ public class JsSemanticLinter {
                                     int pLoop = 0;
                                     while (pChild > 0 && pChild < tTree.nodeCount && ++pLoop <= tTree.nodeCount) {
                                         if (tTree.nodeType[pChild] == JsSyntaxTree.N_PARAM) {
-                                            if ((tTree.nodeExtra[pChild] & JsSyntaxTree.FLAG_REST) != 0) {
+                                            if (isRestParam(tTree, pChild, null)) {
                                                 isVariadic = true;
                                             } else {
                                                 totalParams++;
-                                                if ((tTree.nodeExtra[pChild] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                                if (!isDefaultParam(tTree, pChild)) {
                                                     minParams++;
                                                 }
                                                 String pName = tTree.nodeName[pChild];
@@ -733,11 +756,11 @@ public class JsSemanticLinter {
                                 int childLoop = 0;
                                 while (child > 0 && child < tree.nodeCount && ++childLoop <= tree.nodeCount) {
                                     if (tree.nodeType[child] == JsSyntaxTree.N_PARAM) {
-                                        if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_REST) != 0) {
+                                        if (isRestParam(tree, child, text)) {
                                             isVariadic = true;
                                         } else {
                                             totalParams++;
-                                            if ((tree.nodeExtra[child] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                            if (!isDefaultParam(tree, child)) {
                                                 minParams++;
                                             }
                                             String pName = tree.nodeName[child];
@@ -788,11 +811,11 @@ public class JsSemanticLinter {
                                         int cLoop = 0;
                                         while (c > 0 && c < targetPr.tree.nodeCount && ++cLoop <= targetPr.tree.nodeCount) {
                                             if (targetPr.tree.nodeType[c] == JsSyntaxTree.N_PARAM) {
-                                                if ((targetPr.tree.nodeExtra[c] & JsSyntaxTree.FLAG_REST) != 0) {
+                                                if (isRestParam(targetPr.tree, c, null)) {
                                                     isVariadic = true;
                                                 } else {
                                                     totalParams++;
-                                                    if ((targetPr.tree.nodeExtra[c] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                                                    if (!isDefaultParam(targetPr.tree, c)) {
                                                         minParams++;
                                                     }
                                                     String pName = targetPr.tree.nodeName[c];
@@ -854,6 +877,20 @@ public class JsSemanticLinter {
                         || "flatMap".equals(baseIdentifier) || "reduce".equals(baseIdentifier) || "reduceRight".equals(baseIdentifier)) {
                     minParams = Math.min(minParams, 1);
                     totalParams = Math.max(totalParams, 2);
+                } else if ("addEventListener".equals(baseIdentifier) || "removeEventListener".equals(baseIdentifier)) {
+                    minParams = Math.min(minParams, 2);
+                    totalParams = Math.max(totalParams, 3);
+                } else if ("setTimeout".equals(baseIdentifier) || "setInterval".equals(baseIdentifier) || "setImmediate".equals(baseIdentifier)) {
+                    minParams = Math.min(minParams, 1);
+                    isVariadic = true;
+                } else if ("push".equals(baseIdentifier) || "unshift".equals(baseIdentifier) || "concat".equals(baseIdentifier) || "splice".equals(baseIdentifier)) {
+                    isVariadic = true;
+                } else if ("then".equals(baseIdentifier)) {
+                    minParams = Math.min(minParams, 1);
+                    totalParams = Math.max(totalParams, 2);
+                } else if ("catch".equals(baseIdentifier) || "finally".equals(baseIdentifier)) {
+                    minParams = Math.min(minParams, 1);
+                    totalParams = Math.max(totalParams, 1);
                 }
 
                 if (paramNames.isEmpty() && minParams > 0) {
@@ -861,8 +898,6 @@ public class JsSemanticLinter {
                         paramNames.add("arg" + pIdx);
                     }
                 }
-
-                if (isVariadic) continue;
 
                 int actualArgs = 0;
                 int child = tree.nodeChild[i];
@@ -892,7 +927,7 @@ public class JsSemanticLinter {
                             "Too few arguments: '" + identifier + "' expects " + expectedStr + " argument(s), but got " + actualArgs + namesPart,
                             Problem.Severity.WARNING,
                             ProblemCode.JS_TOO_FEW_ARGUMENTS));
-                } else if (actualArgs > totalParams) {
+                } else if (!isVariadic && actualArgs > totalParams) {
                     int line = LinterUtils.getLine(text, tree.nodeStart[i]);
                     int col = LinterUtils.getColumn(text, tree.nodeStart[i]);
                     problems.add(new Problem(file, line, col, identifier.length(),
@@ -924,11 +959,11 @@ public class JsSemanticLinter {
                 int pGuard = 0;
                 while (pChild > 0 && pChild < tree.nodeCount && ++pGuard <= tree.nodeCount) {
                     if (tree.nodeType[pChild] == JsSyntaxTree.N_PARAM) {
-                        if ((tree.nodeExtra[pChild] & JsSyntaxTree.FLAG_REST) != 0) {
+                        if (isRestParam(tree, pChild, null)) {
                             variadic = true;
                         } else {
                             total++;
-                            if ((tree.nodeExtra[pChild] & JsSyntaxTree.FLAG_DEFAULT) == 0) {
+                            if (!isDefaultParam(tree, pChild)) {
                                 min++;
                             }
                             if (paramNames != null) {

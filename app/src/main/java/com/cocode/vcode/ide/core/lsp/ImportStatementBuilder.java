@@ -62,7 +62,7 @@ public final class ImportStatementBuilder {
      * uses the exact name of {@code toFile} as it appears on disk.
      * Always starts with {@code ./} or {@code ../}.
      */
-    static String computeRelativePath(File fromDir, File toFile) {
+    public static String computeRelativePath(File fromDir, File toFile) {
         if (fromDir == null || toFile == null) return null;
         // Normalize: use absolute paths and split into components.
         String fromPath = fromDir.getAbsolutePath();

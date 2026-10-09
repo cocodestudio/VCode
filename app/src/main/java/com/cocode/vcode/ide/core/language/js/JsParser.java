@@ -2896,6 +2896,18 @@ public class JsParser {
                                 convertObjectLiteralToParams(tree, curr);
                             }
 
+                            // Detect rest parameter (...args) preceding this arrow param
+                            int scanStart = lastParam > 0 ? tree.nodeEnd[lastParam] : 0;
+                            int rp = tree.nodeStart[curr] - 1;
+                            while (rp >= scanStart && Character.isWhitespace(source.charAt(rp))) {
+                                rp--;
+                            }
+                            if (rp >= scanStart + 2 && source.charAt(rp) == '.' && source.charAt(rp - 1) == '.' && source.charAt(rp - 2) == '.') {
+                                tree.nodeExtra[curr] |= JsSyntaxTree.FLAG_REST;
+                            } else if (tree.nodeName[curr] != null && tree.nodeName[curr].startsWith("...")) {
+                                tree.nodeExtra[curr] |= JsSyntaxTree.FLAG_REST;
+                            }
+
                             int arrowStart = stream.tokenStart[i];
                             int scanEnd = (next > 0 && next < tree.nodeCount) ? tree.nodeStart[next] : Math.min(arrowStart, colonOffset);
                             scanEnd = Math.min(scanEnd, source.length());

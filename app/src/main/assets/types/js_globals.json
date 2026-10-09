@@ -30,7 +30,9 @@
     "MessageChannel", "MessagePort", "indexedDB", "IDBDatabase", "IDBTransaction",
     "IDBRequest", "IDBKeyRange", "AudioContext", "OfflineAudioContext", "Audio",
     "Image", "Option", "ReadableStream", "WritableStream", "TransformStream",
-    "BroadcastChannel", "Notification", "DOMException", "Range", "Selection",
+    "BroadcastChannel", "CompressionStream", "DecompressionStream", "PerformanceObserver",
+    "SubtleCrypto", "ByteLengthQueuingStrategy", "CountQueuingStrategy",
+    "TextEncoderStream", "TextDecoderStream", "Notification", "DOMException", "Range", "Selection",
     "TreeWalker", "NodeIterator", "NodeFilter", "CSSStyleDeclaration",
     "setImmediate", "clearImmediate"
   ],
