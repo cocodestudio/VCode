@@ -1267,11 +1267,14 @@ public class JsParser {
 
             } else if ("type".equals(kw)) {
 
-                i = parseTypeAlias(source, stream, tree, i, exportNode);
-
-                tree.nodeEnd[exportNode] = getOffset(stream, source, i);
-
-                return i;
+                int afterType = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                if (afterType < stream.length && stream.types[afterType] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[afterType]) == '{') {
+                    i = skipToken(stream, i);
+                } else {
+                    i = parseTypeAlias(source, stream, tree, i, exportNode);
+                    tree.nodeEnd[exportNode] = getOffset(stream, source, i);
+                    return i;
+                }
 
             } else if ("namespace".equals(kw) || "module".equals(kw)) {
 
@@ -1356,6 +1359,13 @@ public class JsParser {
 
                 String word = (t == TokenStream.TK_IDENTIFIER || t == TokenStream.TK_KEYWORD) ? getWord(source, stream, tok) : null;
 
+                if ("type".equals(word)) {
+                    int afterType = skipWhitespaceAndComments(stream, skipToken(stream, tok));
+                    if (afterType < stream.length && (stream.types[afterType] == TokenStream.TK_IDENTIFIER || stream.types[afterType] == TokenStream.TK_KEYWORD)) {
+                        i = skipToken(stream, tok);
+                        continue;
+                    }
+                }
 
                 if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[tok]) == '}') {
                     if (lastName != null) {
@@ -1739,16 +1749,38 @@ public class JsParser {
             if (t == TokenStream.TK_IDENTIFIER) {
                 if (name == null) name = getWord(source, stream, nextTok);
                 i = skipToken(stream, nextTok);
-            } else if (t == TokenStream.TK_KEYWORD && "extends".equals(getWord(source, stream, nextTok))) {
+            } else if ((t == TokenStream.TK_OPERATOR || t == TokenStream.TK_PUNCT) && source.charAt(stream.tokenStart[nextTok]) == '<') {
+                nextTok = skipGenericArguments(source, stream, nextTok);
+                i = nextTok;
+            } else if (t == TokenStream.TK_KEYWORD && ("extends".equals(getWord(source, stream, nextTok)) || "implements".equals(getWord(source, stream, nextTok)))) {
                 int extTok = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
-                if (extTok < stream.length && stream.types[extTok] == TokenStream.TK_IDENTIFIER) {
-                    extendsName = getWord(source, stream, extTok);
-                    extendsStart = stream.tokenStart[extTok];
-                    extendsEnd = getOffset(stream, source, skipToken(stream, extTok));
-                    i = skipToken(stream, extTok);
-                } else {
-                    i = skipToken(stream, nextTok);
+                while (extTok < stream.length) {
+                    byte et = stream.types[extTok];
+                    if (et == TokenStream.TK_IDENTIFIER) {
+                        String idName = getWord(source, stream, extTok);
+                        if (extendsName == null) {
+                            extendsName = idName;
+                            extendsStart = stream.tokenStart[extTok];
+                            extendsEnd = getOffset(stream, source, skipToken(stream, extTok));
+                        } else {
+                            extendsName += ", " + idName;
+                        }
+                        int nextAfterId = skipToken(stream, extTok);
+                        int checkGen = skipWhitespaceAndComments(stream, nextAfterId);
+                        if (checkGen < stream.length && (stream.types[checkGen] == TokenStream.TK_OPERATOR || stream.types[checkGen] == TokenStream.TK_PUNCT) && source.charAt(stream.tokenStart[checkGen]) == '<') {
+                            nextAfterId = skipGenericArguments(source, stream, checkGen);
+                        }
+                        extTok = skipWhitespaceAndComments(stream, nextAfterId);
+                        if (extTok < stream.length && stream.types[extTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[extTok]) == ',') {
+                            extTok = skipWhitespaceAndComments(stream, skipToken(stream, extTok));
+                            continue;
+                        }
+                        break;
+                    } else {
+                        break;
+                    }
                 }
+                i = extTok;
             } else if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[nextTok]) == '{') {
                 int classNode = tree.addNode(nodeType, nodeStart, 0, parent, name);
                 tree.nodeTypeAnn[classNode] = extendsName;
@@ -1860,6 +1892,10 @@ public class JsParser {
                 name = getWord(source, stream, i);
 
                 i = skipToken(stream, i);
+
+            } else if ((t == TokenStream.TK_OPERATOR || t == TokenStream.TK_PUNCT) && source.charAt(stream.tokenStart[i]) == '<') {
+
+                i = skipGenericArguments(source, stream, i);
 
             } else if (t == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[i]) == '=') {
 
@@ -2970,6 +3006,13 @@ public class JsParser {
                 while (curr < stream.length) {
 
                     int next = skipWhitespaceAndComments(stream, curr);
+
+                    if (next < stream.length && stream.types[next] == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[next]) == '!') {
+                        int afterBang = skipWhitespaceAndComments(stream, skipToken(stream, next));
+                        if (afterBang < stream.length && stream.types[afterBang] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[afterBang]) == '.') {
+                            next = afterBang;
+                        }
+                    }
 
                     if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT &&
                             (source.charAt(stream.tokenStart[next]) == '.' ||

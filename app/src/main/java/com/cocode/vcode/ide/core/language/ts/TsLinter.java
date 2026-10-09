@@ -28,6 +28,20 @@ public class TsLinter {
 
     public static List<Problem> analyze(File file, String text, com.cocode.vcode.ide.core.lsp.ProjectIndex index) {
         if (text == null || text.trim().isEmpty()) return Collections.emptyList();
+        if (text.contains("@ts-nocheck")) return Collections.emptyList();
+
+        Set<Integer> suppressedLines = new HashSet<>();
+        if (text.contains("@ts-ignore") || text.contains("@ts-expect-error")) {
+            String[] lines = text.split("\r?\n");
+            for (int lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+                String lineStr = lines[lineIdx];
+                if (lineStr.contains("@ts-ignore") || lineStr.contains("@ts-expect-error")) {
+                    int lineNum = lineIdx + 1;
+                    suppressedLines.add(lineNum);
+                    suppressedLines.add(lineNum + 1);
+                }
+            }
+        }
 
         TokenStream mask = JsLexer.tokenize(text);
         JsLinter.AnalysisContext ctx = JsLinter.prepareContext(file, text, mask, index);
@@ -50,6 +64,12 @@ public class TsLinter {
             checkUnionUndefined(file, text, ctx.tree, problems);
             checkReadonlyArray(file, text, ctx.tree, problems);
             checkInlineObjectType(file, text, ctx.tree, problems);
+            checkInterfaceImplementation(file, text, ctx.tree, problems);
+            checkMissingProperties(file, text, ctx.tree, problems);
+        }
+
+        if (!suppressedLines.isEmpty()) {
+            problems.removeIf(p -> suppressedLines.contains(p.getLine()));
         }
 
         return problems;
@@ -164,7 +184,7 @@ public class TsLinter {
                                 out.add(new Problem(file, line, col, pName.length(),
                                         "Optional parameter '" + lastOptional + "?' before required parameter '" + pName + "': required params must come first",
                                         Problem.Severity.WARNING,
-                                        ProblemCode.SYNTAX_ERROR));
+                                        ProblemCode.TS_TYPE_MISMATCH));
                             }
                             if (isOpt) {
                                 lastOptional = pName;
@@ -203,24 +223,9 @@ public class TsLinter {
         }
     }
 
-    // Enum declaration check
+    // Enum declaration check (valid in TypeScript)
     private static void checkEnum(File file, String text, JsSyntaxTree tree, List<Problem> out) {
-        for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == JsSyntaxTree.N_ENUM) {
-                String name = tree.nodeName[i];
-                if (name != null && !name.isEmpty()) {
-                    int start = tree.nodeStart[i];
-                    int end = tree.nodeEnd[i];
-                    int targetOffset = findIdentifierOffset(text, start, end, name);
-                    int line = LinterUtils.getLine(text, targetOffset);
-                    int col = LinterUtils.getColumn(text, targetOffset);
-                    out.add(new Problem(file, line, col, name.length(),
-                            "Enums add runtime overhead: consider 'const' object with 'as const' for better tree-shaking",
-                            Problem.Severity.INFO,
-                            ProblemCode.SYNTAX_ERROR));
-                }
-            }
-        }
+        // Enums are natively supported in TypeScript without syntax error
     }
 
     // Redundant type annotation matching inferred literal
@@ -340,7 +345,7 @@ public class TsLinter {
                     out.add(new Problem(file, line, col, typeAnn.length(),
                             "Inline object type with " + propCount + " properties: consider extracting to a named interface",
                             Problem.Severity.INFO,
-                            ProblemCode.SYNTAX_ERROR));
+                            ProblemCode.TS_REDUNDANT_TYPE));
                 }
             }
         }
@@ -381,7 +386,7 @@ public class TsLinter {
                         out.add(new Problem(file, line, col, 9,
                                 "'namespace' is discouraged in modern TypeScript: use ES modules (import/export) instead",
                                 Problem.Severity.WARNING,
-                                ProblemCode.SYNTAX_ERROR));
+                                ProblemCode.TS_REDUNDANT_TYPE));
                     }
                 }
             }
@@ -472,14 +477,14 @@ public class TsLinter {
                         int next = skipWsAndComments(stream, skipToken(stream, t));
                         if (next < stream.length && stream.types[next] == TokenStream.TK_IDENTIFIER) {
                             String targetName = getWord(text, stream, next);
-                            if (!targetName.isEmpty() && Character.isUpperCase(targetName.charAt(0))) {
+                            if ("any".equals(targetName)) {
                                 int start = next;
                                 int line = LinterUtils.getLine(text, start);
                                 int col = LinterUtils.getColumn(text, start);
                                 out.add(new Problem(file, line, col, targetName.length(),
-                                        "Type assertion 'as " + targetName + "': make sure the cast is safe",
-                                        Problem.Severity.INFO,
-                                        ProblemCode.SYNTAX_ERROR));
+                                        "Type assertion 'as any': weakens type safety — use 'unknown' or a specific type",
+                                        Problem.Severity.WARNING,
+                                        ProblemCode.TS_EXPLICIT_ANY));
                             }
                         }
                     }
@@ -549,12 +554,7 @@ public class TsLinter {
             t = skipToken(stream, t);
         }
 
-        if (nonNullCount > 3) {
-            out.add(new Problem(file, 1, 1, 1,
-                    "High use of '!' non-null assertion (" + nonNullCount + " occurrences): consider stricter null handling",
-                    Problem.Severity.WARNING,
-                    ProblemCode.SYNTAX_ERROR));
-        }
+
     }
 
     private static int findAssignmentOperator(String text, TokenStream stream, int startOffset, int endOffset) {
@@ -640,5 +640,113 @@ public class TsLinter {
             idx = text.indexOf(name, idx + 1);
         }
         return start;
+    }
+
+    private static void checkInterfaceImplementation(File file, String text, JsSyntaxTree tree, List<Problem> out) {
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_CLASS_DECL) {
+                String heritage = tree.nodeTypeAnn[i];
+                if (heritage == null || heritage.isEmpty()) continue;
+                String className = tree.nodeName[i];
+                if (className == null) className = "AnonymousClass";
+
+                Set<String> classMethods = new HashSet<>();
+                int child = tree.nodeChild[i];
+                while (child > 0 && child < tree.nodeCount) {
+                    if (tree.nodeType[child] == JsSyntaxTree.N_METHOD) {
+                        String mName = tree.nodeName[child];
+                        if (mName != null && !mName.isEmpty()) {
+                            classMethods.add(mName);
+                        }
+                    }
+                    child = tree.nodeSibling[child];
+                }
+
+                String[] parts = heritage.split(",");
+                for (String part : parts) {
+                    String ifaceName = part.trim();
+                    int angleIdx = ifaceName.indexOf('<');
+                    if (angleIdx >= 0) ifaceName = ifaceName.substring(0, angleIdx).trim();
+                    if (ifaceName.isEmpty()) continue;
+
+                    int ifaceNode = TsParser.findInterfaceOrType(tree, ifaceName);
+                    if (ifaceNode > 0 && tree.nodeType[ifaceNode] == JsSyntaxTree.N_INTERFACE) {
+                        int ifChild = tree.nodeChild[ifaceNode];
+                        while (ifChild > 0 && ifChild < tree.nodeCount) {
+                            if (tree.nodeType[ifChild] == JsSyntaxTree.N_METHOD) {
+                                String reqMethod = tree.nodeName[ifChild];
+                                if (reqMethod != null && !reqMethod.isEmpty() && !classMethods.contains(reqMethod)) {
+                                    int start = tree.nodeStart[i];
+                                    int line = LinterUtils.getLine(text, start);
+                                    int col = LinterUtils.getColumn(text, start);
+                                    out.add(new Problem(file, line, col, className.length(),
+                                            "Class '" + className + "' incorrectly implements interface '" + ifaceName + "'. Missing method: '" + reqMethod + "'",
+                                            Problem.Severity.ERROR,
+                                            ProblemCode.TS_INTERFACE_NOT_IMPLEMENTED));
+                                }
+                            }
+                            ifChild = tree.nodeSibling[ifChild];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void checkMissingProperties(File file, String text, JsSyntaxTree tree, List<Problem> out) {
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == JsSyntaxTree.N_VAR_DECL) {
+                String typeAnn = tree.nodeTypeAnn[i];
+                if (typeAnn == null || typeAnn.isEmpty()) continue;
+                String typeName = typeAnn.trim();
+                int angleIdx = typeName.indexOf('<');
+                if (angleIdx >= 0) typeName = typeName.substring(0, angleIdx).trim();
+
+                int ifaceNode = TsParser.findInterfaceOrType(tree, typeName);
+                if (ifaceNode <= 0 || tree.nodeType[ifaceNode] != JsSyntaxTree.N_INTERFACE) continue;
+
+                int objLitNode = -1;
+                int child = tree.nodeChild[i];
+                while (child > 0 && child < tree.nodeCount) {
+                    if (tree.nodeType[child] == JsSyntaxTree.N_OBJECT_LITERAL) {
+                        objLitNode = child;
+                        break;
+                    }
+                    child = tree.nodeSibling[child];
+                }
+                if (objLitNode <= 0) continue;
+
+                Set<String> objProps = new HashSet<>();
+                int prop = tree.nodeChild[objLitNode];
+                while (prop > 0 && prop < tree.nodeCount) {
+                    if (tree.nodeType[prop] == JsSyntaxTree.N_PROPERTY || tree.nodeType[prop] == JsSyntaxTree.N_METHOD) {
+                        String pName = tree.nodeName[prop];
+                        if (pName != null && !pName.isEmpty()) {
+                            objProps.add(pName);
+                        }
+                    }
+                    prop = tree.nodeSibling[prop];
+                }
+
+                int ifMember = tree.nodeChild[ifaceNode];
+                while (ifMember > 0 && ifMember < tree.nodeCount) {
+                    if (tree.nodeType[ifMember] == JsSyntaxTree.N_PROPERTY) {
+                        String mName = tree.nodeName[ifMember];
+                        if (mName != null && !mName.isEmpty() && !mName.endsWith("?")) {
+                            if (!objProps.contains(mName)) {
+                                int start = tree.nodeStart[objLitNode];
+                                int line = LinterUtils.getLine(text, start);
+                                int col = LinterUtils.getColumn(text, start);
+                                out.add(new Problem(file, line, col, Math.min(10, text.length() - start),
+                                        "Type '{ ... }' is missing required property '" + mName + "' from interface '" + typeName + "'",
+                                        Problem.Severity.ERROR,
+                                        ProblemCode.TS_MISSING_PROPERTIES));
+                            }
+                        }
+                    }
+                    ifMember = tree.nodeSibling[ifMember];
+                }
+            }
+        }
     }
 }

@@ -1579,6 +1579,65 @@ public final class QuickFixRegistry {
                 }
             });
         }
+
+        // TS: Interface not implemented
+        if (code == ProblemCode.TS_INTERFACE_NOT_IMPLEMENTED || msg.contains("incorrectly implements interface")) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return "Implement missing interface method";
+                }
+
+                @Override
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    int pLine = Math.max(0, prob.getLine() - 1);
+                    if (pLine < ed.getLineCount()) {
+                        String lt = ed.getLineText(pLine);
+                        ed.beginAtomicGroup();
+                        try {
+                            String mName = "method";
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Missing method: '([^']+)'").matcher(prob.getMessage());
+                            if (m.find()) mName = m.group(1);
+                            String stub = "\n    " + mName + "(): void {\n        throw new Error(\"Method not implemented.\");\n    }\n";
+                            ed.replaceRange(pLine, lt.length(), pLine, lt.length(), stub);
+                        } finally {
+                            ed.endAtomicGroup();
+                        }
+                    }
+                }
+            });
+        }
+
+        // TS: Missing required properties
+        if (code == ProblemCode.TS_MISSING_PROPERTIES || msg.contains("missing required property")) {
+            fixes.add(new QuickFix() {
+                @Override
+                public String getTitle() {
+                    return "Add missing required property";
+                }
+
+                @Override
+                public void apply(CodeEditorTarget ed, Problem prob) {
+                    int pLine = Math.max(0, prob.getLine() - 1);
+                    if (pLine < ed.getLineCount()) {
+                        String lt = ed.getLineText(pLine);
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("missing required property '([^']+)'").matcher(prob.getMessage());
+                        String propName = m.find() ? m.group(1) : "prop";
+                        ed.beginAtomicGroup();
+                        try {
+                            int braceIdx = lt.indexOf('{');
+                            if (braceIdx >= 0) {
+                                ed.replaceRange(pLine, braceIdx + 1, pLine, braceIdx + 1, " " + propName + ": \"\",");
+                            } else {
+                                ed.replaceRange(pLine, lt.length(), pLine, lt.length(), " " + propName + ": \"\",");
+                            }
+                        } finally {
+                            ed.endAtomicGroup();
+                        }
+                    }
+                }
+            });
+        }
     }
 
     // ==========================================

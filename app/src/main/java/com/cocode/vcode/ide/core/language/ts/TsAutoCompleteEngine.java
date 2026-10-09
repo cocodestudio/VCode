@@ -72,6 +72,12 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
             return getTypeAnnotationSuggestions(fullText, cursorPos, word);
         }
 
+        // Check if cursor is inside an object literal conforming to an interface
+        List<CompletionItem> ifaceProps = getInterfacePropertySuggestions(fullText, cursorPos, word);
+        if (ifaceProps != null && !ifaceProps.isEmpty()) {
+            return ifaceProps;
+        }
+
         List<CompletionItem> base = super.getSuggestions(fullText, cursorPos);
         if (word.isEmpty()) return base;
 
@@ -300,5 +306,67 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
         }
 
         return fuzzyFilter(candidateList, word);
+    }
+
+    private List<CompletionItem> getInterfacePropertySuggestions(String fullText, int cursorPos, String word) {
+        int openBrace = -1;
+        int depth = 0;
+        for (int i = cursorPos - word.length() - 1; i >= 0; i--) {
+            char c = fullText.charAt(i);
+            if (c == '}') depth++;
+            else if (c == '{') {
+                if (depth > 0) depth--;
+                else {
+                    openBrace = i;
+                    break;
+                }
+            } else if (c == ';') {
+                break;
+            }
+        }
+        if (openBrace <= 0) return null;
+
+        int scan = openBrace - 1;
+        while (scan >= 0 && Character.isWhitespace(fullText.charAt(scan))) scan--;
+        if (scan < 0 || fullText.charAt(scan) != '=') return null;
+        scan--;
+        while (scan >= 0 && Character.isWhitespace(fullText.charAt(scan))) scan--;
+        int typeEnd = scan + 1;
+        while (scan >= 0 && (Character.isJavaIdentifierPart(fullText.charAt(scan)) || fullText.charAt(scan) == '<' || fullText.charAt(scan) == '>')) scan--;
+        if (scan < 0 || scan >= typeEnd) return null;
+        String typeName = fullText.substring(scan + 1, typeEnd).trim();
+        int angle = typeName.indexOf('<');
+        if (angle >= 0) typeName = typeName.substring(0, angle).trim();
+        if (typeName.isEmpty()) return null;
+
+        int beforeType = scan;
+        while (beforeType >= 0 && Character.isWhitespace(fullText.charAt(beforeType))) beforeType--;
+        if (beforeType < 0 || fullText.charAt(beforeType) != ':') return null;
+
+        JsSyntaxTree tree = getCachedTree();
+        if (tree == null) return null;
+        int ifaceNode = TsParser.findInterfaceOrType(tree, typeName);
+        if (ifaceNode <= 0 || tree.nodeType[ifaceNode] != JsSyntaxTree.N_INTERFACE) return null;
+
+        List<CompletionItem> results = new ArrayList<>();
+        String lower = word.toLowerCase();
+        int child = tree.nodeChild[ifaceNode];
+        while (child > 0 && child < tree.nodeCount) {
+            if (tree.nodeType[child] == JsSyntaxTree.N_PROPERTY || tree.nodeType[child] == JsSyntaxTree.N_METHOD) {
+                String pName = tree.nodeName[child];
+                if (pName != null && !pName.isEmpty()) {
+                    String cleanName = pName.endsWith("?") ? pName.substring(0, pName.length() - 1) : pName;
+                    if (cleanName.toLowerCase().startsWith(lower)) {
+                        String detail = tree.nodeTypeAnn[child] != null ? tree.nodeTypeAnn[child] : "Property";
+                        CompletionItem ci = new CompletionItem(cleanName, cleanName + ": |", detail, CompletionItem.Type.VALUE, 0);
+                        ci.setSortScore(120);
+                        ci.setReplaceLength(word.length());
+                        results.add(ci);
+                    }
+                }
+            }
+            child = tree.nodeSibling[child];
+        }
+        return results;
     }
 }
