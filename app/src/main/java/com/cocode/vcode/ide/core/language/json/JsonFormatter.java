@@ -51,6 +51,16 @@ public class JsonFormatter extends BaseFormatter {
                 indent++;
                 out.append(getIndentString(indent));
             } else if (c == '}' || c == ']') {
+                int last = out.length() - 1;
+                while (last >= 0 && Character.isWhitespace(out.charAt(last))) {
+                    last--;
+                }
+                if (last >= 0 && out.charAt(last) == ',') {
+                    out.deleteCharAt(last);
+                    while (out.length() > last && Character.isWhitespace(out.charAt(out.length() - 1))) {
+                        out.deleteCharAt(out.length() - 1);
+                    }
+                }
                 out.append('\n');
                 indent = Math.max(0, indent - 1);
                 out.append(getIndentString(indent)).append(c);

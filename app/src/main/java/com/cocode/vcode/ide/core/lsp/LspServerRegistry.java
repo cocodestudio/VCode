@@ -74,11 +74,17 @@ public final class LspServerRegistry {
         // TypeScript
         registerServer("typescript", TsLspServer::new, ServerCapabilities.DEFAULT_WEB);
 
-        // JSON
-        registerServer("json", ctx -> new JsonLspServer(), new ServerCapabilities.Builder()
+        // JSON & JSONC
+        ServerCapabilities jsonCap = new ServerCapabilities.Builder()
                 .setCompletionProvider(true)
+                .setHoverProvider(true)
+                .setDefinitionProvider(true)
+                .setDocumentSymbolProvider(true)
+                .setCodeActionProvider(true)
                 .setFormattingProvider(true)
-                .build());
+                .build();
+        registerServer("json", JsonLspServer::new, jsonCap);
+        registerServer("jsonc", JsonLspServer::new, jsonCap);
 
         // Markdown
         registerServer("markdown", MarkdownLspServer::new, new ServerCapabilities.Builder()

@@ -104,8 +104,9 @@ public class JsonLexer {
                 }
             }
 
-            // String
-            if (c == '"') {
+            // String (double quotes or single quotes)
+            if (c == '"' || c == '\'') {
+                char quoteChar = c;
                 int start = i;
                 types[i] = JsonTokenStream.TK_STRING;
                 starts[i] = start;
@@ -114,7 +115,7 @@ public class JsonLexer {
                     char curr = source.charAt(i);
                     types[i] = JsonTokenStream.TK_STRING;
                     starts[i] = start;
-                    if (curr == '"') {
+                    if (curr == quoteChar) {
                         i++;
                         break;
                     } else if (curr == '\\') {

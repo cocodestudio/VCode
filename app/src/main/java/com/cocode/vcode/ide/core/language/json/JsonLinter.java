@@ -1,5 +1,6 @@
 package com.cocode.vcode.ide.core.language.json;
 
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.model.Problem;
 
@@ -10,10 +11,37 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Linter for JSON using the flat-array AST.
- * Flags syntax errors (N_ERROR) and duplicate keys within the same object.
+ * Linter for JSON and JSONC using the flat-array AST.
+ * Flags syntax errors (N_ERROR), duplicate keys within the same object,
+ * comments in strict mode, and enforces single root value.
+ * Also delegates to {@link JsonSchemaManager} for manifest validation.
  */
 public class JsonLinter {
+
+    public static boolean isJsoncMode(File file) {
+        if (file == null) return false;
+        return isJsoncMode(file.getName(), file.getPath());
+    }
+
+    public static boolean isJsoncMode(String name, String path) {
+        if (name == null && path == null) return false;
+        String lowerName = (name != null ? name : path).toLowerCase();
+        int slash = Math.max(lowerName.lastIndexOf('/'), lowerName.lastIndexOf('\\'));
+        String baseName = slash >= 0 ? lowerName.substring(slash + 1) : lowerName;
+
+        if (baseName.endsWith(".jsonc")) return true;
+        if (baseName.startsWith("tsconfig") && baseName.endsWith(".json")) return true;
+        if (baseName.startsWith("jsconfig") && baseName.endsWith(".json")) return true;
+        if (baseName.startsWith(".eslintrc") && baseName.endsWith(".json")) return true;
+        if ("settings.json".equals(baseName)) return true;
+
+        if (path != null) {
+            String lowerPath = path.toLowerCase();
+            if (lowerPath.contains("/.vcode/") || lowerPath.contains("\\.vcode\\")) return true;
+            if (lowerPath.contains("/.vscode/") || lowerPath.contains("\\.vscode\\")) return true;
+        }
+        return false;
+    }
 
     public static List<Problem> analyze(File file, String text) {
         List<Problem> problems = new ArrayList<>();
@@ -29,7 +57,7 @@ public class JsonLinter {
             return problems;
         }
 
-        boolean isJsonc = file != null && file.getName().toLowerCase().endsWith(".jsonc");
+        boolean isJsonc = isJsoncMode(file);
         if (!isJsonc) {
             int k = 0;
             while (k < stream.length) {
@@ -43,15 +71,15 @@ public class JsonLinter {
                     int col = LinterUtils.getColumn(text, cStart);
                     problems.add(new Problem(file, line, col, Math.max(1, cEnd - cStart),
                             "Comments are not permitted in standard JSON", Problem.Severity.WARNING,
-                            com.cocode.vcode.ide.core.diagnostic.ProblemCode.JSON_COMMENTS_DISALLOWED));
-                    k = cEnd;
+                            ProblemCode.JSON_COMMENTS_DISALLOWED));
+                    k = Math.max(k + 1, cEnd);
                 } else {
                     k++;
                 }
             }
         }
 
-        JsonSyntaxTree tree = JsonParser.parse(stream, text);
+        JsonSyntaxTree tree = JsonParser.parse(stream, text, isJsonc);
 
         for (int i = 1; i < tree.nodeCount; i++) {
             byte type = tree.nodeType[i];
@@ -67,8 +95,12 @@ public class JsonLinter {
                 String msg = tree.nodeName[i];
                 if (msg == null || msg.isEmpty()) msg = "Syntax error";
 
-                problems.add(new Problem(file, line, col, len, msg, Problem.Severity.ERROR,
-                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.JSON_SYNTAX_ERROR));
+                ProblemCode code = ProblemCode.JSON_SYNTAX_ERROR;
+                if (msg.contains("Multiple root values")) {
+                    code = ProblemCode.JSON_MULTIPLE_ROOTS;
+                }
+
+                problems.add(new Problem(file, line, col, len, msg, Problem.Severity.ERROR, code));
             } else if (type == JsonSyntaxTree.N_OBJECT) {
                 Set<String> seenKeys = new HashSet<>();
                 int child = tree.nodeChild[i];
@@ -85,13 +117,19 @@ public class JsonLinter {
                                 int col = LinterUtils.getColumn(text, start);
 
                                 problems.add(new Problem(file, line, col, len, "Duplicate object key: " + keyName, Problem.Severity.WARNING,
-                                        com.cocode.vcode.ide.core.diagnostic.ProblemCode.JSON_DUPLICATE_KEY));
+                                        ProblemCode.JSON_DUPLICATE_KEY));
                             }
                         }
                     }
                     child = tree.nodeSibling[child];
                 }
             }
+        }
+
+        // Schema-driven validation (e.g. package.json, tsconfig.json)
+        List<Problem> schemaProblems = JsonSchemaManager.validate(file, file != null ? file.getPath() : null, text, tree);
+        if (schemaProblems != null && !schemaProblems.isEmpty()) {
+            problems.addAll(schemaProblems);
         }
 
         return problems;

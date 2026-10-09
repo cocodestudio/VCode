@@ -151,4 +151,64 @@ public class JsonLinterTest {
                     p.getMessage().contains("Comments are not permitted"));
         }
     }
+
+    @Test
+    public void testJsoncConfigFilesAllowCommentsAndTrailingCommas() {
+        String[] configNames = {"tsconfig.json", "tsconfig.node.json", "settings.json", ".eslintrc.json"};
+        for (String name : configNames) {
+            File configFile = new File(name);
+            assertTrue("Should be recognized as JSONC: " + name, JsonLinter.isJsoncMode(configFile));
+
+            String source = "{\n  // Permitted comment\n  \"key\": 123,\n}";
+            List<Problem> problems = JsonLinter.analyze(configFile, source);
+            for (Problem p : problems) {
+                assertFalse("No comment or trailing comma errors allowed in " + name + ": " + p.getMessage(),
+                        p.getMessage().contains("Comments are not permitted") || p.getMessage().contains("Trailing comma"));
+            }
+        }
+    }
+
+    @Test
+    public void testMultipleRootsEmitsError() {
+        String source = "{ \"a\": 1 } { \"b\": 2 }";
+        List<Problem> problems = JsonLinter.analyze(mockFile, source);
+        boolean foundMultipleRoots = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Multiple root values")) {
+                foundMultipleRoots = true;
+                break;
+            }
+        }
+        assertTrue("Should emit error for multiple root values", foundMultipleRoots);
+    }
+
+    @Test
+    public void testPackageJsonSchemaValidationMissingRequiredFields() {
+        File pkgFile = new File("package.json");
+        String source = "{\n  \"description\": \"A package without name or version\"\n}";
+        List<Problem> problems = JsonLinter.analyze(pkgFile, source);
+        boolean missingName = false;
+        boolean missingVersion = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Missing required property 'name'")) missingName = true;
+            if (p.getMessage().contains("Missing required property 'version'")) missingVersion = true;
+        }
+        assertTrue("Should report missing 'name' in package.json", missingName);
+        assertTrue("Should report missing 'version' in package.json", missingVersion);
+    }
+
+    @Test
+    public void testTsConfigSchemaValidationInvalidEnum() {
+        File tsconfigFile = new File("tsconfig.json");
+        String source = "{\n  \"compilerOptions\": {\n    \"target\": \"INVALID_TARGET\"\n  }\n}";
+        List<Problem> problems = JsonLinter.analyze(tsconfigFile, source);
+        boolean foundEnumError = false;
+        for (Problem p : problems) {
+            if (p.getMessage().contains("Value 'INVALID_TARGET' is not accepted for 'target'")) {
+                foundEnumError = true;
+                break;
+            }
+        }
+        assertTrue("Should report invalid enum value for target", foundEnumError);
+    }
 }

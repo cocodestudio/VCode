@@ -50,13 +50,17 @@ public class JsonLanguageBackend implements LanguageBackend {
 
     @Override
     public LspServer createLspServer(Context context) {
-        return new JsonLspServer();
+        return new JsonLspServer(context);
     }
 
     @Override
     public ServerCapabilities getServerCapabilities() {
         return new ServerCapabilities.Builder()
                 .setCompletionProvider(true)
+                .setHoverProvider(true)
+                .setDefinitionProvider(true)
+                .setDocumentSymbolProvider(true)
+                .setCodeActionProvider(true)
                 .setFormattingProvider(true)
                 .build();
     }

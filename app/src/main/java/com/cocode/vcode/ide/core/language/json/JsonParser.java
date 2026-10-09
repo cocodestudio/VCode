@@ -3,10 +3,15 @@ package com.cocode.vcode.ide.core.language.json;
 /**
  * Parses a flat JsonTokenStream into a JsonSyntaxTree.
  * Implements a zero-allocation, iterative, fault-tolerant state machine.
+ * Supports both strict RFC 8259 mode and JSONC mode.
  */
 public class JsonParser {
 
     public static JsonSyntaxTree parse(JsonTokenStream stream, String source) {
+        return parse(stream, source, false);
+    }
+
+    public static JsonSyntaxTree parse(JsonTokenStream stream, String source, boolean isJsonc) {
         JsonSyntaxTree tree = new JsonSyntaxTree(stream.length / 4 + 10);
         int root = 0;
 
@@ -20,6 +25,7 @@ public class JsonParser {
         boolean lastWasComma = false;
         int lastCommaStart = -1;
         int lastCommaEnd = -1;
+        boolean rootValueFinished = false;
 
         while (p < stream.length) {
             byte type = stream.types[p];
@@ -33,7 +39,31 @@ public class JsonParser {
             int end = getTokenEnd(stream, start);
             p = Math.max(p + 1, end); // advance outer pointer with forward progress guarantee
 
+            // Single root value check: any token appearing after the first root value closed is an error
+            if (rootValueFinished && currentParent == root && depth == 0) {
+                tree.addNode(JsonSyntaxTree.N_ERROR, start, end, root, "Multiple root values are not permitted in JSON");
+                continue;
+            }
+
             if (type == JsonTokenStream.TK_ERROR) {
+                byte parentType = currentParent == root ? 0 : tree.nodeType[currentParent];
+                if (parentType == JsonSyntaxTree.N_OBJECT && isIdentStart(source.charAt(start))) {
+                    tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Property keys must be enclosed in double quotes");
+                    String keyName = source.substring(start, end).trim();
+                    int keyNode = tree.addNode(JsonSyntaxTree.N_KEY, start, -1, currentParent, keyName);
+
+                    if (depth >= parentStack.length) {
+                        int[] newStack = new int[parentStack.length * 2];
+                        System.arraycopy(parentStack, 0, newStack, 0, parentStack.length);
+                        parentStack = newStack;
+                    }
+                    parentStack[depth++] = currentParent;
+                    currentParent = keyNode;
+                    expectColon = true;
+                    lastWasComma = false;
+                    continue;
+                }
+
                 tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Unrecognized syntax");
                 if (currentParent != root && tree.nodeType[currentParent] == JsonSyntaxTree.N_KEY && !expectColon) {
                     tree.nodeEnd[currentParent] = end;
@@ -48,7 +78,7 @@ public class JsonParser {
 
             if (parentType == JsonSyntaxTree.N_OBJECT) {
                 if (type == JsonTokenStream.TK_BRACE_CLOSE) {
-                    if (lastWasComma) {
+                    if (lastWasComma && !isJsonc) {
                         tree.addNode(JsonSyntaxTree.N_ERROR, lastCommaStart >= 0 ? lastCommaStart : start, lastCommaEnd >= 0 ? lastCommaEnd : end, currentParent, "Trailing comma");
                     }
                     tree.nodeEnd[currentParent] = end;
@@ -60,6 +90,9 @@ public class JsonParser {
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];
                         else currentParent = root;
+                    }
+                    if (currentParent == root && depth == 0) {
+                        rootValueFinished = true;
                     }
                     lastWasComma = false;
                     continue;
@@ -153,7 +186,7 @@ public class JsonParser {
             } else { // Array or Root
                 if (type == JsonTokenStream.TK_BRACKET_CLOSE) {
                     if (parentType == JsonSyntaxTree.N_ARRAY) {
-                        if (lastWasComma) {
+                        if (lastWasComma && !isJsonc) {
                             tree.addNode(JsonSyntaxTree.N_ERROR, lastCommaStart >= 0 ? lastCommaStart : start, lastCommaEnd >= 0 ? lastCommaEnd : end, currentParent, "Trailing comma");
                         }
                         tree.nodeEnd[currentParent] = end;
@@ -165,6 +198,9 @@ public class JsonParser {
                             if (depth > 0) currentParent = parentStack[--depth];
                             else currentParent = root;
                         }
+                        if (currentParent == root && depth == 0) {
+                            rootValueFinished = true;
+                        }
                     } else {
                         tree.addNode(JsonSyntaxTree.N_ERROR, start, end, currentParent, "Stray ']'");
                     }
@@ -172,6 +208,8 @@ public class JsonParser {
                     continue;
                 } else if (type == JsonTokenStream.TK_COMMA) {
                     lastWasComma = true;
+                    lastCommaStart = start;
+                    lastCommaEnd = end;
                     continue;
                 }
 
@@ -182,6 +220,8 @@ public class JsonParser {
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];
                         else currentParent = root;
+                    } else if (currentParent == root && depth == 0) {
+                        rootValueFinished = true;
                     }
                 } else if (type == JsonTokenStream.TK_NUMBER) {
                     tree.addNode(JsonSyntaxTree.N_VALUE_NUMBER, start, end, currentParent, source.substring(start, end).trim());
@@ -189,6 +229,8 @@ public class JsonParser {
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];
                         else currentParent = root;
+                    } else if (currentParent == root && depth == 0) {
+                        rootValueFinished = true;
                     }
                 } else if (type == JsonTokenStream.TK_KEYWORD) {
                     String kw = source.substring(start, end).trim();
@@ -198,6 +240,8 @@ public class JsonParser {
                         tree.nodeEnd[currentParent] = end;
                         if (depth > 0) currentParent = parentStack[--depth];
                         else currentParent = root;
+                    } else if (currentParent == root && depth == 0) {
+                        rootValueFinished = true;
                     }
                 } else if (type == JsonTokenStream.TK_BRACE_OPEN) {
                     int obj = tree.addNode(JsonSyntaxTree.N_OBJECT, start, -1, currentParent, null);
@@ -242,8 +286,18 @@ public class JsonParser {
     }
 
     private static void checkMissingQuote(JsonSyntaxTree tree, int start, int end, int parent, String source) {
+        if (start >= end) return;
+        char first = source.charAt(start);
+        if (first == '\'') {
+            tree.addNode(JsonSyntaxTree.N_ERROR, start, end, parent, "Strings must use double quotes");
+            return;
+        }
         if (end - start == 1 || source.charAt(end - 1) != '"') {
             tree.addNode(JsonSyntaxTree.N_ERROR, start, end, parent, "Missing closing quote");
         }
+    }
+
+    private static boolean isIdentStart(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$';
     }
 }
