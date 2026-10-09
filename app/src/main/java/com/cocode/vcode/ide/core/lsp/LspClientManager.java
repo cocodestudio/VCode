@@ -2,6 +2,10 @@ package com.cocode.vcode.ide.core.lsp;
 
 import android.content.Context;
 
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentContentChangeEvent;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
+import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
@@ -266,11 +270,70 @@ public final class LspClientManager {
     }
 
     // -------------------------------------------------------------------------
+    // Document Synchronization Notifications (LSP 3.17)
+    // -------------------------------------------------------------------------
+
+    public void didOpen(TextDocumentItem item) {
+        if (item == null) return;
+        LspDocumentManager.getInstance().openDocument(item);
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            try {
+                LspServer server = getOrStartServer(item.languageId);
+                if (server != null && server.isReady()) {
+                    server.didOpen(item);
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    public void didChange(VersionedTextDocumentIdentifier docId, List<TextDocumentContentChangeEvent> changes, String languageId, String fullText) {
+        if (docId == null) return;
+        LspDocumentManager.getInstance().updateDocument(docId, changes, fullText);
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            try {
+                LspServer server = getOrStartServer(languageId);
+                if (server != null && server.isReady()) {
+                    server.didChange(docId, changes);
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    public void didSave(TextDocumentIdentifier docId, String languageId) {
+        if (docId == null) return;
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            try {
+                LspServer server = getOrStartServer(languageId);
+                if (server != null && server.isReady()) {
+                    server.didSave(docId);
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    public void didClose(TextDocumentIdentifier docId, String languageId) {
+        if (docId == null) return;
+        LspDocumentManager.getInstance().closeDocument(docId);
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            try {
+                LspServer server = getOrStartServer(languageId);
+                if (server != null && server.isReady()) {
+                    server.didClose(docId);
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
 
     /**
-     * Shuts down all active language servers and clears the {@link ProjectIndex}.
+     * Shuts down all active language servers and clears document caches and the {@link ProjectIndex}.
      * Should be called when the project is closed.
      */
     public void shutdownAll() {
@@ -282,6 +345,7 @@ public final class LspClientManager {
                 }
             }
             servers.clear();
+            LspDocumentManager.getInstance().clear();
             ProjectIndex.getInstance().clear();
         });
     }

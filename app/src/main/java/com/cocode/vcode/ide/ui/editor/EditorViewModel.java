@@ -22,7 +22,9 @@ import com.cocode.vcode.ide.git.model.FileStatus;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
+import com.cocode.vcode.ide.core.lsp.LspClientManager;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
 import com.cocode.vcode.ide.core.refactor.FileReferenceUpdater;
 import com.cocode.vcode.ide.data.watcher.ProjectFileWatcher;
 import com.cocode.vcode.ide.ui.editor.helper.EditorGitHelper;
@@ -1309,6 +1311,11 @@ public class EditorViewModel extends ViewModel {
                     // Update symbol index silently so catalog timestamp remains in sync with disk
                     ProjectSymbolIndex.getInstance().updateFileSilently(ef.getFile());
 
+                    if (ef.getFile() != null) {
+                        String lang = ef.getFileType() != null ? ef.getFileType().getLspLanguageId() : "plaintext";
+                        LspClientManager.getInstance().didSave(new TextDocumentIdentifier(ef.getFile().getAbsolutePath()), lang);
+                    }
+
                     if (onComplete != null) onComplete.run();
                 }
                 fileSaveResult.setValue(result);
@@ -1363,6 +1370,8 @@ public class EditorViewModel extends ViewModel {
                             if (ef.getFile() != null) {
                                 ef.setLastDiskModified(ef.getFile().lastModified());
                                 ef.setLastDiskSize(ef.getFile().length());
+                                String lang = ef.getFileType() != null ? ef.getFileType().getLspLanguageId() : "plaintext";
+                                LspClientManager.getInstance().didSave(new TextDocumentIdentifier(ef.getFile().getAbsolutePath()), lang);
                             }
                             anySaved = true;
                             // Write back to the original content:// source if applicable
@@ -1480,6 +1489,10 @@ public class EditorViewModel extends ViewModel {
                     try {
                         fileRepo.writeFileSync(ef.getFile(), ef.getContent());
                         ef.markSaved();
+                        if (ef.getFile() != null) {
+                            String lang = ef.getFileType() != null ? ef.getFileType().getLspLanguageId() : "plaintext";
+                            LspClientManager.getInstance().didSave(new TextDocumentIdentifier(ef.getFile().getAbsolutePath()), lang);
+                        }
                         anySaved = true;
                         // Write back to the original content:// source if applicable
                         if (ef.getSourceUriString() != null) {

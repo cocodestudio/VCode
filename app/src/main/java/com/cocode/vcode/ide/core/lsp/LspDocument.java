@@ -31,77 +31,64 @@ public final class LspDocument {
      */
     public final int version;
 
+    /**
+     * Precomputed line offset cache providing O(1) position ↔ flat offset lookups.
+     */
+    private final OffsetIndexCache indexCache;
+
     public LspDocument(String uri, String text, String languageId, int version) {
+        this(uri, text, languageId, version, null);
+    }
+
+    public LspDocument(String uri, String text, String languageId, int version, OffsetIndexCache cache) {
         this.uri = uri;
-        this.text = text;
-        this.languageId = languageId;
+        this.text = text != null ? text : "";
+        this.languageId = languageId != null ? languageId : "plaintext";
         this.version = version;
+        this.indexCache = (cache != null) ? cache : new OffsetIndexCache(this.text);
     }
 
     /**
-     * Returns the number of lines in the document.
+     * Returns the precomputed line offset cache for this document.
+     */
+    public OffsetIndexCache getOffsetIndexCache() {
+        return indexCache;
+    }
+
+    /**
+     * Returns the number of lines in the document in O(1).
      */
     public int lineCount() {
-        if (text == null || text.isEmpty()) return 1;
-        int count = 1;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') count++;
-        }
-        return count;
+        return indexCache.getLineCount();
     }
 
     /**
-     * Returns the text of a specific zero-based line, without the trailing newline.
+     * Returns the text of a specific zero-based line, without the trailing newline in O(1).
      * Returns an empty string if the line index is out of bounds.
      */
     public String getLine(int lineIndex) {
-        if (text == null || text.isEmpty()) return "";
-        int line = 0;
-        int start = 0;
-        for (int i = 0; i <= text.length(); i++) {
-            boolean atEnd = (i == text.length());
-            boolean atNewLine = !atEnd && text.charAt(i) == '\n';
-            if (atEnd || atNewLine) {
-                if (line == lineIndex) {
-                    return text.substring(start, i);
-                }
-                line++;
-                start = i + 1;
-            }
-        }
-        return "";
+        return indexCache.getLine(text, lineIndex);
     }
 
     /**
-     * Converts a zero-based (line, character) position to a flat character offset.
+     * Converts a zero-based (line, character) position to a flat character offset in O(1).
      * Returns -1 if the position is out of range.
      */
     public int toOffset(LspPosition pos) {
-        if (text == null) return -1;
-        int line = 0;
-        int i = 0;
-        while (i < text.length() && line < pos.line) {
-            if (text.charAt(i) == '\n') line++;
-            i++;
-        }
-        int offset = i + pos.character;
-        return offset <= text.length() ? offset : -1;
+        return indexCache.toOffset(pos);
+    }
+
+    /**
+     * Converts an {@link com.cocode.vcode.ide.core.lsp.model.LspPosition} to a flat character offset in O(1).
+     */
+    public int toOffset(com.cocode.vcode.ide.core.lsp.model.LspPosition pos) {
+        return indexCache.toOffset(pos);
     }
 
     /**
      * Converts a flat character offset to a zero-based (line, character) position.
      */
     public LspPosition toPosition(int offset) {
-        if (text == null || offset <= 0) return new LspPosition(0, 0);
-        int target = Math.min(offset, text.length());
-        int line = 0;
-        int lineStart = 0;
-        for (int i = 0; i < target; i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
-                lineStart = i + 1;
-            }
-        }
-        return new LspPosition(line, target - lineStart);
+        return indexCache.toPosition(offset);
     }
 }

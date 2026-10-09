@@ -25,8 +25,8 @@ import com.cocode.vcode.ide.views.CodeEditorLayout;
 public class CodeFileViewer implements IFileViewer {
 
     private final Handler jsonValidationHandler = new Handler(Looper.getMainLooper());
-    private final java.util.concurrent.atomic.AtomicLong diagnosticVersion = new java.util.concurrent.atomic.AtomicLong(0);
     private final LspEditorBridge lspBridge = new LspEditorBridge();
+    private final Runnable autoSaveValidationRunnable = this::performAutoSaveAndSnapshot;
     private FrameLayout viewContainer;
     private CodeEditorLayout editorLayout;
     private CodeEditText codeEditText;
@@ -397,130 +397,69 @@ public class CodeFileViewer implements IFileViewer {
             return;
         }
 
-        jsonValidationHandler.removeCallbacksAndMessages(null);
+        jsonValidationHandler.removeCallbacks(autoSaveValidationRunnable);
+        jsonValidationHandler.postDelayed(autoSaveValidationRunnable, 300L);
+    }
 
+    private void performAutoSaveAndSnapshot() {
         final EditorFile capturedFile = currentFile;
-        final IEditorCallback capturedCallback = editorCallback;
-
-        // Use a self-referencing Runnable array so it can re-post itself when the
-        // async setText() hasn't finished applying content yet.
-        final Runnable[] runnableHolder = new Runnable[1];
-        runnableHolder[0] = () -> {
-            if (capturedFile == null || capturedFile.getFile() == null) {
-                if (codeEditText != null)
-                    codeEditText.applyDiagnostics(new java.util.ArrayList<>());
-                return;
-            }
-
-            // If the editor is currently loading text asynchronously (e.g. from a tab switch),
-            // do not snapshot the text! The buffer currently holds the OLD file's text.
-            //
-            // Do NOT just re-poll on a timer here: a blind postDelayed() re-check can fire
-            // AFTER some unrelated, still-in-flight load (e.g. from a rapid A -> B -> A tab
-            // switch) flips isSettingText() back to false, at which point the buffer holds
-            // a DIFFERENT file's text — snapshotting then would corrupt capturedFile with
-            // the wrong file's content. Instead, bail out entirely and re-arm via a one-shot
-            // text-load listener gated on capturedFile, so this only ever re-fires once
-            // loading has genuinely finished for the bind that's actually current.
-            if (codeEditText != null && (codeEditText.isSettingText() || isPositionRestoring)) {
-                final CodeEditText ed = codeEditText;
-                ed.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
-                    @Override
-                    public void onTextLoadStateChanged(boolean isLoading) {
-                        if (!isLoading) {
-                            ed.removeTextLoadListener(this);
-                            if (currentFile == capturedFile) {
-                                validateCodeIfRequired();
-                            }
-                        }
-                    }
-                });
-                return;
-            }
-
-            // Capture UI state on main thread ONLY AFTER text is fully loaded and positions restored.
-            final String textSnapshot = codeEditText != null ? codeEditText.getTextAsString() : "";
-            final int cursor = (codeEditText != null && !isPositionRestoring) ? codeEditText.getSelectionStart() : capturedFile.getCursorPosition();
-            final int scrollY = (codeEditText != null && !isPositionRestoring) ? codeEditText.getScrollY() : capturedFile.getScrollY();
-
-            // 1. Update EditorFile with latest state synchronously on the Main Thread.
-            //    This ensures that the model always gets the most recent keystrokes in order.
-            capturedFile.setContent(textSnapshot);
-            capturedFile.setCursorPosition(cursor);
-            capturedFile.setScrollY(scrollY);
-
-            // Notify language parse pipelines with the debounced snapshot (avoids per-keystroke allocations)
-            if (capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT ||
-                    capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.TYPESCRIPT) {
-                com.cocode.vcode.ide.core.language.js.JsParsePipeline.getInstance().onTextChanged(
-                        capturedFile.getFile(), textSnapshot, cursor);
-            } else if (capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.HTML) {
-                com.cocode.vcode.ide.core.language.html.HtmlParsePipeline.getInstance().onTextChanged(
-                        capturedFile.getFile(), textSnapshot, cursor);
-            }
-
-            // 2. Show "Analyzing..." ONLY when the legacy linter is about to run.
-            //    When LSP is active, the bridge fires its own 300ms-debounced diagnostic
-            //    and calls reportProblems() when done — so it manages loading state itself.
-            //    Calling setDiagnosticLoading() here when LSP is active causes a critical
-            //    race: the LSP already completed and cleared the UI at T+300ms, and this
-            //    re-sets it at T+800ms with NOTHING left to clear it → infinite hang.
-            if (!lspBridge.isLspActive()) {
-                viewModel.setDiagnosticLoading(capturedFile.getFile());
-            }
-
-            // 3. Auto-save: dispatch disk write to IO thread (non-blocking for diagnostics).
-            if (settings.autoSave && !textSnapshot.isEmpty()) {
-                viewModel.triggerAutoSave();
-            }
-
-            // 4. Run legacy linter only when LSP is NOT active for this file type.
-            //    Uses the DIAGNOSTIC executor (not IO), so it never blocks behind auto-saves
-            //    or project-indexing tasks. LSP diagnostics are handled independently by
-            //    LspEditorBridge via LspClientManager.requestDiagnostics().
-            if (!lspBridge.isLspActive()) {
-                final long taskVersion = diagnosticVersion.incrementAndGet();
-                ExecutorProvider.getInstance().runOnDiagnostic(() -> {
-                    if (taskVersion != diagnosticVersion.get()) {
-                        return;
-                    }
-                    java.util.List<Problem> problems = null;
-                    try {
-                        problems = com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine.analyze(
-                                capturedFile.getFile(), textSnapshot, capturedFile.getFileType(), com.cocode.vcode.ide.core.lsp.ProjectIndex.getInstance());
-                    } catch (Throwable t) {
-                        problems = new java.util.ArrayList<>();
-                    }
-                    final java.util.List<Problem> finalProblems = (problems != null) ? problems : new java.util.ArrayList<>();
-                    ExecutorProvider.getInstance().runOnMain(() -> {
-                        if (taskVersion != diagnosticVersion.get()) {
-                            return;
-                        }
-                        if (capturedCallback != null) {
-                            capturedCallback.reportProblems(capturedFile.getFile(), finalProblems);
-                        }
-                        if (editorLayout == null || editorLayout.getParent() == null
-                                || ((View) editorLayout.getParent()).getVisibility() != View.VISIBLE) {
-                            return;
-                        }
-                        if (codeEditText != null) {
-                            codeEditText.applyDiagnostics(finalProblems);
-                        }
-                    });
-                });
-            }
-            // When LSP IS active: LspEditorBridge.contentListener has already scheduled
-            // its own 300ms-debounced performDiagnostics() call — nothing more needed here.
-        };
-
-        // Adaptive debounce delay: large files need more time to avoid competing with typing.
-        int contentLen = codeEditText != null ? codeEditText.length() : 0;
-        long diagDelay;
-        if (lspBridge.isLspActive()) {
-            diagDelay = 300L;
-        } else {
-            diagDelay = contentLen > 20000 ? 1500L : 800L;
+        if (capturedFile == null || capturedFile.getFile() == null) {
+            if (codeEditText != null)
+                codeEditText.applyDiagnostics(new java.util.ArrayList<>());
+            return;
         }
-        jsonValidationHandler.postDelayed(runnableHolder[0], diagDelay);
+
+        // If the editor is currently loading text asynchronously (e.g. from a tab switch),
+        // do not snapshot the text! The buffer currently holds the OLD file's text.
+        //
+        // Do NOT just re-poll on a timer here: a blind postDelayed() re-check can fire
+        // AFTER some unrelated, still-in-flight load (e.g. from a rapid A -> B -> A tab
+        // switch) flips isSettingText() back to false, at which point the buffer holds
+        // a DIFFERENT file's text — snapshotting then would corrupt capturedFile with
+        // the wrong file's content. Instead, bail out entirely and re-arm via a one-shot
+        // text-load listener gated on capturedFile, so this only ever re-fires once
+        // loading has genuinely finished for the bind that's actually current.
+        if (codeEditText != null && (codeEditText.isSettingText() || isPositionRestoring)) {
+            final CodeEditText ed = codeEditText;
+            ed.addTextLoadListener(new CodeEditText.OnTextLoadListener() {
+                @Override
+                public void onTextLoadStateChanged(boolean isLoading) {
+                    if (!isLoading) {
+                        ed.removeTextLoadListener(this);
+                        if (currentFile == capturedFile) {
+                            validateCodeIfRequired();
+                        }
+                    }
+                }
+            });
+            return;
+        }
+
+        // Capture UI state on main thread ONLY AFTER text is fully loaded and positions restored.
+        final String textSnapshot = codeEditText != null ? codeEditText.getTextAsString() : "";
+        final int cursor = (codeEditText != null && !isPositionRestoring) ? codeEditText.getSelectionStart() : capturedFile.getCursorPosition();
+        final int scrollY = (codeEditText != null && !isPositionRestoring) ? codeEditText.getScrollY() : capturedFile.getScrollY();
+
+        // 1. Update EditorFile with latest state synchronously on the Main Thread.
+        //    This ensures that the model always gets the most recent keystrokes in order.
+        capturedFile.setContent(textSnapshot);
+        capturedFile.setCursorPosition(cursor);
+        capturedFile.setScrollY(scrollY);
+
+        // Notify language parse pipelines with the debounced snapshot (avoids per-keystroke allocations)
+        if (capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.JAVASCRIPT ||
+                capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.TYPESCRIPT) {
+            com.cocode.vcode.ide.core.language.js.JsParsePipeline.getInstance().onTextChanged(
+                    capturedFile.getFile(), textSnapshot, cursor);
+        } else if (capturedFile.getFileType() == com.cocode.vcode.ide.core.model.FileType.HTML) {
+            com.cocode.vcode.ide.core.language.html.HtmlParsePipeline.getInstance().onTextChanged(
+                    capturedFile.getFile(), textSnapshot, cursor);
+        }
+
+        // 2. Auto-save: dispatch disk write to IO thread (non-blocking for diagnostics).
+        AppSettings settings = viewModel != null ? viewModel.getSettingsLiveData().getValue() : null;
+        if (settings != null && settings.autoSave && !textSnapshot.isEmpty()) {
+            viewModel.triggerAutoSave();
+        }
     }
 }

@@ -2534,6 +2534,14 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         return content.flatOffset(ContentPosition.max(cursor, selectionAnchor));
     }
 
+    public int getCursorLine() {
+        return cursor.line;
+    }
+
+    public int getCursorColumn() {
+        return cursor.column;
+    }
+
     /**
      * Called by {@link com.cocode.vcode.ide.core.lsp.LspEditorBridge} to suppress the
      * legacy autocomplete engine when an LSP server is available for the current language.

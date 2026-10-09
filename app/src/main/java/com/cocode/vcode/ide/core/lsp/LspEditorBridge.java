@@ -4,6 +4,10 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentContentChangeEvent;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
+import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
+import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -75,6 +79,9 @@ public final class LspEditorBridge {
     private final Runnable updateProjectIndexRunnable = this::updateProjectIndex;
     private static final long PROJECT_INDEX_DEBOUNCE_MS = 300L;
     private static final long SILENT_INDEX_DEBOUNCE_MS = 600L;
+    private static final long CHANGE_SYNC_DEBOUNCE_MS = 200L;
+    private int lastSyncedVersion = -1;
+    private final Runnable changeSyncRunnable = this::performChangeSync;
     private final Runnable silentIndexRunnable = () -> {
         if (currentFile != null) {
             com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().updateFileSilently(currentFile);
@@ -110,6 +117,7 @@ public final class LspEditorBridge {
         if (isLoading || !contentSyncPending) return;
         contentSyncPending = false;
         if (!attached || editor == null) return;
+        streamDidOpen();
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.post(diagnosticRunnable);
     };
@@ -489,15 +497,19 @@ public final class LspEditorBridge {
         lastActionWasTextChange = true;
         docVersion.incrementAndGet();
 
-        // Cancel active background tasks immediately to prevent CPU churn
+        // Cancel active background tasks immediately to prevent CPU churn without allocating new objects
         if (activeDiagnosticToken != null) {
             activeDiagnosticToken.cancel();
+            activeDiagnosticToken = null;
         }
         if (activeCompletionToken != null) {
             activeCompletionToken.cancel();
+            activeCompletionToken = null;
         }
-        activeDiagnosticToken = new CancellationToken();
-        activeCompletionToken = new CancellationToken();
+
+        // Reschedule debounced LSP document change sync
+        mainHandler.removeCallbacks(changeSyncRunnable);
+        mainHandler.postDelayed(changeSyncRunnable, CHANGE_SYNC_DEBOUNCE_MS);
 
         // Reschedule debounced diagnostics
         mainHandler.removeCallbacks(diagnosticRunnable);
@@ -595,6 +607,8 @@ public final class LspEditorBridge {
             updateProjectIndex();
             if (!previousFile.equals(file)) {
                 String prevPath = previousFile.getAbsolutePath();
+                String prevLang = (fileType != null) ? fileType.getLspLanguageId() : "plaintext";
+                LspClientManager.getInstance().didClose(new TextDocumentIdentifier(prevPath), prevLang);
                 com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().invalidateFile(prevPath);
                 ProjectIndex.getInstance().reindexFile(previousFile);
                 com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex.getInstance().updateFileFromIndex(previousFile);
@@ -652,6 +666,7 @@ public final class LspEditorBridge {
             mainHandler.postDelayed(() -> {
                 if (contentSyncPending && attached && editor != null && !editor.isSettingText()) {
                     contentSyncPending = false;
+                    streamDidOpen();
                     mainHandler.post(diagnosticRunnable);
                 }
             }, 800L);
@@ -661,6 +676,7 @@ public final class LspEditorBridge {
     public void clearContentSyncPending() {
         if (!attached || !contentSyncPending) return;
         contentSyncPending = false;
+        streamDidOpen();
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.post(diagnosticRunnable);
     }
@@ -811,6 +827,7 @@ public final class LspEditorBridge {
             activeCompletionToken.cancel();
             activeCompletionToken = null;
         }
+        mainHandler.removeCallbacks(changeSyncRunnable);
         mainHandler.removeCallbacks(diagnosticRunnable);
         mainHandler.removeCallbacks(completionRunnable);
         mainHandler.removeCallbacks(signatureHelpRunnable);
@@ -830,10 +847,53 @@ public final class LspEditorBridge {
      * Completely resets the bridge state. Call this when the project is closed.
      */
     public void reset() {
+        if (currentFile != null) {
+            String uri = currentFile.getAbsolutePath();
+            String lang = (fileType != null) ? fileType.getLspLanguageId() : "plaintext";
+            LspClientManager.getInstance().didClose(new TextDocumentIdentifier(uri), lang);
+        }
         detach();
         currentFile = null;
         // Do NOT reset hasIndexedProject here — it is session-level state shared
         // across all tabs. Only resetProjectSession() should reset it.
+    }
+
+    /**
+     * Notifies LSP language servers and document manager that the active file was saved to disk.
+     */
+    public void notifyFileSaved(File savedFile) {
+        if (savedFile == null) return;
+        String lang = (fileType != null) ? fileType.getLspLanguageId() : "plaintext";
+        TextDocumentIdentifier docId = new TextDocumentIdentifier(savedFile.getAbsolutePath());
+        LspClientManager.getInstance().didSave(docId, lang);
+    }
+
+    private void performChangeSync() {
+        if (!attached || editor == null || currentFile == null) return;
+        if (contentSyncPending && editor.isSettingText()) return;
+        LspDocument doc = buildSnapshot();
+        if (doc == null) return;
+
+        final int currentVer = doc.version;
+        if (currentVer <= lastSyncedVersion) {
+            return;
+        }
+        lastSyncedVersion = currentVer;
+
+        VersionedTextDocumentIdentifier docId = new VersionedTextDocumentIdentifier(doc.uri, currentVer);
+        List<TextDocumentContentChangeEvent> changes = Collections.singletonList(
+                new TextDocumentContentChangeEvent(doc.text)
+        );
+        LspClientManager.getInstance().didChange(docId, changes, doc.languageId, doc.text);
+    }
+
+    private void streamDidOpen() {
+        if (!attached || editor == null || currentFile == null) return;
+        LspDocument doc = buildSnapshot();
+        if (doc == null) return;
+        lastSyncedVersion = doc.version;
+        TextDocumentItem item = new TextDocumentItem(doc.uri, doc.languageId, doc.version, doc.text);
+        LspClientManager.getInstance().didOpen(item);
     }
 
     // -------------------------------------------------------------------------
@@ -868,7 +928,13 @@ public final class LspEditorBridge {
             return;
         }
 
+        // Ensure language server has received latest didChange before diagnosing
+        if (doc.version > lastSyncedVersion) {
+            performChangeSync();
+        }
+
         final int capturedVersion = doc.version;
+        activeDiagnosticToken = new CancellationToken();
         final CancellationToken token = activeDiagnosticToken;
 
         if (editorCallback != null && currentFile != null) {
@@ -953,6 +1019,7 @@ public final class LspEditorBridge {
 
         LspPosition pos = cursorPosition();
         final int capturedVersion = docVersion.get();
+        activeCompletionToken = new CancellationToken();
         final CancellationToken token = activeCompletionToken;
 
         LspClientManager.getInstance().requestCompletion(doc, pos, token, new LspCallback<List<LspCompletionItem>>() {
@@ -1056,14 +1123,9 @@ public final class LspEditorBridge {
      * Falls back to (0, 0) if the position cannot be determined.
      */
     private LspPosition cursorPosition() {
-        // CodeEditText exposes the cursor via its content model.
-        // We read the full text and compute line/char from the flat offset.
         if (editor == null) return new LspPosition(0, 0);
         try {
-            // getText() returns the full content; find newlines to determine line/char
-            CharSequence text = editor.getText();
-            if (text == null) return new LspPosition(0, 0);
-            return SymbolExtractor.offsetToPosition(text.toString(), getCursorFlatOffset());
+            return new LspPosition(editor.getCursorLine(), editor.getCursorColumn());
         } catch (Exception e) {
             return new LspPosition(0, 0);
         }
@@ -1092,6 +1154,7 @@ public final class LspEditorBridge {
     private void updateProjectIndex() {
         LspDocument doc = buildSnapshot();
         if (doc != null) {
+            LspDocumentManager.getInstance().updateDocument(doc.uri, doc.text, doc.version);
             ProjectIndex.getInstance().updateDocument(doc);
         }
     }
