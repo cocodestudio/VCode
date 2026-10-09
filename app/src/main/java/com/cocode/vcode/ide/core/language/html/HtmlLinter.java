@@ -25,6 +25,11 @@ public class HtmlLinter {
             "div", "span", "p", "section", "ul", "ol", "button"
     ));
 
+    // HTML5 specification permits omitting closing tags for these elements
+    private static final Set<String> OPTIONAL_CLOSING_TAGS = new HashSet<>(Arrays.asList(
+            "p", "li", "tr", "td", "th", "dt", "dd", "option", "optgroup", "rt", "rp"
+    ));
+
     public static List<Problem> analyze(File file, String text) {
         if (text == null || text.trim().isEmpty()) return new ArrayList<>();
         HtmlTokenStream stream = HtmlLexer.tokenize(text);
@@ -65,6 +70,9 @@ public class HtmlLinter {
                 String msg;
                 ProblemCode pCode;
                 if ("Unclosed".equals(tree.nodeValue[i])) {
+                    if (errorName != null && OPTIONAL_CLOSING_TAGS.contains(errorName.toLowerCase())) {
+                        continue;
+                    }
                     msg = "Unclosed tag '<" + (errorName != null ? errorName : "") + ">'";
                     pCode = ProblemCode.HTML_UNCLOSED_TAG;
                 } else if (errorName != null && KnownElements.VOID_ELEMENTS.contains(errorName.toLowerCase())) {

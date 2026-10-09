@@ -52,6 +52,8 @@ public final class LspServerRegistry {
                 .setReferencesProvider(true)
                 .setFormattingProvider(true)
                 .setHoverProvider(true)
+                .setCodeActionProvider(true)
+                .setDocumentSymbolProvider(true)
                 .build());
 
         // CSS & SCSS
