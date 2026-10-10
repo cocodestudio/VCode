@@ -31,7 +31,7 @@ public class HtmlLinterTest {
 
     @Test
     public void testUnclosedTag() {
-        String html = "<div><p>text</div>";
+        String html = "<div><span>text</div>";
         List<Problem> problems = HtmlLinter.analyze(mockFile, html);
         
         boolean found = false;

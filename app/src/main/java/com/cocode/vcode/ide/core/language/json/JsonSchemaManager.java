@@ -44,7 +44,7 @@ public final class JsonSchemaManager {
 
         public String toMarkdown() {
             StringBuilder sb = new StringBuilder();
-            sb.append("**").append(name).append("**\n\n");
+            sb.append("### `").append(name).append("`\n\n");
             if (type != null && !type.isEmpty()) {
                 sb.append("_Type:_ `").append(type).append("`\n\n");
             }

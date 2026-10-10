@@ -17,8 +17,8 @@ import androidx.core.content.ContextCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.Problem;
-import com.cocode.vcode.ide.core.quickfix.QuickFix;
-import com.cocode.vcode.ide.core.quickfix.QuickFixRegistry;
+import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
+import com.cocode.vcode.ide.core.lsp.model.CodeAction;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
@@ -249,7 +249,7 @@ public class QuickSymbolBar extends LinearLayout {
         List<Problem> problems = editor.getProblemsAtCursor();
         boolean hasFix = false;
         for (Problem p : problems) {
-            if (QuickFixRegistry.hasFixes(p)) {
+            if (LspEditorBridge.hasCodeActionsForProblem(p, editor)) {
                 hasFix = true;
                 break;
             }
@@ -286,13 +286,15 @@ public class QuickSymbolBar extends LinearLayout {
         int totalFixes = 0;
 
         for (Problem p : problems) {
-            List<QuickFix> candidateFixes = QuickFixRegistry.getFixesForProblem(p, editor);
+            List<CodeAction> candidateFixes = LspEditorBridge.getCodeActionsForProblem(p, editor);
             if (candidateFixes != null) {
-                for (QuickFix fix : candidateFixes) {
+                for (CodeAction fix : candidateFixes) {
                     totalFixes++;
                     final Problem finalProb = p;
-                    popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {
-                        fix.apply(editor, finalProb);
+                    popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.title, () -> {
+                        if (fix.edit != null) {
+                            editor.applyWorkspaceEdit(fix.edit);
+                        }
                         editor.removeProblem(finalProb);
                         checkQuickFixAvailable();
                     });

@@ -360,6 +360,13 @@ public final class LspClientManager {
         return server != null && server.isReady();
     }
 
+    /**
+     * Returns the active LspServer for the given language id, initialising it if needed.
+     */
+    public LspServer getServer(String languageId) {
+        return getOrStartServer(languageId);
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------

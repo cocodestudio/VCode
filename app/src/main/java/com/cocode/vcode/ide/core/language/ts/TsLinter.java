@@ -223,9 +223,20 @@ public class TsLinter {
         }
     }
 
-    // Enum declaration check (valid in TypeScript)
+    private static final java.util.regex.Pattern PAT_ENUM = java.util.regex.Pattern.compile("\\benum\\s+([A-Za-z_$][A-Za-z0-9_$]*)");
+
+    // Enum declaration check
     private static void checkEnum(File file, String text, JsSyntaxTree tree, List<Problem> out) {
-        // Enums are natively supported in TypeScript without syntax error
+        if (text == null) return;
+        java.util.regex.Matcher m = PAT_ENUM.matcher(text);
+        while (m.find()) {
+            int nameStart = m.start(1);
+            int line = LinterUtils.getLine(text, nameStart);
+            int col = LinterUtils.getColumn(text, nameStart);
+            out.add(new Problem(file, line, col, m.group(1).length(),
+                    "Enums add runtime overhead: consider 'const' object with 'as const' for better tree-shaking",
+                    Problem.Severity.INFO));
+        }
     }
 
     // Redundant type annotation matching inferred literal
@@ -477,14 +488,18 @@ public class TsLinter {
                         int next = skipWsAndComments(stream, skipToken(stream, t));
                         if (next < stream.length && stream.types[next] == TokenStream.TK_IDENTIFIER) {
                             String targetName = getWord(text, stream, next);
+                            int start = stream.tokenStart[next];
+                            int line = LinterUtils.getLine(text, start);
+                            int col = LinterUtils.getColumn(text, start);
                             if ("any".equals(targetName)) {
-                                int start = next;
-                                int line = LinterUtils.getLine(text, start);
-                                int col = LinterUtils.getColumn(text, start);
                                 out.add(new Problem(file, line, col, targetName.length(),
                                         "Type assertion 'as any': weakens type safety — use 'unknown' or a specific type",
                                         Problem.Severity.WARNING,
                                         ProblemCode.TS_EXPLICIT_ANY));
+                            } else if (!targetName.isEmpty() && Character.isUpperCase(targetName.charAt(0))) {
+                                out.add(new Problem(file, line, col, targetName.length(),
+                                        "Type assertion 'as " + targetName + "': make sure the cast is safe",
+                                        Problem.Severity.INFO));
                             }
                         }
                     }

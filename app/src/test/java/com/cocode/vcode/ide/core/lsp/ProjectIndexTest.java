@@ -108,23 +108,24 @@ public class ProjectIndexTest {
         }
         assertTrue("Initial indexing should complete", latch1.getCount() == 0);
 
-        // Verify .vcode/cache/symbols.idx exists
+        // Verify legacy symbols.idx is not created
         File cacheFile = new File(srcDir, ".vcode/cache/symbols.idx");
-        assertTrue("symbols.idx must be written to disk", cacheFile.exists());
+        assertFalse("legacy symbols.idx should not be created", cacheFile.exists());
 
         // Clear in-memory indices to simulate fresh session / cold restart
         ProjectIndex.getInstance().clear();
         assertTrue("All URIs should be empty after clear", ProjectIndex.getInstance().getAllUris().isEmpty());
 
         // Inject a stray .tmp file into .vcode/cache/
-        File cacheDir = cacheFile.getParentFile();
+        File cacheDir = new File(srcDir, ".vcode/cache");
+        cacheDir.mkdirs();
         File strayTmp = new File(cacheDir, "symbols.idx.9999.tmp");
         try (FileWriter writer = new FileWriter(strayTmp)) {
             writer.write("abandoned tmp data");
         }
         assertTrue("Stray tmp file should exist before re-indexing", strayTmp.exists());
 
-        // Re-index project (cold restart loading from symbols.idx)
+        // Re-index project
         CountDownLatch latch2 = new CountDownLatch(1);
         ProjectIndex.getInstance().indexProject(srcDir, latch2::countDown);
 
@@ -135,18 +136,18 @@ public class ProjectIndexTest {
         }
         assertTrue("Re-indexing should complete", latch2.getCount() == 0);
 
-        // Verify that getAllUris() returns the cached files!
+        // Verify that getAllUris() returns the indexed files!
         List<String> uris = ProjectIndex.getInstance().getAllUris();
-        assertFalse("getAllUris() must not be empty when symbols.idx is loaded", uris.isEmpty());
+        assertFalse("getAllUris() must not be empty after re-indexing", uris.isEmpty());
 
-        // Verify symbols are served from cache
+        // Verify symbols are available
         List<SymbolEntry> cssSymbols = ProjectIndex.getInstance().getFileSymbols(cssFile.getAbsolutePath());
-        assertFalse("Cached CSS symbols must be available", cssSymbols.isEmpty());
+        assertFalse("CSS symbols must be available", cssSymbols.isEmpty());
         assertEquals(".app-banner", cssSymbols.get(0).name);
 
-        // Verify lazy document loading on demand
+        // Verify document loading on demand
         LspDocument doc = ProjectIndex.getInstance().getDocument(cssFile.getAbsolutePath());
-        assertNotNull("getDocument should lazily load cached file on demand", doc);
+        assertNotNull("getDocument should return document", doc);
         assertTrue(doc.text.contains(".app-banner"));
 
         // Verify stray tmp file was purged

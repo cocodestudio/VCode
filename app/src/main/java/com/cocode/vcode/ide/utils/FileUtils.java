@@ -646,6 +646,20 @@ public class FileUtils {
         }
     }
 
+    public static File uriToFile(String uri) {
+        if (uri == null || uri.trim().isEmpty()) return null;
+        String path = uri.trim();
+        if (path.startsWith("file:///")) {
+            path = path.substring(7);
+            if (path.length() > 2 && path.charAt(0) == '/' && Character.isLetter(path.charAt(1)) && path.charAt(2) == ':') {
+                path = path.substring(1);
+            }
+        } else if (path.startsWith("file://")) {
+            path = path.substring(7);
+        }
+        return new File(path);
+    }
+
     public interface ProgressListener {
         void onProgress(File file, long bytesRead);
     }

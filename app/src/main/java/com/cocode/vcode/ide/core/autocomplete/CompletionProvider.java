@@ -6,7 +6,6 @@ import java.util.List;
 
 /**
  * Service Provider Interface (SPI) for contributing code completions to the editor.
- * Multiple providers can be registered concurrently with {@link CompositeCompletionEngine}.
  */
 public interface CompletionProvider {
 

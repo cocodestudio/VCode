@@ -38,6 +38,8 @@ import com.cocode.vcode.ide.ui.settings.SettingsActivity;
 import com.cocode.vcode.ide.ui.sheets.editor.KeyboardShortcutsBottomSheet;
 
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
+import com.cocode.vcode.ide.core.lsp.model.CodeAction;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -1317,10 +1319,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     jumpToPosition(problem.getFile(), problem.getLine(), problem.getColumn());
                     CodeEditText editor = getActiveCodeEditor();
                     if (editor != null) {
-                        List<com.cocode.vcode.ide.core.quickfix.QuickFix> fixes =
-                                com.cocode.vcode.ide.core.quickfix.QuickFixRegistry.getFixesForProblem(problem, editor);
+                        List<CodeAction> fixes = LspEditorBridge.getCodeActionsForProblem(problem, editor);
                         if (fixes.size() == 1) {
-                            fixes.get(0).apply(editor, problem);
+                            CodeAction action = fixes.get(0);
+                            if (action.edit != null) {
+                                editor.applyWorkspaceEdit(action.edit);
+                            }
                             editor.removeProblem(problem);
                             if (viewModel != null) {
                                 viewModel.removeProblem(problem);
@@ -1333,9 +1337,11 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             popup.setCardBackgroundColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_bg_surface));
                             popup.setTextColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_text_primary));
                             for (int i = 0; i < fixes.size(); i++) {
-                                final com.cocode.vcode.ide.core.quickfix.QuickFix fix = fixes.get(i);
-                                popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.getTitle(), () -> {
-                                    fix.apply(editor, problem);
+                                final CodeAction fix = fixes.get(i);
+                                popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.title, () -> {
+                                    if (fix.edit != null) {
+                                        editor.applyWorkspaceEdit(fix.edit);
+                                    }
                                     editor.removeProblem(problem);
                                     if (viewModel != null) {
                                         viewModel.removeProblem(problem);

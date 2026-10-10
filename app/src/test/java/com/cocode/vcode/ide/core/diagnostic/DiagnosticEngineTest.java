@@ -18,13 +18,13 @@ public class DiagnosticEngineTest {
 
     @Test
     public void testAnalyzeHtml() {
-        String html = "<div><p>text</div>";
+        String html = "<div><span>text</div>";
         List<Problem> problems = DiagnosticEngine.analyze(mockFile, html, FileType.HTML);
         
         assertFalse("Should find HTML problems", problems.isEmpty());
         boolean foundHtmlProblem = false;
         for (Problem p : problems) {
-            if (p.getMessage().contains("Unclosed tag '<p>'")) {
+            if (p.getMessage().contains("Unclosed tag '<span>'")) {
                 foundHtmlProblem = true;
             }
         }

@@ -29,7 +29,9 @@ import androidx.core.view.GestureDetectorCompat;
 
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
-import com.cocode.vcode.ide.core.autocomplete.CompositeCompletionEngine;
+import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
+import com.cocode.vcode.ide.core.lsp.model.TextEdit;
+import com.cocode.vcode.ide.core.lsp.model.WorkspaceEdit;
 import com.cocode.vcode.ide.core.keybinding.KeyCommand;
 import com.cocode.vcode.ide.core.keybinding.KeybindingManager;
 import com.cocode.vcode.ide.ui.editor.helper.EditorCommentHelper;
@@ -62,6 +64,7 @@ import com.cocode.vcode.ide.utils.FontManager;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -84,12 +87,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
      * Returns the trigger characters for the currently active language/engine.
      */
     public String getTriggerCharacters() {
-        if (autoCompleteEngine != null) {
-            String triggers = autoCompleteEngine.getTriggerCharacters();
-            if (triggers != null && !triggers.isEmpty()) {
-                return triggers;
-            }
-        }
         return AutoCompleteEngine.getTriggerCharacters(fileType);
     }
     // Selection handle drag states
@@ -181,7 +178,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     private FileType fileType = FileType.TEXT;
     private File currentFile;
     private SyntaxHighlighter syntaxHighlighter;
-    private CompositeCompletionEngine autoCompleteEngine;
+    private LspEditorBridge lspBridge;
     // State flags
     private boolean isAutoClosing = false;
     private boolean isApplyingHighlight = false;
@@ -202,7 +199,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     private boolean rainbowBrackets = true;
     private boolean bracketHighlighting = true;
     private IndentationEngine indentEngine;
-    private boolean lspCompletionActive = false;
     private int defaultTextColor;
     private int[] rainbowColors;
     private int[] colorBuffer = new int[1024];
@@ -381,7 +377,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         handleRadiusPx = dpToPx(5);
         handleThresholdPx = dpToPx(20);
         setTabSize(new AppSettings().tabSize);
-        autoCompleteEngine = new CompositeCompletionEngine(context);
         textDecorationManager.addListener(this::postInvalidate);
 
         setFocusable(true);
@@ -2542,17 +2537,12 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
         return cursor.column;
     }
 
-    /**
-     * Called by {@link com.cocode.vcode.ide.core.lsp.LspEditorBridge} to suppress the
-     * legacy autocomplete engine when an LSP server is available for the current language.
-     * When {@code suppress} is true, {@link #triggerAutoComplete()} becomes a no-op and
-     * all completions are delivered via {@link #showLspCompletions(java.util.List)}.
-     */
-    public void suppressLegacyAutoComplete(boolean suppress) {
-        this.lspCompletionActive = suppress;
-        if (!suppress && autoCompletePopup != null) {
-            autoCompletePopup.dismiss();
-        }
+    public void setLspBridge(LspEditorBridge bridge) {
+        this.lspBridge = bridge;
+    }
+
+    public LspEditorBridge getLspBridge() {
+        return lspBridge;
     }
 
     public void setLspNavigationToolbar(LspNavigationToolbar toolbar) {
@@ -3699,13 +3689,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
     public void setFileType(FileType fileType) {
         this.fileType = fileType;
-        if (autoCompleteEngine == null) {
-            autoCompleteEngine = new CompositeCompletionEngine(getContext());
-        }
-        autoCompleteEngine.setFileType(fileType);
-        if (currentFile != null) {
-            autoCompleteEngine.setCurrentFile(currentFile);
-        }
 
         if (fileType != null) {
             Context ctx = getContext();
@@ -3742,13 +3725,6 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             this.syntaxHighlighter = null;
         }
         scheduleHighlight();
-    }
-
-    public CompositeCompletionEngine getAutoCompleteEngine() {
-        if (autoCompleteEngine == null) {
-            autoCompleteEngine = new CompositeCompletionEngine(getContext());
-        }
-        return autoCompleteEngine;
     }
 
     // Public API — diagnostics
@@ -4158,94 +4134,16 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     }
 
     public void triggerAutoComplete(boolean force) {
-        if (autoCompleteEngine == null || lspCompletionActive) return;
-        if (force) {
-            int totalLen = content.totalLength();
-            int flatCursor = content.flatOffset(cursor);
-            if (flatCursor < 0 || flatCursor > totalLen) return;
-            String fullText = getCachedFullText();
-            final int capturedCursor = flatCursor;
-            final String capturedText = fullText;
-            ExecutorProvider.getInstance().runOnCpu(() -> {
-                try {
-                    List<CompletionItem> items = autoCompleteEngine.getSuggestions(capturedText, capturedCursor);
-                    mainHandler.post(() -> {
-                        if (content.flatOffset(cursor) != capturedCursor) return;
-                        if (items != null && !items.isEmpty()) {
-                            showAutoComplete(items, capturedCursor);
-                        } else {
-                            dismissAutoCompletePopup();
-                        }
-                    });
-                } catch (Exception ignored) {
-                }
-            });
-        } else {
-            triggerAutoComplete();
+        if (lspBridge != null) {
+            lspBridge.performCompletion();
         }
     }
 
     private void triggerAutoComplete() {
         if (isProgrammaticChange) return;
-        if (autoCompleteEngine == null) return;
-        // LSP bridge has taken over completions for this language — skip legacy engine.
-        if (lspCompletionActive) return;
-
-        int totalLen = content.totalLength();
-        int flatCursor = content.flatOffset(cursor);
-
-        if (flatCursor <= 0 || flatCursor > totalLen) {
-            dismissAutoCompletePopup();
-            return;
+        if (lspBridge != null) {
+            lspBridge.performCompletion();
         }
-
-        // Fast character checks directly without allocating or fetching full text
-        char lastChar = (cursor.column > 0)
-                ? content.charAt(cursor.line, cursor.column - 1)
-                : '\n';
-
-        if (Character.isWhitespace(lastChar)) {
-            dismissAutoCompletePopup();
-            return;
-        }
-
-        char prevChar = (cursor.column >= 2)
-                ? content.charAt(cursor.line, cursor.column - 2)
-                : (flatCursor >= 2 ? content.getSubstring(flatCursor - 2, flatCursor - 1).charAt(0) : '\0');
-
-        String triggerChars = getTriggerCharacters();
-        boolean isTriggerChar = triggerChars.indexOf(lastChar) >= 0
-                || (lastChar == '{' && flatCursor >= 2 && prevChar == '$');
-        boolean isIdentifier = Character.isLetterOrDigit(lastChar)
-                || lastChar == '_' || lastChar == '$'
-                || (lastChar == '-' && (fileType == FileType.CSS || fileType == FileType.HTML));
-
-        if (!isIdentifier && !isTriggerChar) {
-            dismissAutoCompletePopup();
-            return;
-        }
-
-        String fullText = getCachedFullText();
-
-        if (isCursorInComment(fullText, flatCursor)) {
-            dismissAutoCompletePopup();
-            return;
-        }
-
-        final int capturedCursor = flatCursor;
-        final String capturedText = fullText;
-
-        ExecutorProvider.getInstance().runOnCpu(() -> {
-            List<CompletionItem> items = autoCompleteEngine.getSuggestions(capturedText, capturedCursor);
-            mainHandler.post(() -> {
-                if (content.flatOffset(cursor) != capturedCursor) return;
-                if (items != null && !items.isEmpty()) {
-                    showAutoComplete(items, capturedCursor);
-                } else {
-                    dismissAutoCompletePopup();
-                }
-            });
-        });
     }
 
     // Lifecycle
@@ -4850,13 +4748,70 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     }
 
     public File getCurrentFile() {
-        return currentFile;
+        return currentFile != null ? currentFile : (lspBridge != null ? lspBridge.getCurrentFile() : null);
     }
 
     public void setCurrentFile(File file) {
         this.currentFile = file;
-        if (autoCompleteEngine != null) {
-            autoCompleteEngine.setCurrentFile(file);
+    }
+
+    public void applyWorkspaceEdit(WorkspaceEdit edit) {
+        if (edit == null || edit.changes == null || edit.changes.isEmpty()) return;
+        File cur = getCurrentFile();
+        for (java.util.Map.Entry<String, List<TextEdit>> entry : edit.changes.entrySet()) {
+            String uri = entry.getKey();
+            List<TextEdit> edits = entry.getValue();
+            if (edits == null || edits.isEmpty()) continue;
+
+            File targetFile = com.cocode.vcode.ide.utils.FileUtils.uriToFile(uri);
+            if (targetFile != null && cur != null && targetFile.getAbsolutePath().equals(cur.getAbsolutePath())) {
+                applyTextEdits(edits);
+            } else if (targetFile != null) {
+                try {
+                    if (!targetFile.exists()) {
+                        File parent = targetFile.getParentFile();
+                        if (parent != null && !parent.exists()) {
+                            parent.mkdirs();
+                        }
+                        StringBuilder sb = new StringBuilder();
+                        for (TextEdit te : edits) {
+                            if (te.newText != null) sb.append(te.newText);
+                        }
+                        com.cocode.vcode.ide.utils.FileUtils.writeFile(targetFile, sb.toString());
+                    }
+                } catch (Exception ignored) {
+                }
+            } else if (edit.changes.size() == 1) {
+                applyTextEdits(edits);
+            }
+        }
+    }
+
+    public void applyTextEdits(List<TextEdit> edits) {
+        if (edits == null || edits.isEmpty()) return;
+        List<TextEdit> sorted = new ArrayList<>(edits);
+        Collections.sort(sorted, (a, b) -> {
+            if (a.range == null || b.range == null) return 0;
+            if (a.range.start == null || b.range.start == null) return 0;
+            int lineCmp = Integer.compare(b.range.start.line, a.range.start.line);
+            if (lineCmp != 0) return lineCmp;
+            return Integer.compare(b.range.start.character, a.range.start.character);
+        });
+
+        beginAtomicGroup();
+        try {
+            for (TextEdit edit : sorted) {
+                if (edit.range == null || edit.range.start == null || edit.range.end == null) continue;
+                replaceRange(
+                        edit.range.start.line,
+                        edit.range.start.character,
+                        edit.range.end.line,
+                        edit.range.end.character,
+                        edit.newText != null ? edit.newText : ""
+                );
+            }
+        } finally {
+            endAtomicGroup();
         }
     }
 

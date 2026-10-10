@@ -36,7 +36,7 @@ public class HtmlLspServerTest {
 
     @Test
     public void testDiagnostics() {
-        LspDocument doc = new LspDocument("/test.html", "<div><p>unclosed</div>", "html", 1);
+        LspDocument doc = new LspDocument("/test.html", "<div><span>unclosed</div>", "html", 1);
         List<Problem> problems = server.diagnostics(doc);
         
         assertNotNull(problems);

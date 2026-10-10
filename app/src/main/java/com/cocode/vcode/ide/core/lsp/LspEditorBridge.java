@@ -4,6 +4,13 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.lsp.model.CodeAction;
+import com.cocode.vcode.ide.core.lsp.model.CodeActionContext;
+import com.cocode.vcode.ide.core.lsp.model.CodeActionKind;
+import com.cocode.vcode.ide.core.lsp.model.CodeActionParams;
+import com.cocode.vcode.ide.core.lsp.model.Diagnostic;
+import com.cocode.vcode.ide.core.lsp.model.DiagnosticSeverity;
+import com.cocode.vcode.ide.core.lsp.model.LspRange;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentContentChangeEvent;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
@@ -573,6 +580,7 @@ public final class LspEditorBridge {
         this.editor = codeEditor;
         this.fileType = codeEditor.getFileType();
         this.attached = true;
+        codeEditor.setLspBridge(this);
         codeEditor.addContentChangeListener(contentListener);
         codeEditor.addCursorChangeListener(cursorChangeListener);
         codeEditor.addTextLoadListener(textLoadListener);
@@ -638,9 +646,6 @@ public final class LspEditorBridge {
 
         String languageId = this.fileType != null ? this.fileType.getLspLanguageId() : "plaintext";
         hasLspServer = LspClientManager.getInstance().hasServerForLanguage(languageId);
-        if (editor != null) {
-            editor.suppressLegacyAutoComplete(hasLspServer);
-        }
         // ONE-TIME incremental project scan per session. Unlike indexProject() this does
         // NOT wipe live in-memory data — it only fills gaps for files not yet opened.
         if (file != null && hasIndexedProject.compareAndSet(false, true)) {
@@ -834,6 +839,7 @@ public final class LspEditorBridge {
         mainHandler.removeCallbacks(updateProjectIndexRunnable);
         mainHandler.removeCallbacks(silentIndexRunnable);
         if (editor != null) {
+            editor.setLspBridge(null);
             editor.removeContentChangeListener(contentListener);
             editor.removeCursorChangeListener(cursorChangeListener);
             editor.removeTextLoadListener(textLoadListener);
@@ -976,7 +982,7 @@ public final class LspEditorBridge {
         });
     }
 
-    private void performCompletion() {
+    public void performCompletion() {
         if (!attached || editor == null || !hasLspServer) return;
         if (editor.isProgrammaticChange() || (editor.isDeletingText() && !editor.wasAutoCompleteVisibleBeforeDelete())) {
             editor.dismissAutoCompletePopup();
@@ -1159,11 +1165,73 @@ public final class LspEditorBridge {
         }
     }
 
+    public File getCurrentFile() {
+        return currentFile;
+    }
 
+    /**
+     * Resolves available CodeActions for the given problem diagnostic.
+     * Queries the active language server natively using the LSP codeAction capability.
+     */
+    public static List<CodeAction> getCodeActionsForProblem(Problem problem, CodeEditText editor) {
+        if (problem == null) return Collections.emptyList();
+        File file = problem.getFile();
+        if (file == null && editor != null && editor.getCurrentFile() != null) {
+            file = editor.getCurrentFile();
+        }
+        if (file == null) return Collections.emptyList();
 
+        FileType ft = (editor != null && editor.getFileType() != null)
+                ? editor.getFileType()
+                : FileType.fromExtension(file.getName());
+        String langId = ft != null ? ft.getLspLanguageId() : "plaintext";
+        LspServer server = LspClientManager.getInstance().getServer(langId);
+        if (server == null) return Collections.emptyList();
 
+        String uri = file.getAbsolutePath();
+        int line = Math.max(0, problem.getLine() - 1);
+        int col = Math.max(0, problem.getColumn() - 1);
+        int length = Math.max(1, problem.getLength());
+        LspRange range = new LspRange(line, col, line, col + length);
 
+        Diagnostic diag = new Diagnostic(
+                range,
+                mapSeverityToLsp(problem.getSeverity()),
+                problem.getCode() != null ? problem.getCode() : "",
+                langId,
+                problem.getMessage() != null ? problem.getMessage() : ""
+        );
 
+        CodeActionContext context = new CodeActionContext(
+                Collections.singletonList(diag),
+                Collections.singletonList(CodeActionKind.QUICKFIX)
+        );
+        CodeActionParams params = new CodeActionParams(new TextDocumentIdentifier(uri), range, context);
 
+        try {
+            List<CodeAction> actions = server.codeAction(params, new CancellationToken());
+            return actions != null ? actions : Collections.emptyList();
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
 
+    /**
+     * Checks if any CodeAction / QuickFix is available for the given problem.
+     */
+    public static boolean hasCodeActionsForProblem(Problem problem, CodeEditText editor) {
+        List<CodeAction> actions = getCodeActionsForProblem(problem, editor);
+        return actions != null && !actions.isEmpty();
+    }
+
+    private static DiagnosticSeverity mapSeverityToLsp(Problem.Severity severity) {
+        if (severity == null) return DiagnosticSeverity.WARNING;
+        switch (severity) {
+            case ERROR: return DiagnosticSeverity.ERROR;
+            case INFO: return DiagnosticSeverity.INFORMATION;
+            case WARNING:
+            default:
+                return DiagnosticSeverity.WARNING;
+        }
+    }
 }

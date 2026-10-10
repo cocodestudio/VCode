@@ -69,9 +69,9 @@ public class DiagnosticPositionTest {
 
     @Test
     public void testHtmlUnclosedTagPosition() {
-        String code = "<div>\n    <p>Unclosed paragraph\n</div>";
+        String code = "<div>\n    <span>Unclosed paragraph\n</div>";
         List<Problem> problems = HtmlLinter.analyze(mockFile, code);
-        assertSquigglyMatches(code, problems, "Unclosed tag '<p>'", "<p>");
+        assertSquigglyMatches(code, problems, "Unclosed tag '<span>'", "<span>");
     }
 
     @Test

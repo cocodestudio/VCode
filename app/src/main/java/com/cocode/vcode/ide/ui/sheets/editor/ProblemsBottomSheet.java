@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.cocode.vcode.ide.R;
+import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.databinding.BottomSheetProblemsBinding;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
@@ -154,7 +155,7 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
             holder.binding.ivSeverity.setColorFilter(
                     androidx.core.content.ContextCompat.getColor(ctx, colorRes));
 
-            boolean hasFix = com.cocode.vcode.ide.core.quickfix.QuickFixRegistry.hasFixes(item);
+            boolean hasFix = LspEditorBridge.hasCodeActionsForProblem(item, null);
             holder.binding.btnQuickFix.setVisibility(hasFix ? View.VISIBLE : View.GONE);
             if (hasFix) {
                 holder.binding.btnQuickFix.setOnClickListener(v -> {

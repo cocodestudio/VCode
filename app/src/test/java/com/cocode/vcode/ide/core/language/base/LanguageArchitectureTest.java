@@ -165,7 +165,7 @@ public class LanguageArchitectureTest {
         ServerCapabilities jsonCaps = registry.getCapabilities("json");
         assertTrue(jsonCaps.hasCompletion());
         assertTrue(jsonCaps.hasFormatting());
-        assertFalse(jsonCaps.hasHover());
+        assertTrue(jsonCaps.hasHover());
     }
 
     @Test

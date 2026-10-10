@@ -12,8 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import com.cocode.vcode.ide.core.lsp.index.PersistentSymbolStore;
-import com.cocode.vcode.ide.core.lsp.index.PersistentSymbolStore.FileSymbolRecord;
+import com.cocode.vcode.ide.core.lsp.index.FileSymbolRecord;
 
 /**
  * Project-wide symbol index.
@@ -183,14 +182,12 @@ public final class ProjectIndex {
             fileSymbols.clear();
             persistentRecords.clear();
             File cacheFile = getSymbolCacheFile(projectRoot);
-            Map<String, FileSymbolRecord> loaded = PersistentSymbolStore.loadIndex(cacheFile, projectRoot);
-            if (loaded != null && !loaded.isEmpty()) {
-                persistentRecords.putAll(loaded);
+            if (cacheFile != null && cacheFile.exists()) {
+                cacheFile.delete();
             }
             indexDirectory(root);
             pruneDeletedFiles(persistentRecords, fileSymbols);
             cleanStrayTmpFiles(cacheFile != null ? cacheFile.getParentFile() : null);
-            PersistentSymbolStore.saveIndex(cacheFile, projectRoot, persistentRecords);
             if (onComplete != null) {
                 ExecutorProvider.getInstance().runOnMain(onComplete);
             }
@@ -215,16 +212,12 @@ public final class ProjectIndex {
         ExecutorProvider.getInstance().runOnIo(() -> {
             try {
                 File cacheFile = getSymbolCacheFile(projectRoot);
-                if (persistentRecords.isEmpty()) {
-                    Map<String, FileSymbolRecord> loaded = PersistentSymbolStore.loadIndex(cacheFile, projectRoot);
-                    if (loaded != null && !loaded.isEmpty()) {
-                        persistentRecords.putAll(loaded);
-                    }
+                if (cacheFile != null && cacheFile.exists()) {
+                    cacheFile.delete();
                 }
                 indexDirectoryIncremental(root);
                 pruneDeletedFiles(persistentRecords, fileSymbols);
                 cleanStrayTmpFiles(cacheFile != null ? cacheFile.getParentFile() : null);
-                PersistentSymbolStore.saveIndex(cacheFile, projectRoot, persistentRecords);
             } finally {
                 isIncrementalScanRunning.set(false);
             }
