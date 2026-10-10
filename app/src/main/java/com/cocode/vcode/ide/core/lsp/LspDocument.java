@@ -100,6 +100,11 @@ public final class LspDocument {
         return new com.cocode.vcode.ide.core.lsp.model.LspPosition(p.line, p.character);
     }
 
+    public com.cocode.vcode.ide.core.lsp.model.LspPosition toModelPosition(LspPosition pos) {
+        if (pos == null) return new com.cocode.vcode.ide.core.lsp.model.LspPosition(0, 0);
+        return new com.cocode.vcode.ide.core.lsp.model.LspPosition(pos.line, pos.character);
+    }
+
     /**
      * Converts start and end flat offsets to a model LspRange.
      */

@@ -24,6 +24,7 @@ import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.lsp.LspClientManager;
 import com.cocode.vcode.ide.core.lsp.ProjectIndex;
+import com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
 import com.cocode.vcode.ide.core.refactor.FileReferenceUpdater;
 import com.cocode.vcode.ide.data.watcher.ProjectFileWatcher;
@@ -346,6 +347,12 @@ public class EditorViewModel extends ViewModel {
      * @param pId   Unique identifier for the project.
      * @param pName Human-friendly name of the project.
      */
+    public void loadProject(File root) {
+        if (root == null) return;
+        initProject(root, root.getName(), root.getName());
+        WorkspaceIndexService.getInstance().indexProjectIncremental(root);
+    }
+
     public void initProject(File root, String pId, String pName) {
         initProject(root, pId, pName, false);
     }
@@ -388,6 +395,7 @@ public class EditorViewModel extends ViewModel {
         isEditorLoadingLiveData.setValue(true);
 
         // Load project-specific state (open tabs, scroll positions) from the metadata repository
+        WorkspaceIndexService.getInstance().indexProjectIncremental(projectRoot);
         ExecutorProvider.getInstance().runOnIo(() -> {
             ProjectState state = stateRepo.loadStateSync(projectRoot, projectId, isFromIntent);
             ExecutorProvider.getInstance().runOnMain(() -> {

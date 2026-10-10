@@ -1430,6 +1430,40 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return;
         }
 
+        // Check if LSP bridge is available and active for formatting
+        if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+            com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
+            if (cfv.getLspBridge() != null && cfv.getLspBridge().isLspActive()) {
+                Toast.makeText(this, R.string.vcode_formatting, Toast.LENGTH_SHORT).show();
+                cfv.getLspBridge().requestFormatting(new com.cocode.vcode.ide.core.lsp.LspCallback<List<com.cocode.vcode.ide.core.lsp.model.TextEdit>>() {
+                    @Override
+                    public void onResult(List<com.cocode.vcode.ide.core.lsp.model.TextEdit> edits) {
+                        if (edits != null && !edits.isEmpty()) {
+                            codeEditText.applyTextEdits(edits);
+                            String newContent = codeEditText.getTextAsString();
+                            activeFile.setContent(newContent);
+                            activeFile.setDirty(true);
+                            viewModel.notifyFileDirtyStatusChanged();
+                            viewModel.triggerAutoSave();
+                            Toast.makeText(EditorActivity.this, R.string.vcode_formatted_successfully, Toast.LENGTH_SHORT).show();
+                        } else {
+                            formatWithFallbackFormatter(activeFile, codeEditText, rawCode, lang);
+                        }
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        formatWithFallbackFormatter(activeFile, codeEditText, rawCode, lang);
+                    }
+                });
+                return;
+            }
+        }
+
+        formatWithFallbackFormatter(activeFile, codeEditText, rawCode, lang);
+    }
+
+    private void formatWithFallbackFormatter(EditorFile activeFile, CodeEditText codeEditText, String rawCode, FileType lang) {
         Toast.makeText(this, R.string.vcode_formatting, Toast.LENGTH_SHORT).show();
         ExecutorProvider.getInstance().runOnIo(() -> {
             String formattedCode = CodeFormatter.format(rawCode, lang);

@@ -400,10 +400,29 @@ public final class CssLspServer implements LspServer {
             int secondStart = Math.max(mlStart, mrStart);
             int secondEnd = (secondStart == mlStart) ? mlEnd : mrEnd;
 
-            int lineStart2 = text.lastIndexOf('\n', secondStart);
-            int lineEnd2 = text.indexOf('\n', secondEnd);
-            int deleteStart = (lineStart2 != -1) ? lineStart2 : secondStart;
-            int deleteEnd = (lineEnd2 != -1) ? lineEnd2 : secondEnd;
+            int deleteStart = secondStart;
+            int deleteEnd = secondEnd;
+
+            int lineStart = secondStart;
+            while (lineStart > 0 && text.charAt(lineStart - 1) != '\n') {
+                lineStart--;
+            }
+            int lineEnd = secondEnd;
+            while (lineEnd < text.length() && text.charAt(lineEnd) != '\n') {
+                lineEnd++;
+            }
+            int lineEndWithNewline = (lineEnd < text.length() && text.charAt(lineEnd) == '\n') ? lineEnd + 1 : lineEnd;
+
+            String beforeOnLine = text.substring(lineStart, secondStart);
+            String afterOnLine = text.substring(secondEnd, lineEnd);
+            if (beforeOnLine.trim().isEmpty() && afterOnLine.trim().isEmpty()) {
+                deleteStart = lineStart;
+                deleteEnd = lineEndWithNewline;
+            } else {
+                while (deleteEnd < text.length() && Character.isWhitespace(text.charAt(deleteEnd)) && text.charAt(deleteEnd) != '\n') {
+                    deleteEnd++;
+                }
+            }
 
             WorkspaceEdit edit = new WorkspaceEdit();
             edit.addEdit(doc.uri, new TextEdit(doc.toModelRange(firstStart, firstEnd), "margin: 0 auto;"));

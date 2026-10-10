@@ -63,6 +63,15 @@ public class SegmentedSymbolStore {
                     tmp.delete();
                 }
             }
+            File parentCache = cacheDir.getParentFile();
+            if (parentCache != null && parentCache.exists()) {
+                File[] parentTmp = parentCache.listFiles((dir, name) -> name.endsWith(".tmp"));
+                if (parentTmp != null) {
+                    for (File tmp : parentTmp) {
+                        tmp.delete();
+                    }
+                }
+            }
 
             File[] files = cacheDir.listFiles((dir, name) -> name.startsWith("seg_") && name.endsWith(".bin"));
             if (files == null) return;

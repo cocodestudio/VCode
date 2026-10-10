@@ -192,6 +192,7 @@ public final class UndoStack {
     }
 
     public void commitPending() {
+        if (atomicDepth > 0) return;
         if (pendingGroup.isEmpty()) {
             pendingType = null;
             lastAfter = null;

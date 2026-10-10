@@ -4320,16 +4320,37 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             int safeFinal = Math.min(finalCursorFlat, content.totalLength());
             cursor = content.positionAt(safeFinal);
             UndoStack.EditorSnapshot after = snapshotAt(cursor, null);
-            // Commit any pending group first, then seal the completion as its own atomic undo step.
-            undoStack.commitPending();
-            if (!deletedText.isEmpty()) {
-                undoStack.recordReplace(wordStartPos.line, wordStartPos.column,
-                        deleteEndPos.line, deleteEndPos.column, deletedText, cleanInsert, before, after);
-            } else {
-                undoStack.recordInsert(wordStartPos.line, wordStartPos.column, cleanInsert, before, after);
+            undoStack.beginAtomicGroup();
+            try {
+                if (!deletedText.isEmpty()) {
+                    undoStack.recordReplace(wordStartPos.line, wordStartPos.column,
+                            deleteEndPos.line, deleteEndPos.column, deletedText, cleanInsert, before, after);
+                } else {
+                    undoStack.recordInsert(wordStartPos.line, wordStartPos.column, cleanInsert, before, after);
+                }
+
+                if (item.getAdditionalTextEdits() != null && !item.getAdditionalTextEdits().isEmpty()) {
+                    int cursorFlat = content.flatOffset(cursor);
+                    int adjustedCursorFlat = cursorFlat;
+                    for (com.cocode.vcode.ide.core.lsp.model.TextEdit edit : item.getAdditionalTextEdits()) {
+                        if (edit.range != null && edit.range.start != null && edit.range.end != null) {
+                            int editStartFlat = content.flatOffset(new ContentPosition(edit.range.start.line, edit.range.start.character));
+                            int editEndFlat = content.flatOffset(new ContentPosition(edit.range.end.line, edit.range.end.character));
+                            if (editEndFlat <= cursorFlat) {
+                                int oldLen = Math.max(0, editEndFlat - editStartFlat);
+                                int newLen = edit.newText != null ? edit.newText.length() : 0;
+                                adjustedCursorFlat += (newLen - oldLen);
+                            }
+                        }
+                    }
+                    applyTextEdits(item.getAdditionalTextEdits());
+                    adjustedCursorFlat = Math.max(0, Math.min(adjustedCursorFlat, content.totalLength()));
+                    cursor = content.positionAt(adjustedCursorFlat);
+                    selectionAnchor = null;
+                }
+            } finally {
+                undoStack.endAtomicGroup();
             }
-            undoStack.commitPending();
-            selectionAnchor = null;
 
             dismissAutoCompletePopup();
             scheduleHighlight();
@@ -4768,7 +4789,17 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                 applyTextEdits(edits);
             } else if (targetFile != null) {
                 try {
-                    if (!targetFile.exists()) {
+                    String languageId = FileType.fromFileName(targetFile.getName()).getLspLanguageId();
+                    if (targetFile.exists()) {
+                        String originalContent = com.cocode.vcode.ide.utils.FileUtils.readFile(targetFile);
+                        if (originalContent != null) {
+                            String updatedContent = applyEditsToString(originalContent, edits);
+                            com.cocode.vcode.ide.utils.FileUtils.writeFile(targetFile, updatedContent);
+                            com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService.getInstance().updateDocument(
+                                    new com.cocode.vcode.ide.core.lsp.LspDocument(targetFile.getAbsolutePath(), updatedContent, languageId, 0)
+                            );
+                        }
+                    } else {
                         File parent = targetFile.getParentFile();
                         if (parent != null && !parent.exists()) {
                             parent.mkdirs();
@@ -4777,7 +4808,11 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                         for (TextEdit te : edits) {
                             if (te.newText != null) sb.append(te.newText);
                         }
-                        com.cocode.vcode.ide.utils.FileUtils.writeFile(targetFile, sb.toString());
+                        String newContent = sb.toString();
+                        com.cocode.vcode.ide.utils.FileUtils.writeFile(targetFile, newContent);
+                        com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService.getInstance().updateDocument(
+                                new com.cocode.vcode.ide.core.lsp.LspDocument(targetFile.getAbsolutePath(), newContent, languageId, 0)
+                        );
                     }
                 } catch (Exception ignored) {
                 }
@@ -4785,6 +4820,49 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                 applyTextEdits(edits);
             }
         }
+    }
+
+    public static String applyEditsToString(String text, List<TextEdit> edits) {
+        if (text == null || edits == null || edits.isEmpty()) return text;
+        List<TextEdit> sorted = new ArrayList<>(edits);
+        Collections.sort(sorted, (a, b) -> {
+            if (a.range == null || b.range == null) return 0;
+            if (a.range.start == null || b.range.start == null) return 0;
+            int lineCmp = Integer.compare(b.range.start.line, a.range.start.line);
+            if (lineCmp != 0) return lineCmp;
+            return Integer.compare(b.range.start.character, a.range.start.character);
+        });
+
+        StringBuilder sb = new StringBuilder(text);
+        for (TextEdit edit : sorted) {
+            if (edit.range == null || edit.range.start == null || edit.range.end == null) continue;
+            int startOff = positionToOffset(sb.toString(), edit.range.start.line, edit.range.start.character);
+            int endOff = positionToOffset(sb.toString(), edit.range.end.line, edit.range.end.character);
+            if (startOff > endOff) {
+                int tmp = startOff;
+                startOff = endOff;
+                endOff = tmp;
+            }
+            startOff = Math.max(0, Math.min(startOff, sb.length()));
+            endOff = Math.max(0, Math.min(endOff, sb.length()));
+            sb.replace(startOff, endOff, edit.newText != null ? edit.newText : "");
+        }
+        return sb.toString();
+    }
+
+    private static int positionToOffset(String text, int line, int character) {
+        if (text == null || line < 0) return 0;
+        int currentLine = 0;
+        int offset = 0;
+        int len = text.length();
+        while (offset < len && currentLine < line) {
+            if (text.charAt(offset) == '\n') {
+                currentLine++;
+            }
+            offset++;
+        }
+        if (currentLine < line) return len;
+        return Math.min(len, offset + Math.max(0, character));
     }
 
     public void applyTextEdits(List<TextEdit> edits) {

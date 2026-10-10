@@ -61,6 +61,13 @@ public interface LspServer {
     void initialize(ProjectIndex index);
 
     /**
+     * Initialization hook using the authoritative {@link com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService}.
+     */
+    default void initialize(com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService index) {
+        initialize(ProjectIndex.getInstance());
+    }
+
+    /**
      * Modern LSP 3.17 initialize request hook.
      */
     default void initialize(InitializeParams params) {

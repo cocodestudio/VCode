@@ -147,6 +147,10 @@ public class WorkspaceIndexService {
         return segmentedStore;
     }
 
+    public SegmentedSymbolStore getSymbolStore() {
+        return segmentedStore;
+    }
+
     public void addProgressListener(IndexingProgressListener listener) {
         if (listener != null && !progressListeners.contains(listener)) {
             progressListeners.add(listener);
@@ -285,8 +289,13 @@ public class WorkspaceIndexService {
 
                 List<File> candidateFiles = new ArrayList<>();
                 collectCandidateFiles(rootDir, candidateFiles);
+                pruneDeletedFiles(rootDir, candidateFiles);
 
                 if (segmentedStore.isIndexUpToDate(rootDir, candidateFiles)) {
+                    for (File f : candidateFiles) {
+                        indexFile(f);
+                    }
+                    cleanStrayTmpFiles(new File(rootDir, ".vcode/cache"));
                     loadCachedSymbolsIntoMemory();
                     if (onComplete != null) {
                         ExecutorProvider.getInstance().runOnMain(onComplete);
@@ -302,6 +311,7 @@ public class WorkspaceIndexService {
 
                 segmentedStore.indexFiles(rootDir, candidateFiles, (file, relPath, fileId) -> {
                     List<IndexSymbolEntry> entries = new ArrayList<>();
+                    indexFile(file);
                     String name = file.getName().toLowerCase(Locale.US);
                     if (name.endsWith(".css") || name.endsWith(".scss")) {
                         indexCssFile(file, classNames, cssIds, entries, fileId);
@@ -313,7 +323,14 @@ public class WorkspaceIndexService {
                     return entries;
                 });
 
+                for (File f : candidateFiles) {
+                    if (!documents.containsKey(f.getAbsolutePath())) {
+                        indexFile(f);
+                    }
+                }
+
                 segmentedStore.removeProgressListener(forwarder);
+                cleanStrayTmpFiles(new File(rootDir, ".vcode/cache"));
                 loadCachedSymbolsIntoMemory();
 
                 if (onComplete != null) {
@@ -330,8 +347,18 @@ public class WorkspaceIndexService {
     }
 
     public void indexProjectIncremental(File root) {
-        if (root == null) return;
-        if (!isIncrementalScanRunning.compareAndSet(false, true)) return;
+        indexProjectIncremental(root, null);
+    }
+
+    public void indexProjectIncremental(File root, Runnable onComplete) {
+        if (root == null) {
+            if (onComplete != null) ExecutorProvider.getInstance().runOnMain(onComplete);
+            return;
+        }
+        if (!isIncrementalScanRunning.compareAndSet(false, true)) {
+            if (onComplete != null) ExecutorProvider.getInstance().runOnMain(onComplete);
+            return;
+        }
         projectRoot = root.getAbsolutePath();
 
         ExecutorProvider.getInstance().runOnIo(() -> {
@@ -341,6 +368,7 @@ public class WorkspaceIndexService {
                 }
                 List<File> candidateFiles = new ArrayList<>();
                 collectCandidateFiles(root, candidateFiles);
+                pruneDeletedFiles(root, candidateFiles);
 
                 Set<String> classNames = new HashSet<>();
                 Set<String> cssIds = new HashSet<>();
@@ -348,6 +376,7 @@ public class WorkspaceIndexService {
 
                 segmentedStore.indexFiles(root, candidateFiles, (file, relPath, fileId) -> {
                     List<IndexSymbolEntry> entries = new ArrayList<>();
+                    indexFile(file);
                     String name = file.getName().toLowerCase(Locale.US);
                     if (name.endsWith(".css") || name.endsWith(".scss")) {
                         indexCssFile(file, classNames, cssIds, entries, fileId);
@@ -359,7 +388,21 @@ public class WorkspaceIndexService {
                     return entries;
                 }, true);
 
+                for (File f : candidateFiles) {
+                    if (!documents.containsKey(f.getAbsolutePath())) {
+                        indexFile(f);
+                    }
+                }
+
+                cleanStrayTmpFiles(new File(root, ".vcode/cache"));
                 loadCachedSymbolsIntoMemory();
+                if (onComplete != null) {
+                    ExecutorProvider.getInstance().runOnMain(onComplete);
+                }
+            } catch (Throwable t) {
+                for (IndexingProgressListener l : progressListeners) {
+                    try { l.onIndexingError(t); } catch (Exception ignored) {}
+                }
             } finally {
                 isIncrementalScanRunning.set(false);
             }
@@ -384,22 +427,97 @@ public class WorkspaceIndexService {
         }
 
         for (File f : files) {
-            if (f.isDirectory()) {
+            if (f.isDirectory() && f.exists()) {
                 collectCandidateFiles(f, candidateFiles);
-            } else if (isSupportedFile(f)) {
+            } else if (isSupportedFile(f) && f.exists()) {
                 candidateFiles.add(f);
+            } else if (!f.exists()) {
+                VFSManager.getInstance().invalidateDirectory(dir);
+            }
+        }
+    }
+
+    private void pruneDeletedFiles(File rootDir, List<File> candidateFiles) {
+        for (String uri : new ArrayList<>(documents.keySet())) {
+            LspDocument doc = documents.get(uri);
+            if (doc != null && doc.version > 0) {
+                continue;
+            }
+            File f = new File(uri.startsWith("file://") ? uri.substring(7) : uri);
+            if (!f.exists()) {
+                documents.remove(uri);
+                fileSymbols.remove(uri);
+                persistentRecords.remove(uri);
+                String canon = canonicalize(uri);
+                if (canon != null) {
+                    documents.remove(canon);
+                    fileSymbols.remove(canon);
+                    persistentRecords.remove(canon);
+                }
+                invalidateFile(uri);
+            }
+        }
+        for (String uri : new ArrayList<>(fileSymbols.keySet())) {
+            LspDocument doc = documents.get(uri);
+            if (doc != null && doc.version > 0) {
+                continue;
+            }
+            File f = new File(uri.startsWith("file://") ? uri.substring(7) : uri);
+            if (!f.exists()) {
+                documents.remove(uri);
+                fileSymbols.remove(uri);
+                persistentRecords.remove(uri);
+                String canon = canonicalize(uri);
+                if (canon != null) {
+                    documents.remove(canon);
+                    fileSymbols.remove(canon);
+                    persistentRecords.remove(canon);
+                }
+                invalidateFile(uri);
+            }
+        }
+        for (String uri : new ArrayList<>(persistentRecords.keySet())) {
+            LspDocument doc = documents.get(uri);
+            if (doc != null && doc.version > 0) {
+                continue;
+            }
+            File f = new File(uri.startsWith("file://") ? uri.substring(7) : uri);
+            if (!f.exists()) {
+                documents.remove(uri);
+                fileSymbols.remove(uri);
+                persistentRecords.remove(uri);
+                String canon = canonicalize(uri);
+                if (canon != null) {
+                    documents.remove(canon);
+                    fileSymbols.remove(canon);
+                    persistentRecords.remove(canon);
+                }
+                invalidateFile(uri);
+            }
+        }
+    }
+
+    private static void cleanStrayTmpFiles(File cacheDir) {
+        if (cacheDir == null || !cacheDir.exists() || !cacheDir.isDirectory()) return;
+        File[] tmpFiles = cacheDir.listFiles((dir, name) -> name.endsWith(".tmp"));
+        if (tmpFiles != null) {
+            for (File tmp : tmpFiles) {
+                tmp.delete();
             }
         }
     }
 
     public void clear() {
         projectRoot = null;
+        isBuilding.set(false);
+        isIncrementalScanRunning.set(false);
         documents.clear();
         fileSymbols.clear();
         parseResults.clear();
         exportTables.clear();
         persistentRecords.clear();
         clearInMemorySymbols();
+        VFSManager.getInstance().clear();
         if (segmentedStore != null) {
             segmentedStore.close();
             segmentedStore = null;
@@ -1100,13 +1218,18 @@ public class WorkspaceIndexService {
         }
         if (visited != null && !visited.add(pathKey)) return;
 
-        Map<String, CompletionItem> fileSyms = getJsSymbolsForFile(pathKey);
+        Map<String, CompletionItem> fileSyms = getJsSymbolsForFile(file);
         if (fileSyms != null) {
-            targetSymbols.putAll(fileSyms);
+            String origin = file.getName();
+            for (Map.Entry<String, CompletionItem> entry : fileSyms.entrySet()) {
+                CompletionItem item = entry.getValue();
+                String itemOrigin = (item.getDetail() != null && !item.getDetail().isEmpty()) ? item.getDetail() : origin;
+                addOrMergeJsSymbol(targetSymbols, entry.getKey(), item.getLabel(), item.getEffectiveInsertText(), itemOrigin, item.getType());
+            }
         }
 
         String content = readFile(file);
-        if (content != null) {
+        if (content != null && (content.contains("import") || content.contains("require"))) {
             List<File> importedFiles = extractJsImports(content, file);
             for (File imp : importedFiles) {
                 collectJsSymbolsRecursively(imp, targetSymbols, visited);
@@ -1123,6 +1246,26 @@ public class WorkspaceIndexService {
         return map != null ? Collections.unmodifiableMap(map) : Collections.emptyMap();
     }
 
+    public synchronized Map<String, CompletionItem> getJsSymbolsForFile(File file) {
+        if (file == null) return Collections.emptyMap();
+        String pathKey = file.getAbsolutePath();
+        try {
+            pathKey = file.getCanonicalPath();
+        } catch (Exception ignored) {
+        }
+        Map<String, CompletionItem> map = fileJsSymbols.get(pathKey);
+        if (map == null) {
+            boolean canRead = file.exists() || hasDocument(file);
+            if (canRead) {
+                indexJsFile(file);
+                map = fileJsSymbols.get(pathKey);
+            } else {
+                fileJsSymbols.put(pathKey, Collections.emptyMap());
+            }
+        }
+        return map != null ? new LinkedHashMap<>(map) : Collections.emptyMap();
+    }
+
     public synchronized List<CompletionItem> getJsFileExports(String uri) {
         if (uri == null) return Collections.emptyList();
         List<CompletionItem> list = jsFileExports.get(uri);
@@ -1136,13 +1279,20 @@ public class WorkspaceIndexService {
     // Internal File Parsing & Indexing
     // -------------------------------------------------------------------------
 
-    private void indexFile(File file) {
+    public void indexFile(File file) {
         try {
             String uri = file.getAbsolutePath();
+            String canon = canonicalize(uri);
             LspDocument existing = documents.get(uri);
+            if (existing == null && canon != null) {
+                existing = documents.get(canon);
+            }
             if (existing != null && existing.version > 0) {
                 List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(existing);
                 fileSymbols.put(uri, symbols);
+                if (canon != null && !canon.equals(uri)) {
+                    fileSymbols.put(canon, symbols);
+                }
                 persistentRecords.put(uri, new FileSymbolRecord(file.lastModified(), file.length(), symbols));
                 return;
             }
@@ -1151,8 +1301,14 @@ public class WorkspaceIndexService {
             String languageId = getLanguageId(file.getName());
             LspDocument doc = new LspDocument(uri, text, languageId, 0);
             documents.put(uri, doc);
+            if (canon != null && !canon.equals(uri)) {
+                documents.put(canon, doc);
+            }
             List<SymbolEntry> symbols = SymbolExtractor.extractSymbols(doc);
             fileSymbols.put(uri, symbols);
+            if (canon != null && !canon.equals(uri)) {
+                fileSymbols.put(canon, symbols);
+            }
             persistentRecords.put(uri, new FileSymbolRecord(file.lastModified(), file.length(), symbols));
 
             if ("javascript".equals(languageId) || "typescript".equals(languageId)) {
@@ -1665,7 +1821,7 @@ public class WorkspaceIndexService {
         }
     }
 
-    private void ensureDependencyLoaded(File currentFile, String packageName) {
+    public void ensureDependencyLoaded(File currentFile, String packageName) {
         if (packageName == null || packageName.isEmpty()) return;
         if (dependencyMembers.containsKey(packageName) || dependencyExports.containsKey(packageName)) {
             return;
@@ -1969,7 +2125,8 @@ public class WorkspaceIndexService {
                 } catch (Exception e) {
                     resolved = resolved.getAbsoluteFile();
                 }
-                if (resolved.exists()) {
+                WorkspaceIndexService service = getInstance();
+                if (resolved.exists() || (service != null && service.hasDocument(resolved))) {
                     result.add(resolved);
                 }
             }
@@ -1978,13 +2135,23 @@ public class WorkspaceIndexService {
     }
 
     private static File resolveJsCandidate(File baseDir, String relPath) {
+        WorkspaceIndexService service = getInstance();
         File f = new File(baseDir, relPath);
-        if (f.exists()) return f;
+        File fCanon = f;
+        try { fCanon = f.getCanonicalFile(); } catch (Exception ignored) {}
+        if (f.exists() || fCanon.exists() || (service != null && (service.hasDocument(f) || service.hasDocument(fCanon)))) return fCanon;
+
         File fJs = new File(baseDir, relPath + ".js");
-        if (fJs.exists()) return fJs;
+        File fJsCanon = fJs;
+        try { fJsCanon = fJs.getCanonicalFile(); } catch (Exception ignored) {}
+        if (fJs.exists() || fJsCanon.exists() || (service != null && (service.hasDocument(fJs) || service.hasDocument(fJsCanon)))) return fJsCanon;
+
         File fTs = new File(baseDir, relPath + ".ts");
-        if (fTs.exists()) return fTs;
-        return f;
+        File fTsCanon = fTs;
+        try { fTsCanon = fTs.getCanonicalFile(); } catch (Exception ignored) {}
+        if (fTs.exists() || fTsCanon.exists() || (service != null && (service.hasDocument(fTs) || service.hasDocument(fTsCanon)))) return fTsCanon;
+
+        return fCanon;
     }
 
     public static void extractSymbolsFromJsTree(JsSyntaxTree tree, Map<String, CompletionItem> result, String origin) {

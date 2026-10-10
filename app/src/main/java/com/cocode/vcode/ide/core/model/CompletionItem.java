@@ -22,6 +22,7 @@ public class CompletionItem {
     private String sourceUri;
     private android.graphics.drawable.Drawable iconDrawable;
     private int customColor = 0;
+    private java.util.List<com.cocode.vcode.ide.core.lsp.model.TextEdit> additionalTextEdits;
 
     public CompletionItem(String label, String insertText, String detail, Type type, int cursorOffset) {
         this.label = label;
@@ -76,6 +77,16 @@ public class CompletionItem {
         this.sourceUri = other.sourceUri;
         this.iconDrawable = other.iconDrawable;
         this.customColor = other.customColor;
+        this.additionalTextEdits = other.additionalTextEdits != null
+                ? new java.util.ArrayList<>(other.additionalTextEdits) : null;
+    }
+
+    public java.util.List<com.cocode.vcode.ide.core.lsp.model.TextEdit> getAdditionalTextEdits() {
+        return additionalTextEdits;
+    }
+
+    public void setAdditionalTextEdits(java.util.List<com.cocode.vcode.ide.core.lsp.model.TextEdit> additionalTextEdits) {
+        this.additionalTextEdits = additionalTextEdits;
     }
 
     /**

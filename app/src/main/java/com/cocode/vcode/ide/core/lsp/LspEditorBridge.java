@@ -18,6 +18,9 @@ import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
+import com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService;
+import com.cocode.vcode.ide.core.lsp.model.FormattingOptions;
+import com.cocode.vcode.ide.core.lsp.model.TextEdit;
 import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
 import com.cocode.vcode.ide.views.CodeEditText;
 
@@ -651,7 +654,7 @@ public final class LspEditorBridge {
         if (file != null && hasIndexedProject.compareAndSet(false, true)) {
             File projectRoot = com.cocode.vcode.ide.data.repository.ProjectRepository.findProjectRoot(file);
             if (projectRoot == null) projectRoot = file.getParentFile();
-            ProjectIndex.getInstance().indexProjectIncremental(projectRoot);
+            WorkspaceIndexService.getInstance().indexProjectIncremental(projectRoot);
         }
         // Do NOT post an immediate diagnostic pass here. The caller's subsequent
         // editor.setText(newContent) call — which actually loads the new file's text into
@@ -815,6 +818,20 @@ public final class LspEditorBridge {
             return;
         }
         LspClientManager.getInstance().requestSignatureHelp(doc, cursorPosition(), callback);
+    }
+
+    /**
+     * Requests formatting for the active document via LSP.
+     */
+    public void requestFormatting(LspCallback<List<TextEdit>> callback) {
+        LspDocument doc = buildSnapshot();
+        if (doc == null) {
+            if (callback != null) callback.onResult(Collections.emptyList());
+            return;
+        }
+        int tabSize = (editor != null) ? editor.getTabSize() : 4;
+        FormattingOptions options = new FormattingOptions(tabSize, true);
+        LspClientManager.getInstance().requestFormatting(doc, options, callback);
     }
 
     /**
@@ -1108,6 +1125,7 @@ public final class LspEditorBridge {
             CompletionItem ci = new CompletionItem(
                     li.label, insert, li.detail, mapKindToLegacy(li.kind), cursorOffset);
             ci.setReplaceLength(li.replaceLength);
+            ci.setAdditionalTextEdits(li.additionalTextEdits);
             out.add(ci);
         }
         return out;

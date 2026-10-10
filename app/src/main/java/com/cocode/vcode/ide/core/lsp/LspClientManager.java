@@ -2,13 +2,19 @@ package com.cocode.vcode.ide.core.lsp;
 
 import android.content.Context;
 
+import com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService;
+import com.cocode.vcode.ide.core.lsp.model.CompletionParams;
+import com.cocode.vcode.ide.core.lsp.model.DocumentFormattingParams;
+import com.cocode.vcode.ide.core.lsp.model.FormattingOptions;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentContentChangeEvent;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentIdentifier;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
+import com.cocode.vcode.ide.core.lsp.model.TextEdit;
 import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -97,6 +103,36 @@ public final class LspClientManager {
                     deliverError(callback, "Language server not ready");
                     return;
                 }
+
+                // Route through LSP 3.17 completion to obtain rich items including additionalTextEdits
+                CompletionParams params = new CompletionParams(
+                        new TextDocumentIdentifier(doc.uri),
+                        doc.toModelPosition(pos)
+                );
+                List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> modelItems = server.completion(params, cancellationToken);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
+
+                if (modelItems != null && !modelItems.isEmpty()) {
+                    List<LspCompletionItem> converted = new ArrayList<>(modelItems.size());
+                    for (com.cocode.vcode.ide.core.lsp.model.CompletionItem mi : modelItems) {
+                        int kind = mi.kind != null ? mi.kind.getValue() : LspCompletionItem.KIND_TEXT;
+                        String docStr = mi.documentation != null ? mi.documentation.value : null;
+                        String insert = mi.insertText != null ? mi.insertText : mi.label;
+                        converted.add(new LspCompletionItem(
+                                mi.label,
+                                insert,
+                                kind,
+                                mi.detail,
+                                docStr,
+                                -1,
+                                mi.additionalTextEdits
+                        ));
+                    }
+                    deliverResult(callback, converted);
+                    return;
+                }
+
+                // Fall back to legacy completion if LSP 3.17 returned empty
                 List<LspCompletionItem> items = server.completion(doc, pos);
                 if (cancellationToken != null && cancellationToken.isCancelled()) return;
                 deliverResult(callback, items != null ? items : Collections.emptyList());
@@ -269,6 +305,39 @@ public final class LspClientManager {
         });
     }
 
+    /**
+     * Requests formatting for the given document using LSP 3.17 formatting pipeline.
+     */
+    public void requestFormatting(LspDocument doc, FormattingOptions options,
+                                  LspCallback<List<TextEdit>> callback) {
+        requestFormatting(doc, options, null, callback);
+    }
+
+    public void requestFormatting(LspDocument doc, FormattingOptions options,
+                                  CancellationToken cancellationToken,
+                                  LspCallback<List<TextEdit>> callback) {
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            try {
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
+                LspServer server = getOrStartServer(doc.languageId);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
+                if (server == null || !server.isReady()) {
+                    deliverResult(callback, Collections.emptyList());
+                    return;
+                }
+                DocumentFormattingParams params = new DocumentFormattingParams(
+                        new TextDocumentIdentifier(doc.uri),
+                        options != null ? options : FormattingOptions.DEFAULT
+                );
+                List<TextEdit> edits = server.formatting(params, cancellationToken);
+                if (cancellationToken != null && cancellationToken.isCancelled()) return;
+                deliverResult(callback, edits != null ? edits : Collections.emptyList());
+            } catch (Exception e) {
+                deliverError(callback, e.getMessage());
+            }
+        });
+    }
+
     // -------------------------------------------------------------------------
     // Document Synchronization Notifications (LSP 3.17)
     // -------------------------------------------------------------------------
@@ -391,8 +460,8 @@ public final class LspClientManager {
             if (newServer == null) return null;
 
             servers.put(languageId, newServer);
-            // Initialise on the current IO thread
-            newServer.initialize(ProjectIndex.getInstance());
+            // Initialise with unified WorkspaceIndexService
+            newServer.initialize(WorkspaceIndexService.getInstance());
             return newServer;
         }
     }

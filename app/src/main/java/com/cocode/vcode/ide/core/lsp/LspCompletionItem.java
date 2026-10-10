@@ -1,5 +1,11 @@
 package com.cocode.vcode.ide.core.lsp;
 
+import com.cocode.vcode.ide.core.lsp.model.TextEdit;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * A code completion suggestion returned by an {@link LspServer}.
  * <p>
@@ -72,11 +78,20 @@ public final class LspCompletionItem {
      */
     public final int replaceLength;
 
+    /**
+     * Optional additional text edits to apply (e.g. auto-imports).
+     */
+    public final List<TextEdit> additionalTextEdits;
+
     public LspCompletionItem(String label, String insertText, int kind, String detail, String documentation) {
-        this(label, insertText, kind, detail, documentation, -1);
+        this(label, insertText, kind, detail, documentation, -1, Collections.emptyList());
     }
 
     public LspCompletionItem(String label, String insertText, int kind, String detail, String documentation, int replaceLength) {
+        this(label, insertText, kind, detail, documentation, replaceLength, Collections.emptyList());
+    }
+
+    public LspCompletionItem(String label, String insertText, int kind, String detail, String documentation, int replaceLength, List<TextEdit> additionalTextEdits) {
         this.label = label;
         this.insertText = insertText != null ? insertText : label;
         this.kind = kind;
@@ -85,14 +100,17 @@ public final class LspCompletionItem {
         this.sortText = label;
         this.commitTriggerReRequest = false;
         this.replaceLength = replaceLength;
+        this.additionalTextEdits = additionalTextEdits != null
+                ? Collections.unmodifiableList(new ArrayList<>(additionalTextEdits))
+                : Collections.emptyList();
     }
 
     public LspCompletionItem(String label, int kind) {
-        this(label, null, kind, null, null, -1);
+        this(label, null, kind, null, null, -1, Collections.emptyList());
     }
 
     public LspCompletionItem(String label, String insertText, int kind) {
-        this(label, insertText, kind, null, null, -1);
+        this(label, insertText, kind, null, null, -1, Collections.emptyList());
     }
 
     /**
@@ -100,5 +118,9 @@ public final class LspCompletionItem {
      */
     public String getInsertText() {
         return insertText != null ? insertText : label;
+    }
+
+    public List<TextEdit> getAdditionalTextEdits() {
+        return additionalTextEdits;
     }
 }

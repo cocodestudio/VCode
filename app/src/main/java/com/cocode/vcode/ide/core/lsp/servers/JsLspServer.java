@@ -448,7 +448,7 @@ public final class JsLspServer implements LspServer {
 
                 // Check for unused variable
                 if (msg.contains("is declared but never used") || "JS_UNUSED_VARIABLE".equals(diag.code)) {
-                    TextEdit edit = new TextEdit(diag.range, "");
+                    TextEdit edit = computeUnusedVariableRemovalEdit(doc, diag.range);
                     WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
                     CodeAction action = new CodeAction(
                             "Remove unused variable",
@@ -508,6 +508,108 @@ public final class JsLspServer implements LspServer {
         }
 
         return actions;
+    }
+
+    private TextEdit computeUnusedVariableRemovalEdit(LspDocument doc, com.cocode.vcode.ide.core.lsp.model.LspRange range) {
+        if (doc == null || doc.text == null || range == null || range.start == null) {
+            return new TextEdit(range, "");
+        }
+        int startOff = doc.toOffset(range.start);
+        int endOff = doc.toOffset(range.end);
+        if (startOff < 0 || endOff < startOff || startOff >= doc.text.length()) {
+            return new TextEdit(range, "");
+        }
+
+        int lineStart = startOff;
+        while (lineStart > 0 && doc.text.charAt(lineStart - 1) != '\n') {
+            lineStart--;
+        }
+        int lineEnd = endOff;
+        while (lineEnd < doc.text.length() && doc.text.charAt(lineEnd) != '\n') {
+            lineEnd++;
+        }
+        int lineEndWithNewline = (lineEnd < doc.text.length() && doc.text.charAt(lineEnd) == '\n') ? lineEnd + 1 : lineEnd;
+
+        String beforeOnLine = doc.text.substring(lineStart, startOff);
+        String trimmedBefore = beforeOnLine.trim();
+
+        // Check if part of a comma-separated declaration on the same line
+        // First find the extent of the variable's initializer (if any)
+        int initEnd = endOff;
+        int p = endOff;
+        while (p < lineEnd && Character.isWhitespace(doc.text.charAt(p))) {
+            p++;
+        }
+        if (p < lineEnd && doc.text.charAt(p) == '=') {
+            p++;
+            int parenDepth = 0;
+            int braceDepth = 0;
+            int bracketDepth = 0;
+            while (p < lineEnd) {
+                char c = doc.text.charAt(p);
+                if (c == '(') parenDepth++;
+                else if (c == ')' && parenDepth > 0) parenDepth--;
+                else if (c == '{') braceDepth++;
+                else if (c == '}' && braceDepth > 0) braceDepth--;
+                else if (c == '[') bracketDepth++;
+                else if (c == ']' && bracketDepth > 0) bracketDepth--;
+                else if (parenDepth == 0 && braceDepth == 0 && bracketDepth == 0) {
+                    if (c == ',' || c == ';') break;
+                }
+                p++;
+            }
+            initEnd = p;
+        }
+
+        // Check if there is a trailing comma on the declaration list: const x = 1, y = 2;
+        int afterInit = initEnd;
+        while (afterInit < lineEnd && Character.isWhitespace(doc.text.charAt(afterInit))) {
+            afterInit++;
+        }
+        boolean hasTrailingComma = (afterInit < lineEnd && doc.text.charAt(afterInit) == ',');
+
+        // Check if there is a leading comma: const y = 2, x = 1;
+        int commaBefore = -1;
+        int b = startOff - 1;
+        while (b >= lineStart) {
+            char c = doc.text.charAt(b);
+            if (c == ',') {
+                commaBefore = b;
+                break;
+            } else if (!Character.isWhitespace(c)) {
+                break;
+            }
+            b--;
+        }
+
+        if (hasTrailingComma) {
+            int removeEnd = afterInit + 1;
+            while (removeEnd < lineEnd && Character.isWhitespace(doc.text.charAt(removeEnd))) {
+                removeEnd++;
+            }
+            return new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(
+                    doc.toModelPosition(startOff),
+                    doc.toModelPosition(removeEnd)
+            ), "");
+        } else if (commaBefore >= 0) {
+            return new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(
+                    doc.toModelPosition(commaBefore),
+                    doc.toModelPosition(initEnd)
+            ), "");
+        }
+
+        // If the declaration is the sole statement on this line, delete the entire line cleanly
+        if (trimmedBefore.equals("const") || trimmedBefore.equals("let") || trimmedBefore.equals("var") || trimmedBefore.isEmpty()) {
+            return new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(
+                    doc.toModelPosition(lineStart),
+                    doc.toModelPosition(lineEndWithNewline)
+            ), "");
+        }
+
+        return new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(
+                doc.toModelPosition(startOff),
+                doc.toModelPosition(initEnd)
+        ), "");
     }
 
     // -------------------------------------------------------------------------

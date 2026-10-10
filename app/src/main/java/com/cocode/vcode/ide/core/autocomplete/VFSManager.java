@@ -166,4 +166,12 @@ public class VFSManager {
             directoryCache.remove(directory.getAbsolutePath());
         }
     }
+
+    /**
+     * Clears all cached directory listings and resets the project root.
+     */
+    public void clear() {
+        directoryCache.clear();
+        projectRoot = null;
+    }
 }
