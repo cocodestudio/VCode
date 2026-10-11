@@ -39,7 +39,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             "js", "ts", "jsx", "tsx", "mjs", "cjs", "json", "vue"
     ));
     public static final Set<String> CSS_URL_EXTS = new HashSet<>(Arrays.asList(
-            "png", "jpg", "jpeg", "svg", "webp", "gif", "woff", "woff2", "ttf", "otf", "eot"
+            "png", "jpg", "jpeg", "svg", "webp", "gif", "woff", "woff2", "ttf", "otf", "eot", "css", "scss"
     ));
     public static final Set<String> CSS_IMPORT_EXTS = new HashSet<>(Arrays.asList(
             "css", "scss"
@@ -181,6 +181,19 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         if (files == null || files.isEmpty()) {
+            if (filterPrefix.equals(".") || filterPrefix.equals("..")) {
+                List<CompletionItem> navItems = new ArrayList<>(2);
+                CompletionItem dotItem = new CompletionItem("./", "./", "Directory", CompletionItem.Type.FOLDER, 0);
+                dotItem.setReplaceLength(filterPrefix.length());
+                dotItem.setSortScore(1200);
+                navItems.add(dotItem);
+
+                CompletionItem dotDotItem = new CompletionItem("../", "../", "Directory", CompletionItem.Type.FOLDER, 0);
+                dotDotItem.setReplaceLength(filterPrefix.length());
+                dotDotItem.setSortScore(1100);
+                navItems.add(dotDotItem);
+                return navItems;
+            }
             // When user types without a slash in HTML/CSS/Markdown and local directory matches nothing,
             // fall back to recursive search across project folders
             if (lastSlash == -1 && !filterPrefix.isEmpty() && !isGitIgnore && projectRoot != null) {
@@ -191,6 +204,18 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
 
         String lowerPrefix = filterPrefix.toLowerCase(Locale.ROOT);
         List<CompletionItem> candidates = new ArrayList<>();
+
+        if (filterPrefix.equals(".") || filterPrefix.equals("..")) {
+            CompletionItem dotItem = new CompletionItem("./", "./", "Directory", CompletionItem.Type.FOLDER, 0);
+            dotItem.setReplaceLength(filterPrefix.length());
+            dotItem.setSortScore(1200);
+            candidates.add(dotItem);
+
+            CompletionItem dotDotItem = new CompletionItem("../", "../", "Directory", CompletionItem.Type.FOLDER, 0);
+            dotDotItem.setReplaceLength(filterPrefix.length());
+            dotDotItem.setSortScore(1100);
+            candidates.add(dotDotItem);
+        }
 
         for (File f : files) {
             String name = f.getName();
@@ -444,6 +469,20 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         while (tokenEnd > 0 && Character.isWhitespace(text.charAt(tokenEnd - 1))) {
             tokenEnd--;
         }
+        // If the character immediately preceding the quote (after skipping whitespace) is '(', '=', or ':',
+        // skip that punctuation mark and any additional preceding whitespace before reading tokenStart.
+        if (tokenEnd > 0) {
+            char p = text.charAt(tokenEnd - 1);
+            if (p == '(' || p == '=' || p == ':') {
+                tokenEnd--;
+                while (tokenEnd > 0 && Character.isWhitespace(text.charAt(tokenEnd - 1))) {
+                    tokenEnd--;
+                }
+            }
+        }
+        if (tokenEnd > 0 && (text.charAt(tokenEnd - 1) == '"' || text.charAt(tokenEnd - 1) == '\'')) {
+            tokenEnd--;
+        }
         int tokenStart = tokenEnd;
         while (tokenStart > 0) {
             char c = text.charAt(tokenStart - 1);
@@ -465,7 +504,22 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         if (token.equals("url")) {
             return (f, isDir) -> isDir || isExtensionIn(f, CSS_URL_EXTS);
         }
-        if (token.equals("@import") || fileName.endsWith(".css") || fileName.endsWith(".scss")) {
+        if (token.equals("@import")) {
+            return (f, isDir) -> isDir || isExtensionIn(f, CSS_IMPORT_EXTS);
+        }
+        if (token.equals("src") || token.equals("poster")) {
+            return (f, isDir) -> isDir || isExtensionIn(f, IMAGE_MEDIA_EXTS) || isExtensionIn(f, SCRIPT_EXTS);
+        }
+        if (token.equals("href")) {
+            return (f, isDir) -> isDir || isExtensionIn(f, STYLESHEET_EXTS) || isExtensionIn(f, HYPERLINK_EXTS);
+        }
+        if (token.equals("from") || token.equals("require") || token.equals("import")) {
+            return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS);
+        }
+        if (token.equals("main") || token.equals("module") || token.equals("types") || token.equals("typings")) {
+            return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS);
+        }
+        if (fileName.endsWith(".css") || fileName.endsWith(".scss")) {
             return (f, isDir) -> isDir || isExtensionIn(f, CSS_IMPORT_EXTS);
         }
         if (fileName.endsWith(".md") || fileName.endsWith(".markdown")) {
@@ -473,12 +527,6 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         }
         if (fileName.endsWith(".js") || fileName.endsWith(".ts") || fileName.endsWith(".jsx") || fileName.endsWith(".tsx")) {
             return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS);
-        }
-        if (token.equals("src") || token.equals("poster")) {
-            return (f, isDir) -> isDir || isExtensionIn(f, IMAGE_MEDIA_EXTS) || isExtensionIn(f, SCRIPT_EXTS);
-        }
-        if (token.equals("href")) {
-            return (f, isDir) -> isDir || isExtensionIn(f, STYLESHEET_EXTS) || isExtensionIn(f, HYPERLINK_EXTS);
         }
 
         return null;

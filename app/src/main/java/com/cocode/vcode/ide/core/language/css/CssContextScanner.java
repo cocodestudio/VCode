@@ -302,6 +302,35 @@ public final class CssContextScanner {
         return false;
     }
 
+    public static boolean isInsideVarFirstArg(String text, int cursorPos) {
+        if (text == null || cursorPos <= 0) return false;
+        int depth = 0;
+        int commaCount = 0;
+        for (int i = cursorPos - 1; i >= 0; i--) {
+            char c = text.charAt(i);
+            if (c == ';' || c == '{' || c == '}') return false;
+            if (c == ')') {
+                depth++;
+            } else if (c == '(') {
+                if (depth > 0) {
+                    depth--;
+                } else {
+                    int j = i - 1;
+                    while (j >= 0 && Character.isWhitespace(text.charAt(j))) j--;
+                    if (j >= 2 && text.charAt(j) == 'r' && text.charAt(j - 1) == 'a' && text.charAt(j - 2) == 'v') {
+                        if (j == 2 || (!Character.isLetterOrDigit(text.charAt(j - 3)) && text.charAt(j - 3) != '_' && text.charAt(j - 3) != '-')) {
+                            return commaCount == 0;
+                        }
+                    }
+                    return false;
+                }
+            } else if (c == ',' && depth == 0) {
+                commaCount++;
+            }
+        }
+        return false;
+    }
+
     public static boolean isInsideAtRuleCondition(String text, int cursorPos) {
         int start = Math.max(0, cursorPos - 500);
         String snippet = text.substring(start, cursorPos);

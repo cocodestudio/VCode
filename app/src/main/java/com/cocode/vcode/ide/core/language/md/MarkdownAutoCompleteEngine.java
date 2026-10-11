@@ -34,8 +34,12 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
             {"css", "CSS - Cascading Style Sheets"},
             {"javascript", "JavaScript"},
             {"js", "JavaScript"},
+            {"jsx", "React JSX"},
+            {"mjs", "ECMAScript Module"},
+            {"cjs", "CommonJS Module"},
             {"typescript", "TypeScript"},
             {"ts", "TypeScript"},
+            {"tsx", "React TSX"},
             {"json", "JSON - JavaScript Object Notation"},
             {"markdown", "Markdown"},
             {"md", "Markdown"},
@@ -77,7 +81,7 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
 
     @Override
     public String getTriggerCharacters() {
-        return "[(#*`!|-";
+        return "[(#*`!|-/.\"<";
     }
 
     @Override
@@ -202,13 +206,13 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private AutoCompleteEngine resolveEmbeddedEngine(String lang) {
-        if (lang.equals("js") || lang.equals("javascript")) {
+        if (lang.equals("js") || lang.equals("javascript") || lang.equals("jsx") || lang.equals("mjs") || lang.equals("cjs")) {
             if (jsEngine == null) {
                 jsEngine = new JsAutoCompleteEngine(context);
                 if (currentFile != null) jsEngine.setCurrentFile(currentFile);
             }
             return jsEngine;
-        } else if (lang.equals("ts") || lang.equals("typescript")) {
+        } else if (lang.equals("ts") || lang.equals("typescript") || lang.equals("tsx")) {
             if (tsEngine == null) {
                 tsEngine = new TsAutoCompleteEngine(context);
                 if (currentFile != null) tsEngine.setCurrentFile(currentFile);

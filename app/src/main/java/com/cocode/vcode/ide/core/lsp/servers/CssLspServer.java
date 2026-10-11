@@ -2,7 +2,9 @@ package com.cocode.vcode.ide.core.lsp.servers;
 
 import android.content.Context;
 
+import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.css.CssContextScanner;
 import com.cocode.vcode.ide.core.language.css.CssFormatter;
 import com.cocode.vcode.ide.core.language.css.CssLexer;
 import com.cocode.vcode.ide.core.language.css.CssLinter;
@@ -217,16 +219,19 @@ public final class CssLspServer implements LspServer {
         Set<String> seenLabels = new HashSet<>();
 
         // 1. CSS Variable Completion (var(--custom-prop) across :root)
-        boolean insideVar = isInsideVarFunction(doc.text, flatOffset);
+        boolean insideVarFirstArg = CssContextScanner.isInsideVarFirstArg(doc.text, flatOffset);
         boolean isVarPrefix = isTypingCssVariablePrefix(doc.text, flatOffset);
-        if (insideVar || isVarPrefix) {
+
+        if (insideVarFirstArg || isVarPrefix) {
             String word = getWordBeforeCursor(doc.text, flatOffset);
             int replaceLen = word.length();
-            List<SymbolEntry> varSymbols = collectAllWorkspaceCssVariables(doc);
-            for (SymbolEntry sym : varSymbols) {
+            List<SymbolEntry> allVars = collectAllWorkspaceCssVariables(doc);
+            List<SymbolEntry> filteredVars = filterAndRankVariables(allVars, word);
+
+            for (SymbolEntry sym : filteredVars) {
                 if (token != null && token.isCancelled()) return Collections.emptyList();
                 if (seenLabels.add(sym.name)) {
-                    String insert = insideVar || isVarPrefix ? sym.name : "var(" + sym.name + ")";
+                    String insert = insideVarFirstArg || isVarPrefix ? sym.name : "var(" + sym.name + ")";
                     String detail = sym.detail != null && !sym.detail.isEmpty() ? sym.detail : "CSS Variable";
                     MarkupContent docContent = new MarkupContent(MarkupKind.MARKDOWN,
                             "Custom property: `" + sym.name + ": " + (sym.detail != null ? sym.detail : "") + "`");
@@ -241,6 +246,13 @@ public final class CssLspServer implements LspServer {
                     }
                     items.add(vb.build());
                 }
+            }
+
+            // Inside the first argument of var(), only custom properties are valid.
+            // Return immediately so non-matching queries (e.g. var(--hshsd)) yield an empty list
+            // and dismiss the autocomplete popup.
+            if (insideVarFirstArg) {
+                return items;
             }
         }
 
@@ -277,23 +289,19 @@ public final class CssLspServer implements LspServer {
         int flatOffset = doc.toOffset(pos);
         if (flatOffset < 0) flatOffset = doc.text.length();
 
-        completeEngine.setCurrentFile(new File(doc.uri));
-        List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
-        List<LspCompletionItem> converted = convertCompletions(legacy);
+        boolean insideVarFirstArg = CssContextScanner.isInsideVarFirstArg(doc.text, flatOffset);
+        boolean isVarPrefix = isTypingCssVariablePrefix(doc.text, flatOffset);
 
-        // Augment with CSS variables if typing inside var( or typing --
-        if (isInsideVarFunction(doc.text, flatOffset) || isTypingCssVariablePrefix(doc.text, flatOffset)) {
+        if (insideVarFirstArg || isVarPrefix) {
             String word = getWordBeforeCursor(doc.text, flatOffset);
             int replaceLen = word.length();
-            List<SymbolEntry> varSymbols = collectAllWorkspaceCssVariables(doc);
-            List<LspCompletionItem> augmented = new ArrayList<>(converted);
+            List<SymbolEntry> allVars = collectAllWorkspaceCssVariables(doc);
+            List<SymbolEntry> filteredVars = filterAndRankVariables(allVars, word);
+            List<LspCompletionItem> varItems = new ArrayList<>(filteredVars.size());
             Set<String> seen = new HashSet<>();
-            for (LspCompletionItem item : converted) {
-                seen.add(item.label);
-            }
-            for (SymbolEntry sym : varSymbols) {
+            for (SymbolEntry sym : filteredVars) {
                 if (seen.add(sym.name)) {
-                    augmented.add(new LspCompletionItem(
+                    varItems.add(new LspCompletionItem(
                             sym.name,
                             sym.name,
                             LspCompletionItem.KIND_VARIABLE,
@@ -303,10 +311,33 @@ public final class CssLspServer implements LspServer {
                     ));
                 }
             }
+
+            // Inside the first argument of var(), only custom properties are valid.
+            // Return immediately so non-matching queries (e.g. var(--hshsd)) yield an empty list
+            // and dismiss the autocomplete popup.
+            if (insideVarFirstArg) {
+                return varItems;
+            }
+
+            completeEngine.setCurrentFile(new File(doc.uri));
+            List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
+            List<LspCompletionItem> converted = convertCompletions(legacy);
+            List<LspCompletionItem> augmented = new ArrayList<>(converted);
+            Set<String> existing = new HashSet<>();
+            for (LspCompletionItem item : converted) {
+                existing.add(item.label);
+            }
+            for (LspCompletionItem vItem : varItems) {
+                if (existing.add(vItem.label)) {
+                    augmented.add(vItem);
+                }
+            }
             return augmented;
         }
 
-        return converted;
+        completeEngine.setCurrentFile(new File(doc.uri));
+        List<com.cocode.vcode.ide.core.model.CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
+        return convertCompletions(legacy);
     }
 
     private static String getWordBeforeCursor(String text, int offset) {
@@ -1287,16 +1318,41 @@ public final class CssLspServer implements LspServer {
         return Character.isLetterOrDigit(c) || c == '-' || c == '_';
     }
 
-    private static boolean isInsideVarFunction(String text, int offset) {
-        if (text == null || offset <= 0) return false;
-        int checkStart = Math.max(0, offset - 100);
-        String prefix = text.substring(checkStart, offset);
-        int lastVar = prefix.lastIndexOf("var(");
-        if (lastVar != -1) {
-            int closeParen = prefix.indexOf(')', lastVar);
-            return closeParen == -1;
+    private static final class ScoredVarSymbol {
+        final SymbolEntry entry;
+        final int score;
+        ScoredVarSymbol(SymbolEntry entry, int score) {
+            this.entry = entry;
+            this.score = score;
         }
-        return false;
+    }
+
+    private List<SymbolEntry> filterAndRankVariables(List<SymbolEntry> allSymbols, String word) {
+        if (allSymbols == null || allSymbols.isEmpty()) return Collections.emptyList();
+        String query = word != null ? word.trim().toLowerCase() : "";
+
+        // When cursor is at var(--, var(-, or var(, show all variables
+        if (query.isEmpty() || query.equals("-") || query.equals("--")) {
+            return allSymbols;
+        }
+
+        List<ScoredVarSymbol> scored = new ArrayList<>();
+        for (SymbolEntry sym : allSymbols) {
+            if (sym == null || sym.name == null) continue;
+            int score = AutoCompleteEngine.computeFuzzyScore(sym.name, query);
+            if (score > 0) {
+                scored.add(new ScoredVarSymbol(sym, score));
+            }
+        }
+
+        // Sort descending by match score
+        Collections.sort(scored, (a, b) -> Integer.compare(b.score, a.score));
+
+        List<SymbolEntry> results = new ArrayList<>(scored.size());
+        for (ScoredVarSymbol s : scored) {
+            results.add(s.entry);
+        }
+        return results;
     }
 
     private static boolean isTypingCssVariablePrefix(String text, int offset) {

@@ -111,7 +111,7 @@ public abstract class AutoCompleteEngine {
             case JSON:
                 return "\"':{[/";
             case MARKDOWN:
-                return "[(#*`!|-";
+                return "[(#*`!|-/.\"<";
             case SVG:
                 return "<'/\"!=:@-.*+^#&";
             case GITIGNORE:

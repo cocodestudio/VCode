@@ -234,4 +234,79 @@ public class PathAutoCompleteEngineTest {
         String rel = PathAutoCompleteEngine.getRelativePath(srcDir, fileB);
         assertEquals("../assets/logo.png", rel.replace('\\', '/'));
     }
+
+    @Test
+    public void testDotAndDotDotRelativeNavigationInjection() {
+        engine.setCurrentFile(appJs);
+
+        // When typing single dot
+        List<CompletionItem> dotItems = engine.getSuggestionsForPath(".");
+        assertNotNull(dotItems);
+        boolean hasDot = false;
+        boolean hasDotDot = false;
+        for (CompletionItem item : dotItems) {
+            if ("./".equals(item.getLabel())) {
+                hasDot = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+                assertEquals(1, item.getReplaceLength());
+            }
+            if ("../".equals(item.getLabel())) {
+                hasDotDot = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+                assertEquals(1, item.getReplaceLength());
+            }
+        }
+        assertTrue("Typing . must inject ./", hasDot);
+        assertTrue("Typing . must inject ../", hasDotDot);
+
+        // When typing double dot
+        List<CompletionItem> dotDotItems = engine.getSuggestionsForPath("..");
+        assertNotNull(dotDotItems);
+        boolean hasParent = false;
+        for (CompletionItem item : dotDotItems) {
+            if ("../".equals(item.getLabel())) {
+                hasParent = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+                assertEquals(2, item.getReplaceLength());
+            }
+        }
+        assertTrue("Typing .. must inject ../", hasParent);
+    }
+
+    @Test
+    public void testCssUrlExtsIncludeCssAndScss() {
+        assertTrue("CSS_URL_EXTS must support css", PathAutoCompleteEngine.CSS_URL_EXTS.contains("css"));
+        assertTrue("CSS_URL_EXTS must support scss", PathAutoCompleteEngine.CSS_URL_EXTS.contains("scss"));
+    }
+
+    @Test
+    public void testTokenExtractionBeforePunctuationAndQuotes() {
+        engine.setCurrentFile(appJs);
+
+        // url("...") with parenthesis before quote
+        String urlText = "background: url(\"../assets/";
+        List<CompletionItem> urlItems = engine.getSuggestions(urlText, urlText.length());
+        assertNotNull(urlItems);
+        boolean hasLogoInUrl = false;
+        for (CompletionItem item : urlItems) {
+            if ("logo.png".equals(item.getLabel())) {
+                hasLogoInUrl = true;
+                break;
+            }
+        }
+        assertTrue("url(\"...\") must extract url token and allow images", hasLogoInUrl);
+
+        // src="..." with equals before quote
+        String srcText = "<img src=\"../assets/";
+        List<CompletionItem> srcItems = engine.getSuggestions(srcText, srcText.length());
+        assertNotNull(srcItems);
+        boolean hasLogoInSrc = false;
+        for (CompletionItem item : srcItems) {
+            if ("logo.png".equals(item.getLabel())) {
+                hasLogoInSrc = true;
+                break;
+            }
+        }
+        assertTrue("src=\"...\" must extract src token and allow images", hasLogoInSrc);
+    }
 }
