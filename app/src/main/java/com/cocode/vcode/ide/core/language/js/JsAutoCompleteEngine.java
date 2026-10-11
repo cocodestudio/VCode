@@ -9,6 +9,8 @@ import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.completion.staticdata.JsStaticCompletionDispatcher;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.data.npm.sync.PackageJsonSync;
+import com.cocode.vcode.ide.data.repository.ProjectRepository;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -246,109 +248,81 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos) {
         if (fullText == null || fullText.isEmpty()) return new ArrayList<>();
         ensureDocumentIndexed(fullText);
-        if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
-            return new ArrayList<>();
+        if (cursorPos < 0 || cursorPos > fullText.length()) return new ArrayList<>();
 
-        String word = getWordBeforeCursor(fullText, cursorPos);
+        JsContextScanner.JsContext ctx = JsContextScanner.scan(fullText, cursorPos, false);
 
-        // Module path completions for import and require calls
-        List<CompletionItem> importItems = getImportPathSuggestions(fullText, cursorPos);
-        if (importItems != null) return importItems;
+        // 1. Suppress inside regular string literals and comments
+        if (ctx.type == JsContextScanner.ContextType.STRING_OR_COMMENT) {
+            return Collections.emptyList();
+        }
 
-        // Named import and export clause completions
-        List<CompletionItem> importExport = getImportExportSuggestions(fullText, cursorPos, word);
-        if (importExport != null) return importExport;
-
-        // Event name string completions (addEventListener/removeEventListener/on) & DOM queries
-        String lineBefore = getLineBeforeCursor(fullText, cursorPos);
-        int lastQuote = Math.max(lineBefore.lastIndexOf('\''), lineBefore.lastIndexOf('"'));
-        if (lastQuote != -1) {
-            String beforeQuote = lineBefore.substring(0, lastQuote).trim();
-            if (beforeQuote.endsWith("(")) {
-                String callee = beforeQuote.substring(0, beforeQuote.length() - 1).trim();
-                if (callee.endsWith("addEventListener") || callee.endsWith("removeEventListener") || callee.endsWith("on")) {
-                    String typedEvent = lineBefore.substring(lastQuote + 1);
-                    List<CompletionItem> eventItems = new ArrayList<>();
-                    for (String ev : JsStandardLibrary.EVENT_NAMES) {
-                        CompletionItem ci = new CompletionItem(ev, ev, "DOM Event", CompletionItem.Type.VALUE, 0);
-                        ci.setReplaceLength(typedEvent.length());
-                        eventItems.add(ci);
-                    }
-                    return fuzzyFilter(eventItems, typedEvent);
-                } else if (callee.endsWith("getElementById")) {
-                    String typedId = lineBefore.substring(lastQuote + 1);
-                    List<CompletionItem> ids = (scopedHtmlIds != null && !scopedHtmlIds.isEmpty())
-                            ? scopedHtmlIds
-                            : ProjectSymbolIndex.getInstance().getHtmlIdItems();
-                    List<CompletionItem> filtered = fuzzyFilter(ids, typedId);
-                    List<CompletionItem> out = new ArrayList<>(filtered.size());
-                    for (CompletionItem ci : filtered) {
-                        CompletionItem copy = new CompletionItem(ci);
-                        copy.setReplaceLength(typedId.length());
-                        out.add(copy);
-                    }
-                    return out;
-                } else if (callee.endsWith("querySelector") || callee.endsWith("querySelectorAll")) {
-                    String typedQuery = lineBefore.substring(lastQuote + 1);
-                    List<CompletionItem> prefixed = getCompletionItems(typedQuery);
-                    for (CompletionItem ci : prefixed) ci.setReplaceLength(typedQuery.length());
-                    return fuzzyFilter(prefixed, typedQuery);
-                }
+        // 2. Import / require module path completion (relative project files or bare npm packages)
+        if (ctx.type == JsContextScanner.ContextType.IMPORT_PATH) {
+            if (ctx.isRelativeImport) {
+                return buildFileCompletions(ctx.importPath);
+            } else {
+                return buildBareImportSuggestions(ctx.importPath);
             }
         }
 
-        if (cachedTokens != null && cachedTokens.length > 0) {
-            int tokIdx = findTokenIndexAtOffset(cachedTokens, cursorPos);
-            if (tokIdx >= 0 && tokIdx < cachedTokens.length) {
-                byte type = cachedTokens.types[tokIdx];
-                if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_COMMENT ||
-                        type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_STRING ||
-                        type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE) {
-                    if (type == com.cocode.vcode.ide.core.diagnostic.util.TokenStream.TK_TEMPLATE && isInsideTemplateExpression(fullText, cursorPos)) {
-                        // Allow completions inside template interpolation (${...})
-                    } else if (cursorPos != cachedTokens.tokenStart[tokIdx]) {
-                        return new ArrayList<>();
-                    }
-                }
+        // 3. Named import and export clause completions
+        if (ctx.type == JsContextScanner.ContextType.IMPORT_CLAUSE || ctx.type == JsContextScanner.ContextType.IMPORT_TYPE) {
+            List<CompletionItem> importExport = getImportExportSuggestions(fullText, cursorPos, ctx.word);
+            if (importExport != null) return importExport;
+        }
+
+        // 4. Event name string completions (addEventListener/removeEventListener/on)
+        if (ctx.type == JsContextScanner.ContextType.EVENT_NAME) {
+            List<CompletionItem> eventItems = new ArrayList<>();
+            for (String ev : JsStandardLibrary.EVENT_NAMES) {
+                CompletionItem ci = new CompletionItem(ev, ev, "DOM Event", CompletionItem.Type.VALUE, 0);
+                ci.setReplaceLength(ctx.word.length());
+                eventItems.add(ci);
             }
+            return fuzzyFilter(eventItems, ctx.word);
         }
 
-        // Member access completions following a dot accessor
-        int dotCheckPos = cursorPos - word.length() - 1;
-
-        int enclosingNode = 0;
-        if (cachedTree != null && cachedTree.nodesByOffset != null) {
-            int low = 1, high = cachedTree.nodeCount - 1;
-            while (low <= high) {
-                int mid = (low + high) >>> 1;
-                int midNode = cachedTree.nodesByOffset[mid];
-                if (cachedTree.nodeStart[midNode] <= cursorPos) {
-                    enclosingNode = midNode;
-                    low = mid + 1;
-                } else {
-                    high = mid - 1;
-                }
+        // 5. DOM getElementById ID string completions
+        if (ctx.type == JsContextScanner.ContextType.GET_ELEMENT_BY_ID) {
+            List<CompletionItem> ids = (scopedHtmlIds != null && !scopedHtmlIds.isEmpty())
+                    ? scopedHtmlIds
+                    : ProjectSymbolIndex.getInstance().getHtmlIdItems();
+            List<CompletionItem> filtered = fuzzyFilter(ids, ctx.word);
+            List<CompletionItem> out = new ArrayList<>(filtered.size());
+            for (CompletionItem ci : filtered) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(ctx.word.length());
+                out.add(copy);
             }
+            return out;
         }
 
-        if (dotCheckPos >= 0 && fullText.charAt(dotCheckPos) == '.') {
-            return getMemberCompletions(fullText, dotCheckPos, word);
-        }
-        if (dotCheckPos >= 1 && fullText.charAt(dotCheckPos) == '.' && fullText.charAt(dotCheckPos - 1) == '?') {
-            return getMemberCompletions(fullText, dotCheckPos, word);
+        // 6. DOM querySelector / querySelectorAll CSS selector string completions
+        if (ctx.type == JsContextScanner.ContextType.DOM_SELECTOR) {
+            List<CompletionItem> prefixed = getCompletionItems(ctx.word);
+            for (CompletionItem ci : prefixed) ci.setReplaceLength(ctx.word.length());
+            return fuzzyFilter(prefixed, ctx.word);
         }
 
-        // Inside an object literal (after { or ,), suggest known property keys
-        List<CompletionItem> objKeys = getObjectLiteralSuggestions(fullText, cursorPos, word);
+        // 7. Dot-member access completions (strictly isolated to object members)
+        if (ctx.type == JsContextScanner.ContextType.DOT_MEMBER) {
+            return getMemberCompletions(fullText, ctx.dotOffset, ctx.word);
+        }
+
+        // 8. Inside an object literal (after { or ,), suggest known property keys
+        List<CompletionItem> objKeys = getObjectLiteralSuggestions(fullText, cursorPos, ctx.word);
         if (objKeys != null) return objKeys;
 
-        if (word.isEmpty()) {
+        if (ctx.word.isEmpty()) {
             if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '(') {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
         }
 
-        // Scope symbols, globals, and keyword completions
+        String word = ctx.word;
+
+        // 9. Lexical scope symbols, globals, and keyword completions
         List<CompletionItem> staticItems = JsStaticCompletionDispatcher.buildCompletions();
         List<CompletionItem> baseKeywords = (staticItems != null && !staticItems.isEmpty()) ? staticItems : builtinItems;
         List<CompletionItem> filteredKeywords = JsStaticCompletionDispatcher.filterStructural(baseKeywords, fullText, cursorPos);
@@ -735,7 +709,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     // Import / require path completion
-    private List<CompletionItem> getImportExportSuggestions(String fullText, int cursorPos, String word) {
+    protected List<CompletionItem> getImportExportSuggestions(String fullText, int cursorPos, String word) {
         if (fullText == null || cursorPos <= 0 || cursorPos > fullText.length()) return null;
 
         // Check if preceding is `as ` (alias)
@@ -980,37 +954,174 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 name, sourceFileUri, currentFileUri, currentText);
     }
 
+    private static final String[] BUILTIN_NODE_MODULES = {
+            "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster",
+            "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns",
+            "dns/promises", "domain", "events", "fs", "fs/promises", "http", "http2",
+            "https", "inspector", "inspector/promises", "module", "net", "os", "path",
+            "path/posix", "path/win32", "perf_hooks", "process", "punycode", "querystring",
+            "readline", "readline/promises", "repl", "stream", "stream/consumers",
+            "stream/promises", "stream/web", "string_decoder", "timers", "timers/promises",
+            "tls", "trace_events", "tty", "url", "util", "util/types", "v8", "vm",
+            "wasi", "worker_threads", "zlib"
+    };
+
     /**
-     * Returns file completions when cursor is inside an import/require path string.
-     *
-     * @return list of file completions, empty list if inside import but no matches,
-     * or {@code null} if NOT inside an import context at all.
+     * Builds completions for bare npm package imports, installed node_modules, and Node.js built-ins.
      */
-    private List<CompletionItem> getImportPathSuggestions(String fullText, int cursorPos) {
-        if (currentFile == null) return null;
+    protected List<CompletionItem> buildBareImportSuggestions(String typedPath) {
+        List<CompletionItem> items = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        String lowerTyped = typedPath != null ? typedPath.toLowerCase() : "";
 
-        String lineBefore = getLineBeforeCursor(fullText, cursorPos);
-        int lastQuote = Math.max(lineBefore.lastIndexOf('\''), lineBefore.lastIndexOf('"'));
-        if (lastQuote == -1) return null;
+        File projectRoot = currentFile != null ? ProjectRepository.findProjectRoot(currentFile) : null;
+        File nodeModulesDir = projectRoot != null ? new File(projectRoot, "node_modules") : null;
 
-        String beforeQuote = lineBefore.substring(0, lastQuote).trim();
-        boolean isImportPath = false;
-        if (beforeQuote.endsWith("from") || beforeQuote.endsWith("require(") || beforeQuote.endsWith("import(")) {
-            isImportPath = true;
-        } else if (beforeQuote.endsWith("(")) {
-            String callee = beforeQuote.substring(0, beforeQuote.length() - 1).trim();
-            if (callee.endsWith("require") || callee.endsWith("import")) {
-                isImportPath = true;
+        int lastSlash = typedPath != null ? typedPath.lastIndexOf('/') : -1;
+        if (lastSlash != -1) {
+            String pkgPrefix = typedPath.substring(0, lastSlash);
+            String subFilter = typedPath.substring(lastSlash + 1).toLowerCase();
+
+            // Node.js built-ins with subpaths (e.g. fs/promises, path/posix)
+            for (String mod : BUILTIN_NODE_MODULES) {
+                if (mod.startsWith(pkgPrefix + "/")) {
+                    String subName = mod.substring(pkgPrefix.length() + 1);
+                    if (subFilter.isEmpty() || subName.toLowerCase().startsWith(subFilter)) {
+                        if (seen.add(subName)) {
+                            CompletionItem ci = new CompletionItem(subName, subName, "Node.js Built-in", CompletionItem.Type.BUILTIN, 0);
+                            ci.setReplaceLength(subFilter.length());
+                            items.add(ci);
+                        }
+                    }
+                }
+            }
+
+            // Installed node_modules package subpaths
+            if (nodeModulesDir != null && nodeModulesDir.isDirectory()) {
+                File targetDir = new File(nodeModulesDir, pkgPrefix);
+                if (targetDir.isDirectory()) {
+                    List<File> subFiles = VFSManager.getInstance().listCachedFiles(targetDir);
+                    if (subFiles != null) {
+                        for (File f : subFiles) {
+                            String name = f.getName();
+                            if (name.startsWith(".") || "node_modules".equals(name)) continue;
+                            if (!subFilter.isEmpty() && !name.toLowerCase().startsWith(subFilter)) continue;
+                            if (f.isDirectory()) {
+                                if (seen.add(name + "/")) {
+                                    CompletionItem ci = new CompletionItem(name + "/", name + "/", "Directory", CompletionItem.Type.FOLDER, 0);
+                                    ci.setReplaceLength(subFilter.length());
+                                    items.add(ci);
+                                }
+                            } else if (isJsLike(name)) {
+                                String cleanName = name;
+                                if (cleanName.endsWith(".js") || cleanName.endsWith(".ts")) {
+                                    cleanName = cleanName.substring(0, cleanName.lastIndexOf('.'));
+                                }
+                                if (seen.add(cleanName)) {
+                                    CompletionItem ci = new CompletionItem(cleanName, cleanName, "Module", CompletionItem.Type.FILE, 0);
+                                    ci.setReplaceLength(subFilter.length());
+                                    items.add(ci);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            java.util.Collections.sort(items, (a, b) -> a.getLabel().compareToIgnoreCase(b.getLabel()));
+            return items.size() > MAX_SUGGESTIONS ? items.subList(0, MAX_SUGGESTIONS) : items;
+        }
+
+        // Top-level packages from package.json
+        if (projectRoot != null) {
+            Map<String, String> deps = PackageJsonSync.getDependencies(projectRoot);
+            if (deps != null) {
+                for (Map.Entry<String, String> entry : deps.entrySet()) {
+                    String pkgName = entry.getKey();
+                    if (pkgName == null || pkgName.isEmpty()) continue;
+                    if (lowerTyped.isEmpty() || pkgName.toLowerCase().startsWith(lowerTyped)) {
+                        if (seen.add(pkgName)) {
+                            CompletionItem ci = new CompletionItem(pkgName, pkgName, "npm: " + entry.getValue(), CompletionItem.Type.BUILTIN, 0);
+                            ci.setReplaceLength(typedPath != null ? typedPath.length() : 0);
+                            items.add(ci);
+                        }
+                    }
+                }
+            }
+            Map<String, String> devDeps = PackageJsonSync.getDevDependencies(projectRoot);
+            if (devDeps != null) {
+                for (Map.Entry<String, String> entry : devDeps.entrySet()) {
+                    String pkgName = entry.getKey();
+                    if (pkgName == null || pkgName.isEmpty()) continue;
+                    if (lowerTyped.isEmpty() || pkgName.toLowerCase().startsWith(lowerTyped)) {
+                        if (seen.add(pkgName)) {
+                            CompletionItem ci = new CompletionItem(pkgName, pkgName, "npm (dev): " + entry.getValue(), CompletionItem.Type.BUILTIN, 0);
+                            ci.setReplaceLength(typedPath != null ? typedPath.length() : 0);
+                            items.add(ci);
+                        }
+                    }
+                }
             }
         }
-        if (!isImportPath) return null;
 
-        String typedPath = lineBefore.substring(lastQuote + 1);
-        return buildFileCompletions(typedPath);
+        // Installed packages in node_modules
+        if (nodeModulesDir != null && nodeModulesDir.isDirectory()) {
+            List<File> installed = VFSManager.getInstance().listCachedFiles(nodeModulesDir);
+            if (installed != null) {
+                for (File f : installed) {
+                    String name = f.getName();
+                    if (name.startsWith(".") || !f.isDirectory()) continue;
+                    if (name.startsWith("@")) {
+                        List<File> scopedPkgs = VFSManager.getInstance().listCachedFiles(f);
+                        if (scopedPkgs != null) {
+                            for (File sp : scopedPkgs) {
+                                if (sp.isDirectory() && !sp.getName().startsWith(".")) {
+                                    String fullPkg = name + "/" + sp.getName();
+                                    if (lowerTyped.isEmpty() || fullPkg.toLowerCase().startsWith(lowerTyped)) {
+                                        if (seen.add(fullPkg)) {
+                                            CompletionItem ci = new CompletionItem(fullPkg, fullPkg, "npm package", CompletionItem.Type.BUILTIN, 0);
+                                            ci.setReplaceLength(typedPath != null ? typedPath.length() : 0);
+                                            items.add(ci);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if (lowerTyped.isEmpty() || name.toLowerCase().startsWith(lowerTyped)) {
+                            if (seen.add(name)) {
+                                CompletionItem ci = new CompletionItem(name, name, "npm package", CompletionItem.Type.BUILTIN, 0);
+                                ci.setReplaceLength(typedPath != null ? typedPath.length() : 0);
+                                items.add(ci);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Node.js built-ins
+        for (String mod : BUILTIN_NODE_MODULES) {
+            if (mod.indexOf('/') == -1 || (!lowerTyped.isEmpty() && mod.toLowerCase().startsWith(lowerTyped))) {
+                if (lowerTyped.isEmpty() || mod.toLowerCase().startsWith(lowerTyped)) {
+                    if (seen.add(mod)) {
+                        CompletionItem ci = new CompletionItem(mod, mod, "Node.js Built-in", CompletionItem.Type.BUILTIN, 0);
+                        ci.setReplaceLength(typedPath != null ? typedPath.length() : 0);
+                        items.add(ci);
+                    }
+                }
+            }
+        }
+
+        java.util.Collections.sort(items, (a, b) -> a.getLabel().compareToIgnoreCase(b.getLabel()));
+        return items.size() > MAX_SUGGESTIONS ? items.subList(0, MAX_SUGGESTIONS) : items;
     }
 
-    private List<CompletionItem> buildFileCompletions(String typedPath) {
-        File baseDir = currentFile.getParentFile();
+    /**
+     * Returns file completions when cursor is inside an import/require path string.
+     */
+    protected List<CompletionItem> buildFileCompletions(String typedPath) {
+        File baseDir = currentFile != null ? currentFile.getParentFile() : null;
         if (baseDir == null) return new ArrayList<>();
 
         int lastSlash = typedPath.lastIndexOf('/');
@@ -1023,7 +1134,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             searchDir = dirPart.isEmpty() ? baseDir : new File(baseDir, dirPart);
         } else {
             filterPrefix = typedPath.toLowerCase();
-            // For relative paths (start with . or /) search base dir; for bare names also show from base dir
             searchDir = baseDir;
         }
 
@@ -1039,14 +1149,18 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     continue;
 
                 if (f.isDirectory()) {
-                    items.add(new CompletionItem(name + "/", name + "/",
-                            "Directory", CompletionItem.Type.FOLDER, 0));
+                    CompletionItem ci = new CompletionItem(name + "/", name + "/",
+                            "Directory", CompletionItem.Type.FOLDER, 0);
+                    ci.setReplaceLength(filterPrefix.length());
+                    items.add(ci);
                 } else if (isJsLike(name) || typedPath.isEmpty()) {
 
                     if (currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath()))
                         continue;
 
-                    items.add(new CompletionItem(name, name, "File", CompletionItem.Type.FILE, 0));
+                    CompletionItem ci = new CompletionItem(name, name, "File", CompletionItem.Type.FILE, 0);
+                    ci.setReplaceLength(filterPrefix.length());
+                    items.add(ci);
                 }
             }
         }

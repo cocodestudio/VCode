@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine;
+import com.cocode.vcode.ide.core.language.js.JsContextScanner;
 import com.cocode.vcode.ide.core.language.js.JsKeywords;
 import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
 import com.cocode.vcode.ide.core.model.CompletionItem;
@@ -55,39 +56,82 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
 
         ensureDocumentIndexed(fullText);
 
-        String word = getWordBeforeCursor(fullText, cursorPos);
+        JsContextScanner.JsContext ctx = JsContextScanner.scan(fullText, cursorPos, true);
 
-        // Check if cursor is after '.' (member access)
-        int dotCheckPos = cursorPos - word.length() - 1;
-        boolean isMemberAccess = (dotCheckPos >= 0 && fullText.charAt(dotCheckPos) == '.')
-                || (dotCheckPos >= 1 && fullText.charAt(dotCheckPos) == '.' && fullText.charAt(dotCheckPos - 1) == '?');
+        // 1. Suppress inside regular string literals and comments
+        if (ctx.type == JsContextScanner.ContextType.STRING_OR_COMMENT) {
+            return Collections.emptyList();
+        }
 
-        // If after dot, delegate entirely to member completions
-        if (isMemberAccess) {
+        // 2. Import / require module path completion (relative project files or bare npm packages)
+        if (ctx.type == JsContextScanner.ContextType.IMPORT_PATH) {
+            if (ctx.isRelativeImport) {
+                return buildFileCompletions(ctx.importPath);
+            } else {
+                return buildBareImportSuggestions(ctx.importPath);
+            }
+        }
+
+        // 3. Named import and export clause completions
+        if (ctx.type == JsContextScanner.ContextType.IMPORT_CLAUSE || ctx.type == JsContextScanner.ContextType.IMPORT_TYPE) {
+            List<CompletionItem> importExport = getImportExportSuggestions(fullText, cursorPos, ctx.word);
+            if (importExport != null) return importExport;
+        }
+
+        // 4. Dot-member access completions (strictly isolated to object members)
+        if (ctx.type == JsContextScanner.ContextType.DOT_MEMBER) {
             return super.getSuggestions(fullText, cursorPos);
         }
 
-        // Check if cursor is in a type annotation context
-        if (isTypeAnnotationPosition(fullText, cursorPos, word)) {
-            return getTypeAnnotationSuggestions(fullText, cursorPos, word);
+        // 5. TypeScript type annotation, generic type argument, or type assertion positions
+        if (ctx.type == JsContextScanner.ContextType.TYPE_ANNOTATION
+                || ctx.type == JsContextScanner.ContextType.GENERIC_TYPE
+                || ctx.type == JsContextScanner.ContextType.TYPE_ASSERTION) {
+            return getTypeAnnotationSuggestions(fullText, cursorPos, ctx.word);
         }
 
-        // Check if cursor is inside an object literal conforming to an interface
-        List<CompletionItem> ifaceProps = getInterfacePropertySuggestions(fullText, cursorPos, word);
+        // 6. Interface or type alias body member positions
+        if (ctx.type == JsContextScanner.ContextType.INTERFACE_MEMBER) {
+            return Collections.emptyList();
+        }
+
+        // 7. Check if cursor is inside an object literal conforming to an interface
+        List<CompletionItem> ifaceProps = getInterfacePropertySuggestions(fullText, cursorPos, ctx.word);
         if (ifaceProps != null && !ifaceProps.isEmpty()) {
             return ifaceProps;
         }
 
+        // 8. Event name string completions
+        if (ctx.type == JsContextScanner.ContextType.EVENT_NAME) {
+            return super.getSuggestions(fullText, cursorPos);
+        }
+
+        // 9. DOM getElementById ID completions
+        if (ctx.type == JsContextScanner.ContextType.GET_ELEMENT_BY_ID) {
+            return super.getSuggestions(fullText, cursorPos);
+        }
+
+        // 10. DOM querySelector CSS selector completions
+        if (ctx.type == JsContextScanner.ContextType.DOM_SELECTOR) {
+            return super.getSuggestions(fullText, cursorPos);
+        }
+
+        // 11. Fallback check for type annotation position
+        if (isTypeAnnotationPosition(fullText, cursorPos, ctx.word)) {
+            return getTypeAnnotationSuggestions(fullText, cursorPos, ctx.word);
+        }
+
+        // 12. Lexical scope, globals and keywords
         List<CompletionItem> base = super.getSuggestions(fullText, cursorPos);
-        if (word.isEmpty()) return base;
+        if (ctx.word.isEmpty()) return base;
 
         List<CompletionItem> tsItems = new ArrayList<>();
-        String lower = word.toLowerCase();
+        String lower = ctx.word.toLowerCase();
         for (String kw : JsKeywords.TS_KEYWORDS) {
             if (kw.startsWith(lower)) {
                 CompletionItem item = new CompletionItem(kw, kw, "TypeScript", CompletionItem.Type.KEYWORD, 0);
                 item.setSortScore(100);
-                item.setReplaceLength(word.length());
+                item.setReplaceLength(ctx.word.length());
                 tsItems.add(item);
             }
         }
@@ -117,129 +161,11 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
     }
 
     /**
-     * Checks if the cursor is at a position expecting a type annotation, such as after
-     * a colon, generic bracket, union/intersection operator, type alias assignment,
-     * tuple bracket, or type assertion keyword.
+     * Checks if the cursor is at a position expecting a type annotation, delegating
+     * to {@link JsContextScanner#isTypeAnnotationPosition(String, int, String)}.
      */
     public static boolean isTypeAnnotationPosition(String text, int cursorPos, String word) {
-        if (text == null || cursorPos <= 0 || cursorPos > text.length()) return false;
-
-        int idx = cursorPos - word.length() - 1;
-        while (idx >= 0 && Character.isWhitespace(text.charAt(idx))) {
-            idx--;
-        }
-        if (idx < 0) return false;
-
-        char c = text.charAt(idx);
-
-        // Union or intersection ('A | ' or 'A & ')
-        if (c == '|' || c == '&') {
-            if (idx > 0 && text.charAt(idx - 1) == c) return false;
-            return true;
-        }
-
-        // Tuple type opening bracket (e.g. 'let tuple: [' or 'type Tuple = [')
-        if (c == '[') {
-            int pre = idx - 1;
-            while (pre >= 0 && Character.isWhitespace(text.charAt(pre))) pre--;
-            if (pre >= 0) {
-                char preC = text.charAt(pre);
-                if (preC == ':' || preC == '=' || preC == '<' || preC == ',' || preC == '|' || preC == '&') {
-                    return true;
-                }
-                int wStart = pre;
-                while (wStart >= 0 && Character.isJavaIdentifierPart(text.charAt(wStart))) wStart--;
-                wStart++;
-                if (wStart <= pre) {
-                    String prevWord = text.substring(wStart, pre + 1);
-                    if ("as".equals(prevWord) || "is".equals(prevWord) ||
-                            "extends".equals(prevWord) || "implements".equals(prevWord)) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        // Generic type argument ('Promise<' or 'Map<string, ') or tuple element position ('[string, ')
-        if (c == '<' || c == ',') {
-            int angleDepth = 0;
-            int bracketDepth = 0;
-            for (int j = idx; j >= 0; j--) {
-                char ch = text.charAt(j);
-                if (ch == '>') angleDepth++;
-                else if (ch == '<') {
-                    if (angleDepth > 0) angleDepth--;
-                    else return true;
-                } else if (ch == ']') bracketDepth++;
-                else if (ch == '[') {
-                    if (bracketDepth > 0) bracketDepth--;
-                    else {
-                        int pre = j - 1;
-                        while (pre >= 0 && Character.isWhitespace(text.charAt(pre))) pre--;
-                        if (pre >= 0) {
-                            char preC = text.charAt(pre);
-                            if (preC == ':' || preC == '=' || preC == '<' || preC == ',' || preC == '|' || preC == '&') {
-                                return true;
-                            }
-                            int wStart = pre;
-                            while (wStart >= 0 && Character.isJavaIdentifierPart(text.charAt(wStart))) wStart--;
-                            wStart++;
-                            if (wStart <= pre) {
-                                String prevWord = text.substring(wStart, pre + 1);
-                                if ("as".equals(prevWord) || "is".equals(prevWord) ||
-                                        "extends".equals(prevWord) || "implements".equals(prevWord)) {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                } else if (ch == ';' || ch == '{' || ch == '}') {
-                    break;
-                }
-            }
-        }
-
-        // Type assertion or heritage keywords ('as', 'is', 'extends', 'implements')
-        int wordEnd = idx + 1;
-        int wordStart = idx;
-        while (wordStart >= 0 && Character.isJavaIdentifierPart(text.charAt(wordStart))) {
-            wordStart--;
-        }
-        wordStart++;
-        if (wordStart < wordEnd) {
-            String prevWord = text.substring(wordStart, wordEnd);
-            if ("as".equals(prevWord) || "is".equals(prevWord) ||
-                    "extends".equals(prevWord) || "implements".equals(prevWord)) {
-                return true;
-            }
-        }
-
-        // Type alias assignment ('type Foo = ')
-        if (c == '=') {
-            int lineStart = idx;
-            while (lineStart > 0 && text.charAt(lineStart - 1) != '\n' && text.charAt(lineStart - 1) != ';') {
-                lineStart--;
-            }
-            String stmt = text.substring(lineStart, idx).trim();
-            if (stmt.matches(".*\\btype\\s+[A-Za-z0-9_$]+(\\s*<[^>]*>)?\\s*")) {
-                return true;
-            }
-        }
-
-        // Variable, parameter, or return type annotation
-        if (c == ':') {
-            int lineStart = idx;
-            while (lineStart > 0 && text.charAt(lineStart - 1) != '\n' && text.charAt(lineStart - 1) != ';') {
-                lineStart--;
-            }
-            String stmt = text.substring(lineStart, idx).trim();
-            if (stmt.startsWith("case ") || stmt.startsWith("default:")) {
-                return false;
-            }
-            return true;
-        }
-
-        return false;
+        return JsContextScanner.isTypeAnnotationPosition(text, cursorPos, word);
     }
 
     private List<CompletionItem> getTypeAnnotationSuggestions(String fullText, int cursorPos, String word) {
