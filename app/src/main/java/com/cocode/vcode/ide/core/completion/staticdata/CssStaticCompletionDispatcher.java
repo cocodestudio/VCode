@@ -84,36 +84,15 @@ public final class CssStaticCompletionDispatcher {
     public static Position detectPosition(String source, CssTokenStream tokens,
                                           CssSyntaxTree tree, int cursor) {
         if (source == null || cursor < 0 || cursor > source.length()) return Position.NONE;
-        // Find the enclosing block by scanning for '{' and '}' before
-        // the cursor, then check whether the cursor is between '{' and
-        // the matching '}'. If not inside a block, return NONE.
-        int openBrace = -1;
-        for (int i = cursor - 1; i >= 0; i--) {
-            char c = source.charAt(i);
-            if (c == '}') return Position.NONE; // outside any block
-            if (c == '{') {
-                openBrace = i;
-                break;
-            }
+        com.cocode.vcode.ide.core.language.css.CssContextScanner.CssContext ctx =
+                com.cocode.vcode.ide.core.language.css.CssContextScanner.scan(source, cursor, false);
+        if (ctx.type == com.cocode.vcode.ide.core.language.css.CssContextScanner.ContextType.PROPERTY_NAME) {
+            return Position.PROPERTY_NAME;
         }
-        if (openBrace < 0) return Position.NONE;
-
-        // Inside a block. Walk forward from openBrace to the cursor
-        // to find the most recent declaration boundary (';' or the
-        // '{' itself) and the most recent ':'.
-        int lastBoundary = openBrace;
-        int lastColon = -1;
-        for (int i = openBrace + 1; i < cursor; i++) {
-            char c = source.charAt(i);
-            if (c == ';' || c == '{') lastBoundary = i;
-            else if (c == ':') lastColon = i;
+        if (ctx.type == com.cocode.vcode.ide.core.language.css.CssContextScanner.ContextType.PROPERTY_VALUE) {
+            return Position.PROPERTY_VALUE;
         }
-        // Property-value position: there is a ':' after the most
-        // recent boundary.
-        if (lastColon > lastBoundary) return Position.PROPERTY_VALUE;
-        // Property-name position: no ':' after the most recent
-        // boundary.
-        return Position.PROPERTY_NAME;
+        return Position.NONE;
     }
 
     /**
@@ -123,35 +102,9 @@ public final class CssStaticCompletionDispatcher {
      */
     public static String resolvePropertyName(String source, CssTokenStream tokens, int cursor) {
         if (source == null || cursor < 0 || cursor > source.length()) return null;
-        int openBrace = -1;
-        for (int i = cursor - 1; i >= 0; i--) {
-            char c = source.charAt(i);
-            if (c == '}') return null;
-            if (c == '{') {
-                openBrace = i;
-                break;
-            }
-        }
-        if (openBrace < 0) return null;
-        // Find the last ';' or '{' before cursor, then the ':' after
-        // that boundary, then read the property-name token
-        // between the boundary and the ':'.
-        int lastBoundary = openBrace;
-        int lastColon = -1;
-        for (int i = openBrace + 1; i < cursor; i++) {
-            char c = source.charAt(i);
-            if (c == ';' || c == '{') lastBoundary = i;
-            else if (c == ':') lastColon = i;
-        }
-        if (lastColon <= lastBoundary) return null;
-        // Property name is the trimmed substring from (lastBoundary+1)
-        // to (lastColon). Skip leading whitespace.
-        int nameStart = lastBoundary + 1;
-        while (nameStart < lastColon && Character.isWhitespace(source.charAt(nameStart))) {
-            nameStart++;
-        }
-        if (nameStart >= lastColon) return null;
-        return source.substring(nameStart, lastColon).trim();
+        com.cocode.vcode.ide.core.language.css.CssContextScanner.CssContext ctx =
+                com.cocode.vcode.ide.core.language.css.CssContextScanner.scan(source, cursor, false);
+        return ctx.propertyName;
     }
 
     public static void clearCachesForTest() {

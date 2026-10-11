@@ -220,6 +220,8 @@ public final class CssLspServer implements LspServer {
         boolean insideVar = isInsideVarFunction(doc.text, flatOffset);
         boolean isVarPrefix = isTypingCssVariablePrefix(doc.text, flatOffset);
         if (insideVar || isVarPrefix) {
+            String word = getWordBeforeCursor(doc.text, flatOffset);
+            int replaceLen = word.length();
             List<SymbolEntry> varSymbols = collectAllWorkspaceCssVariables(doc);
             for (SymbolEntry sym : varSymbols) {
                 if (token != null && token.isCancelled()) return Collections.emptyList();
@@ -233,8 +235,8 @@ public final class CssLspServer implements LspServer {
                             .setKind(CompletionItemKind.VARIABLE)
                             .setDetail(detail)
                             .setDocumentation(docContent);
-                    if (isVarPrefix) {
-                        int startOff = Math.max(0, flatOffset - 2);
+                    if (replaceLen > 0) {
+                        int startOff = Math.max(0, flatOffset - replaceLen);
                         vb.setTextEdit(new TextEdit(new LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)), insert));
                     }
                     items.add(vb.build());
@@ -281,6 +283,8 @@ public final class CssLspServer implements LspServer {
 
         // Augment with CSS variables if typing inside var( or typing --
         if (isInsideVarFunction(doc.text, flatOffset) || isTypingCssVariablePrefix(doc.text, flatOffset)) {
+            String word = getWordBeforeCursor(doc.text, flatOffset);
+            int replaceLen = word.length();
             List<SymbolEntry> varSymbols = collectAllWorkspaceCssVariables(doc);
             List<LspCompletionItem> augmented = new ArrayList<>(converted);
             Set<String> seen = new HashSet<>();
@@ -295,7 +299,7 @@ public final class CssLspServer implements LspServer {
                             LspCompletionItem.KIND_VARIABLE,
                             sym.detail != null ? sym.detail : "CSS Variable",
                             null,
-                            sym.name.length()
+                            replaceLen
                     ));
                 }
             }
@@ -303,6 +307,15 @@ public final class CssLspServer implements LspServer {
         }
 
         return converted;
+    }
+
+    private static String getWordBeforeCursor(String text, int offset) {
+        if (text == null || offset <= 0) return "";
+        int start = offset;
+        while (start > 0 && isCssVarChar(text.charAt(start - 1))) {
+            start--;
+        }
+        return text.substring(start, offset);
     }
 
     public static List<LspCompletionItem> convertCompletions(List<com.cocode.vcode.ide.core.model.CompletionItem> legacy) {

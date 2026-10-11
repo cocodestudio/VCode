@@ -5,6 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.EmmetParser;
 import com.cocode.vcode.ide.core.autocomplete.FastTrie;
+import com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.completion.staticdata.CssStaticCompletionDispatcher;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
@@ -15,6 +16,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +54,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             "0 20px 25px -5px rgba(0,0,0,0.1)", "inset 0 2px 4px 0 rgba(0,0,0,0.06)"
     };
     // Instance state
+    private final PathAutoCompleteEngine pathEngine;
     private final List<CompletionItem> propertyItems = new ArrayList<>();
     private final Map<String, List<String>> valueMap = new HashMap<>();
     private final List<CompletionItem> htmlTagItems = new ArrayList<>();
@@ -82,6 +85,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
     public CssAutoCompleteEngine(Context context) {
         super(context);
+        this.pathEngine = new PathAutoCompleteEngine(context);
         loadProperties();
         loadHtmlTags();
         loadColors();
@@ -90,6 +94,9 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     @Override
     public void setCurrentFile(File file) {
         super.setCurrentFile(file);
+        if (pathEngine != null) {
+            pathEngine.setCurrentFile(file);
+        }
     }
 
     // Asset loading
@@ -182,11 +189,7 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
     public List<CompletionItem> getSuggestions(String fullText, int cursorPos, boolean isInlineStyle) {
         if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
-            return new ArrayList<>();
-
-        if (isInsideComment(fullText, cursorPos) || isInsideStringLiteral(fullText, cursorPos)) {
-            return new ArrayList<>();
-        }
+            return Collections.emptyList();
 
         ensureCustomPropsIndexed(fullText);
         ensureDocumentClassesAndIdsIndexed(fullText);
@@ -195,38 +198,62 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         String trimmed = line.trim();
         String word = getWordBeforeCursor(fullText, cursorPos);
 
-        // Prevent showing all suggestions immediately after typing { or }
+        // Delimiter suppression: directly after '{', '}', or '>' (combinator/tag closure)
+        if (line.endsWith(">") || trimmed.endsWith("{") || trimmed.endsWith("}")) {
+            return Collections.emptyList();
+        }
         if (word.isEmpty()) {
-            if (trimmed.endsWith("{") || trimmed.endsWith("}")) {
-                return new ArrayList<>();
-            }
             if (cursorPos > 0 && fullText.charAt(cursorPos - 1) == '(' && !isInsideVar(fullText, cursorPos)) {
-                return new ArrayList<>();
+                return Collections.emptyList();
             }
         }
 
-        // Inline style handling inside HTML elements
-        if (isInlineStyle) {
-            Zone declZone = detectDeclarationZone(fullText, cursorPos);
-            if (declZone == Zone.VALUE) {
-                String propName = extractPropertyBeforeColon(line);
-                return getValueSuggestions(propName, word, fullText, cursorPos);
-            } else {
-                return getPropertySuggestions(word, fullText, cursorPos);
-            }
+        CssContextScanner.CssContext ctx = CssContextScanner.scan(fullText, cursorPos, isInlineStyle);
+        if (ctx.isInsideComment || ctx.isInsideString) {
+            return Collections.emptyList();
         }
 
-        // Media, supports, and container condition completions
-        if (isInsideAtRuleCondition(fullText, cursorPos)) {
+        if (ctx.type == CssContextScanner.ContextType.URL_VALUE) {
+            if (pathEngine != null) {
+                List<CompletionItem> pathSuggestions = pathEngine.getSuggestions(fullText, cursorPos);
+                if (pathSuggestions != null && !pathSuggestions.isEmpty()) {
+                    return pathSuggestions;
+                }
+            }
+            return Collections.emptyList();
+        }
+
+        if (ctx.type == CssContextScanner.ContextType.AT_RULE) {
+            String atWord = word.startsWith("@") ? word : ("@" + word);
+            List<CompletionItem> filtered = fuzzyFilter(CssDefinitions.AT_RULE_ITEMS, atWord);
+            List<CompletionItem> out = new ArrayList<>(filtered.size());
+            for (CompletionItem ci : filtered) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(atWord.length());
+                out.add(copy);
+            }
+            return out;
+        }
+
+        if (ctx.type == CssContextScanner.ContextType.MEDIA_FEATURE) {
             return getMediaSuggestions(fullText, cursorPos, word);
         }
 
-        // At-rule completions when line starts with "@"
-        if (trimmed.startsWith("@")) {
-            String atWord = "@" + word;
-            return fuzzyFilter(CssDefinitions.AT_RULE_ITEMS, atWord);
+        if (ctx.type == CssContextScanner.ContextType.PROPERTY_VALUE) {
+            String propName = ctx.propertyName != null && !ctx.propertyName.isEmpty()
+                    ? ctx.propertyName
+                    : extractPropertyBeforeColon(line);
+            return getValueSuggestions(propName, word, fullText, cursorPos);
         }
 
+        if (ctx.type == CssContextScanner.ContextType.PROPERTY_NAME) {
+            if (word.startsWith("&")) {
+                return getNestedSuggestions(word, trimmed, fullText, cursorPos);
+            }
+            return getPropertySuggestions(word, fullText, cursorPos);
+        }
+
+        // ContextType.SELECTOR
         int wordStartPos = cursorPos - word.length();
         boolean directlyAfterColon = wordStartPos > 0 && fullText.charAt(wordStartPos - 1) == ':';
         boolean cursorRightAfterColon = word.isEmpty() && cursorPos > 0
@@ -243,42 +270,11 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
                 && fullText.charAt(cursorPos - 1) == '#';
         boolean isIdSelector = directlyAfterHash || cursorRightAfterHash || word.startsWith("#");
 
-        // Context-aware property, selector, and value completions based on AST position
-        CssStaticCompletionDispatcher.Position pos =
-                CssStaticCompletionDispatcher.detectPosition(fullText, null, null, cursorPos);
-
-        if (pos == CssStaticCompletionDispatcher.Position.PROPERTY_VALUE) {
-            String propName = CssStaticCompletionDispatcher.resolvePropertyName(fullText, null, cursorPos);
-            if (propName == null || propName.isEmpty()) {
-                propName = extractPropertyBeforeColon(line);
-            }
-            return getValueSuggestions(propName, word, fullText, cursorPos);
-        }
-
-        if (pos == CssStaticCompletionDispatcher.Position.PROPERTY_NAME) {
-            // If user explicitly typed a nested selector prefix (e.g. ., #, :, &)
-            if (isClassSelector) {
-                String classQuery = word.startsWith(".") ? word : ("." + word);
-                return filterClassSelectors(classQuery);
-            }
-            if (isIdSelector) {
-                String idQuery = word.startsWith("#") ? word : ("#" + word);
-                return filterIdSelectors(idQuery);
-            }
-            if (isPseudo) {
-                String pseudoQuery = word.startsWith(":") ? word.substring(1) : word;
-                return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, pseudoQuery);
-            }
-            if (word.startsWith("&")) {
-                return getNestedSuggestions(word, trimmed, fullText, cursorPos);
-            }
-            return getPropertySuggestions(word, fullText, cursorPos);
-        }
-
-        // pos == NONE: We are in selector position (outside any declaration block)
         if (isPseudo) {
-            String pseudoQuery = word.startsWith(":") ? word.substring(1) : word;
-            return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, pseudoQuery);
+            boolean hasTwoColons = (wordStartPos > 1 && fullText.charAt(wordStartPos - 1) == ':' && fullText.charAt(wordStartPos - 2) == ':')
+                    || (word.isEmpty() && cursorPos > 1 && fullText.charAt(cursorPos - 1) == ':' && fullText.charAt(cursorPos - 2) == ':')
+                    || word.startsWith("::");
+            return filterPseudoSelectors(word, directlyAfterColon || cursorRightAfterColon, hasTwoColons);
         }
 
         if (isClassSelector) {
@@ -292,6 +288,28 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         return getSelectorSuggestions(word, trimmed);
+    }
+
+    private List<CompletionItem> filterPseudoSelectors(String word, boolean hasPrecedingColon, boolean hasTwoColons) {
+        String query = word.startsWith("::") ? word.substring(2) : (word.startsWith(":") ? word.substring(1) : word);
+        List<CompletionItem> filtered = fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, query);
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
+        for (CompletionItem ci : filtered) {
+            CompletionItem copy;
+            if (hasTwoColons) {
+                String rawName = ci.getLabel().replaceAll("^:+", "");
+                copy = new CompletionItem(ci.getLabel(), rawName, ci.getDetail(), ci.getType(), ci.getCursorOffset());
+            } else if (hasPrecedingColon) {
+                copy = new CompletionItem(ci.getLabel(), ci.getEffectiveInsertText(), ci.getDetail(), ci.getType(), ci.getCursorOffset());
+            } else if (word.startsWith(":")) {
+                copy = new CompletionItem(ci.getLabel(), ci.getLabel(), ci.getDetail(), ci.getType(), ci.getCursorOffset());
+            } else {
+                copy = new CompletionItem(ci.getLabel(), ci.getLabel(), ci.getDetail(), ci.getType(), ci.getCursorOffset());
+            }
+            copy.setReplaceLength(word.length());
+            out.add(copy);
+        }
+        return out;
     }
 
     /**
@@ -409,16 +427,6 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private List<CompletionItem> getValueSuggestions(String propertyName, String word, String fullText, int cursorPos) {
-        // Emmet CSS shorthand in value position
-        String expanded = EmmetParser.expandCss(word);
-        if (expanded != null) {
-            List<CompletionItem> res = new ArrayList<>();
-            CompletionItem emmetItem = new CompletionItem(word, expanded, "Emmet", CompletionItem.Type.SNIPPET, 0);
-            emmetItem.setReplaceLength(word.length());
-            res.add(emmetItem);
-            return res;
-        }
-
         // First argument of var() only accepts custom properties
         if (isInsideVarFirstArg(fullText, cursorPos)) {
             List<CompletionItem> varItems = new ArrayList<>();
@@ -497,7 +505,14 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        return fuzzyFilter(items, word);
+        List<CompletionItem> filtered = fuzzyFilter(items, word);
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
+        for (CompletionItem ci : filtered) {
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(word.length());
+            out.add(copy);
+        }
+        return out;
     }
 
     private List<CompletionItem> getPropertySuggestions(String word, String fullText, int cursorPos) {
@@ -515,13 +530,29 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         List<CompletionItem> all = new ArrayList<>();
         List<CompletionItem> matches = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssPropertyIndex().filter(word, MAX_SUGGESTIONS);
         if (!matches.isEmpty()) {
-            all.addAll(matches);
-            all.addAll(fuzzyFilter(cachedCustomProps, word));
+            for (CompletionItem ci : matches) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(word.length());
+                all.add(copy);
+            }
+            List<CompletionItem> varMatches = fuzzyFilter(cachedCustomProps, word);
+            for (CompletionItem ci : varMatches) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(word.length());
+                all.add(copy);
+            }
             return all;
         } else {
             List<CompletionItem> fallback = new ArrayList<>(propertyItems);
             fallback.addAll(cachedCustomProps);
-            return fuzzyFilter(fallback, word);
+            List<CompletionItem> filtered = fuzzyFilter(fallback, word);
+            List<CompletionItem> outFallback = new ArrayList<>(filtered.size());
+            for (CompletionItem ci : filtered) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(word.length());
+                outFallback.add(copy);
+            }
+            return outFallback;
         }
     }
 
@@ -550,7 +581,14 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         } else if (word.startsWith(":")) {
             all.addAll(CssDefinitions.PSEUDO_ITEMS);
         }
-        return fuzzyFilter(all, word);
+        List<CompletionItem> filtered = fuzzyFilter(all, word);
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
+        for (CompletionItem ci : filtered) {
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(word.length());
+            out.add(copy);
+        }
+        return out;
     }
 
     private List<CompletionItem> filterClassSelectors(String query) {
@@ -658,11 +696,23 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
     private List<CompletionItem> getSelectorSuggestions(String word, String trimmed) {
         if (word.startsWith(":")) {
-            return fuzzyFilter(CssDefinitions.PSEUDO_ITEMS, word.substring(1));
+            return filterPseudoSelectors(word, false, false);
         }
-        List<CompletionItem> all = new ArrayList<>(htmlTagItems);
+        List<CompletionItem> all = new ArrayList<>();
+        for (CompletionItem ci : htmlTagItems) {
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(word.length());
+            all.add(copy);
+        }
         addCrossFileSelectors(all);
-        return fuzzyFilter(all, word);
+        List<CompletionItem> filtered = fuzzyFilter(all, word);
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
+        for (CompletionItem ci : filtered) {
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(word.length());
+            out.add(copy);
+        }
+        return out;
     }
 
     private boolean isColorProperty(String prop) {
@@ -711,7 +761,14 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
             items.add(new CompletionItem(label, insertText, "Media feature", CompletionItem.Type.CSS_VALUE, offset));
         }
 
-        return fuzzyFilter(items, word);
+        List<CompletionItem> filtered = fuzzyFilter(items, word);
+        List<CompletionItem> out = new ArrayList<>(filtered.size());
+        for (CompletionItem ci : filtered) {
+            CompletionItem copy = new CompletionItem(ci);
+            copy.setReplaceLength(word.length());
+            out.add(copy);
+        }
+        return out;
     }
 
     private boolean isInParens(String fullText, int cursorPos) {
