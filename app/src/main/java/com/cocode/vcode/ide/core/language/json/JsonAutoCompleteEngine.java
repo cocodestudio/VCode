@@ -13,10 +13,14 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+
+import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 
 /**
  * Context-aware suggestion provider for JSON documents.
@@ -99,7 +103,12 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
      */
     private String getCurrentFileName() {
         if (currentFile == null) return null;
-        return currentFile.getName();
+        String name = currentFile.getPath();
+        int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        if (slash >= 0) {
+            name = name.substring(slash + 1);
+        }
+        return name;
     }
 
     // Snippet loading
@@ -153,35 +162,25 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         if (fullText == null || cursorPos < 0 || cursorPos > fullText.length())
             return new ArrayList<>();
 
-        if (isInsideComment(fullText, cursorPos)) {
+        JsonContextScanner.JsonContext ctx = JsonContextScanner.scan(fullText, cursorPos);
+        if (ctx.type == JsonContextScanner.ContextType.COMMENT || ctx.type == JsonContextScanner.ContextType.NONE) {
             return new ArrayList<>();
         }
 
         String fileName = getCurrentFileName();
-        JsonStaticCompletionDispatcher.Position staticPos = JsonStaticCompletionDispatcher.detectPosition(fullText, cursorPos);
-        if (staticPos == JsonStaticCompletionDispatcher.Position.FILE_EMPTY) {
-            return JsonStaticCompletionDispatcher.buildCompletions(staticPos, fileName);
+        if (ctx.type == JsonContextScanner.ContextType.FILE_EMPTY) {
+            return JsonStaticCompletionDispatcher.buildCompletions(JsonStaticCompletionDispatcher.Position.FILE_EMPTY, fileName);
         }
 
         ensureDocKeysIndexed(fullText);
 
-        // Check if cursor is inside a quoted string
-        int quoteCount = 0;
-        for (int k = 0; k < cursorPos; k++) {
-            if (fullText.charAt(k) == '"' && (k == 0 || fullText.charAt(k - 1) != '\\')) {
-                quoteCount++;
-            }
-        }
-        boolean inQuotes = (quoteCount % 2 != 0);
+        String query = ctx.word;
+        int replaceLen = ctx.replaceLength;
 
-        String query = getJsonQuery(fullText, cursorPos, inQuotes);
-        int replaceLen = (inQuotes ? 1 : 0) + query.length();
-
-        String line = getLineBeforeCursor(fullText, cursorPos);
-        String trimmed = line.trim();
-
-        // Prevent showing all suggestions immediately after typing { or }
-        if (query.isEmpty() && !inQuotes) {
+        // Prevent showing all suggestions immediately after typing { or } when query is empty outside quotes
+        if (query.isEmpty() && !ctx.inQuotes) {
+            String line = getLineBeforeCursor(fullText, cursorPos);
+            String trimmed = line.trim();
             if (trimmed.endsWith("{") || trimmed.endsWith("}")) {
                 return new ArrayList<>();
             }
@@ -190,15 +189,39 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // Value position completions
-        if (staticPos == JsonStaticCompletionDispatcher.Position.VALUE) {
-            String currentKey = resolveCurrentKey(fullText, cursorPos);
+        // 1. Value position completions
+        if (ctx.type == JsonContextScanner.ContextType.OBJECT_VALUE) {
             List<CompletionItem> candidates = new ArrayList<>();
 
-            List<CompletionItem> specificValues = getSpecificValueCompletions(fileName, currentKey);
+            // Specific value completions for package.json, tsconfig.json, manifest.json
+            List<CompletionItem> specificValues = getSpecificValueCompletions(fileName, ctx.activeKey, ctx.inQuotes);
             if (specificValues != null && !specificValues.isEmpty()) {
                 candidates.addAll(specificValues);
             }
+
+            // Schema-driven enum and boolean completions
+            addSchemaValueCompletions(fileName, ctx, candidates);
+
+            // Generic values (booleans, null, structural snippets)
+            for (CompletionItem vi : VALUE_ITEMS) {
+                candidates.add(new CompletionItem(vi.getLabel(), vi.getInsertText(), vi.getDetail(), vi.getType(), vi.getCursorOffset()));
+            }
+
+            List<CompletionItem> filtered = fuzzyFilter(candidates, query);
+            for (CompletionItem ci : filtered) {
+                if (ci.getReplaceLength() < 0) {
+                    ci.setReplaceLength(replaceLen);
+                }
+            }
+            return filtered;
+        }
+
+        // 2. Array element position completions
+        if (ctx.type == JsonContextScanner.ContextType.ARRAY_ELEMENT) {
+            List<CompletionItem> candidates = new ArrayList<>();
+
+            // Schema-driven array completions (e.g. lib or paths)
+            addSchemaArrayCompletions(fileName, ctx, candidates);
 
             for (CompletionItem vi : VALUE_ITEMS) {
                 candidates.add(new CompletionItem(vi.getLabel(), vi.getInsertText(), vi.getDetail(), vi.getType(), vi.getCursorOffset()));
@@ -206,111 +229,220 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
 
             List<CompletionItem> filtered = fuzzyFilter(candidates, query);
             for (CompletionItem ci : filtered) {
-                ci.setReplaceLength(replaceLen);
+                if (ci.getReplaceLength() < 0) {
+                    ci.setReplaceLength(replaceLen);
+                }
             }
             return filtered;
         }
 
-        // Key position completions
+        // 3. Key position completions (OBJECT_KEY)
         List<CompletionItem> keyCandidates = new ArrayList<>();
 
-        // Schema-aware key suggestions based on file name
-        if (fileName != null) {
-            ensureSchemasLoaded();
-            List<CompletionItem> schemaKeys = SCHEMA_KEYS.get(fileName);
+        // Schema-aware key suggestions based on file name & active property path
+        addSchemaKeyCompletions(fileName, ctx, keyCandidates);
 
-            // For tsconfig.json, detect if we're inside compilerOptions block
-            if ("tsconfig.json".equals(fileName) && isInsideObjectKey(fullText, cursorPos, "compilerOptions")) {
-                schemaKeys = SCHEMA_KEYS.get("tsconfig_compilerOptions");
+        // Document keys from document itself
+        for (CompletionItem dk : cachedDocKeys) {
+            String clean = JsonSchemaManager.cleanKey(dk.getLabel());
+            if (!ctx.existingKeys.contains(clean)) {
+                keyCandidates.add(new CompletionItem(dk.getLabel(), dk.getInsertText(), dk.getDetail(), dk.getType(), dk.getCursorOffset()));
             }
-
-            if (schemaKeys != null) {
-                for (CompletionItem sk : schemaKeys) {
-                    keyCandidates.add(new CompletionItem(sk.getLabel(), sk.getInsertText(), sk.getDetail(), sk.getType(), sk.getCursorOffset()));
+        }
+        // Snippet templates for non-schema files or fallback
+        if (keyCandidates.isEmpty()) {
+            for (CompletionItem si : snippetItems) {
+                String clean = JsonSchemaManager.cleanKey(si.getLabel());
+                if (!ctx.existingKeys.contains(clean)) {
+                    keyCandidates.add(new CompletionItem(si.getLabel(), si.getInsertText(), si.getDetail(), si.getType(), si.getCursorOffset()));
                 }
             }
         }
 
-        for (CompletionItem dk : cachedDocKeys) {
-            keyCandidates.add(new CompletionItem(dk.getLabel(), dk.getInsertText(), dk.getDetail(), dk.getType(), dk.getCursorOffset()));
-        }
-        for (CompletionItem si : snippetItems) {
-            keyCandidates.add(new CompletionItem(si.getLabel(), si.getInsertText(), si.getDetail(), si.getType(), si.getCursorOffset()));
-        }
-
         List<CompletionItem> filteredKeys = fuzzyFilter(keyCandidates, query);
+        int keyReplaceLen = (ctx.inQuotes ? 1 : 0) + query.length();
         for (CompletionItem ci : filteredKeys) {
-            ci.setReplaceLength(replaceLen);
+            ci.setReplaceLength(keyReplaceLen);
         }
         return filteredKeys;
     }
 
-    private String getJsonQuery(String text, int cursor, boolean inQuotes) {
-        if (text == null || cursor <= 0) return "";
-        if (inQuotes) {
-            int i = cursor - 1;
-            while (i >= 0) {
-                if (text.charAt(i) == '"' && (i == 0 || text.charAt(i - 1) != '\\')) {
-                    return text.substring(i + 1, cursor);
+    private void addSchemaValueCompletions(String fileName, JsonContextScanner.JsonContext ctx, List<CompletionItem> out) {
+        if (ctx.activeKey == null || ctx.activeKey.isEmpty()) return;
+        String clean = JsonSchemaManager.cleanKey(ctx.activeKey);
+        JsonSchemaManager.SchemaProperty prop = resolveSchemaProperty(fileName, ctx.propertyPath, clean);
+        if (prop != null) {
+            if (prop.enumValues != null) {
+                for (String ev : prop.enumValues) {
+                    String insert = ctx.inQuotes ? ev : ("\"" + ev + "\"");
+                    CompletionItem ci = new CompletionItem(ev, insert, "enum (" + prop.name + ")", CompletionItem.Type.VALUE, 0);
+                    ci.setReplaceLength(ctx.word.length());
+                    out.add(ci);
+                    String lower = ev.toLowerCase(Locale.ROOT);
+                    if (!lower.equals(ev)) {
+                        String lowerInsert = ctx.inQuotes ? lower : ("\"" + lower + "\"");
+                        CompletionItem lci = new CompletionItem(lower, lowerInsert, "enum (" + prop.name + ")", CompletionItem.Type.VALUE, 0);
+                        lci.setReplaceLength(ctx.word.length());
+                        out.add(lci);
+                    }
                 }
-                i--;
+            } else if ("boolean".equals(prop.type)) {
+                int rLen = (ctx.inQuotes ? 1 : 0) + ctx.word.length();
+                CompletionItem t = new CompletionItem("true", "true", "Boolean", CompletionItem.Type.VALUE, 0);
+                t.setReplaceLength(rLen);
+                out.add(t);
+                CompletionItem f = new CompletionItem("false", "false", "Boolean", CompletionItem.Type.VALUE, 0);
+                f.setReplaceLength(rLen);
+                out.add(f);
             }
-            return "";
-        } else {
-            return getWordBeforeCursor(text, cursor);
+
+            if (prop.isPath) {
+                List<CompletionItem> paths = buildFileCompletions(ctx.word);
+                if (paths != null) out.addAll(paths);
+            }
         }
     }
 
-    private String resolveCurrentKey(String text, int cursor) {
-        if (text == null || cursor <= 0) return null;
-        int i = cursor - 1;
-        int quoteCount = 0;
-        for (int k = 0; k < cursor; k++) {
-            if (text.charAt(k) == '"' && (k == 0 || text.charAt(k - 1) != '\\')) {
-                quoteCount++;
-            }
-        }
-        if (quoteCount % 2 != 0) {
-            while (i >= 0) {
-                if (text.charAt(i) == '"' && (i == 0 || text.charAt(i - 1) != '\\')) {
-                    i--;
-                    break;
-                }
-                i--;
-            }
-        } else {
-            while (i >= 0 && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_' || text.charAt(i) == '-')) {
-                i--;
-            }
-        }
-        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
-        if (i < 0 || text.charAt(i) != ':') return null;
-        i--;
-        while (i >= 0 && Character.isWhitespace(text.charAt(i))) i--;
-        if (i < 0) return null;
-        if (text.charAt(i) == '"') {
-            int endQuote = i;
-            int startQuote = -1;
-            for (int j = i - 1; j >= 0; j--) {
-                if (text.charAt(j) == '"' && (j == 0 || text.charAt(j - 1) != '\\')) {
-                    startQuote = j;
-                    break;
+    private void addSchemaArrayCompletions(String fileName, JsonContextScanner.JsonContext ctx, List<CompletionItem> out) {
+        if (ctx.activeKey == null || ctx.activeKey.isEmpty()) return;
+        String clean = JsonSchemaManager.cleanKey(ctx.activeKey);
+        JsonSchemaManager.SchemaProperty prop = resolveSchemaProperty(fileName, ctx.propertyPath, clean);
+        if (prop != null) {
+            if (prop.enumValues != null) {
+                for (String ev : prop.enumValues) {
+                    String insert = ctx.inQuotes ? ev : ("\"" + ev + "\"");
+                    CompletionItem ci = new CompletionItem(ev, insert, "enum (" + prop.name + ")", CompletionItem.Type.VALUE, 0);
+                    ci.setReplaceLength(ctx.word.length());
+                    out.add(ci);
                 }
             }
-            if (startQuote >= 0) {
-                return text.substring(startQuote + 1, endQuote);
+            if (prop.isPath || "files".equals(clean) || "include".equals(clean) || "exclude".equals(clean)) {
+                List<CompletionItem> paths = buildFileCompletions(ctx.word);
+                if (paths != null) out.addAll(paths);
             }
+        }
+    }
+
+    private void addSchemaKeyCompletions(String fileName, JsonContextScanner.JsonContext ctx, List<CompletionItem> out) {
+        Map<String, JsonSchemaManager.SchemaProperty> schemaMap = null;
+        if ("package.json".equals(fileName)) {
+            if (ctx.propertyPath.isEmpty()) {
+                schemaMap = JsonSchemaManager.getPackageProperties();
+            } else if (ctx.propertyPath.contains("scripts")) {
+                String[] scripts = {"build", "start", "test", "dev", "lint", "clean", "preview", "serve"};
+                for (String s : scripts) {
+                    if (!ctx.existingKeys.contains(s)) {
+                        out.add(new CompletionItem(s, "\"" + s + "\": \"|\"", "Script", CompletionItem.Type.JSON_KEY, 0));
+                    }
+                }
+            }
+        } else if ("tsconfig.json".equals(fileName) || (fileName != null && fileName.startsWith("tsconfig") && fileName.endsWith(".json"))
+                || "jsconfig.json".equals(fileName)) {
+            if (ctx.propertyPath.isEmpty()) {
+                schemaMap = JsonSchemaManager.getTsConfigRootProperties();
+            } else if (ctx.propertyPath.contains("compilerOptions")) {
+                schemaMap = JsonSchemaManager.getTsConfigCompilerOptions();
+            }
+        }
+
+        if (schemaMap != null) {
+            for (JsonSchemaManager.SchemaProperty prop : schemaMap.values()) {
+                if (!ctx.existingKeys.contains(prop.name)) {
+                    String insert = "\"" + prop.name + "\": " + (prop.defaultValue != null ? prop.defaultValue : "\"|\"");
+                    out.add(new CompletionItem(prop.name, insert, prop.type, CompletionItem.Type.JSON_KEY, 0));
+                }
+            }
+        } else if (fileName != null) {
+            ensureSchemasLoaded();
+            List<CompletionItem> schemaKeys = SCHEMA_KEYS.get(fileName);
+            if (schemaKeys != null) {
+                for (CompletionItem sk : schemaKeys) {
+                    String clean = JsonSchemaManager.cleanKey(sk.getLabel());
+                    if (!ctx.existingKeys.contains(clean)) {
+                        out.add(new CompletionItem(sk.getLabel(), sk.getInsertText(), sk.getDetail(), sk.getType(), sk.getCursorOffset()));
+                    }
+                }
+            }
+        }
+    }
+
+    private JsonSchemaManager.SchemaProperty resolveSchemaProperty(String fileName, List<String> path, String key) {
+        if ("package.json".equals(fileName)) {
+            return JsonSchemaManager.getPackageProperties().get(key);
+        } else if ("tsconfig.json".equals(fileName) || (fileName != null && fileName.startsWith("tsconfig") && fileName.endsWith(".json"))
+                || "jsconfig.json".equals(fileName)) {
+            if (path != null && path.contains("compilerOptions")) {
+                return JsonSchemaManager.getTsConfigCompilerOptions().get(key);
+            }
+            JsonSchemaManager.SchemaProperty rootProp = JsonSchemaManager.getTsConfigRootProperties().get(key);
+            if (rootProp != null) return rootProp;
+            return JsonSchemaManager.getTsConfigCompilerOptions().get(key);
         }
         return null;
     }
 
-    private List<CompletionItem> getSpecificValueCompletions(String fileName, String keyName) {
+    public List<CompletionItem> buildFileCompletions(String typedPath) {
+        File baseDir = currentFile != null ? currentFile.getParentFile() : null;
+        if (baseDir == null) return new ArrayList<>();
+
+        int lastSlash = typedPath != null ? typedPath.lastIndexOf('/') : -1;
+        File searchDir;
+        String filterPrefix;
+
+        if (lastSlash != -1) {
+            String dirPart = typedPath.substring(0, lastSlash);
+            filterPrefix = typedPath.substring(lastSlash + 1).toLowerCase(Locale.ROOT);
+            searchDir = dirPart.isEmpty() ? baseDir : new File(baseDir, dirPart);
+        } else {
+            filterPrefix = typedPath != null ? typedPath.toLowerCase(Locale.ROOT) : "";
+            searchDir = baseDir;
+        }
+
+        if (!searchDir.exists() || !searchDir.isDirectory()) return new ArrayList<>();
+
+        List<CompletionItem> items = new ArrayList<>();
+        List<File> files = VFSManager.getInstance().listCachedFiles(searchDir);
+        if (files == null) {
+            File[] fs = searchDir.listFiles();
+            if (fs != null) {
+                files = new ArrayList<>(fs.length);
+                Collections.addAll(files, fs);
+            }
+        }
+
+        if (files != null) {
+            for (File f : files) {
+                String name = f.getName();
+                if (name.startsWith(".")) continue;
+                if (!filterPrefix.isEmpty() && !name.toLowerCase(Locale.ROOT).startsWith(filterPrefix))
+                    continue;
+
+                if (f.isDirectory()) {
+                    CompletionItem ci = new CompletionItem(name + "/", name + "/",
+                            "Directory", CompletionItem.Type.FOLDER, 0);
+                    ci.setReplaceLength(filterPrefix.length());
+                    items.add(ci);
+                } else {
+                    if (currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath()))
+                        continue;
+                    CompletionItem ci = new CompletionItem(name, name, "File", CompletionItem.Type.FILE, 0);
+                    ci.setReplaceLength(filterPrefix.length());
+                    items.add(ci);
+                }
+            }
+        }
+        return items;
+    }
+
+    private List<CompletionItem> getSpecificValueCompletions(String fileName, String keyName, boolean inQuotes) {
         if (keyName == null) return null;
         List<CompletionItem> list = new ArrayList<>();
         if ("package.json".equals(fileName)) {
             if ("type".equals(keyName)) {
-                list.add(new CompletionItem("\"module\"", "\"module\"", "ES Module", CompletionItem.Type.VALUE, 0));
-                list.add(new CompletionItem("\"commonjs\"", "\"commonjs\"", "CommonJS", CompletionItem.Type.VALUE, 0));
+                String[] types = {"module", "commonjs"};
+                for (String t : types) {
+                    list.add(new CompletionItem(t, inQuotes ? t : ("\"" + t + "\""), "Module Type", CompletionItem.Type.VALUE, 0));
+                }
                 return list;
             } else if ("private".equals(keyName) || "sideEffects".equals(keyName)) {
                 list.add(new CompletionItem("true", "true", "Boolean", CompletionItem.Type.VALUE, 0));
@@ -318,26 +450,44 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
                 return list;
             }
         }
-        if ("tsconfig.json".equals(fileName)) {
+        if ("tsconfig.json".equals(fileName) || (fileName != null && fileName.startsWith("tsconfig") && fileName.endsWith(".json"))) {
             if ("target".equals(keyName)) {
-                String[] targets = {"\"ES2022\"", "\"ES2021\"", "\"ES2020\"", "\"ES2019\"", "\"ES2018\"", "\"ES2015\"", "\"ES6\"", "\"ESNext\""};
-                for (String t : targets)
-                    list.add(new CompletionItem(t, t, "ECMAScript target", CompletionItem.Type.VALUE, 0));
+                String[] targets = {"ES2022", "ES2021", "ES2020", "ES2019", "ES2018", "ES2015", "ES6", "ESNext"};
+                for (String t : targets) {
+                    String insert = inQuotes ? t : ("\"" + t + "\"");
+                    list.add(new CompletionItem(t, insert, "ECMAScript target", CompletionItem.Type.VALUE, 0));
+                    String lower = t.toLowerCase(Locale.ROOT);
+                    if (!lower.equals(t)) {
+                        String lowerInsert = inQuotes ? lower : ("\"" + lower + "\"");
+                        list.add(new CompletionItem(lower, lowerInsert, "ECMAScript target", CompletionItem.Type.VALUE, 0));
+                    }
+                }
                 return list;
             } else if ("module".equals(keyName)) {
-                String[] mods = {"\"ESNext\"", "\"NodeNext\"", "\"Node16\"", "\"CommonJS\"", "\"AMD\"", "\"System\"", "\"UMD\""};
-                for (String m : mods)
-                    list.add(new CompletionItem(m, m, "Module system", CompletionItem.Type.VALUE, 0));
+                String[] mods = {"ESNext", "NodeNext", "Node16", "CommonJS", "AMD", "System", "UMD"};
+                for (String m : mods) {
+                    String insert = inQuotes ? m : ("\"" + m + "\"");
+                    list.add(new CompletionItem(m, insert, "Module system", CompletionItem.Type.VALUE, 0));
+                    String lower = m.toLowerCase(Locale.ROOT);
+                    if (!lower.equals(m)) {
+                        String lowerInsert = inQuotes ? lower : ("\"" + lower + "\"");
+                        list.add(new CompletionItem(lower, lowerInsert, "Module system", CompletionItem.Type.VALUE, 0));
+                    }
+                }
                 return list;
             } else if ("moduleResolution".equals(keyName)) {
-                String[] res = {"\"bundler\"", "\"node\"", "\"node16\"", "\"nodenext\"", "\"classic\""};
-                for (String r : res)
-                    list.add(new CompletionItem(r, r, "Module resolution", CompletionItem.Type.VALUE, 0));
+                String[] res = {"bundler", "node", "node16", "nodenext", "classic"};
+                for (String r : res) {
+                    String insert = inQuotes ? r : ("\"" + r + "\"");
+                    list.add(new CompletionItem(r, insert, "Module resolution", CompletionItem.Type.VALUE, 0));
+                }
                 return list;
             } else if ("jsx".equals(keyName)) {
-                String[] jsx = {"\"react-jsx\"", "\"react-jsxdev\"", "\"react\"", "\"preserve\"", "\"react-native\""};
-                for (String j : jsx)
-                    list.add(new CompletionItem(j, j, "JSX mode", CompletionItem.Type.VALUE, 0));
+                String[] jsx = {"react-jsx", "react-jsxdev", "react", "preserve", "react-native"};
+                for (String j : jsx) {
+                    String insert = inQuotes ? j : ("\"" + j + "\"");
+                    list.add(new CompletionItem(j, insert, "JSX mode", CompletionItem.Type.VALUE, 0));
+                }
                 return list;
             } else if ("strict".equals(keyName) || "esModuleInterop".equals(keyName) || "skipLibCheck".equals(keyName)
                     || "declaration".equals(keyName) || "sourceMap".equals(keyName) || "resolveJsonModule".equals(keyName)
@@ -351,41 +501,21 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         }
         if ("manifest.json".equals(fileName)) {
             if ("display".equals(keyName)) {
-                String[] modes = {"\"standalone\"", "\"fullscreen\"", "\"minimal-ui\"", "\"browser\""};
-                for (String m : modes)
-                    list.add(new CompletionItem(m, m, "Display mode", CompletionItem.Type.VALUE, 0));
+                String[] modes = {"standalone", "fullscreen", "minimal-ui", "browser"};
+                for (String m : modes) {
+                    String insert = inQuotes ? m : ("\"" + m + "\"");
+                    list.add(new CompletionItem(m, insert, "Display mode", CompletionItem.Type.VALUE, 0));
+                }
                 return list;
             } else if ("orientation".equals(keyName)) {
-                String[] orients = {"\"portrait\"", "\"landscape\"", "\"any\"", "\"natural\""};
-                for (String o : orients)
-                    list.add(new CompletionItem(o, o, "Orientation", CompletionItem.Type.VALUE, 0));
+                String[] orients = {"portrait", "landscape", "any", "natural"};
+                for (String o : orients) {
+                    String insert = inQuotes ? o : ("\"" + o + "\"");
+                    list.add(new CompletionItem(o, insert, "Orientation", CompletionItem.Type.VALUE, 0));
+                }
                 return list;
             }
         }
         return null;
-    }
-
-    /**
-     * Checks if the cursor is inside a specific named object block.
-     * e.g., for "compilerOptions": { ... cursor here ... }
-     */
-    private boolean isInsideObjectKey(String text, int cursorPos, String key) {
-        String searchPattern = "\"" + key + "\"";
-        int keyIdx = text.lastIndexOf(searchPattern, cursorPos);
-        if (keyIdx < 0) return false;
-
-        int open = 0, close = 0;
-        boolean inStr = false;
-        for (int i = keyIdx; i < cursorPos && i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '"' && (i == 0 || text.charAt(i - 1) != '\\')) {
-                inStr = !inStr;
-                continue;
-            }
-            if (inStr) continue;
-            if (c == '{') open++;
-            else if (c == '}') close++;
-        }
-        return open > close;
     }
 }

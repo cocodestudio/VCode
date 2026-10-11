@@ -352,4 +352,74 @@ public class JsonLspServerTest {
         }
         assertTrue("Should offer 'es2020' enum completion for tsconfig target", foundEs2020);
     }
+
+    @Test
+    public void testValueContextSuppressesObjectKeys() {
+        String uri = "file:///workspace/tsconfig.json";
+        String content = "{\n  \"compilerOptions\": {\n    \"target\": \"\"\n  }\n}";
+        server.didOpen(new TextDocumentItem(uri, "json", 1, content));
+
+        // Line 2, column 15 is inside "target": ""
+        CompletionParams params = new CompletionParams(uri, 2, 15);
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        for (CompletionItem item : completions) {
+            assertFalse("Object keys must NOT appear in value context: " + item.label,
+                    "target".equals(item.label) || "compilerOptions".equals(item.label) || "strict".equals(item.label));
+        }
+    }
+
+    @Test
+    public void testDuplicateKeyExclusionInObject() {
+        String uri = "file:///workspace/package.json";
+        String content = "{\n  \"name\": \"vcode\",\n  \"\"\n}";
+        server.didOpen(new TextDocumentItem(uri, "json", 1, content));
+
+        // Line 2, column 3 is inside the second key ""
+        CompletionParams params = new CompletionParams(uri, 2, 3);
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        boolean foundName = false;
+        boolean foundVersion = false;
+        for (CompletionItem item : completions) {
+            if ("name".equals(item.label)) foundName = true;
+            if ("version".equals(item.label)) foundVersion = true;
+        }
+        assertFalse("Already defined key 'name' must be excluded from suggestions", foundName);
+        assertTrue("New schema key 'version' must still be offered", foundVersion);
+    }
+
+    @Test
+    public void testCommentsSuppressCompletionsInJsonc() {
+        String uri = "file:///workspace/tsconfig.json";
+        String content = "{\n  // typing comment here \n  \"compilerOptions\": {}\n}";
+        server.didOpen(new TextDocumentItem(uri, "json", 1, content));
+
+        // Line 1, column 10 is inside line comment
+        CompletionParams params = new CompletionParams(uri, 1, 10);
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+        assertTrue("Completions must be suppressed inside JSONC comments", completions.isEmpty());
+    }
+
+    @Test
+    public void testExplicitTextEditRangesOnAllItems() {
+        String uri = "file:///workspace/package.json";
+        String content = "{\n  \"n\"\n}";
+        server.didOpen(new TextDocumentItem(uri, "json", 1, content));
+
+        CompletionParams params = new CompletionParams(uri, 1, 4);
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+        assertFalse(completions.isEmpty());
+
+        for (CompletionItem item : completions) {
+            assertNotNull("Every completion item must carry an explicit textEdit: " + item.label, item.textEdit);
+            assertNotNull("TextEdit must carry an explicit range", item.textEdit.range);
+            assertTrue("TextEdit start position line must be valid", item.textEdit.range.start.line >= 0);
+            assertTrue("TextEdit end position line must be valid", item.textEdit.range.end.line >= 0);
+        }
+    }
 }

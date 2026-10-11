@@ -218,37 +218,19 @@ public final class JsonLspServer implements LspServer {
         int flatOffset = doc.toOffset(params.position);
         if (flatOffset < 0) flatOffset = doc.text.length();
 
-        List<CompletionItem> combined = new ArrayList<>();
         File docFile = doc.uri != null ? new File(doc.uri) : null;
-
-        // 1. Schema-driven completions (package.json, tsconfig.json)
-        boolean isJsonc = JsonLinter.isJsoncMode(docFile);
-        JsonTokenStream stream = JsonLexer.tokenize(doc.text);
-        JsonSyntaxTree tree = JsonParser.parse(stream, doc.text, isJsonc);
-        List<CompletionItem> schemaItems = JsonSchemaManager.getCompletions(docFile, doc.uri, doc.text, flatOffset, tree);
-        if (schemaItems != null && !schemaItems.isEmpty()) {
-            combined.addAll(schemaItems);
-        }
-
-        // 2. Engine suggestions
         if (docFile != null) {
             completeEngine.setCurrentFile(docFile);
         }
-        List<CompletionItem> legacy = completeEngine.getSuggestions(doc.text, flatOffset);
-        if (legacy != null) {
-            Set<String> seen = new HashSet<>();
-            for (CompletionItem si : combined) {
-                seen.add(si.getLabel());
-            }
-            for (CompletionItem ci : legacy) {
-                if (seen.add(ci.getLabel())) {
-                    combined.add(ci);
-                }
-            }
+
+        List<CompletionItem> suggestions = completeEngine.getSuggestions(doc.text, flatOffset);
+        if (suggestions == null || suggestions.isEmpty()) {
+            return Collections.emptyList();
         }
 
-        List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> result = new ArrayList<>(combined.size());
-        for (CompletionItem ci : combined) {
+        List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> result = new ArrayList<>(suggestions.size());
+        for (CompletionItem ci : suggestions) {
+            if (token != null && token.isCancelled()) return Collections.emptyList();
             result.add(convertToModelItem(ci, doc, flatOffset));
         }
         return result;

@@ -192,7 +192,9 @@ public final class JsonSchemaManager {
                 "{}", false, null, false));
         putTsOpt(new SchemaProperty("lib", "array",
                 "Specify bundled library declaration files that describe runtime environment.",
-                "[\"ES2022\", \"DOM\"]", false, null, false));
+                "[\"ES2022\", \"DOM\"]", false,
+                Arrays.asList("ES5", "ES6", "ES2015", "ES2016", "ES2017", "ES2018", "ES2019", "ES2020", "ES2021", "ES2022", "ES2023", "ESNext", "DOM", "DOM.Iterable", "WebWorker", "ScriptHost"),
+                false));
         putTsOpt(new SchemaProperty("allowJs", "boolean",
                 "Allow JavaScript files to be a part of your program.",
                 "true", false, null, false));
@@ -244,6 +246,18 @@ public final class JsonSchemaManager {
 
     private static void putTsOpt(SchemaProperty p) {
         TSCONFIG_COMPILER_OPTIONS.put(p.name, p);
+    }
+
+    public static Map<String, SchemaProperty> getPackageProperties() {
+        return Collections.unmodifiableMap(PACKAGE_PROPERTIES);
+    }
+
+    public static Map<String, SchemaProperty> getTsConfigRootProperties() {
+        return Collections.unmodifiableMap(TSCONFIG_ROOT_PROPERTIES);
+    }
+
+    public static Map<String, SchemaProperty> getTsConfigCompilerOptions() {
+        return Collections.unmodifiableMap(TSCONFIG_COMPILER_OPTIONS);
     }
 
     public static boolean isPackageJson(File file, String uri) {
@@ -437,83 +451,84 @@ public final class JsonSchemaManager {
         boolean isPkg = isPackageJson(file, uri);
         boolean isTs = isTsConfig(file, uri);
         if (!isPkg && !isTs) return Collections.emptyList();
+        if (text == null || offset < 0 || offset > text.length()) return Collections.emptyList();
+
+        JsonContextScanner.JsonContext ctx = JsonContextScanner.scan(text, offset);
+        if (ctx.type == JsonContextScanner.ContextType.COMMENT || ctx.type == JsonContextScanner.ContextType.NONE) {
+            return Collections.emptyList();
+        }
 
         List<CompletionItem> items = new ArrayList<>();
 
-        // 1. Check if the cursor is in a property value position to offer enum/boolean completions
-        String activeKey = findActivePropertyKey(text, offset);
-        if (activeKey != null) {
-            String clean = cleanKey(activeKey);
+        if (ctx.type == JsonContextScanner.ContextType.OBJECT_VALUE || ctx.type == JsonContextScanner.ContextType.ARRAY_ELEMENT) {
+            String clean = cleanKey(ctx.activeKey);
             SchemaProperty activeProp = null;
             if (isPkg) {
                 activeProp = PACKAGE_PROPERTIES.get(clean);
             } else if (isTs) {
-                activeProp = TSCONFIG_COMPILER_OPTIONS.get(clean);
+                if (ctx.propertyPath.contains("compilerOptions")) {
+                    activeProp = TSCONFIG_COMPILER_OPTIONS.get(clean);
+                }
                 if (activeProp == null) {
                     activeProp = TSCONFIG_ROOT_PROPERTIES.get(clean);
                 }
+                if (activeProp == null) {
+                    activeProp = TSCONFIG_COMPILER_OPTIONS.get(clean);
+                }
             }
+
             if (activeProp != null) {
                 if (activeProp.enumValues != null) {
                     for (String ev : activeProp.enumValues) {
-                        items.add(new CompletionItem(ev, ev, "enum (" + activeProp.name + ")",
-                                CompletionItem.Type.VALUE, 0));
-                        String lower = ev.toLowerCase();
+                        String insert = ctx.inQuotes ? ev : ("\"" + ev + "\"");
+                        CompletionItem ci = new CompletionItem(ev, insert, "enum (" + activeProp.name + ")",
+                                CompletionItem.Type.VALUE, 0);
+                        ci.setReplaceLength(ctx.word.length());
+                        items.add(ci);
+                        String lower = ev.toLowerCase(Locale.ROOT);
                         if (!lower.equals(ev)) {
-                            items.add(new CompletionItem(lower, lower, "enum (" + activeProp.name + ")",
-                                    CompletionItem.Type.VALUE, 0));
+                            String lowerInsert = ctx.inQuotes ? lower : ("\"" + lower + "\"");
+                            CompletionItem lci = new CompletionItem(lower, lowerInsert, "enum (" + activeProp.name + ")",
+                                    CompletionItem.Type.VALUE, 0);
+                            lci.setReplaceLength(ctx.word.length());
+                            items.add(lci);
                         }
                     }
                 } else if ("boolean".equals(activeProp.type)) {
-                    items.add(new CompletionItem("true", "true", "boolean", CompletionItem.Type.VALUE, 0));
-                    items.add(new CompletionItem("false", "false", "boolean", CompletionItem.Type.VALUE, 0));
-                }
-                if (!items.isEmpty()) {
-                    return items;
+                    int rLen = (ctx.inQuotes ? 1 : 0) + ctx.word.length();
+                    CompletionItem t = new CompletionItem("true", "true", "boolean", CompletionItem.Type.VALUE, 0);
+                    t.setReplaceLength(rLen);
+                    items.add(t);
+                    CompletionItem f = new CompletionItem("false", "false", "boolean", CompletionItem.Type.VALUE, 0);
+                    f.setReplaceLength(rLen);
+                    items.add(f);
                 }
             }
+            return items;
         }
 
-        if (tree == null) return items;
-
-        int enclosingObj = tree.getEnclosingObject(offset);
-        if (enclosingObj <= 0) return items;
-
-        // Collect existing keys in the enclosing object to avoid duplicate suggestions
-        Set<String> existingKeys = new HashSet<>();
-        int child = tree.nodeChild[enclosingObj];
-        int loop = 0;
-        while (child > 0 && child < tree.nodeCount && ++loop <= tree.nodeCount) {
-            if (tree.nodeType[child] == JsonSyntaxTree.N_KEY) {
-                existingKeys.add(cleanKey(tree.nodeName[child]));
+        if (ctx.type == JsonContextScanner.ContextType.OBJECT_KEY) {
+            Map<String, SchemaProperty> targetMap = null;
+            if (isPkg && ctx.propertyPath.isEmpty()) {
+                targetMap = PACKAGE_PROPERTIES;
+            } else if (isTs) {
+                if (ctx.propertyPath.isEmpty()) {
+                    targetMap = TSCONFIG_ROOT_PROPERTIES;
+                } else if (ctx.propertyPath.contains("compilerOptions")) {
+                    targetMap = TSCONFIG_COMPILER_OPTIONS;
+                }
             }
-            child = tree.nodeSibling[child];
-        }
 
-        // Determine which schema applies to the enclosing object
-        Map<String, SchemaProperty> targetMap = null;
-        if (isPkg && tree.nodeParent[enclosingObj] == 0) {
-            targetMap = PACKAGE_PROPERTIES;
-        } else if (isTs) {
-            if (tree.nodeParent[enclosingObj] == 0) {
-                targetMap = TSCONFIG_ROOT_PROPERTIES;
-            } else {
-                int parent = tree.nodeParent[enclosingObj];
-                if (parent > 0 && tree.nodeType[parent] == JsonSyntaxTree.N_KEY) {
-                    String parentKey = cleanKey(tree.nodeName[parent]);
-                    if ("compilerOptions".equals(parentKey)) {
-                        targetMap = TSCONFIG_COMPILER_OPTIONS;
+            if (targetMap != null) {
+                int rLen = (ctx.inQuotes ? 1 : 0) + ctx.word.length();
+                for (SchemaProperty prop : targetMap.values()) {
+                    if (!ctx.existingKeys.contains(prop.name)) {
+                        String insertText = "\"" + prop.name + "\": " + (prop.defaultValue != null ? prop.defaultValue : "\"|\"");
+                        CompletionItem ci = new CompletionItem(prop.name, insertText, prop.type,
+                                CompletionItem.Type.JSON_KEY, 0);
+                        ci.setReplaceLength(rLen);
+                        items.add(ci);
                     }
-                }
-            }
-        }
-
-        if (targetMap != null) {
-            for (SchemaProperty prop : targetMap.values()) {
-                if (!existingKeys.contains(prop.name)) {
-                    String insertText = "\"" + prop.name + "\": " + (prop.defaultValue != null ? prop.defaultValue : "\"|\"");
-                    items.add(new CompletionItem("\"" + prop.name + "\"", insertText, prop.type,
-                            CompletionItem.Type.JSON_KEY, 0));
                 }
             }
         }
