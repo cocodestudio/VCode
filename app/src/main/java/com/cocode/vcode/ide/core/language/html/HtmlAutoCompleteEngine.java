@@ -5,6 +5,7 @@ import android.content.Context;
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.EmmetParser;
 import com.cocode.vcode.ide.core.autocomplete.FastTrie;
+import com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.language.css.CssAutoCompleteEngine;
@@ -55,6 +56,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
     private final CssAutoCompleteEngine cssEngine;
     private final JsAutoCompleteEngine jsEngine;
+    private final PathAutoCompleteEngine pathEngine;
     private File currentFile;
     private String htmlBoilerplate;
 
@@ -63,6 +65,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         loadTags();
         this.cssEngine = new CssAutoCompleteEngine(context);
         this.jsEngine = new JsAutoCompleteEngine(context);
+        this.pathEngine = new PathAutoCompleteEngine(context);
     }
 
     @Override
@@ -78,6 +81,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         this.lastHtmlJsHash = 0;
         jsEngine.setCurrentFile(file);
         cssEngine.setCurrentFile(file);
+        if (pathEngine != null) pathEngine.setCurrentFile(file);
         cssEngine.setScopedHtmlSelectors(null, null);
     }
 
@@ -662,122 +666,22 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
      * present; otherwise searches from project root.
      */
     private List<CompletionItem> getFileSuggestions(String typedPath, String tagName, String attrName) {
-        if (currentFile == null) return new ArrayList<>();
-        File currentDir = currentFile.getParentFile();
-        if (currentDir == null) return new ArrayList<>();
-
-        List<CompletionItem> items = new ArrayList<>();
-        int lastSlash = typedPath.lastIndexOf('/');
-
-        if (lastSlash != -1 || typedPath.isEmpty()) {
-            // User typed a path with a directory component OR it's empty — list that directory
-            String dirPart = lastSlash != -1 ? typedPath.substring(0, lastSlash) : "";
-            String filterPrefix = lastSlash != -1 ? typedPath.substring(lastSlash + 1).toLowerCase() : typedPath.toLowerCase();
-            File searchDir = dirPart.isEmpty() ? currentDir : new File(currentDir, dirPart);
-
-            if (searchDir.exists() && searchDir.isDirectory()) {
-                List<File> files = VFSManager.getInstance().listCachedFiles(searchDir);
-                if (files != null) {
-                    for (File f : files) {
-                        if (f.getName().startsWith(".")) continue;
-                        if (!isFileAllowed(f, tagName, attrName)) continue;
-                        String name = f.getName();
-                        if (!filterPrefix.isEmpty() && !name.toLowerCase().startsWith(filterPrefix))
-                            continue;
-                        String completion = name + (f.isDirectory() ? "/" : "");
-                        CompletionItem ci = new CompletionItem(completion, completion,
-                                f.isDirectory() ? "Directory" : getFileSizeHint(f),
-                                f.isDirectory() ? CompletionItem.Type.FOLDER : CompletionItem.Type.FILE, 0);
-                        ci.setReplaceLength(filterPrefix.length());
-                        items.add(ci);
-                    }
-                }
+        if (pathEngine == null) return Collections.emptyList();
+        pathEngine.setCurrentFile(currentFile);
+        return pathEngine.getSuggestionsForPath(typedPath, new PathAutoCompleteEngine.PathFilter() {
+            @Override
+            public boolean isAllowed(File f, boolean isDirectory) {
+                return isFileAllowed(f, tagName, attrName);
             }
-            sortFileItems(items);
-            return items.size() > MAX_SUGGESTIONS ? items.subList(0, MAX_SUGGESTIONS) : items;
-        }
 
-        // No slash — search recursively from the project root
-        File projectRoot = getProjectRoot(currentFile);
-        if (projectRoot == null) projectRoot = currentDir;
-
-        List<File> allMatching = new ArrayList<>();
-        findFilesRecursively(projectRoot, typedPath.toLowerCase(), allMatching, 50, tagName, attrName);
-
-        for (File f : allMatching) {
-            String relPath = getRelativeHtmlPath(currentDir, f);
-            String label = f.getName() + (f.isDirectory() ? "/" : "");
-            CompletionItem ci = new CompletionItem(label, relPath,
-                    f.isDirectory() ? "Directory" : relPath,
-                    f.isDirectory() ? CompletionItem.Type.FOLDER : CompletionItem.Type.FILE, 0);
-            ci.setReplaceLength(typedPath.length());
-            items.add(ci);
-        }
-        sortFileItems(items);
-        return items;
-    }
-
-    private void sortFileItems(List<CompletionItem> items) {
-        // Folders first, then files alphabetically
-        Collections.sort(items, (a, b) -> {
-            int fa = a.getType() == CompletionItem.Type.FOLDER ? 0 : 1;
-            int fb = b.getType() == CompletionItem.Type.FOLDER ? 0 : 1;
-            if (fa != fb) return fa - fb;
-            return a.getLabel().compareToIgnoreCase(b.getLabel());
+            @Override
+            public int getPriority(File f, boolean isDirectory) {
+                return isDirectory ? 10 : 5;
+            }
         });
     }
 
-    private String getFileSizeHint(File f) {
-        long size = f.length();
-        if (size < 1024) return size + " B";
-        if (size < 1024 * 1024) return (size / 1024) + " KB";
-        return (size / (1024 * 1024)) + " MB";
-    }
 
-    // Path helpers
-    private File getProjectRoot(File file) {
-        return ProjectRepository.findProjectRoot(file);
-    }
-
-    private String getRelativeHtmlPath(File baseDir, File target) {
-        String[] basePath = baseDir.getAbsolutePath().split("/");
-        String[] targetPath = target.getAbsolutePath().split("/");
-
-        int common = 0;
-        while (common < basePath.length && common < targetPath.length
-                && basePath[common].equals(targetPath[common])) {
-            common++;
-        }
-
-        StringBuilder rel = new StringBuilder();
-        for (int i = common; i < basePath.length; i++) rel.append("../");
-        for (int i = common; i < targetPath.length; i++) {
-            rel.append(targetPath[i]);
-            if (i < targetPath.length - 1) rel.append("/");
-        }
-        if (target.isDirectory() && rel.length() > 0 && rel.charAt(rel.length() - 1) != '/') {
-            rel.append("/");
-        }
-        return rel.length() == 0 ? "./" : rel.toString();
-    }
-
-    private void findFilesRecursively(File dir, String query, List<File> results, int limit, String tagName, String attrName) {
-        if (results.size() >= limit) return;
-        List<File> files = VFSManager.getInstance().listCachedFiles(dir);
-        if (files == null) return;
-        for (File f : files) {
-            if (f.getName().startsWith(".")) continue;
-            if (!isFileAllowed(f, tagName, attrName)) continue;
-
-            if (f.getName().toLowerCase().startsWith(query)) {
-                results.add(f);
-                if (results.size() >= limit) return;
-            }
-            if (f.isDirectory()) {
-                findFilesRecursively(f, query, results, limit, tagName, attrName);
-            }
-        }
-    }
 
     private boolean isFileAllowed(File f, String tagName, String attrName) {
         if (f.isDirectory()) return true; // Always allow traversing directories

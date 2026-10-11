@@ -22,6 +22,7 @@ public class VFSManager {
     private static VFSManager instance;
     // Maps absolute directory path -> list of child files/folders
     private final Map<String, List<File>> directoryCache = new ConcurrentHashMap<>();
+    private final Map<String, List<File>> allDirectoryCache = new ConcurrentHashMap<>();
     private volatile String projectRoot = null;
 
     private VFSManager() {
@@ -134,25 +135,53 @@ public class VFSManager {
      * Retrieves files from the RAM cache instead of querying the disk.
      */
     public List<File> listCachedFiles(File directory) {
+        return listCachedFiles(directory, false);
+    }
+
+    /**
+     * Retrieves files from the RAM cache with optional hidden files inclusion (e.g. for .gitignore).
+     */
+    public List<File> listCachedFiles(File directory, boolean includeHidden) {
         if (directory == null) return null;
 
-        List<File> cached = directoryCache.get(directory.getAbsolutePath());
+        if (!includeHidden) {
+            List<File> cached = directoryCache.get(directory.getAbsolutePath());
+            if (cached != null) {
+                return cached;
+            }
+
+            File[] diskFiles = directory.listFiles();
+            if (diskFiles != null) {
+                List<File> list = new ArrayList<>();
+                for (File f : diskFiles) {
+                    String name = f.getName();
+                    if (!name.startsWith(".")) {
+                        list.add(f);
+                    }
+                }
+                List<File> safeList = Collections.unmodifiableList(list);
+                directoryCache.put(directory.getAbsolutePath(), safeList);
+                return safeList;
+            }
+            return null;
+        }
+
+        List<File> cached = allDirectoryCache.get(directory.getAbsolutePath());
         if (cached != null) {
             return cached;
         }
 
-        // If not in cache, fallback to disk (and add it to cache)
         File[] diskFiles = directory.listFiles();
         if (diskFiles != null) {
             List<File> list = new ArrayList<>();
             for (File f : diskFiles) {
                 String name = f.getName();
-                if (!name.startsWith(".")) {
+                if (!name.equals(".") && !name.equals("..")) {
                     list.add(f);
                 }
             }
             List<File> safeList = Collections.unmodifiableList(list);
-            directoryCache.put(directory.getAbsolutePath(), safeList);
+            allDirectoryCache.put(directory.getAbsolutePath(), safeList);
             return safeList;
         }
         return null;
@@ -164,6 +193,7 @@ public class VFSManager {
     public void invalidateDirectory(File directory) {
         if (directory != null) {
             directoryCache.remove(directory.getAbsolutePath());
+            allDirectoryCache.remove(directory.getAbsolutePath());
         }
     }
 
@@ -172,6 +202,7 @@ public class VFSManager {
      */
     public void clear() {
         directoryCache.clear();
+        allDirectoryCache.clear();
         projectRoot = null;
     }
 }

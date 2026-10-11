@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.ProjectSymbolIndex;
 import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.completion.staticdata.JsStaticCompletionDispatcher;
@@ -197,8 +198,21 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return keys;
     }
 
+    private PathAutoCompleteEngine pathEngine;
+
+    private PathAutoCompleteEngine getPathEngine() {
+        if (pathEngine == null) {
+            pathEngine = new PathAutoCompleteEngine(context);
+        }
+        pathEngine.setCurrentFile(currentFile);
+        return pathEngine;
+    }
+
     public void setCurrentFile(File file) {
         this.currentFile = file;
+        if (pathEngine != null) {
+            pathEngine.setCurrentFile(file);
+        }
     }
 
     // Keyword loading
@@ -1130,57 +1144,8 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
      * Returns file completions when cursor is inside an import/require path string.
      */
     protected List<CompletionItem> buildFileCompletions(String typedPath) {
-        File baseDir = currentFile != null ? currentFile.getParentFile() : null;
-        if (baseDir == null) return new ArrayList<>();
-
-        int lastSlash = typedPath.lastIndexOf('/');
-        File searchDir;
-        String filterPrefix;
-
-        if (lastSlash != -1) {
-            String dirPart = typedPath.substring(0, lastSlash);
-            filterPrefix = typedPath.substring(lastSlash + 1).toLowerCase();
-            searchDir = dirPart.isEmpty() ? baseDir : new File(baseDir, dirPart);
-        } else {
-            filterPrefix = typedPath.toLowerCase();
-            searchDir = baseDir;
-        }
-
-        if (!searchDir.exists() || !searchDir.isDirectory()) return new ArrayList<>();
-
-        List<CompletionItem> items = new ArrayList<>();
-        List<File> files = VFSManager.getInstance().listCachedFiles(searchDir);
-        if (files != null) {
-            for (File f : files) {
-                String name = f.getName();
-                if (name.startsWith(".")) continue;
-                if (!filterPrefix.isEmpty() && !name.toLowerCase().startsWith(filterPrefix))
-                    continue;
-
-                if (f.isDirectory()) {
-                    CompletionItem ci = new CompletionItem(name + "/", name + "/",
-                            "Directory", CompletionItem.Type.FOLDER, 0);
-                    ci.setReplaceLength(filterPrefix.length());
-                    items.add(ci);
-                } else if (isJsLike(name) || typedPath.isEmpty()) {
-
-                    if (currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath()))
-                        continue;
-
-                    CompletionItem ci = new CompletionItem(name, name, "File", CompletionItem.Type.FILE, 0);
-                    ci.setReplaceLength(filterPrefix.length());
-                    items.add(ci);
-                }
-            }
-        }
-
-        java.util.Collections.sort(items, (a, b) -> {
-            int fa = a.getType() == CompletionItem.Type.FOLDER ? 0 : 1;
-            int fb = b.getType() == CompletionItem.Type.FOLDER ? 0 : 1;
-            if (fa != fb) return fa - fb;
-            return a.getLabel().compareToIgnoreCase(b.getLabel());
-        });
-        return items.size() > MAX_SUGGESTIONS ? items.subList(0, MAX_SUGGESTIONS) : items;
+        PathAutoCompleteEngine engine = getPathEngine();
+        return engine.getSuggestionsForPath(typedPath, (f, isDirectory) -> isDirectory || isJsLike(f.getName()) || (typedPath != null && typedPath.isEmpty()));
     }
 
     private boolean isJsLike(String name) {

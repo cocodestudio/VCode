@@ -209,7 +209,17 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         CssContextScanner.CssContext ctx = CssContextScanner.scan(fullText, cursorPos, isInlineStyle);
-        if (ctx.isInsideComment || ctx.isInsideString) {
+        if (ctx.isInsideComment) {
+            return Collections.emptyList();
+        }
+
+        if (ctx.isInsideString) {
+            if (isInsideCssImport(fullText, cursorPos) && pathEngine != null) {
+                List<CompletionItem> pathSuggestions = pathEngine.getSuggestions(fullText, cursorPos);
+                if (pathSuggestions != null && !pathSuggestions.isEmpty()) {
+                    return pathSuggestions;
+                }
+            }
             return Collections.emptyList();
         }
 
@@ -812,6 +822,14 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         String afterRule = snippet.substring(mediaIdx);
         // If there's an opening brace, we're past the condition and inside the body
         return afterRule.indexOf('{') < 0;
+    }
+
+    private boolean isInsideCssImport(String text, int pos) {
+        if (text == null || pos <= 0 || pos > text.length()) return false;
+        int lineStart = text.lastIndexOf('\n', pos - 1);
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        String line = text.substring(lineStart, pos).trim();
+        return line.startsWith("@import");
     }
 
     private enum Zone {SELECTOR, PROPERTY, VALUE, NESTED_SELECTOR}

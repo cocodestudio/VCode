@@ -4,6 +4,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
+import com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine;
 import com.cocode.vcode.ide.core.lsp.model.CodeAction;
 import com.cocode.vcode.ide.core.lsp.model.CodeActionContext;
 import com.cocode.vcode.ide.core.lsp.model.CodeActionKind;
@@ -117,6 +118,7 @@ public final class LspEditorBridge {
      */
     private boolean hasLspServer = false;
     private boolean lastActionWasTextChange = false;
+    private PathAutoCompleteEngine pathEngine;
     private final Runnable completionRunnable = this::performCompletion;    /**
      * Fires when {@link CodeEditText#setText} finishes loading new content into the editor.
      * Used to detect the moment a file switch's content has landed (see
@@ -583,6 +585,7 @@ public final class LspEditorBridge {
         this.editor = codeEditor;
         this.fileType = codeEditor.getFileType();
         this.attached = true;
+        this.pathEngine = new PathAutoCompleteEngine(codeEditor.getContext());
         codeEditor.setLspBridge(this);
         codeEditor.addContentChangeListener(contentListener);
         codeEditor.addCursorChangeListener(cursorChangeListener);
@@ -629,6 +632,9 @@ public final class LspEditorBridge {
         // Switch to the new file
         this.currentFile = file;
         this.fileType = editor != null ? editor.getFileType() : fileType;
+        if (pathEngine != null) {
+            pathEngine.setCurrentFile(file);
+        }
 
         // Ensure the new file has an entry in ProjectIndex.
         // We cannot use updateProjectIndex() here because the editor still
@@ -863,6 +869,7 @@ public final class LspEditorBridge {
             editor.dismissSignatureHint();
             editor = null;
         }
+        this.pathEngine = null;
         // DO NOT clear currentFile here — it is needed by setFile() to detect the previous file
     }
 
@@ -999,10 +1006,70 @@ public final class LspEditorBridge {
         });
     }
 
+    private boolean isGitIgnoreFile() {
+        if (fileType == FileType.GITIGNORE) return true;
+        if (currentFile != null) {
+            String name = currentFile.getName().toLowerCase(java.util.Locale.ROOT);
+            return name.equals(".gitignore") || name.endsWith(".gitignore");
+        }
+        return false;
+    }
+
+    private void performGitIgnoreCompletion() {
+        if (!attached || editor == null) return;
+        LspDocument doc = buildSnapshot();
+        if (doc == null || doc.text == null) return;
+
+        int flatCursor = getCursorFlatOffset();
+        if (flatCursor <= 0 || flatCursor > doc.text.length()) {
+            editor.dismissAutoCompletePopup();
+            return;
+        }
+
+        char lastChar = doc.text.charAt(flatCursor - 1);
+        if (Character.isWhitespace(lastChar)) {
+            editor.dismissAutoCompletePopup();
+            return;
+        }
+
+        boolean isPathChar = Character.isLetterOrDigit(lastChar)
+                || lastChar == '/' || lastChar == '.' || lastChar == '_' || lastChar == '-'
+                || lastChar == '!' || lastChar == '*' || lastChar == '$';
+        if (!isPathChar) {
+            editor.dismissAutoCompletePopup();
+            return;
+        }
+
+        int lineStart = doc.text.lastIndexOf('\n', flatCursor - 1);
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        String lineBefore = doc.text.substring(lineStart, flatCursor);
+        if (lineBefore.trim().startsWith("#")) {
+            editor.dismissAutoCompletePopup();
+            return;
+        }
+
+        if (pathEngine == null) {
+            pathEngine = new PathAutoCompleteEngine(editor.getContext());
+        }
+        pathEngine.setCurrentFile(currentFile);
+
+        List<CompletionItem> items = pathEngine.getSuggestions(doc.text, flatCursor);
+        if (items != null && !items.isEmpty()) {
+            editor.showLspCompletions(items);
+        } else {
+            editor.dismissAutoCompletePopup();
+        }
+    }
+
     public void performCompletion() {
-        if (!attached || editor == null || !hasLspServer) return;
+        final boolean isGitIgnore = isGitIgnoreFile();
+        if (!attached || editor == null || (!hasLspServer && !isGitIgnore)) return;
         if (editor.isProgrammaticChange() || (editor.isDeletingText() && !editor.wasAutoCompleteVisibleBeforeDelete())) {
             editor.dismissAutoCompletePopup();
+            return;
+        }
+        if (isGitIgnore) {
+            performGitIgnoreCompletion();
             return;
         }
         LspDocument doc = buildSnapshot();

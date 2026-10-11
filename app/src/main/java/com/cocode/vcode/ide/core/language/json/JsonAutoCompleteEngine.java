@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.cocode.vcode.ide.core.autocomplete.AutoCompleteEngine;
 import com.cocode.vcode.ide.core.autocomplete.FastTrie;
+import com.cocode.vcode.ide.core.autocomplete.PathAutoCompleteEngine;
 import com.cocode.vcode.ide.core.completion.staticdata.JsonStaticCompletionDispatcher;
 import com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader;
 import com.cocode.vcode.ide.core.model.CompletionItem;
@@ -94,8 +95,13 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
         SCHEMA_KEYS.putAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getJsonSchemaKeysMap());
     }
 
+    private PathAutoCompleteEngine pathEngine;
+
     public void setCurrentFile(File file) {
         this.currentFile = file;
+        if (pathEngine != null) {
+            pathEngine.setCurrentFile(file);
+        }
     }
 
     /**
@@ -382,56 +388,11 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     public List<CompletionItem> buildFileCompletions(String typedPath) {
-        File baseDir = currentFile != null ? currentFile.getParentFile() : null;
-        if (baseDir == null) return new ArrayList<>();
-
-        int lastSlash = typedPath != null ? typedPath.lastIndexOf('/') : -1;
-        File searchDir;
-        String filterPrefix;
-
-        if (lastSlash != -1) {
-            String dirPart = typedPath.substring(0, lastSlash);
-            filterPrefix = typedPath.substring(lastSlash + 1).toLowerCase(Locale.ROOT);
-            searchDir = dirPart.isEmpty() ? baseDir : new File(baseDir, dirPart);
-        } else {
-            filterPrefix = typedPath != null ? typedPath.toLowerCase(Locale.ROOT) : "";
-            searchDir = baseDir;
+        if (pathEngine == null) {
+            pathEngine = new PathAutoCompleteEngine(context);
         }
-
-        if (!searchDir.exists() || !searchDir.isDirectory()) return new ArrayList<>();
-
-        List<CompletionItem> items = new ArrayList<>();
-        List<File> files = VFSManager.getInstance().listCachedFiles(searchDir);
-        if (files == null) {
-            File[] fs = searchDir.listFiles();
-            if (fs != null) {
-                files = new ArrayList<>(fs.length);
-                Collections.addAll(files, fs);
-            }
-        }
-
-        if (files != null) {
-            for (File f : files) {
-                String name = f.getName();
-                if (name.startsWith(".")) continue;
-                if (!filterPrefix.isEmpty() && !name.toLowerCase(Locale.ROOT).startsWith(filterPrefix))
-                    continue;
-
-                if (f.isDirectory()) {
-                    CompletionItem ci = new CompletionItem(name + "/", name + "/",
-                            "Directory", CompletionItem.Type.FOLDER, 0);
-                    ci.setReplaceLength(filterPrefix.length());
-                    items.add(ci);
-                } else {
-                    if (currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath()))
-                        continue;
-                    CompletionItem ci = new CompletionItem(name, name, "File", CompletionItem.Type.FILE, 0);
-                    ci.setReplaceLength(filterPrefix.length());
-                    items.add(ci);
-                }
-            }
-        }
-        return items;
+        pathEngine.setCurrentFile(currentFile);
+        return pathEngine.getSuggestionsForPath(typedPath, null);
     }
 
     private List<CompletionItem> getSpecificValueCompletions(String fileName, String keyName, boolean inQuotes) {
