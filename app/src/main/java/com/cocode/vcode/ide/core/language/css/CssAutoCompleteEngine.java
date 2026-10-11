@@ -94,71 +94,25 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
 
     // Asset loading
     private void loadColors() {
-        try {
-            String json = loadAssetJson("completions/css_colors.json");
-            JSONObject obj = new JSONObject(json);
-            JSONArray colors = obj.optJSONArray("colors");
-            if (colors != null) {
-                for (int i = 0; i < colors.length(); i++) {
-                    String c = colors.optString(i);
-                    colorItems.add(new CompletionItem(c, c, "Named color", CompletionItem.Type.CSS_VALUE, 0));
-                }
-            }
-            JSONArray colorFuncs = obj.optJSONArray("color_functions");
-            if (colorFuncs != null) {
-                for (int i = 0; i < colorFuncs.length(); i++) {
-                    String f = colorFuncs.optString(i);
-                    String label = f.replace("|", "");
-                    colorItems.add(new CompletionItem(label, f, "Color function", CompletionItem.Type.CSS_VALUE, 0));
-                }
-            }
-            JSONArray globalFuncs = obj.optJSONArray("global_functions");
-            if (globalFuncs != null) {
-                for (int i = 0; i < globalFuncs.length(); i++) {
-                    String f = globalFuncs.optString(i);
-                    String label = f.replace("|", "");
-                    globalValueItems.add(new CompletionItem(label, f, "Function", CompletionItem.Type.CSS_VALUE, 0));
-                }
-            }
-        } catch (Exception e) { /* Non-critical */ }
+        colorItems.clear();
+        colorItems.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssColorCompletionItems());
+        globalValueItems.clear();
+        globalValueItems.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssGlobalFunctionItems());
     }
 
     private void loadHtmlTags() {
-        try {
-            String json = loadAssetJson("completions/html_tags.json");
-            JSONArray arr = new JSONArray(json);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String tag = obj.optString("tag");
-                htmlTagItems.add(new CompletionItem(tag, tag + " ", obj.optString("detail", "HTML Element"),
-                        CompletionItem.Type.TAG, 0));
-            }
-        } catch (Exception e) { /* Non-critical */ }
+        htmlTagItems.clear();
+        htmlTagItems.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssHtmlTagCompletionItems());
     }
 
     private void loadProperties() {
-        try {
-            String json = loadAssetJson("completions/css_properties.json");
-            JSONArray arr = new JSONArray(json);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String property = obj.optString("property");
-                String detail = obj.optString("detail", "");
-                JSONArray values = obj.optJSONArray("values");
-
-                // Cursor between colon and semicolon after selection
-                CompletionItem item = new CompletionItem(property, property + ": |;",
-                        detail, CompletionItem.Type.CSS_PROPERTY, 0);
-                propertyItems.add(item);
-                propertyTrie.insert(item);
-
-                if (values != null) {
-                    List<String> vals = new ArrayList<>();
-                    for (int j = 0; j < values.length(); j++) vals.add(values.optString(j));
-                    valueMap.put(property, vals);
-                }
-            }
-        } catch (Exception e) { /* Non-critical */ }
+        propertyItems.clear();
+        propertyItems.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssPropertyCompletionItems());
+        for (CompletionItem item : propertyItems) {
+            propertyTrie.insert(item);
+        }
+        valueMap.clear();
+        valueMap.putAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssPropertyValueMap());
     }
 
     // Custom property scanning
@@ -559,9 +513,9 @@ public class CssAutoCompleteEngine extends AutoCompleteEngine {
         }
 
         List<CompletionItem> all = new ArrayList<>();
-        List<CompletionItem> prefixMatches = propertyTrie.getCompletions(word, MAX_SUGGESTIONS);
-        if (!prefixMatches.isEmpty()) {
-            all.addAll(prefixMatches);
+        List<CompletionItem> matches = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getCssPropertyIndex().filter(word, MAX_SUGGESTIONS);
+        if (!matches.isEmpty()) {
+            all.addAll(matches);
             all.addAll(fuzzyFilter(cachedCustomProps, word));
             return all;
         } else {

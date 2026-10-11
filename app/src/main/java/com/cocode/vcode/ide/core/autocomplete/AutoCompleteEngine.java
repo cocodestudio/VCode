@@ -406,7 +406,7 @@ public abstract class AutoCompleteEngine {
      *   <li>-3   each non-consecutive gap character (distance penalty)</li>
      * </ul>
      */
-    protected int computeFuzzyScore(String label, String lowerQuery) {
+    public static int computeFuzzyScore(String label, String lowerQuery) {
         if (label == null || lowerQuery == null || lowerQuery.isEmpty()) return 0;
 
         String lowerLabel = label.toLowerCase();

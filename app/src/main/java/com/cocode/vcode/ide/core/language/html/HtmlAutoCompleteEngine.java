@@ -84,64 +84,17 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
     // Tag loading
 
     /**
-     * Initialises HTML tag completions and per-tag attribute lists from the JSON asset.
+     * Initialises HTML tag completions and per-tag attribute lists from shared static registries.
      */
     private void loadTags() {
-        try {
-            String json = loadAssetJson("completions/html_tags.json");
-            // The asset is a top-level object with a "tags" array plus
-            // globalAttributes / globalAttributePrefixes keys. Older
-            // versions were a bare array; accept both for back-compat.
-            org.json.JSONArray arr;
-            if (json.trim().startsWith("[")) {
-                arr = new org.json.JSONArray(json);
-            } else {
-                org.json.JSONObject root = new org.json.JSONObject(json);
-                arr = root.getJSONArray("tags");
-            }
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String tag = obj.optString("tag");
-                String snippet = obj.optString("snippet", "<" + tag + ">|</" + tag + ">");
-                String detail = obj.optString("detail", "");
-
-                CompletionItem item = new CompletionItem(tag, snippet, detail,
-                        CompletionItem.Type.TAG, 0);
-                tagItems.add(item);
-                TAG_TRIE.insert(item);
-
-                // Build per-tag attribute list (tag-specific + global HTML attributes)
-                HtmlDefinitions.ensureLoaded();
-                JSONArray attrs = obj.optJSONArray("attributes");
-                List<CompletionItem> attrList = new ArrayList<>(HtmlDefinitions.getGlobalAttrs());
-                if (attrs != null) {
-                    for (int j = 0; j < attrs.length(); j++) {
-                        String attr = attrs.optString(j);
-                        String insert = com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.isHtmlBooleanAttribute(attr)
-                                ? attr : attr + "=\"|\"";
-                        attrList.add(0, new CompletionItem(attr, insert,
-                                detail.isEmpty() ? tag : detail, CompletionItem.Type.ATTRIBUTE, 0));
-                    }
-                }
-                attrMap.put(tag, attrList);
-            }
-        } catch (Exception e) {
-            // Completion data not critical — proceed with empty list
+        tagItems.clear();
+        tagItems.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagCompletionItems());
+        for (CompletionItem item : tagItems) {
+            TAG_TRIE.insert(item);
         }
-
-        // Load the ! boilerplate (Emmet)
-        try {
-            String template = loadAssetText("templates/template_blank.html");
-            if (template != null && !template.trim().isEmpty()) {
-                htmlBoilerplate = template.replace("<body>\n\n", "<body>\n    |\n")
-                        .replace("<body>\r\n\r\n", "<body>\r\n    |\r\n");
-                if (!htmlBoilerplate.contains("|")) {
-                    htmlBoilerplate = htmlBoilerplate.replace("<body>", "<body>\n    |");
-                }
-            }
-        } catch (Exception e) {
-            // Non-critical
-        }
+        attrMap.clear();
+        attrMap.putAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagAttributeMap());
+        htmlBoilerplate = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlBoilerplate();
     }
 
     // Main entry point
@@ -540,11 +493,11 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.TAG_NAME, fullText, cursorPos);
 
             if (!staticTags.isEmpty()) {
-                finalResults.addAll(fuzzyFilter(staticTags, word != null ? word : ""));
+                finalResults.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagIndex().filter(word != null ? word : "", MAX_SUGGESTIONS));
             } else {
-                List<CompletionItem> prefixMatches = TAG_TRIE.getCompletions(word, MAX_SUGGESTIONS);
-                if (!prefixMatches.isEmpty()) {
-                    finalResults.addAll(prefixMatches);
+                List<CompletionItem> tagMatches = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagIndex().filter(word, MAX_SUGGESTIONS);
+                if (!tagMatches.isEmpty()) {
+                    finalResults.addAll(tagMatches);
                 } else {
                     finalResults.addAll(fuzzyFilter(tagItems, word));
                 }

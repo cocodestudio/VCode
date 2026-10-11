@@ -29,6 +29,11 @@ public class VCodeApplication extends Application {
         instance = this;
         com.cocode.vcode.ide.core.completion.staticdata.StaticAssetReader.setAppContext(this);
 
+        // Pre-parse static completion datasets and TwoTierIndexes in RAM on startup
+        com.cocode.vcode.ide.utils.ExecutorProvider.getInstance().runOnCpu(
+                com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader::warmUp
+        );
+
         // Setup custom crash handler
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             Log.e("VCodeApplication", "Uncaught exception", throwable);

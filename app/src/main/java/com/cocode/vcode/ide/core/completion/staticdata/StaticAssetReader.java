@@ -18,7 +18,10 @@ import java.util.Map;
 public final class StaticAssetReader {
 
     private static final Map<String, String> overrides = new HashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> assetCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private static volatile Context appContext;
+
     private StaticAssetReader() {
     }
 
@@ -39,6 +42,7 @@ public final class StaticAssetReader {
      */
     public static void setAssetOverride(String assetPath, String json) {
         if (assetPath == null) return;
+        assetCache.remove(assetPath);
         if (json == null) {
             overrides.remove(assetPath);
         } else {
@@ -47,24 +51,28 @@ public final class StaticAssetReader {
     }
 
     /**
-     * Drop all overrides and the cached context (test-only).
+     * Drop all overrides, cached asset content, and the cached context (test-only).
      */
     public static synchronized void resetForTest() {
         overrides.clear();
+        assetCache.clear();
         appContext = null;
     }
 
     /**
      * Read the JSON content of an asset. If a test override is set
      * for the path, the override is returned. Otherwise the real
-     * Android asset is read via {@code Context.getAssets()}. If
-     * the context is unset and no override exists, the empty
-     * string is returned (callers will parse to an empty dataset).
+     * Android asset is read via {@code Context.getAssets()}. Once read,
+     * the content is cached in process memory so subsequent queries do zero I/O.
      */
     public static String readAsset(String assetPath) {
         if (assetPath == null) return "";
         String ovr = overrides.get(assetPath);
         if (ovr != null) return ovr;
+
+        String cached = assetCache.get(assetPath);
+        if (cached != null) return cached;
+
         Context ctx = appContext;
         if (ctx != null) {
             try (java.io.InputStream is = ctx.getAssets().open(assetPath);
@@ -73,7 +81,9 @@ public final class StaticAssetReader {
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
-                return sb.toString();
+                String result = sb.toString();
+                assetCache.put(assetPath, result);
+                return result;
             } catch (Exception ignored) {
                 // In unit tests, asset may not be packaged into Context, fall through to disk fallback
             }
@@ -89,7 +99,9 @@ public final class StaticAssetReader {
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
-                return sb.toString();
+                String result = sb.toString();
+                assetCache.put(assetPath, result);
+                return result;
             } catch (Exception ignored) {
             }
         }

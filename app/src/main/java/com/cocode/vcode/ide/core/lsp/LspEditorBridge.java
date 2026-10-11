@@ -89,7 +89,7 @@ public final class LspEditorBridge {
     private final Runnable updateProjectIndexRunnable = this::updateProjectIndex;
     private static final long PROJECT_INDEX_DEBOUNCE_MS = 300L;
     private static final long SILENT_INDEX_DEBOUNCE_MS = 600L;
-    private static final long CHANGE_SYNC_DEBOUNCE_MS = 200L;
+    private static final long CHANGE_SYNC_DEBOUNCE_MS = 75L;
     private int lastSyncedVersion = -1;
     private final Runnable changeSyncRunnable = this::performChangeSync;
     private final Runnable silentIndexRunnable = () -> {
@@ -1008,6 +1008,12 @@ public final class LspEditorBridge {
         LspDocument doc = buildSnapshot();
         if (doc == null || doc.text == null) return;
 
+        // Guarantee the server has the current text before querying. The 75ms sync debounce
+        // usually fires first, but if the user types faster than that window, flush now.
+        if (doc.version > lastSyncedVersion) {
+            performChangeSync();
+        }
+
         // Fast-path: prevent autocomplete popup from flashing/triggering on
         // newlines, spaces, backspaces on empty lines, and non-trigger symbols.
         int flatCursor = getCursorFlatOffset();
@@ -1077,6 +1083,10 @@ public final class LspEditorBridge {
         if (!attached || editor == null || !hasLspServer) return;
         LspDocument doc = buildSnapshot();
         if (doc == null || doc.text == null) return;
+
+        if (doc.version > lastSyncedVersion) {
+            performChangeSync();
+        }
 
         LspPosition pos = cursorPosition();
         final int capturedVersion = docVersion.get();

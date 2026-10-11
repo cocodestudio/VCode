@@ -87,26 +87,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private static void loadSchemasFromAssets() {
-        String jsonStr = StaticAssetReader.readAsset("completions/json_schemas.json");
-        if (jsonStr == null || jsonStr.trim().isEmpty()) return;
-        try {
-            JSONObject root = new JSONObject(jsonStr);
-            Iterator<String> keys = root.keys();
-            while (keys.hasNext()) {
-                String schemaName = keys.next();
-                JSONArray arr = root.getJSONArray(schemaName);
-                List<CompletionItem> items = new ArrayList<>(arr.length());
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONArray entry = arr.getJSONArray(i);
-                    String label = entry.getString(0);
-                    String insertText = entry.getString(1);
-                    String detail = entry.getString(2);
-                    items.add(new CompletionItem(label, insertText, detail, CompletionItem.Type.JSON_KEY, 0));
-                }
-                SCHEMA_KEYS.put(schemaName, items);
-            }
-        } catch (Exception ignored) {
-        }
+        SCHEMA_KEYS.putAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getJsonSchemaKeysMap());
     }
 
     public void setCurrentFile(File file) {
@@ -127,27 +108,7 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
      * Reads complex dictionary keys and developer-defined boilerplate schemas out of the JSON asset.
      */
     private void loadSnippets() {
-        try {
-            String json = loadAssetJson("completions/json_snippets.json");
-            JSONArray arr = new JSONArray(json);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String label = obj.optString("label");
-                String snippet = obj.optString("snippet", label);
-                String detail = obj.optString("detail", "");
-                int offset = 0;
-
-                if (snippet.contains("|")) {
-                    String after = snippet.substring(snippet.indexOf('|') + 1);
-                    offset = after.length();
-                    snippet = snippet.replace("|", "");
-                }
-                snippetItems.add(new CompletionItem(label, snippet, detail,
-                        CompletionItem.Type.SNIPPET, offset));
-            }
-        } catch (Exception e) {
-            // Non-critical
-        }
+        snippetItems.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getJsonSnippetCompletionItems());
     }
 
     // Document key scanning via AST
