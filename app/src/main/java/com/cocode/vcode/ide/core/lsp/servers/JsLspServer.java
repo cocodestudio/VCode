@@ -153,6 +153,11 @@ public final class JsLspServer implements LspServer {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return ".'\"`/@({*";
+    }
+
+    @Override
     public ServerCapabilities getCapabilities() {
         return CAPABILITIES;
     }
@@ -303,6 +308,14 @@ public final class JsLspServer implements LspServer {
                         b.setDetail("Auto import from " + rel);
                     }
                 }
+            }
+
+            if (item.getReplaceLength() >= 0) {
+                int startOff = Math.max(0, offset - item.getReplaceLength());
+                b.setTextEdit(new TextEdit(
+                        new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(offset)),
+                        item.getEffectiveInsertText()
+                ));
             }
 
             out.add(b.build());

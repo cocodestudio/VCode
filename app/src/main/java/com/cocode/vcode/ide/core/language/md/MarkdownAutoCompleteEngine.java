@@ -45,7 +45,7 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
 
     @Override
     public String getTriggerCharacters() {
-        return "[(#*`!|<->:";
+        return "[(#*`!|-";
     }
 
     @Override

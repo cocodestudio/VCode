@@ -103,17 +103,17 @@ public abstract class AutoCompleteEngine {
             case CSS:
                 return ".#:@-(!&/\"'";
             case HTML:
-                return "<'/\"!=:@-.*+^[]{}()#>&";
+                return "<'/\"!=:@-.*+^#&";
             case JAVASCRIPT:
                 return ".'\"`/@({*";
             case TYPESCRIPT:
-                return ".'\"`/@({*:<|&";
+                return ".'\"`/@({*:<";
             case JSON:
-                return "\"':{}[/";
+                return "\"':{[/";
             case MARKDOWN:
-                return "[(#*`!|<->:";
+                return "[(#*`!|-";
             case SVG:
-                return "<'/\"!=:-&";
+                return "<'/\"!=:@-.*+^#&";
             case GITIGNORE:
                 return "/\\.";
             default:

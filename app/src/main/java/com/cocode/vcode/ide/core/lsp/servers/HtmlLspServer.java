@@ -151,6 +151,11 @@ public final class HtmlLspServer implements LspServer {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return "<'/\"!=:@-.*+^#&";
+    }
+
+    @Override
     public ServerCapabilities getCapabilities() {
         return CAPABILITIES;
     }
@@ -280,11 +285,19 @@ public final class HtmlLspServer implements LspServer {
         List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> out = new ArrayList<>(items.size());
         for (LspCompletionItem item : items) {
             if (token != null && token.isCancelled()) break;
-            out.add(com.cocode.vcode.ide.core.lsp.model.CompletionItem.builder(item.label)
-                    .setInsertText(item.insertText != null ? item.insertText : item.label)
-                    .setDetail(item.detail)
-                    .setKind(mapCompletionKind(item.kind))
-                    .build());
+            com.cocode.vcode.ide.core.lsp.model.CompletionItem.Builder b =
+                    com.cocode.vcode.ide.core.lsp.model.CompletionItem.builder(item.label)
+                            .setInsertText(item.insertText != null ? item.insertText : item.label)
+                            .setDetail(item.detail)
+                            .setKind(mapCompletionKind(item.kind));
+            if (item.replaceLength >= 0) {
+                int startOff = Math.max(0, flatOffset - item.replaceLength);
+                b.setTextEdit(new TextEdit(
+                        new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
+                        item.insertText != null ? item.insertText : item.label
+                ));
+            }
+            out.add(b.build());
         }
         return out;
     }

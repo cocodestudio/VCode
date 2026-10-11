@@ -89,6 +89,14 @@ public interface LspServer {
     String getLanguageId();
 
     /**
+     * Characters that trigger autocomplete in this language server, in addition to standard identifier characters.
+     * Closing delimiters (>, }, ), ]) are strictly excluded to avoid unwanted popups.
+     */
+    default String getTriggerCharacters() {
+        return ".";
+    }
+
+    /**
      * Declares the server capabilities for capability negotiation.
      */
     default ServerCapabilities getCapabilities() {

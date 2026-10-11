@@ -4180,12 +4180,11 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                 } else break;
             }
 
-            int col = cursor.column;
-            if (item.getReplaceLength() >= 0) {
+            int col;
+            if (item.getReplaceLength() > 0) {
                 col = Math.max(0, cursor.column - item.getReplaceLength());
-                if (col > identCol) {
-                    col = identCol;
-                }
+            } else if (item.getReplaceLength() == 0) {
+                col = cursor.column;
             } else {
                 col = identCol;
                 if (col > 0 && linePrefix.charAt(col - 1) == '<' && insertText.startsWith("<")) {
@@ -4206,12 +4205,12 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
                 if (col > 0 && linePrefix.charAt(col - 1) == '@' && insertText.startsWith("@")) {
                     col--;
                 }
-            }
-            if (col > 0 && insertText.length() > 0) {
-                char firstChar = insertText.charAt(0);
-                if ((firstChar == '.' || firstChar == '#' || firstChar == ':' || firstChar == '@')
-                        && linePrefix.charAt(col - 1) == firstChar) {
-                    col--;
+                if (col > 0 && insertText.length() > 0) {
+                    char firstChar = insertText.charAt(0);
+                    if ((firstChar == '.' || firstChar == '#' || firstChar == ':' || firstChar == '@')
+                            && linePrefix.charAt(col - 1) == firstChar) {
+                        col--;
+                    }
                 }
             }
             int wordStart = lineStartFlat + col;

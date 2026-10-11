@@ -49,7 +49,38 @@ public class AutoCompleteTriggerAndInsertionTest {
         String mdTriggers = AutoCompleteEngine.getTriggerCharacters(FileType.MARKDOWN);
         assertNotNull(mdTriggers);
         assertTrue(mdTriggers.contains("["));
-        assertTrue(mdTriggers.contains("#"));
+        // Ensure closing delimiters are never triggers
+        for (FileType ft : new FileType[]{FileType.CSS, FileType.HTML, FileType.JAVASCRIPT,
+                FileType.TYPESCRIPT, FileType.JSON, FileType.MARKDOWN, FileType.SVG}) {
+            String triggers = AutoCompleteEngine.getTriggerCharacters(ft);
+            assertFalse("Trigger characters for " + ft + " must not contain '>'", triggers.contains(">"));
+            assertFalse("Trigger characters for " + ft + " must not contain '}'", triggers.contains("}"));
+            assertFalse("Trigger characters for " + ft + " must not contain ')'", triggers.contains(")"));
+            assertFalse("Trigger characters for " + ft + " must not contain ']'", triggers.contains("]"));
+        }
+    }
+
+    @Test
+    public void testLanguageServerTriggerCharactersSanitized() {
+        com.cocode.vcode.ide.core.lsp.servers.HtmlLspServer htmlServer = new com.cocode.vcode.ide.core.lsp.servers.HtmlLspServer();
+        com.cocode.vcode.ide.core.lsp.servers.CssLspServer cssServer = new com.cocode.vcode.ide.core.lsp.servers.CssLspServer();
+        com.cocode.vcode.ide.core.lsp.servers.JsLspServer jsServer = new com.cocode.vcode.ide.core.lsp.servers.JsLspServer();
+        com.cocode.vcode.ide.core.lsp.servers.TsLspServer tsServer = new com.cocode.vcode.ide.core.lsp.servers.TsLspServer();
+        com.cocode.vcode.ide.core.lsp.servers.JsonLspServer jsonServer = new com.cocode.vcode.ide.core.lsp.servers.JsonLspServer();
+        com.cocode.vcode.ide.core.lsp.servers.MarkdownLspServer mdServer = new com.cocode.vcode.ide.core.lsp.servers.MarkdownLspServer();
+
+        com.cocode.vcode.ide.core.lsp.LspServer[] servers = new com.cocode.vcode.ide.core.lsp.LspServer[]{
+                htmlServer, cssServer, jsServer, tsServer, jsonServer, mdServer
+        };
+
+        for (com.cocode.vcode.ide.core.lsp.LspServer s : servers) {
+            String triggers = s.getTriggerCharacters();
+            assertNotNull("Server " + s.getClass().getSimpleName() + " triggers must not be null", triggers);
+            assertFalse("Server " + s.getClass().getSimpleName() + " triggers must not contain '>'", triggers.contains(">"));
+            assertFalse("Server " + s.getClass().getSimpleName() + " triggers must not contain '}'", triggers.contains("}"));
+            assertFalse("Server " + s.getClass().getSimpleName() + " triggers must not contain ')'", triggers.contains(")"));
+            assertFalse("Server " + s.getClass().getSimpleName() + " triggers must not contain ']'", triggers.contains("]"));
+        }
     }
 
     @Test
@@ -188,5 +219,19 @@ public class AutoCompleteTriggerAndInsertionTest {
         }
         assertNotNull("Should contain console.log when typing 'con'", logCon);
         assertEquals("Replace length for 'con' must be 3", 3, logCon.getReplaceLength());
+    }
+
+    @Test
+    public void testExplicitReplaceLengthContract() {
+        CompletionItem defaultItem = new CompletionItem("test", "test", "detail", CompletionItem.Type.KEYWORD);
+        assertEquals("Default replace length should be -1", -1, defaultItem.getReplaceLength());
+
+        CompletionItem explicitZero = new CompletionItem("zero", "zero", "detail", CompletionItem.Type.KEYWORD);
+        explicitZero.setReplaceLength(0);
+        assertEquals(0, explicitZero.getReplaceLength());
+
+        CompletionItem explicitPos = new CompletionItem("pos", "pos", "detail", CompletionItem.Type.KEYWORD);
+        explicitPos.setReplaceLength(5);
+        assertEquals(5, explicitPos.getReplaceLength());
     }
 }

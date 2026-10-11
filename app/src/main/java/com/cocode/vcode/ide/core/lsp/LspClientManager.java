@@ -118,13 +118,36 @@ public final class LspClientManager {
                         int kind = mi.kind != null ? mi.kind.getValue() : LspCompletionItem.KIND_TEXT;
                         String docStr = mi.documentation != null ? mi.documentation.value : null;
                         String insert = mi.insertText != null ? mi.insertText : mi.label;
+                        int replaceLength = -1;
+                        if (mi.textEdit != null && mi.textEdit.range != null) {
+                            int startOffset = doc.toOffset(mi.textEdit.range.start);
+                            int endOffset = doc.toOffset(mi.textEdit.range.end);
+                            if (startOffset >= 0 && endOffset >= startOffset) {
+                                replaceLength = endOffset - startOffset;
+                            }
+                        }
+                        if (replaceLength < 0 && doc.text != null) {
+                            int flatCursor = doc.toOffset(pos);
+                            if (flatCursor > 0 && flatCursor <= doc.text.length()) {
+                                int wordStart = flatCursor;
+                                while (wordStart > 0) {
+                                    char c = doc.text.charAt(wordStart - 1);
+                                    if (Character.isLetterOrDigit(c) || c == '_' || c == '$' || c == '-') {
+                                        wordStart--;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                replaceLength = flatCursor - wordStart;
+                            }
+                        }
                         converted.add(new LspCompletionItem(
                                 mi.label,
                                 insert,
                                 kind,
                                 mi.detail,
                                 docStr,
-                                -1,
+                                replaceLength,
                                 mi.additionalTextEdits
                         ));
                     }
@@ -135,6 +158,38 @@ public final class LspClientManager {
                 // Fall back to legacy completion if LSP 3.17 returned empty
                 List<LspCompletionItem> items = server.completion(doc, pos);
                 if (cancellationToken != null && cancellationToken.isCancelled()) return;
+                if (items != null && !items.isEmpty() && doc.text != null) {
+                    int flatCursor = doc.toOffset(pos);
+                    int wordStart = flatCursor;
+                    if (flatCursor > 0 && flatCursor <= doc.text.length()) {
+                        while (wordStart > 0) {
+                            char c = doc.text.charAt(wordStart - 1);
+                            if (Character.isLetterOrDigit(c) || c == '_' || c == '$' || c == '-') {
+                                wordStart--;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    int defaultReplaceLen = flatCursor - wordStart;
+                    List<LspCompletionItem> withReplace = new ArrayList<>(items.size());
+                    for (LspCompletionItem item : items) {
+                        if (item.replaceLength >= 0) {
+                            withReplace.add(item);
+                        } else {
+                            withReplace.add(new LspCompletionItem(
+                                    item.label,
+                                    item.insertText,
+                                    item.kind,
+                                    item.detail,
+                                    item.documentation,
+                                    defaultReplaceLen,
+                                    item.additionalTextEdits
+                            ));
+                        }
+                    }
+                    items = withReplace;
+                }
                 deliverResult(callback, items != null ? items : Collections.emptyList());
             } catch (Exception e) {
                 deliverError(callback, e.getMessage());

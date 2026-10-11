@@ -147,6 +147,11 @@ public final class CssLspServer implements LspServer {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return ".#:@-(!&/\"'";
+    }
+
+    @Override
     public ServerCapabilities getCapabilities() {
         return CAPABILITIES;
     }
@@ -223,7 +228,16 @@ public final class CssLspServer implements LspServer {
                     String detail = sym.detail != null && !sym.detail.isEmpty() ? sym.detail : "CSS Variable";
                     MarkupContent docContent = new MarkupContent(MarkupKind.MARKDOWN,
                             "Custom property: `" + sym.name + ": " + (sym.detail != null ? sym.detail : "") + "`");
-                    items.add(new CompletionItem(sym.name, insert, CompletionItemKind.VARIABLE, detail, docContent));
+                    CompletionItem.Builder vb = CompletionItem.builder(sym.name)
+                            .setInsertText(insert)
+                            .setKind(CompletionItemKind.VARIABLE)
+                            .setDetail(detail)
+                            .setDocumentation(docContent);
+                    if (isVarPrefix) {
+                        int startOff = Math.max(0, flatOffset - 2);
+                        vb.setTextEdit(new TextEdit(new LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)), insert));
+                    }
+                    items.add(vb.build());
                 }
             }
         }
@@ -235,12 +249,18 @@ public final class CssLspServer implements LspServer {
             for (com.cocode.vcode.ide.core.model.CompletionItem leg : legacy) {
                 if (token != null && token.isCancelled()) return Collections.emptyList();
                 if (leg != null && leg.getLabel() != null && seenLabels.add(leg.getLabel())) {
-                    items.add(new CompletionItem(
-                            leg.getLabel(),
-                            leg.getEffectiveInsertText(),
-                            mapLegacyCompletionKind(leg.getType()),
-                            leg.getDetail()
-                    ));
+                    CompletionItem.Builder b = CompletionItem.builder(leg.getLabel())
+                            .setInsertText(leg.getEffectiveInsertText())
+                            .setKind(mapLegacyCompletionKind(leg.getType()))
+                            .setDetail(leg.getDetail());
+                    if (leg.getReplaceLength() >= 0) {
+                        int startOff = Math.max(0, flatOffset - leg.getReplaceLength());
+                        b.setTextEdit(new TextEdit(
+                                new LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
+                                leg.getEffectiveInsertText()
+                        ));
+                    }
+                    items.add(b.build());
                 }
             }
         }

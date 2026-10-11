@@ -45,7 +45,7 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
 
     @Override
     public String getTriggerCharacters() {
-        return ".'\"`/@({*:<|&";
+        return ".'\"`/@({*:<";
     }
 
     @Override

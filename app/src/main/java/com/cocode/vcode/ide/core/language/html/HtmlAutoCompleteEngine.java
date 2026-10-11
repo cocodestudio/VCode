@@ -67,7 +67,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
     @Override
     public String getTriggerCharacters() {
-        return "<'/\"!=:@-.*+^[]{}()#>&";
+        return "<'/\"!=:@-.*+^#&";
     }
 
     @Override

@@ -166,6 +166,11 @@ public final class MarkdownLspServer implements LspServer {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return "[(#*`!|-";
+    }
+
+    @Override
     public ServerCapabilities getCapabilities() {
         return CAPABILITIES;
     }
@@ -298,8 +303,19 @@ public final class MarkdownLspServer implements LspServer {
             CompletionItemKind kind = (ci.getType() == CompletionItem.Type.SNIPPET)
                     ? CompletionItemKind.SNIPPET
                     : CompletionItemKind.TEXT;
-            results.add(new com.cocode.vcode.ide.core.lsp.model.CompletionItem(
-                    ci.getLabel(), ci.getEffectiveInsertText(), kind, ci.getDetail()));
+            com.cocode.vcode.ide.core.lsp.model.CompletionItem.Builder b =
+                    com.cocode.vcode.ide.core.lsp.model.CompletionItem.builder(ci.getLabel())
+                            .setInsertText(ci.getEffectiveInsertText())
+                            .setKind(kind)
+                            .setDetail(ci.getDetail());
+            if (ci.getReplaceLength() >= 0) {
+                int startOff = Math.max(0, flatOffset - ci.getReplaceLength());
+                b.setTextEdit(new TextEdit(
+                        new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
+                        ci.getEffectiveInsertText()
+                ));
+            }
+            results.add(b.build());
         }
         return results;
     }

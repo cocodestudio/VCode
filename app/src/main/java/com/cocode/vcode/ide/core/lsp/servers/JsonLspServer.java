@@ -135,6 +135,11 @@ public final class JsonLspServer implements LspServer {
     }
 
     @Override
+    public String getTriggerCharacters() {
+        return "\"':{[/";
+    }
+
+    @Override
     public ServerCapabilities getCapabilities() {
         return CAPABILITIES;
     }
@@ -244,17 +249,29 @@ public final class JsonLspServer implements LspServer {
 
         List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> result = new ArrayList<>(combined.size());
         for (CompletionItem ci : combined) {
-            result.add(convertToModelItem(ci));
+            result.add(convertToModelItem(ci, doc, flatOffset));
         }
         return result;
     }
 
-    private com.cocode.vcode.ide.core.lsp.model.CompletionItem convertToModelItem(CompletionItem ci) {
+    private com.cocode.vcode.ide.core.lsp.model.CompletionItem convertToModelItem(CompletionItem ci, LspDocument doc, int flatOffset) {
         String label = ci.getLabel();
         String insertText = ci.getEffectiveInsertText();
         CompletionItemKind kind = mapModelKind(ci.getType());
         String detail = ci.getDetail();
-        return new com.cocode.vcode.ide.core.lsp.model.CompletionItem(label, insertText, kind, detail);
+        com.cocode.vcode.ide.core.lsp.model.CompletionItem.Builder b =
+                com.cocode.vcode.ide.core.lsp.model.CompletionItem.builder(label)
+                        .setInsertText(insertText)
+                        .setDetail(detail)
+                        .setKind(kind);
+        if (ci.getReplaceLength() >= 0 && doc != null) {
+            int startOff = Math.max(0, flatOffset - ci.getReplaceLength());
+            b.setTextEdit(new TextEdit(
+                    new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
+                    insertText
+            ));
+        }
+        return b.build();
     }
 
     private CompletionItemKind mapModelKind(CompletionItem.Type type) {

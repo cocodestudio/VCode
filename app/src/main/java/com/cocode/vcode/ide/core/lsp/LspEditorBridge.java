@@ -1036,7 +1036,14 @@ public final class LspEditorBridge {
             return;
         }
 
-        String triggerChars = editor != null ? editor.getTriggerCharacters() : AutoCompleteEngine.getTriggerCharacters(doc != null ? FileType.fromExtension(doc.uri) : FileType.TEXT);
+        FileType ft = (editor != null && editor.getFileType() != null)
+                ? editor.getFileType()
+                : (doc != null ? FileType.fromExtension(doc.uri) : FileType.TEXT);
+        String langId = ft != null ? ft.getLspLanguageId() : "plaintext";
+        LspServer server = LspClientManager.getInstance().getServer(langId);
+        String triggerChars = (server != null && server.getTriggerCharacters() != null && !server.getTriggerCharacters().isEmpty())
+                ? server.getTriggerCharacters()
+                : (editor != null ? editor.getTriggerCharacters() : AutoCompleteEngine.getTriggerCharacters(ft != null ? ft : FileType.TEXT));
         boolean isTriggerChar = triggerChars.indexOf(lastChar) >= 0;
         boolean isIdentifier = Character.isLetterOrDigit(lastChar)
                 || lastChar == '_' || lastChar == '$' || lastChar == '-';
