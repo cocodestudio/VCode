@@ -115,4 +115,34 @@ public class HtmlTagParserTest {
         assertEquals("div", parser.getCurrentOpenTagName("<div class=\"\"", 12));
         assertNull(parser.getCurrentOpenTagName("<div>", 5));
     }
+
+    @Test
+    public void testOpenTagsAncestryStackLifo() {
+        String html = "<html><body><div><span>";
+        HtmlTagParser.HtmlContext ctx = parser.parseContext(html, html.length());
+        assertEquals("span", ctx.unclosedTag);
+        assertEquals(4, ctx.openTags.size());
+        assertEquals("span", ctx.openTags.get(0));
+        assertEquals("div", ctx.openTags.get(1));
+        assertEquals("body", ctx.openTags.get(2));
+        assertEquals("html", ctx.openTags.get(3));
+    }
+
+    @Test
+    public void testRawTextElementIgnoresLtOperator() {
+        String html = "<script>for (let i = 0; i < len; i++) {}</script><div>";
+        HtmlTagParser.HtmlContext ctx = parser.parseContext(html, html.length());
+        assertEquals("div", ctx.unclosedTag);
+        assertEquals(1, ctx.openTags.size());
+        assertEquals("div", ctx.openTags.get(0));
+    }
+
+    @Test
+    public void testAncestorPoppingOnCloseTag() {
+        String html = "<ul><li>Item 1<li>Item 2</ul>";
+        HtmlTagParser.HtmlContext ctx = parser.parseContext(html, html.length());
+        // Both li tags and ul should be popped when </ul> closes
+        assertTrue(ctx.openTags.isEmpty());
+        assertNull(ctx.unclosedTag);
+    }
 }

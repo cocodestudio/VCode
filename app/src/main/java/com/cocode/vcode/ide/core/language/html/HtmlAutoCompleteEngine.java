@@ -108,6 +108,11 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
         String trimmed = lineBefore.trim();
         String word = getWordBeforeCursor(fullText, cursorPos);
 
+        // Tag closure '>': directly after typing '>', suppress completion popup
+        if (lineBefore.endsWith(">")) {
+            return Collections.emptyList();
+        }
+
         // Suppress completions inside HTML comments
         if (isInsideComment(fullText, cursorPos)) {
             return new ArrayList<>();
@@ -202,122 +207,109 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // Suggest matching closing tags on "</"
-        int lastCloseTagIdx = lineBefore.lastIndexOf("</");
-        if (lastCloseTagIdx != -1) {
-            String afterSlash = lineBefore.substring(lastCloseTagIdx + 2);
-            boolean onlyTagChars = true;
-            for (int i = 0; i < afterSlash.length(); i++) {
-                char ch = afterSlash.charAt(i);
-                if (!Character.isLetterOrDigit(ch) && ch != '-' && ch != '_') {
-                    onlyTagChars = false;
-                    break;
-                }
-            }
-            if (onlyTagChars) {
-                List<String> unclosedTags = new ArrayList<>();
-                try {
-                    HtmlTokenStream tokens = HtmlLexer.tokenize(fullText);
-                    com.cocode.vcode.ide.core.language.js.ParseResult parseRes = HtmlParser.parse(fullText, tokens);
-                    int elem = parseRes.htmlTree.getEnclosingElement(cursorPos);
-                    while (elem > 0 && elem < parseRes.htmlTree.nodeCount) {
-                        if (parseRes.htmlTree.nodeType[elem] == HtmlSyntaxTree.N_ELEMENT && parseRes.htmlTree.nodeName[elem] != null) {
-                            String name = parseRes.htmlTree.nodeName[elem];
-                            if (!unclosedTags.contains(name)) {
-                                unclosedTags.add(name);
-                            }
-                        }
-                        elem = parseRes.htmlTree.nodeParent[elem];
-                    }
-                } catch (Exception ignored) {
-                }
-
-                if (unclosedTags.isEmpty()) {
-                    HtmlTagParser.HtmlContext c = HtmlTagParser.parseContext(fullText, cursorPos);
-                    if (c.unclosedTag != null && !c.unclosedTag.isEmpty()) {
-                        unclosedTags.add(c.unclosedTag);
-                    }
-                }
-
-                if (!unclosedTags.isEmpty()) {
-                    List<CompletionItem> result = new ArrayList<>();
-                    for (String unclosedTag : unclosedTags) {
-                        if (afterSlash.isEmpty() || unclosedTag.toLowerCase().startsWith(afterSlash.toLowerCase())) {
-                            CompletionItem ci = new CompletionItem(
-                                    "</" + unclosedTag + ">",
-                                    "</" + unclosedTag + ">",
-                                    "Close tag <" + unclosedTag + ">",
-                                    CompletionItem.Type.TAG, 0);
-                            ci.setReplaceLength(2 + afterSlash.length());
-                            result.add(ci);
-                        }
-                    }
-                    if (!result.isEmpty()) {
-                        return result;
-                    }
-                }
-            }
-        }
-
-        // Context-aware attribute name and value completions
-        com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position pos =
-                com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.detectPosition(fullText, cursorPos);
-
-        if (pos == com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.ATTRIBUTE_NAME) {
-            List<CompletionItem> attrItems = com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.buildCompletions(pos, fullText, cursorPos);
-            if (!attrItems.isEmpty()) {
-                return fuzzyFilter(attrItems, word != null ? word : "");
-            }
-        }
-
+        // 6. Context Scanning via Lexical State Machine
         HtmlTagParser.HtmlContext ctx = HtmlTagParser.parseContext(fullText, cursorPos);
         if (ctx.isInsideComment) {
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
 
-        // Inside attribute value
-        if (ctx.isInsideOpenTag && !ctx.isTypingTagName && ctx.currentTagName != null) {
+        // 7. Closing Tag Context (Explicitly typing "</")
+        // Guarded: only triggers if cursor is typing directly after "</"
+        int lastCloseTagIdx = lineBefore.lastIndexOf("</");
+        if (ctx.isInsideCloseTag || (lastCloseTagIdx != -1 && isDirectlyAfterCloseTag(lineBefore, lastCloseTagIdx))) {
+            if (lastCloseTagIdx != -1) {
+                String afterSlash = lineBefore.substring(lastCloseTagIdx + 2);
+                boolean validTagChars = true;
+                for (int i = 0; i < afterSlash.length(); i++) {
+                    char ch = afterSlash.charAt(i);
+                    if (!Character.isLetterOrDigit(ch) && ch != '-' && ch != '_') {
+                        validTagChars = false;
+                        break;
+                    }
+                }
+                if (validTagChars) {
+                    List<String> unclosedTags = new ArrayList<>(ctx.openTags);
+                    if (unclosedTags.isEmpty() && ctx.unclosedTag != null && !ctx.unclosedTag.isEmpty()) {
+                        unclosedTags.add(ctx.unclosedTag);
+                    }
+                    if (unclosedTags.isEmpty()) {
+                        try {
+                            HtmlTokenStream tokens = HtmlLexer.tokenize(fullText);
+                            com.cocode.vcode.ide.core.language.js.ParseResult parseRes = HtmlParser.parse(fullText, tokens);
+                            int elem = parseRes.htmlTree.getEnclosingElement(cursorPos);
+                            while (elem > 0 && elem < parseRes.htmlTree.nodeCount) {
+                                if (parseRes.htmlTree.nodeType[elem] == HtmlSyntaxTree.N_ELEMENT && parseRes.htmlTree.nodeName[elem] != null) {
+                                    String name = parseRes.htmlTree.nodeName[elem];
+                                    if (!unclosedTags.contains(name)) {
+                                        unclosedTags.add(name);
+                                    }
+                                }
+                                elem = parseRes.htmlTree.nodeParent[elem];
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+
+                    if (!unclosedTags.isEmpty()) {
+                        List<CompletionItem> result = new ArrayList<>();
+                        for (String unclosedTag : unclosedTags) {
+                            if (afterSlash.isEmpty() || unclosedTag.toLowerCase().startsWith(afterSlash.toLowerCase())) {
+                                CompletionItem ci = new CompletionItem(
+                                        "</" + unclosedTag + ">",
+                                        "</" + unclosedTag + ">",
+                                        "Close tag <" + unclosedTag + ">",
+                                        CompletionItem.Type.TAG, 0);
+                                ci.setReplaceLength(2 + afterSlash.length());
+                                result.add(ci);
+                            }
+                        }
+                        if (!result.isEmpty()) {
+                            return result;
+                        }
+                    }
+                }
+            }
+            return Collections.emptyList();
+        }
+
+        // 8. Inside Open Tag Context
+        if (ctx.isInsideOpenTag) {
+            // 8a. Attribute Value position
             if (ctx.isInsideAttributeValue && ctx.currentAttributeName != null) {
                 String attrName = ctx.currentAttributeName;
                 String typedValue = ctx.currentAttributeValue != null ? ctx.currentAttributeValue : "";
 
-                // Embedded CSS completions inside inline style attributes
+                // style="..." -> forward to cssEngine inline
                 if ("style".equals(attrName)) {
                     return cssEngine.getSuggestions(typedValue, typedValue.length(), true);
                 }
 
-                // Embedded JavaScript completions inside inline event handler attributes
+                // on*="..." -> forward to jsEngine
                 if (attrName.startsWith("on")) {
                     ensureHtmlSelectorsResolved(fullText);
                     ensureHtmlJsSymbolsResolved(fullText);
                     return jsEngine.getSuggestions(typedValue, typedValue.length());
                 }
 
-                // 6c. Inside file-path attribute → file suggestions
+                // File path attributes
                 if (attrName.equals("src") || attrName.equals("href") || attrName.equals("action") ||
                         attrName.equals("formaction") || attrName.equals("poster") || attrName.equals("data") ||
                         attrName.equals("cite") || attrName.equals("manifest") || attrName.equals("srcset")) {
-
                     String pathQuery = getPathQuery(typedValue, attrName);
                     return getFileSuggestions(pathQuery, ctx.currentTagName, attrName);
                 }
 
-                // 6d. Inside class="…" or id="…"
-                String attrWord = typedValue;
                 int lastSpace = typedValue.lastIndexOf(' ');
-                if (lastSpace != -1) {
-                    attrWord = typedValue.substring(lastSpace + 1);
-                }
+                String attrWord = lastSpace != -1 ? typedValue.substring(lastSpace + 1) : typedValue;
 
+                // class="..."
                 if ("class".equals(attrName)) {
                     ensureHtmlSelectorsResolved(fullText);
                     if (!cachedHtmlClassItems.isEmpty()) {
                         Set<String> alreadyChosen = new HashSet<>();
                         String[] tokens = typedValue.split("\\s+");
                         for (String t : tokens) {
-                            if (!t.isEmpty()) {
-                                alreadyChosen.add(t.toLowerCase());
-                            }
+                            if (!t.isEmpty()) alreadyChosen.add(t.toLowerCase());
                         }
                         alreadyChosen.remove(attrWord.toLowerCase());
 
@@ -334,8 +326,11 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                         }
                         return res;
                     }
-                    return new ArrayList<>();
-                } else if ("id".equals(attrName)) {
+                    return Collections.emptyList();
+                }
+
+                // id="..."
+                if ("id".equals(attrName)) {
                     ensureHtmlSelectorsResolved(fullText);
                     if (!cachedHtmlIdItems.isEmpty()) {
                         List<CompletionItem> res = fuzzyFilter(cachedHtmlIdItems, attrWord);
@@ -344,9 +339,10 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                         }
                         return res;
                     }
-                    return new ArrayList<>();
+                    return Collections.emptyList();
                 }
 
+                // Known attribute values
                 String[] values = HtmlDefinitions.getAttributeValues(ctx.currentTagName, attrName);
                 if (values != null) {
                     boolean isMultiValue = "rel".equals(attrName) || "sandbox".equals(attrName)
@@ -354,7 +350,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                             || "aria-haspopup".equals(attrName) || "role".equals(attrName);
 
                     String filterWord = typedValue;
-                    java.util.Set<String> alreadyChosen = new java.util.HashSet<>();
+                    Set<String> alreadyChosen = new HashSet<>();
                     if (isMultiValue) {
                         String[] tokens = typedValue.split("\\s+");
                         for (String t : tokens) {
@@ -368,9 +364,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
 
                     List<CompletionItem> valItems = new ArrayList<>();
                     for (String v : values) {
-                        if (isMultiValue && alreadyChosen.contains(v.toLowerCase())) {
-                            continue;
-                        }
+                        if (isMultiValue && alreadyChosen.contains(v.toLowerCase())) continue;
                         String insertText = v;
                         if (!ctx.isQuotedAttributeValue && lastSpace == -1) {
                             insertText = "\"" + v + "\"";
@@ -383,16 +377,53 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     return fuzzyFilter(valItems, filterWord);
                 }
 
-                return new ArrayList<>();
+                // In attribute values, tag names and attributes are forbidden
+                return Collections.emptyList();
             }
+
+            // 8b. Opening Tag Name position (typing directly after '<')
+            if (ctx.isTypingTagName) {
+                String tagPrefix = word != null ? word : "";
+                List<CompletionItem> tagMatches = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagIndex().filter(tagPrefix, MAX_SUGGESTIONS);
+                if (tagMatches.isEmpty()) {
+                    tagMatches = fuzzyFilter(tagItems, tagPrefix);
+                }
+                boolean hasLtBefore = lineBefore.lastIndexOf('<') >= 0 &&
+                        lineBefore.lastIndexOf('<') == lineBefore.length() - tagPrefix.length() - 1;
+                List<CompletionItem> out = new ArrayList<>(tagMatches.size());
+                for (CompletionItem ci : tagMatches) {
+                    CompletionItem copy = new CompletionItem(ci);
+                    int rLen = (hasLtBefore && copy.getInsertText().startsWith("<")) ? (tagPrefix.length() + 1) : tagPrefix.length();
+                    copy.setReplaceLength(rLen);
+                    out.add(copy);
+                }
+                return out;
+            }
+
+            // 8c. Attribute Name position (inside open tag, past tag name, before '=')
+            com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position pos =
+                    com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.detectPosition(fullText, cursorPos);
+            List<CompletionItem> attrItems = com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.buildCompletions(
+                    pos == com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.ATTRIBUTE_NAME ? pos :
+                            com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.ATTRIBUTE_NAME,
+                    fullText, cursorPos);
+            String attrPrefix = word != null ? word : "";
+            List<CompletionItem> filteredAttrs = fuzzyFilter(attrItems, attrPrefix);
+            List<CompletionItem> outAttrs = new ArrayList<>(filteredAttrs.size());
+            for (CompletionItem ci : filteredAttrs) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(attrPrefix.length());
+                outAttrs.add(copy);
+            }
+            return outAttrs;
         }
 
-        // Emmet abbreviation expansion
+        // 9. Text Content position (between tags, on blank lines, or outside tags)
+        // Check Emmet first
         boolean inEmmetBraces = isInsideEmmetBraces(lineBefore);
         boolean inEmmetBrackets = isInsideEmmetBrackets(lineBefore);
 
         String emmetAbbr = getEmmetAbbreviationBeforeCursor(fullText, cursorPos);
-        List<CompletionItem> emmetResults = new ArrayList<>();
         if (!inEmmetBraces && !inEmmetBrackets && emmetAbbr != null && !emmetAbbr.isEmpty() && !emmetAbbr.contains("<")) {
             String expanded = EmmetParser.expandHtml(emmetAbbr, htmlBoilerplate);
             if (expanded != null) {
@@ -427,8 +458,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        // Candidate Emmet abbreviation with trailing auto-closed delimiter ('}' or ']')
-        // or unclosed delimiter while typing inside braces/brackets
+        // Candidate Emmet inside braces or brackets
         if (inEmmetBraces) {
             int braceIdx = lineBefore.lastIndexOf('{');
             if (braceIdx >= 0) {
@@ -451,6 +481,7 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 }
             }
+            return Collections.emptyList();
         } else if (inEmmetBrackets) {
             int bracketIdx = lineBefore.lastIndexOf('[');
             if (bracketIdx >= 0 && !lineBefore.substring(bracketIdx).contains("]")) {
@@ -473,39 +504,37 @@ public class HtmlAutoCompleteEngine extends AutoCompleteEngine {
                     }
                 }
             }
+            return Collections.emptyList();
         }
 
-        // HTML tag name completions
-        boolean isTagNamePos = pos == com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.TAG_NAME
-                || ctx.isTypingTagName
-                || trimmed.endsWith("<")
-                || (lineBefore.lastIndexOf('<') > lineBefore.lastIndexOf('>'));
-
-        boolean isTagEligible = isTagNamePos || (word != null && !word.isEmpty() && lineBefore.trim().equals(word));
-
-        if (isTagEligible && !ctx.isInsideAttributeValue && !ctx.isInsideComment && !ctx.isInsideCloseTag) {
-            if (inEmmetBraces || inEmmetBrackets) {
-                return emmetResults.isEmpty() ? new ArrayList<>() : emmetResults;
+        // Bare HTML tag suggestions in Text Content (e.g. typing "div" or "p" on blank line or after indent)
+        if (word != null && !word.isEmpty()) {
+            List<CompletionItem> tagMatches = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagIndex().filter(word, MAX_SUGGESTIONS);
+            if (tagMatches.isEmpty()) {
+                tagMatches = fuzzyFilter(tagItems, word);
             }
-            List<CompletionItem> finalResults = new ArrayList<>(emmetResults);
-
-            List<CompletionItem> staticTags = com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.buildCompletions(
-                    com.cocode.vcode.ide.core.completion.staticdata.HtmlStaticCompletionDispatcher.Position.TAG_NAME, fullText, cursorPos);
-
-            if (!staticTags.isEmpty()) {
-                finalResults.addAll(com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagIndex().filter(word != null ? word : "", MAX_SUGGESTIONS));
-            } else {
-                List<CompletionItem> tagMatches = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlTagIndex().filter(word, MAX_SUGGESTIONS);
-                if (!tagMatches.isEmpty()) {
-                    finalResults.addAll(tagMatches);
-                } else {
-                    finalResults.addAll(fuzzyFilter(tagItems, word));
-                }
+            List<CompletionItem> outTags = new ArrayList<>(tagMatches.size());
+            for (CompletionItem ci : tagMatches) {
+                CompletionItem copy = new CompletionItem(ci);
+                copy.setReplaceLength(word.length());
+                outTags.add(copy);
             }
-            return finalResults;
+            return outTags;
         }
 
-        return emmetResults.isEmpty() ? new ArrayList<>() : emmetResults;
+        return Collections.emptyList();
+    }
+
+    private static boolean isDirectlyAfterCloseTag(String lineBefore, int lastCloseTagIdx) {
+        if (lastCloseTagIdx < 0 || lastCloseTagIdx + 2 > lineBefore.length()) return false;
+        String after = lineBefore.substring(lastCloseTagIdx + 2);
+        for (int i = 0; i < after.length(); i++) {
+            char c = after.charAt(i);
+            if (!Character.isLetterOrDigit(c) && c != '-' && c != '_') {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String getPathQuery(String typedValue, String attrName) {

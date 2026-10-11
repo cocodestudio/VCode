@@ -38,18 +38,41 @@ public class HtmlTagParser {
 
             switch (state) {
                 case TEXT:
+                    String currentOpenTag = openTags.peek();
+                    boolean inRawText = currentOpenTag != null && (
+                            "script".equals(currentOpenTag) ||
+                            "style".equals(currentOpenTag) ||
+                            "textarea".equals(currentOpenTag) ||
+                            "title".equals(currentOpenTag));
+
                     if (c == '<') {
                         if (i + 1 < limit && text.charAt(i + 1) == '/') {
-                            state = State.CLOSE_TAG_OPEN;
-                            i++; // skip '/'
-                        } else if (i + 3 < limit && text.charAt(i + 1) == '!' && text.charAt(i + 2) == '-' && text.charAt(i + 3) == '-') {
-                            state = State.COMMENT;
-                            i += 3;
-                        } else if (i + 1 < limit && text.charAt(i + 1) == '!') {
-                            state = State.DOCTYPE;
-                            i++;
-                        } else {
-                            state = State.TAG_OPEN;
+                            if (inRawText) {
+                                int tagStart = i + 2;
+                                while (tagStart < limit && Character.isWhitespace(text.charAt(tagStart))) tagStart++;
+                                int tagEnd = tagStart;
+                                while (tagEnd < limit && (Character.isLetterOrDigit(text.charAt(tagEnd)) || text.charAt(tagEnd) == '-' || text.charAt(tagEnd) == '_')) {
+                                    tagEnd++;
+                                }
+                                String closeCandidate = text.substring(tagStart, tagEnd).toLowerCase();
+                                if (closeCandidate.isEmpty() || currentOpenTag.startsWith(closeCandidate)) {
+                                    state = State.CLOSE_TAG_OPEN;
+                                    i++; // skip '/'
+                                }
+                            } else {
+                                state = State.CLOSE_TAG_OPEN;
+                                i++; // skip '/'
+                            }
+                        } else if (!inRawText) {
+                            if (i + 3 < limit && text.charAt(i + 1) == '!' && text.charAt(i + 2) == '-' && text.charAt(i + 3) == '-') {
+                                state = State.COMMENT;
+                                i += 3;
+                            } else if (i + 1 < limit && text.charAt(i + 1) == '!') {
+                                state = State.DOCTYPE;
+                                i++;
+                            } else {
+                                state = State.TAG_OPEN;
+                            }
                         }
                     }
                     break;
@@ -82,6 +105,11 @@ public class HtmlTagParser {
                         String closedTag = currentTag.toString().toLowerCase();
                         if (!openTags.isEmpty() && Objects.equals(openTags.peek(), closedTag)) {
                             openTags.pop();
+                        } else if (openTags.contains(closedTag)) {
+                            while (!openTags.isEmpty()) {
+                                String popped = openTags.pop();
+                                if (closedTag.equals(popped)) break;
+                            }
                         }
                         state = State.TEXT;
                     } else if (Character.isWhitespace(c)) {
@@ -207,6 +235,7 @@ public class HtmlTagParser {
         }
 
         ctx.unclosedTag = openTags.isEmpty() ? null : openTags.peek();
+        ctx.openTags = new java.util.ArrayList<>(openTags);
 
         if (state == State.COMMENT) {
             ctx.isInsideComment = true;
@@ -290,5 +319,6 @@ public class HtmlTagParser {
         public char quoteChar = 0;
         public String currentAttributeValue = null;
         public String unclosedTag = null;
+        public java.util.List<String> openTags = new java.util.ArrayList<>();
     }
 }
