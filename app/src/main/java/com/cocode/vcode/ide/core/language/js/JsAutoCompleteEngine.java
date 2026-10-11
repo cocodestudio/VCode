@@ -239,6 +239,15 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         } catch (Exception e) {
             // Non-critical
         }
+        if (builtinItems.isEmpty()) {
+            JsKeywords.ensureLoaded();
+            for (String kw : JsKeywords.JS_KEYWORDS) {
+                builtinItems.add(new CompletionItem(kw, kw, "Keyword", CompletionItem.Type.KEYWORD, 0));
+            }
+            for (String b : JsKeywords.JS_BUILTINS) {
+                builtinItems.add(new CompletionItem(b, b, "Built-in", CompletionItem.Type.BUILTIN, 0));
+            }
+        }
     }
 
     // Object literal key suggestions

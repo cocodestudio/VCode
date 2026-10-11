@@ -410,4 +410,148 @@ public class MarkdownLspServerTest {
         assertTrue("Should suggest image.png", foundImage);
         assertTrue("Should suggest folder/", foundFolder);
     }
+
+    @Test
+    public void testEmbeddedCodeBlockJsCompletions() throws Exception {
+        File mdFile = new File(projectRoot, "embedded.md");
+        mdFile.createNewFile();
+        String uri = mdFile.getAbsolutePath();
+        String content = "# Title\n\n```javascript\ncon\n```\n";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        // Line 3: "con" -> position line 3, character 3
+        CompletionParams params = new CompletionParams(uri, 3, 3);
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+        assertFalse(completions.isEmpty());
+
+        boolean foundConsoleOrConst = false;
+        boolean foundHeadingSnippet = false;
+        for (CompletionItem ci : completions) {
+            if ("console".equals(ci.label) || "const".equals(ci.label)) {
+                foundConsoleOrConst = true;
+                assertNotNull(ci.textEdit);
+                assertEquals(3, ci.textEdit.range.start.line);
+                assertEquals(0, ci.textEdit.range.start.character);
+                assertEquals(3, ci.textEdit.range.end.character);
+            }
+            if (ci.label.contains("Heading 1")) {
+                foundHeadingSnippet = true;
+            }
+        }
+
+        assertTrue("Should suggest console or const from embedded JS engine", foundConsoleOrConst);
+        assertFalse("Should suppress markdown snippets inside embedded code block", foundHeadingSnippet);
+    }
+
+    @Test
+    public void testLinkFilePathSuppressesSnippetsAndAnchors() throws Exception {
+        File mdFile = new File(projectRoot, "links.md");
+        mdFile.createNewFile();
+        String uri = mdFile.getAbsolutePath();
+        String content = "# Main\n\n[Test](./\n";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        CompletionParams params = new CompletionParams(uri, 2, "[Test](./".length());
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        boolean foundImage = false;
+        boolean foundAnchor = false;
+        boolean foundHeading = false;
+        for (CompletionItem ci : completions) {
+            if ("image.png".equals(ci.label)) foundImage = true;
+            if (ci.label.startsWith("#")) foundAnchor = true;
+            if (ci.label.contains("Heading 1")) foundHeading = true;
+        }
+
+        assertTrue("Should suggest image.png for file path", foundImage);
+        assertFalse("Should forbid heading anchors in file path context", foundAnchor);
+        assertFalse("Should forbid markdown snippets in file path context", foundHeading);
+    }
+
+    @Test
+    public void testHeadingAnchorSuppressesFilesAndSnippets() throws Exception {
+        File mdFile = new File(projectRoot, "anchors_suppress.md");
+        mdFile.createNewFile();
+        String uri = mdFile.getAbsolutePath();
+        String content = "# First Section\n## Second Section\n\n[Link](#sec\n";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        CompletionParams params = new CompletionParams(uri, 3, "[Link](#sec".length());
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        boolean foundAnchor = false;
+        boolean foundImage = false;
+        boolean foundSnippet = false;
+        for (CompletionItem ci : completions) {
+            if ("#second-section".equals(ci.label)) {
+                foundAnchor = true;
+                assertNotNull(ci.textEdit);
+                assertEquals(3, ci.textEdit.range.start.line);
+                assertEquals(8, ci.textEdit.range.start.character);
+                assertEquals(11, ci.textEdit.range.end.character);
+            }
+            if ("image.png".equals(ci.label)) foundImage = true;
+            if (ci.label.contains("Heading 1")) foundSnippet = true;
+        }
+
+        assertTrue("Should suggest #second-section anchor", foundAnchor);
+        assertFalse("Should forbid file paths in anchor context", foundImage);
+        assertFalse("Should forbid snippets in anchor context", foundSnippet);
+    }
+
+    @Test
+    public void testCodeBlockLanguageFiltersAndSuppressesOtherContexts() {
+        File mdFile = new File(projectRoot, "lang_filter.md");
+        String uri = mdFile.getAbsolutePath();
+        String content = "# Title\n\n```type\n";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        CompletionParams params = new CompletionParams(uri, 2, "```type".length());
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        boolean foundTs = false;
+        boolean foundImage = false;
+        boolean foundAnchor = false;
+        for (CompletionItem ci : completions) {
+            if ("typescript".equals(ci.label)) {
+                foundTs = true;
+                assertNotNull(ci.textEdit);
+                assertEquals(2, ci.textEdit.range.start.line);
+                assertEquals(3, ci.textEdit.range.start.character);
+                assertEquals(7, ci.textEdit.range.end.character);
+            }
+            if ("image.png".equals(ci.label)) foundImage = true;
+            if (ci.label.startsWith("#")) foundAnchor = true;
+        }
+
+        assertTrue("Should suggest typescript keyword", foundTs);
+        assertFalse("Should forbid file paths in code block language context", foundImage);
+        assertFalse("Should forbid anchors in code block language context", foundAnchor);
+    }
+
+    @Test
+    public void testProseContextAllowsInlineSnippetsAndSuppressesLineStructural() {
+        File mdFile = new File(projectRoot, "prose.md");
+        String uri = mdFile.getAbsolutePath();
+        String content = "Here is some bold\n";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        CompletionParams params = new CompletionParams(uri, 0, "Here is some bold".length());
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        boolean foundBold = false;
+        boolean foundH1 = false;
+        for (CompletionItem ci : completions) {
+            if ("**bold**".equals(ci.label)) foundBold = true;
+            if (ci.label.contains("Heading 1")) foundH1 = true;
+        }
+
+        assertTrue("Should suggest inline bold snippet in middle of prose", foundBold);
+        assertFalse("Should forbid line-only structural heading snippet in middle of prose", foundH1);
+    }
 }

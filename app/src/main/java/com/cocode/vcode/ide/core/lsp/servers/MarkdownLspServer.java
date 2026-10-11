@@ -96,30 +96,7 @@ public final class MarkdownLspServer implements LspServer {
             .setSemanticTokensProvider(false)
             .build();
 
-    private static final String[][] CODE_BLOCK_LANGUAGES = {
-            {"html", "HTML - HyperText Markup Language"},
-            {"css", "CSS - Cascading Style Sheets"},
-            {"javascript", "JavaScript"},
-            {"js", "JavaScript"},
-            {"typescript", "TypeScript"},
-            {"ts", "TypeScript"},
-            {"json", "JSON - JavaScript Object Notation"},
-            {"markdown", "Markdown"},
-            {"md", "Markdown"},
-            {"python", "Python"},
-            {"py", "Python"},
-            {"bash", "Bash / Shell Script"},
-            {"sh", "Shell Script"},
-            {"sql", "SQL - Structured Query Language"},
-            {"xml", "XML - Extensible Markup Language"},
-            {"yaml", "YAML Ain't Markup Language"},
-            {"yml", "YAML Ain't Markup Language"},
-            {"java", "Java"},
-            {"c", "C Programming Language"},
-            {"cpp", "C++ Programming Language"},
-            {"rust", "Rust"},
-            {"go", "Go Programming Language"}
-    };
+    public static final String[][] CODE_BLOCK_LANGUAGES = MarkdownAutoCompleteEngine.CODE_BLOCK_LANGUAGES;
 
     private final MarkdownAutoCompleteEngine markdownEngine;
     private final ConcurrentHashMap<String, LspDocument> openDocs = new ConcurrentHashMap<>();
@@ -249,101 +226,66 @@ public final class MarkdownLspServer implements LspServer {
         int flatOffset = doc.toOffset(params.position);
         if (flatOffset < 0) flatOffset = doc.text.length();
 
-        // 1. Fenced Code Block Language completions (e.g. ```html, ```js)
-        int lineStart = doc.toOffset(new LspPosition(params.position.line, 0));
-        if (flatOffset >= lineStart && lineStart >= 0) {
-            String linePrefix = doc.text.substring(lineStart, flatOffset).trim();
-            if (linePrefix.startsWith("```") || linePrefix.startsWith("~~~")) {
-                String prefix = linePrefix.substring(3).trim().toLowerCase();
-                List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> langItems = new ArrayList<>();
-                for (String[] entry : CODE_BLOCK_LANGUAGES) {
-                    String lang = entry[0];
-                    String desc = entry[1];
-                    if (prefix.isEmpty() || lang.startsWith(prefix)) {
-                        langItems.add(new com.cocode.vcode.ide.core.lsp.model.CompletionItem(
-                                lang, lang, CompletionItemKind.KEYWORD, desc));
-                    }
-                }
-                return langItems;
-            }
-        }
-
-        // 2. Heading Anchor completions ([text](#...))
-        if (isInsideAnchorDestination(doc.text, flatOffset)) {
-            String query = extractAnchorQuery(doc.text, flatOffset);
-            List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> anchorItems = new ArrayList<>();
-            MdLineStream stream = MdLexer.lex(doc.text);
-            MdSyntaxTree tree = MdParser.parseBlocks(stream, doc.text);
-            for (int i = 1; i < tree.nodeCount; i++) {
-                if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
-                    String title = tree.nodeName[i];
-                    if (title != null && !title.isEmpty()) {
-                        String slug = MdParser.toSlug(title);
-                        int level = tree.nodeExtra[i];
-                        if (query == null || query.isEmpty() || slug.startsWith(query)) {
-                            anchorItems.add(new com.cocode.vcode.ide.core.lsp.model.CompletionItem(
-                                    "#" + slug, slug, CompletionItemKind.REFERENCE, title + " (H" + level + ")"));
-                        }
-                    }
-                }
-            }
-            if (!anchorItems.isEmpty()) {
-                return anchorItems;
-            }
-        }
-
-        // 3. Fallback to MarkdownAutoCompleteEngine (path completions and snippets)
         File file = doc.uri != null ? new File(doc.uri) : null;
         if (file != null) {
             markdownEngine.setCurrentFile(file);
         }
+
         List<CompletionItem> legacy = markdownEngine.getSuggestions(doc.text, flatOffset);
         List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> results = new ArrayList<>(legacy.size());
         for (CompletionItem ci : legacy) {
-            CompletionItemKind kind = (ci.getType() == CompletionItem.Type.SNIPPET)
-                    ? CompletionItemKind.SNIPPET
-                    : CompletionItemKind.TEXT;
-            com.cocode.vcode.ide.core.lsp.model.CompletionItem.Builder b =
-                    com.cocode.vcode.ide.core.lsp.model.CompletionItem.builder(ci.getLabel())
-                            .setInsertText(ci.getEffectiveInsertText())
-                            .setKind(kind)
-                            .setDetail(ci.getDetail());
-            if (ci.getReplaceLength() >= 0) {
-                int startOff = Math.max(0, flatOffset - ci.getReplaceLength());
-                b.setTextEdit(new TextEdit(
-                        new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
-                        ci.getEffectiveInsertText()
-                ));
-            }
-            results.add(b.build());
+            if (token != null && token.isCancelled()) return Collections.emptyList();
+            results.add(convertToModelItem(ci, doc, flatOffset));
         }
         return results;
     }
 
-    private static boolean isInsideAnchorDestination(String text, int pos) {
-        int i = pos - 1;
-        while (i >= 0) {
-            char c = text.charAt(i);
-            if (c == '\n' || c == '\r' || c == ')') return false;
-            if (c == '#') {
-                int j = i - 1;
-                while (j >= 0 && (text.charAt(j) == ' ' || text.charAt(j) == '\t')) j--;
-                return j >= 0 && text.charAt(j) == '(';
-            }
-            i--;
+    private com.cocode.vcode.ide.core.lsp.model.CompletionItem convertToModelItem(CompletionItem ci, LspDocument doc, int flatOffset) {
+        String label = ci.getLabel();
+        String insertText = ci.getEffectiveInsertText();
+        CompletionItemKind kind = mapModelKind(ci.getType());
+        String detail = ci.getDetail();
+        com.cocode.vcode.ide.core.lsp.model.CompletionItem.Builder b =
+                com.cocode.vcode.ide.core.lsp.model.CompletionItem.builder(label)
+                        .setInsertText(insertText)
+                        .setDetail(detail)
+                        .setKind(kind);
+        if (ci.getReplaceLength() >= 0 && doc != null) {
+            int startOff = Math.max(0, flatOffset - ci.getReplaceLength());
+            b.setTextEdit(new TextEdit(
+                    new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
+                    insertText
+            ));
         }
-        return false;
+        return b.build();
     }
 
-    private static String extractAnchorQuery(String text, int pos) {
-        int i = pos - 1;
-        while (i >= 0 && text.charAt(i) != '#' && text.charAt(i) != '(' && text.charAt(i) != '\n') {
-            i--;
+    private CompletionItemKind mapModelKind(CompletionItem.Type type) {
+        if (type == null) return CompletionItemKind.TEXT;
+        switch (type) {
+            case KEYWORD:
+                return CompletionItemKind.KEYWORD;
+            case VALUE:
+            case CSS_VALUE:
+                return CompletionItemKind.REFERENCE;
+            case SNIPPET:
+                return CompletionItemKind.SNIPPET;
+            case ATTRIBUTE:
+            case CSS_PROPERTY:
+            case JSON_KEY:
+                return CompletionItemKind.PROPERTY;
+            case FUNCTION:
+            case BUILTIN:
+                return CompletionItemKind.FUNCTION;
+            case TAG:
+                return CompletionItemKind.CLASS;
+            case FILE:
+                return CompletionItemKind.FILE;
+            case FOLDER:
+                return CompletionItemKind.FOLDER;
+            default:
+                return CompletionItemKind.TEXT;
         }
-        if (i >= 0 && text.charAt(i) == '#') {
-            return text.substring(i + 1, pos).trim().toLowerCase();
-        }
-        return "";
     }
 
     @Override
