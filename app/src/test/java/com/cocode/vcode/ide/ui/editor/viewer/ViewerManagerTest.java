@@ -109,4 +109,19 @@ public class ViewerManagerTest {
         assertNotNull(fallback);
         assertTrue(fallback instanceof FontFileViewer);
     }
+
+    @Test
+    public void testMarkdownPreviewModeReturnsWebPreviewViewer() {
+        EditorFile mdFile = new EditorFile("md_1", new File("/test/README.md"), "# Hello", FileType.MARKDOWN);
+
+        IFileViewer previewViewer = manager.getOrCreateViewer(null, mdFile, true);
+        assertNotNull(previewViewer);
+        assertTrue("Preview mode should return WebPreviewViewer", previewViewer instanceof WebPreviewViewer);
+
+        previewViewer.bindFile(mdFile, null);
+        assertEquals("WebPreviewViewer must track currentFile after bindFile", mdFile, previewViewer.getCurrentFile());
+
+        previewViewer.destroy();
+        org.junit.Assert.assertNull("WebPreviewViewer must clear currentFile after destroy", previewViewer.getCurrentFile());
+    }
 }

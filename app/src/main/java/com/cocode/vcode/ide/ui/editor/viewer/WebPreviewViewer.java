@@ -24,6 +24,7 @@ public class WebPreviewViewer implements IFileViewer {
 
     private WebView webView;
     private Context context;
+    private EditorFile currentFile;
 
     @Override
     public View getView(Context context, ViewGroup parent) {
@@ -62,13 +63,14 @@ public class WebPreviewViewer implements IFileViewer {
 
     @Override
     public void bindFile(EditorFile file, EditorViewModel viewModel) {
+        this.currentFile = file;
         if (webView == null || file == null) return;
 
         FileType type = file.getFileType();
         String content = file.getContent();
 
         if (type == FileType.SVG) {
-            String base64 = Base64.encodeToString(content.getBytes(), Base64.NO_WRAP);
+            String base64 = Base64.encodeToString(content != null ? content.getBytes(java.nio.charset.StandardCharsets.UTF_8) : new byte[0], Base64.NO_WRAP);
             String html = "<!DOCTYPE html><html><body style=\"margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background-color:transparent;\">" +
                     "<img src=\"data:image/svg+xml;base64," + base64 + "\" style=\"max-width:100%;max-height:100%;\" />" +
                     "</body></html>";
@@ -81,6 +83,11 @@ public class WebPreviewViewer implements IFileViewer {
         } else if (type == FileType.HTML) {
             renderHtml(file);
         }
+    }
+
+    @Override
+    public EditorFile getCurrentFile() {
+        return currentFile;
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -105,6 +112,7 @@ public class WebPreviewViewer implements IFileViewer {
     }
 
     private void renderCsv(String content) {
+        if (content == null) content = "";
         StringBuilder htmlBuilder = new StringBuilder();
         int colorInt = ContextCompat.getColor(context, R.color.vcode_text_primary);
         String hexColor = String.format("#%06X", (0xFFFFFF & colorInt));
@@ -142,12 +150,13 @@ public class WebPreviewViewer implements IFileViewer {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void renderMarkdown(String content) {
+        if (content == null) content = "";
         int colorInt = ContextCompat.getColor(context, R.color.vcode_text_primary);
         String hexColor = String.format("#%06X", (0xFFFFFF & colorInt));
         int surfaceInt = ContextCompat.getColor(context, R.color.vcode_bg_surface);
         String surfaceColor = String.format("#%06X", (0xFFFFFF & surfaceInt));
 
-        String encodedContent = Base64.encodeToString(content.getBytes(), Base64.NO_WRAP);
+        String encodedContent = Base64.encodeToString(content.getBytes(java.nio.charset.StandardCharsets.UTF_8), Base64.NO_WRAP);
 
         String html = "<!DOCTYPE html><html><head>" +
                 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
@@ -165,7 +174,15 @@ public class WebPreviewViewer implements IFileViewer {
                 "</style></head><body>" +
                 "<div id=\"content\"></div>" +
                 "<script>" +
-                "document.getElementById('content').innerHTML = marked.parse(decodeURIComponent(escape(window.atob('" + encodedContent + "'))));" +
+                "try {" +
+                "    var raw = decodeURIComponent(escape(window.atob('" + encodedContent + "')));" +
+                "    var parsed = (typeof marked !== 'undefined' && typeof marked.parse === 'function')" +
+                "            ? marked.parse(raw)" +
+                "            : ((typeof marked === 'function') ? marked(raw) : raw);" +
+                "    document.getElementById('content').innerHTML = parsed;" +
+                "} catch (err) {" +
+                "    document.getElementById('content').innerHTML = '<p style=\"color:red;\">Markdown parse error: ' + err.message + '</p>';" +
+                "}" +
                 "</script>" +
                 "</body></html>";
 
@@ -187,6 +204,7 @@ public class WebPreviewViewer implements IFileViewer {
             webView.destroy();
             webView = null;
         }
+        currentFile = null;
         context = null;
     }
 

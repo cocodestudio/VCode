@@ -1009,17 +1009,19 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void updateActiveViewer(EditorFile activeFile, boolean isPreview) {
-        if (activeViewer != null && activeViewer.getCurrentFile() == activeFile) {
+        IFileViewer targetViewer = viewerManager.getOrCreateViewer(this, activeFile, isPreview);
+        if (activeViewer == targetViewer) {
             updateQuickSymbolBarVisibility();
             applyReadOnlyState();
             return;
         }
 
         if (activeViewer != null) {
+            activeViewer.flushContentToViewModel();
             activeViewer.onPause();
         }
 
-        activeViewer = viewerManager.getOrCreateViewer(this, activeFile, isPreview);
+        activeViewer = targetViewer;
         View viewerView = activeViewer.getView(this, binding.viewerContainer);
 
         // Ensure the view is added to the container
