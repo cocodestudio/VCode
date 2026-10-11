@@ -427,6 +427,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             public boolean onSingleTapUp(@NonNull MotionEvent e) {
                 cursor = touchToPosition(e.getX(), e.getY());
                 selectionAnchor = null;
+                undoStack.commitPending();
                 // Clear stale composing region so that spacebar-slide and
                 // backspace-slide start from the exact tapped position.
                 composingStart = -1;
@@ -5384,7 +5385,12 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             // Group the keystroke and its async side effects (auto-close, auto-indent)
             // into a single undo step. Group is closed via a posted Runnable to ensure
             // it executes after the async handlers finish.
-            boolean mayHaveSideEffects = text.length() == 1 && !editor.isAutoClosing;
+            char typedChar = (text.length() == 1) ? text.charAt(0) : 0;
+            boolean mayHaveSideEffects = text.length() == 1 && !editor.isAutoClosing && (
+                    typedChar == '\n'
+                    || ((editor.autoCloseBrackets || editor.autoCloseQuotes) && editor.getClosingPair(typedChar) != null)
+                    || (editor.autoCloseHtmlTags && editor.fileType == com.cocode.vcode.ide.core.model.FileType.HTML && typedChar == '>')
+            );
             if (mayHaveSideEffects) {
                 editor.undoStack.beginAtomicGroup();
             }
@@ -5416,7 +5422,7 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
             // Side effects
             if (mayHaveSideEffects) {
                 char typed = text.charAt(0);
-                if (editor.autoCloseBrackets) {
+                if (editor.autoCloseBrackets || editor.autoCloseQuotes) {
                     editor.handleAutoClose(new ContentCharSequence(editor.content), beforeFlat + 1, typed);
                 }
                 if (editor.autoCloseHtmlTags

@@ -736,4 +736,60 @@ public class CodeEditTextTest {
 
         assertEquals("const fn = debounce();", editor.getText().toString());
     }
+
+    @Test
+    public void testWordBatchingUndoRedo() {
+        editor.setText("");
+        inputConnection.setSelection(0, 0);
+
+        String word = "function";
+        for (int i = 0; i < word.length(); i++) {
+            inputConnection.commitText(String.valueOf(word.charAt(i)), 1);
+        }
+        assertEquals("function", editor.getText().toString());
+
+        editor.undo();
+        assertEquals("", editor.getText().toString());
+
+        editor.redo();
+        assertEquals("function", editor.getText().toString());
+    }
+
+    @Test
+    public void testMultiWordTypingUndoesWordByWord() {
+        editor.setText("");
+        inputConnection.setSelection(0, 0);
+
+        String text = "hello world";
+        for (int i = 0; i < text.length(); i++) {
+            inputConnection.commitText(String.valueOf(text.charAt(i)), 1);
+        }
+        assertEquals("hello world", editor.getText().toString());
+
+        // 1st Undo: removes "world"
+        editor.undo();
+        assertEquals("hello ", editor.getText().toString());
+
+        // 2nd Undo: removes " "
+        editor.undo();
+        assertEquals("hello", editor.getText().toString());
+
+        // 3rd Undo: removes "hello"
+        editor.undo();
+        assertEquals("", editor.getText().toString());
+    }
+
+    @Test
+    public void testAutoCloseBracketAtomicUndo() {
+        editor.setAutoCloseBrackets(true);
+        editor.setText("");
+        inputConnection.setSelection(0, 0);
+
+        inputConnection.commitText("{", 1);
+        ShadowLooper.idleMainLooper();
+        assertEquals("{}", editor.getText().toString());
+
+        editor.undo();
+        assertEquals("", editor.getText().toString());
+    }
 }
