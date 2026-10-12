@@ -136,7 +136,7 @@ public final class JsonLspServer implements LspServer {
 
     @Override
     public String getTriggerCharacters() {
-        return "\"':{[/";
+        return "\"':{[/\\.";
     }
 
     @Override

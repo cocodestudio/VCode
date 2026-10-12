@@ -222,7 +222,7 @@ public final class MarkdownContextScanner {
                 String pathQuery = destPrefix.trim();
                 int lastSlash = pathQuery.lastIndexOf('/');
                 String filterPrefix = (lastSlash != -1) ? pathQuery.substring(lastSlash + 1) : pathQuery;
-                return new MarkdownContext(ContextType.LINK_FILE_PATH, filterPrefix, filterPrefix.length(), null, -1, -1, curLineStart);
+                return new MarkdownContext(ContextType.LINK_FILE_PATH, filterPrefix, filterPrefix.length(), pathQuery, -1, -1, curLineStart);
             }
         }
 
@@ -248,7 +248,10 @@ public final class MarkdownContextScanner {
             // First word on the line
             return new MarkdownContext(ContextType.STRUCTURAL_SNIPPET, word.toLowerCase(), word.length(), null, -1, -1, curLineStart);
         } else {
-            // Middle of prose text -> Inline formatting snippets only
+            // Middle of prose text -> Inline formatting snippets only if word is non-empty
+            if (word.isEmpty()) {
+                return new MarkdownContext(ContextType.NONE, "", 0, null, -1, -1, curLineStart);
+            }
             return new MarkdownContext(ContextType.INLINE_SNIPPET, word.toLowerCase(), word.length(), null, -1, -1, curLineStart);
         }
     }

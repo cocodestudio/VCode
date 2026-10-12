@@ -109,7 +109,7 @@ public abstract class AutoCompleteEngine {
             case TYPESCRIPT:
                 return ".'\"`/@({*:<";
             case JSON:
-                return "\"':{[/";
+                return "\"':{[/\\.";
             case MARKDOWN:
                 return "[(#*`!|-/.\"<";
             case SVG:

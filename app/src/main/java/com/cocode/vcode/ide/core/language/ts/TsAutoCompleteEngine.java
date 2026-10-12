@@ -68,7 +68,9 @@ public class TsAutoCompleteEngine extends JsAutoCompleteEngine {
             if (ctx.isRelativeImport) {
                 return buildFileCompletions(ctx.importPath);
             } else {
-                return buildBareImportSuggestions(ctx.importPath);
+                List<CompletionItem> bare = buildBareImportSuggestions(ctx.importPath);
+                if (bare != null && !bare.isEmpty()) return bare;
+                return buildFileCompletions(ctx.importPath);
             }
         }
 

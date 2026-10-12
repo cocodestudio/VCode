@@ -1,15 +1,24 @@
 package com.cocode.vcode.ide.core.language.md;
 
+import com.cocode.vcode.ide.core.autocomplete.VFSManager;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public class MarkdownAutoCompleteEngineTest {
+
+    @Rule
+    public TemporaryFolder tempFolder = new TemporaryFolder();
 
     @Test
     public void testHeadingsSuggestedAtLineStart() {
@@ -137,5 +146,57 @@ public class MarkdownAutoCompleteEngineTest {
             }
         }
         assertTrue("Embedded ```cjs block should provide JavaScript suggestions", hasHelperInCjs);
+    }
+
+    @Test
+    public void testPeriodAtEndOfSentenceDoesNotTriggerSnippets() {
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        String doc = "This is a completed sentence.";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertTrue("Typing a period at the end of a prose sentence must not trigger inline snippets",
+                items == null || items.isEmpty());
+    }
+
+    @Test
+    public void testMarkdownLinkPathCompletionsAndDotCleanup() throws IOException {
+        File projectRoot = tempFolder.newFolder("md_project");
+        File appDir = new File(projectRoot, "app");
+        appDir.mkdir();
+        new File(appDir, "index.html").createNewFile();
+        File readme = new File(projectRoot, "README.md");
+        readme.createNewFile();
+        VFSManager.getInstance().clear();
+
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        engine.setCurrentFile(readme);
+        engine.setWorkspaceRoot(projectRoot);
+
+        // 1. Inside [Click](app/| suggestions should include index.html
+        String linkDoc = "[Click](app/";
+        List<CompletionItem> items = engine.getSuggestions(linkDoc, linkDoc.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+        boolean hasIndex = false;
+        for (CompletionItem item : items) {
+            if ("index.html".equals(item.getLabel())) {
+                hasIndex = true;
+                assertEquals(0, item.getReplaceLength());
+            }
+        }
+        assertTrue("Markdown link [Click](app/ should suggest index.html", hasIndex);
+
+        // 2. Inside [Click](app/.| suggestions should replace the dot
+        String dotLinkDoc = "[Click](app/.";
+        List<CompletionItem> dotItems = engine.getSuggestions(dotLinkDoc, dotLinkDoc.length());
+        assertNotNull(dotItems);
+        assertFalse(dotItems.isEmpty());
+        boolean hasIndexInDot = false;
+        for (CompletionItem item : dotItems) {
+            if ("index.html".equals(item.getLabel())) {
+                hasIndexInDot = true;
+                assertEquals("Selection after app/. must replace the dot", 1, item.getReplaceLength());
+            }
+        }
+        assertTrue("Markdown link [Click](app/. should suggest index.html with replaceLength = 1", hasIndexInDot);
     }
 }

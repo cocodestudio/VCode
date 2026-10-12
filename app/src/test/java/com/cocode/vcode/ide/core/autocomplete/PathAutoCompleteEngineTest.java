@@ -54,7 +54,6 @@ public class PathAutoCompleteEngineTest {
         new File(projectRoot, ".env").createNewFile();
         new File(projectRoot, "package.json").createNewFile();
         new File(projectRoot, ".git").mkdir();
-        new File(projectRoot, ".vcode").mkdir();
 
         // Invalidate VFS cache
         VFSManager.getInstance().clear();
@@ -238,7 +237,7 @@ public class PathAutoCompleteEngineTest {
     }
 
     @Test
-    public void testNoDotOrDotDotInjectionAndGitVcodeFiltered() {
+    public void testNoDotOrDotDotInjectionAndGitFiltered() {
         engine.setCurrentFile(indexHtml);
 
         // When typing single dot
@@ -327,7 +326,7 @@ public class PathAutoCompleteEngineTest {
     }
 
     @Test
-    public void testGitIgnoreNeverSuggestsGitOrVcode() {
+    public void testGitIgnoreNeverSuggestsGit() {
         engine.setCurrentFile(gitignoreFile);
 
         List<CompletionItem> itemsDot = engine.getSuggestions(".g", 2);
@@ -372,5 +371,231 @@ public class PathAutoCompleteEngineTest {
             }
         }
         assertTrue("src=\"...\" must extract src token and allow images", hasLogoInSrc);
+    }
+
+    @Test
+    public void testProjectFoldersSuggestedAlongsideFiles() {
+        engine.setCurrentFile(indexHtml); // at projectRoot
+
+        // Querying ""
+        List<CompletionItem> emptyItems = engine.getSuggestionsForPath("");
+        assertNotNull(emptyItems);
+        assertFalse(emptyItems.isEmpty());
+        boolean hasSrcInEmpty = false;
+        boolean hasAssetsInEmpty = false;
+        for (CompletionItem item : emptyItems) {
+            if ("src/".equals(item.getLabel())) {
+                hasSrcInEmpty = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+                assertEquals("Directory", item.getDetail());
+            }
+            if ("assets/".equals(item.getLabel())) {
+                hasAssetsInEmpty = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+            }
+        }
+        assertTrue("Querying \"\" must suggest src/ folder", hasSrcInEmpty);
+        assertTrue("Querying \"\" must suggest assets/ folder", hasAssetsInEmpty);
+
+        // Querying "./"
+        List<CompletionItem> dotSlashItems = engine.getSuggestionsForPath("./");
+        assertNotNull(dotSlashItems);
+        assertFalse(dotSlashItems.isEmpty());
+        boolean hasSrcInDotSlash = false;
+        for (CompletionItem item : dotSlashItems) {
+            if ("src/".equals(item.getLabel())) {
+                hasSrcInDotSlash = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+            }
+        }
+        assertTrue("Querying \"./\" must suggest src/ folder", hasSrcInDotSlash);
+    }
+
+    @Test
+    public void testNoDotOrDotDotOrGitSuggested() {
+        engine.setCurrentFile(indexHtml);
+
+        String[] queries = {".", "./", "", "../"};
+        for (String q : queries) {
+            List<CompletionItem> items = engine.getSuggestionsForPath(q);
+            assertNotNull("Items for query '" + q + "' should not be null", items);
+            for (CompletionItem item : items) {
+                String label = item.getLabel();
+                assertFalse("Query '" + q + "' must never suggest ./", "./".equals(label));
+                assertFalse("Query '" + q + "' must never suggest ../", "../".equals(label));
+                assertFalse("Query '" + q + "' must never suggest .git", ".git".equalsIgnoreCase(label) || ".git/".equalsIgnoreCase(label));
+                assertFalse("Query '" + q + "' must never suggest .nomedia", ".nomedia".equalsIgnoreCase(label) || ".nomedia/".equalsIgnoreCase(label));
+            }
+        }
+    }
+
+    @Test
+    public void testTypingSingleDotSuggestsProjectFolders() {
+        engine.setCurrentFile(indexHtml); // at projectRoot
+
+        List<CompletionItem> items = engine.getSuggestionsForPath(".");
+        assertNotNull(items);
+        assertFalse("Querying '.' must return suggestions", items.isEmpty());
+
+        boolean hasSrc = false;
+        boolean hasAssets = false;
+        boolean hasPackageJson = false;
+
+        for (CompletionItem item : items) {
+            assertEquals("All items suggested on '.' must have replaceLength = 1", 1, item.getReplaceLength());
+            if ("src/".equals(item.getLabel())) {
+                hasSrc = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+            }
+            if ("assets/".equals(item.getLabel())) {
+                hasAssets = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+            }
+            if ("package.json".equals(item.getLabel())) {
+                hasPackageJson = true;
+                assertEquals(CompletionItem.Type.FILE, item.getType());
+            }
+        }
+        assertTrue("Typing '.' must suggest src/ folder", hasSrc);
+        assertTrue("Typing '.' must suggest assets/ folder", hasAssets);
+        assertTrue("Typing '.' must suggest package.json file", hasPackageJson);
+    }
+
+    @Test
+    public void testBoundaryEnforcementPreventsEscapingRoot() {
+        engine.setCurrentFile(indexHtml); // at projectRoot
+
+        List<CompletionItem> parentFromRoot = engine.getSuggestionsForPath("../");
+        assertNotNull(parentFromRoot);
+        assertTrue("Querying '../' from projectRoot must return 0 suggestions", parentFromRoot.isEmpty());
+
+        List<CompletionItem> deepParent = engine.getSuggestionsForPath("../../../../");
+        assertNotNull(deepParent);
+        assertTrue("Querying '../../../../' must return 0 suggestions", deepParent.isEmpty());
+    }
+
+    @Test
+    public void testSelectingFolderAllowsSubdirectoryDrilldown() {
+        engine.setCurrentFile(appJs); // inside src/
+
+        List<CompletionItem> items = engine.getSuggestionsForPath("./components/");
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean hasButton = false;
+        boolean hasHeader = false;
+        for (CompletionItem item : items) {
+            if ("Button.js".equals(item.getLabel())) {
+                hasButton = true;
+            }
+            if ("Header.jsx".equals(item.getLabel())) {
+                hasHeader = true;
+            }
+        }
+        assertTrue("Subdirectory drilldown must suggest Button.js", hasButton);
+        assertTrue("Subdirectory drilldown must suggest Header.jsx", hasHeader);
+    }
+
+    @Test
+    public void testSubfolderDrilldownWithinFolderFromNestedFile() throws IOException {
+        File appDir = new File(projectRoot, "app");
+        appDir.mkdir();
+        File controllersDir = new File(appDir, "controllers");
+        controllersDir.mkdir();
+        new File(controllersDir, "UserController.js").createNewFile();
+        new File(appDir, "main.js").createNewFile();
+        VFSManager.getInstance().clear();
+
+        // From nested file src/app.js, querying "app/" resolves against project root
+        engine.setCurrentFile(appJs);
+        List<CompletionItem> appItems = engine.getSuggestionsForPath("app/");
+        assertNotNull(appItems);
+        assertFalse(appItems.isEmpty());
+
+        boolean hasControllers = false;
+        boolean hasMain = false;
+        for (CompletionItem item : appItems) {
+            if ("controllers/".equals(item.getLabel())) {
+                hasControllers = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+                assertEquals(0, item.getReplaceLength());
+            }
+            if ("main.js".equals(item.getLabel())) {
+                hasMain = true;
+                assertEquals(CompletionItem.Type.FILE, item.getType());
+            }
+        }
+        assertTrue("Querying 'app/' must list nested controllers/ folder", hasControllers);
+        assertTrue("Querying 'app/' must list main.js file", hasMain);
+
+        // Deeper drilldown inside app/controllers/
+        List<CompletionItem> deepItems = engine.getSuggestionsForPath("app/controllers/");
+        assertNotNull(deepItems);
+        boolean hasUserCtrl = false;
+        for (CompletionItem item : deepItems) {
+            if ("UserController.js".equals(item.getLabel())) {
+                hasUserCtrl = true;
+                break;
+            }
+        }
+        assertTrue("Querying 'app/controllers/' must list UserController.js", hasUserCtrl);
+    }
+
+    @Test
+    public void testVCodeFolderShownInGitIgnoreAndDotQueries() throws IOException {
+        File vcodeDir = new File(projectRoot, ".vcode");
+        vcodeDir.mkdir();
+        new File(vcodeDir, "settings.json").createNewFile();
+        VFSManager.getInstance().clear();
+
+        // 1. In .gitignore file, typing .v or empty path should suggest .vcode/
+        engine.setCurrentFile(gitignoreFile);
+        List<CompletionItem> gitIgnoreV = engine.getSuggestionsForPath(".v");
+        assertNotNull(gitIgnoreV);
+        boolean hasVcodeInGitIgnore = false;
+        for (CompletionItem item : gitIgnoreV) {
+            if (".vcode/".equals(item.getLabel())) {
+                hasVcodeInGitIgnore = true;
+                assertEquals(CompletionItem.Type.FOLDER, item.getType());
+                assertEquals(2, item.getReplaceLength());
+            }
+        }
+        assertTrue(".gitignore must suggest .vcode/ folder when typing .v", hasVcodeInGitIgnore);
+
+        // 2. In index.html, typing '.' should suggest .vcode/ with replaceLength = 1
+        engine.setCurrentFile(indexHtml);
+        List<CompletionItem> dotItems = engine.getSuggestionsForPath(".");
+        assertNotNull(dotItems);
+        boolean hasVcodeInDot = false;
+        for (CompletionItem item : dotItems) {
+            if (".vcode/".equals(item.getLabel())) {
+                hasVcodeInDot = true;
+                assertEquals(1, item.getReplaceLength());
+            }
+        }
+        assertTrue("Typing '.' must include .vcode/ folder", hasVcodeInDot);
+    }
+
+    @Test
+    public void testSingleDotInPathCleansUpDot() throws IOException {
+        File appDir = new File(projectRoot, "app");
+        appDir.mkdir();
+        new File(appDir, "main.js").createNewFile();
+        VFSManager.getInstance().clear();
+
+        engine.setCurrentFile(indexHtml);
+        // Typing 'app/.' should list contents of app/ and set replaceLength = 1 to clean up the trailing '.'
+        List<CompletionItem> items = engine.getSuggestionsForPath("app/.");
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean hasMain = false;
+        for (CompletionItem item : items) {
+            if ("main.js".equals(item.getLabel())) {
+                hasMain = true;
+                assertEquals("Selection after app/. must replace the dot", 1, item.getReplaceLength());
+            }
+        }
+        assertTrue("Querying 'app/.' must list app contents and replace the dot", hasMain);
     }
 }

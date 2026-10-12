@@ -282,11 +282,13 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         // 2. Import / require module path completion (relative project files or bare npm packages)
         if (ctx.type == JsContextScanner.ContextType.IMPORT_PATH) {
-            if (ctx.isRelativeImport) {
-                return buildFileCompletions(ctx.importPath);
-            } else {
-                return buildBareImportSuggestions(ctx.importPath);
+            if (ctx.isRelativeImport || ctx.importPath.isEmpty() || ctx.importPath.startsWith("./")) {
+                List<CompletionItem> fileCompletions = buildFileCompletions(ctx.importPath);
+                if (fileCompletions != null && !fileCompletions.isEmpty()) {
+                    return fileCompletions;
+                }
             }
+            return buildBareImportSuggestions(ctx.importPath);
         }
 
         // 3. Named import and export clause completions

@@ -219,6 +219,20 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
                     ci.setReplaceLength(replaceLen);
                 }
             }
+
+            JsonSchemaManager.SchemaProperty prop = resolveSchemaProperty(fileName, ctx.propertyPath, JsonSchemaManager.cleanKey(ctx.activeKey));
+            boolean isPathKey = (prop != null && prop.isPath) ||
+                    "main".equals(ctx.activeKey) || "module".equals(ctx.activeKey) || "types".equals(ctx.activeKey) ||
+                    "typings".equals(ctx.activeKey) || "outFile".equals(ctx.activeKey) || "outDir".equals(ctx.activeKey) ||
+                    "rootDir".equals(ctx.activeKey) || "baseUrl".equals(ctx.activeKey);
+
+            if (query.startsWith(".") || query.startsWith("/") || query.contains("/") || isPathKey) {
+                List<CompletionItem> fileCompletions = buildFileCompletions(query);
+                if (fileCompletions != null && !fileCompletions.isEmpty()) {
+                    filtered.addAll(fileCompletions);
+                }
+            }
+
             return filtered;
         }
 
@@ -239,6 +253,18 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
                     ci.setReplaceLength(replaceLen);
                 }
             }
+
+            JsonSchemaManager.SchemaProperty prop = resolveSchemaProperty(fileName, ctx.propertyPath, JsonSchemaManager.cleanKey(ctx.activeKey));
+            boolean isPathKey = (prop != null && prop.isPath) ||
+                    "files".equals(ctx.activeKey) || "include".equals(ctx.activeKey) || "exclude".equals(ctx.activeKey);
+
+            if (query.startsWith(".") || query.startsWith("/") || query.contains("/") || isPathKey) {
+                List<CompletionItem> fileCompletions = buildFileCompletions(query);
+                if (fileCompletions != null && !fileCompletions.isEmpty()) {
+                    filtered.addAll(fileCompletions);
+                }
+            }
+
             return filtered;
         }
 
@@ -301,11 +327,6 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
                 f.setReplaceLength(rLen);
                 out.add(f);
             }
-
-            if (prop.isPath) {
-                List<CompletionItem> paths = buildFileCompletions(ctx.word);
-                if (paths != null) out.addAll(paths);
-            }
         }
     }
 
@@ -321,10 +342,6 @@ public class JsonAutoCompleteEngine extends AutoCompleteEngine {
                     ci.setReplaceLength(ctx.word.length());
                     out.add(ci);
                 }
-            }
-            if (prop.isPath || "files".equals(clean) || "include".equals(clean) || "exclude".equals(clean)) {
-                List<CompletionItem> paths = buildFileCompletions(ctx.word);
-                if (paths != null) out.addAll(paths);
             }
         }
     }

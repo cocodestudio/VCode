@@ -244,13 +244,17 @@ public final class JsContextScanner {
         if (lineBeforeQuote.endsWith("from") ||
                 lineBeforeQuote.endsWith("require(") ||
                 lineBeforeQuote.endsWith("import(")) {
-            boolean isRel = typedInsideQuote.startsWith(".") || typedInsideQuote.startsWith("/");
+            boolean isRel = typedInsideQuote.isEmpty()
+                    || typedInsideQuote.startsWith(".")
+                    || typedInsideQuote.startsWith("/");
             return new JsContext(ContextType.IMPORT_PATH, word, -1, null, typedInsideQuote, isRel, null, false, false, true);
         }
         if (lineBeforeQuote.endsWith("(")) {
             String callee = lineBeforeQuote.substring(0, lineBeforeQuote.length() - 1).trim();
             if (callee.endsWith("require") || callee.endsWith("import")) {
-                boolean isRel = typedInsideQuote.startsWith(".") || typedInsideQuote.startsWith("/");
+                boolean isRel = typedInsideQuote.isEmpty()
+                        || typedInsideQuote.startsWith(".")
+                        || typedInsideQuote.startsWith("/");
                 return new JsContext(ContextType.IMPORT_PATH, word, -1, null, typedInsideQuote, isRel, null, false, false, true);
             }
             if (callee.endsWith("addEventListener") || callee.endsWith("removeEventListener") || callee.endsWith("on")) {

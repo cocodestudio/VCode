@@ -97,6 +97,12 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         if (jsonEngine != null) jsonEngine.setCurrentFile(file);
     }
 
+    public void setWorkspaceRoot(File root) {
+        if (pathEngine != null) {
+            pathEngine.setWorkspaceRoot(root);
+        }
+    }
+
     private void initSnippets() {
         try {
             String json = loadAssetJson("completions/markdown_snippets.json");
@@ -146,8 +152,13 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
 
         // 4. Link file path completions [text](path|)
         if (ctx.type == MarkdownContextScanner.ContextType.LINK_FILE_PATH) {
-            List<CompletionItem> pathSuggestions = pathEngine.getSuggestions(fullText, cursorPos);
-            return pathSuggestions != null ? pathSuggestions : Collections.emptyList();
+            if (pathEngine != null) {
+                pathEngine.setCurrentFile(currentFile);
+                String path = (ctx.language != null && !ctx.language.isEmpty()) ? ctx.language : ctx.query;
+                List<CompletionItem> pathSuggestions = pathEngine.getSuggestionsForPath(path, null);
+                return pathSuggestions != null ? pathSuggestions : Collections.emptyList();
+            }
+            return Collections.emptyList();
         }
 
         // 5. Snippet completions: Structural vs Inline
