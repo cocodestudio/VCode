@@ -616,5 +616,17 @@ public class JsSignatureParserTest {
         assertEquals("Percentage tax rate", sig.parameters.get(1).documentation);
         assertEquals(1, help.activeParameter);
     }
+
+    @Test
+    public void testMultilineDotChaining_SignatureHelp() {
+        String code = "let result = 10;\nresult\n    .toFixed(";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        LspPosition pos = new LspPosition(2, "    .toFixed(".length());
+
+        LspSignatureHelp help = JsSignatureParser.parse(doc, pos);
+        assertNotNull("Signature help should not be null for multiline result.toFixed()", help);
+        assertFalse(help.signatures.isEmpty());
+        assertTrue("Signature should contain toFixed", help.signatures.get(0).label.contains("toFixed"));
+    }
 }
 

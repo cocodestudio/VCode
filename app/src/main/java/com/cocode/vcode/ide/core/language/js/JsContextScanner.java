@@ -274,9 +274,7 @@ public final class JsContextScanner {
 
     private static JsContext checkDotMemberContext(String text, int pos, String word) {
         int idx = pos - word.length() - 1;
-        while (idx >= 0 && Character.isWhitespace(text.charAt(idx))) {
-            idx--;
-        }
+        idx = JsAutoCompleteEngine.skipWhitespaceAndCommentsBack(text, idx);
         if (idx < 0) return null;
 
         char c = text.charAt(idx);
@@ -311,9 +309,7 @@ public final class JsContextScanner {
 
     private static String extractReceiverBeforeDot(String text, int dotPos) {
         int i = dotPos - 1;
-        while (i >= 0 && Character.isWhitespace(text.charAt(i))) {
-            i--;
-        }
+        i = JsAutoCompleteEngine.skipWhitespaceAndCommentsBack(text, i);
         if (i < 0) return "";
 
         int end = i + 1;
@@ -336,7 +332,23 @@ public final class JsContextScanner {
                 if (depthBrace > 0) depthBrace--;
                 else break;
             } else if (depthParen == 0 && depthBracket == 0 && depthBrace == 0) {
-                if (!Character.isJavaIdentifierPart(c) && c != '.' && c != '?' && c != '$') {
+                if (Character.isWhitespace(c) || c == '/') {
+                    int prev = JsAutoCompleteEngine.skipWhitespaceAndCommentsBack(text, i);
+                    int next = i + 1;
+                    while (next < end && Character.isWhitespace(text.charAt(next))) {
+                        next++;
+                    }
+                    boolean precededByDot = (prev >= 0 && (text.charAt(prev) == '.' || (text.charAt(prev) == '?' && prev > 0 && text.charAt(prev - 1) == '.')));
+                    boolean followedByDot = (next < end && (text.charAt(next) == '.' || (text.charAt(next) == '?' && next + 1 < end && text.charAt(next + 1) == '.')));
+
+                    // Permitted when adjacent to a dot in a multiline dot chain; terminates at statement boundaries
+                    if (precededByDot || followedByDot) {
+                        i = prev + 1;
+                    } else {
+                        i++;
+                        break;
+                    }
+                } else if (!Character.isJavaIdentifierPart(c) && c != '.' && c != '?' && c != '$') {
                     i++;
                     break;
                 }

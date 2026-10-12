@@ -811,11 +811,58 @@ public class JsSignatureParser {
             char c = text.charAt(start);
             if (Character.isLetterOrDigit(c) || c == '_' || c == '$' || c == '.') {
                 start--;
+            } else if (Character.isWhitespace(c) || c == '/') {
+                int prev = com.cocode.vcode.ide.core.language.js.JsAutoCompleteEngine.skipWhitespaceAndCommentsBack(text, start);
+                int next = start + 1;
+                while (next <= end && Character.isWhitespace(text.charAt(next))) {
+                    next++;
+                }
+                boolean precededByDot = (prev >= 0 && (text.charAt(prev) == '.' || (text.charAt(prev) == '?' && prev > 0 && text.charAt(prev - 1) == '.')));
+                boolean followedByDot = (next <= end && (text.charAt(next) == '.' || (text.charAt(next) == '?' && next + 1 <= end && text.charAt(next + 1) == '.')));
+                if (precededByDot || followedByDot) {
+                    start = prev;
+                } else {
+                    break;
+                }
             } else {
                 break;
             }
         }
         String candidate = text.substring(start + 1, end + 1).trim();
+        // Normalize whitespace and comments around dots in multiline chains (e.g. "result\n    .toFixed" -> "result.toFixed")
+        if (candidate.contains(".") && (candidate.contains("\n") || candidate.contains(" ") || candidate.contains("\t") || candidate.contains("/"))) {
+            StringBuilder sb = new StringBuilder(candidate.length());
+            boolean inLineComment = false;
+            boolean inBlockComment = false;
+            for (int k = 0; k < candidate.length(); k++) {
+                char ch = candidate.charAt(k);
+                if (inLineComment) {
+                    if (ch == '\n') inLineComment = false;
+                    continue;
+                }
+                if (inBlockComment) {
+                    if (ch == '*' && k + 1 < candidate.length() && candidate.charAt(k + 1) == '/') {
+                        inBlockComment = false;
+                        k++;
+                    }
+                    continue;
+                }
+                if (ch == '/' && k + 1 < candidate.length() && candidate.charAt(k + 1) == '/') {
+                    inLineComment = true;
+                    k++;
+                    continue;
+                }
+                if (ch == '/' && k + 1 < candidate.length() && candidate.charAt(k + 1) == '*') {
+                    inBlockComment = true;
+                    k++;
+                    continue;
+                }
+                if (!Character.isWhitespace(ch)) {
+                    sb.append(ch);
+                }
+            }
+            candidate = sb.toString();
+        }
         while (candidate.startsWith(".")) {
             candidate = candidate.substring(1).trim();
         }

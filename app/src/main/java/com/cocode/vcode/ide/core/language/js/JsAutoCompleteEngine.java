@@ -1706,6 +1706,21 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 } else {
                     inferredType = "@ANY";
                 }
+
+                if ("@ANY".equals(inferredType) && !isMethod && cachedScopeTree != null && cachedTree != null) {
+                    int currentScope = cachedScopeTree.findScopeAt(dotPos, cachedTree);
+                    int[] sym = cachedScopeTree.lookupSymbol(memberName, currentScope, dotPos, cachedTree);
+                    if (sym != null && sym[1] > 0 && sym[1] < cachedTree.nodeCount) {
+                        String symType = cachedTree.nodeTypeAnn[sym[1]];
+                        if (symType != null && !symType.isEmpty()) {
+                            inferredType = symType;
+                            activeNodeId = sym[1];
+                            if (inferredType.startsWith("@ELEMENT_OF:") || inferredType.startsWith("@AWAIT_ELEMENT_OF:")) {
+                                inferredType = resolveElementType(text, inferredType, dotPos);
+                            }
+                        }
+                    }
+                }
             }
 
             if (isNamespace && activeTree != null) {
@@ -1976,14 +1991,75 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         return filtered;
     }
 
+    /**
+     * Scans backward from offset {@code i}, skipping whitespace, block comments,
+     * and single-line comments. Operates with zero allocations.
+     */
+    public static int skipWhitespaceAndCommentsBack(String text, int i) {
+        if (text == null) return -1;
+        while (i >= 0) {
+            char c = text.charAt(i);
+            if (Character.isWhitespace(c)) {
+                i--;
+                continue;
+            }
+            // Block comment: /* ... */
+            if (c == '/' && i > 0 && text.charAt(i - 1) == '*') {
+                i -= 2;
+                while (i > 0 && !(text.charAt(i) == '*' && text.charAt(i - 1) == '/')) {
+                    i--;
+                }
+                if (i > 0) {
+                    i -= 2;
+                } else {
+                    return -1;
+                }
+                continue;
+            }
+            // Line comment: // ...
+            int lineStart = text.lastIndexOf('\n', i) + 1;
+            int commentIdx = findLineCommentOnLine(text, lineStart, i);
+            if (commentIdx != -1 && commentIdx <= i) {
+                i = commentIdx - 1;
+                continue;
+            }
+            break;
+        }
+        return i;
+    }
+
+    public static int findLineCommentOnLine(String text, int lineStart, int maxPos) {
+        boolean inSingle = false;
+        boolean inDouble = false;
+        boolean inBacktick = false;
+        for (int k = lineStart; k <= maxPos; k++) {
+            char c = text.charAt(k);
+            if (c == '\\' && (inSingle || inDouble)) {
+                k++;
+                continue;
+            }
+            if (c == '\'' && !inDouble && !inBacktick) {
+                inSingle = !inSingle;
+            } else if (c == '"' && !inSingle && !inBacktick) {
+                inDouble = !inDouble;
+            } else if (c == '`' && !inSingle && !inDouble) {
+                inBacktick = !inBacktick;
+            } else if (!inSingle && !inDouble && !inBacktick) {
+                if (c == '/' && k + 1 <= maxPos && text.charAt(k + 1) == '/') {
+                    return k;
+                }
+            }
+        }
+        return -1;
+    }
+
     private List<String> extractChainBeforeDot(String text, int dotPos) {
         List<String> chain = new ArrayList<>();
         int i = dotPos - 1;
         while (i >= 0) {
-            while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+            i = skipWhitespaceAndCommentsBack(text, i);
             if (i >= 0 && text.charAt(i) == '?') {
-                i--;
-                while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+                i = skipWhitespaceAndCommentsBack(text, i - 1);
             }
             if (i < 0) break;
 
@@ -2046,7 +2122,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                         if (depth == 0) {
                             int openPos = i;
                             i--;
-                            while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+                            i = skipWhitespaceAndCommentsBack(text, i);
                             if (i >= 0 && (isWordChar(text.charAt(i)) || text.charAt(i) == ')' || text.charAt(i) == ']')) {
                                 String inner = text.substring(openPos + 1, endBracket).trim();
                                 chain.add(0, "[" + inner + "]");
@@ -2096,7 +2172,7 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                     i--;
                 }
                 parenStart = i + 1;
-                while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+                i = skipWhitespaceAndCommentsBack(text, i);
 
                 if (i >= 0 && isWordChar(text.charAt(i))) {
                     isMethodCall = true;
@@ -2150,12 +2226,12 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                 chain.add(0, isMethodCall ? identifier + "()" : identifier);
             }
 
-            while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+            i = skipWhitespaceAndCommentsBack(text, i);
             if (i >= 0 && text.charAt(i) == '.') {
                 i--;
-                while (i >= 0 && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) i--;
+                i = skipWhitespaceAndCommentsBack(text, i);
                 if (i >= 0 && text.charAt(i) == '?') {
-                    i--;
+                    i = skipWhitespaceAndCommentsBack(text, i - 1);
                 }
             } else {
                 break;

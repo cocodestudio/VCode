@@ -549,6 +549,52 @@ public class JsDotCompletionTest extends BaseJsAstTest {
         assertTrue("Expected 'toFixed' for ((10 - 6) * 3).", hasCompletion(comps, "toFixed"));
     }
 
+    @Test
+    public void testMultilineDotChaining_LeadingDots() {
+        String code = "let result = 10;\nresult\n    .toFixed(2)\n    .";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        boolean hasToUpperCase = false, hasCharAt = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+            if ("charAt".equals(item.getLabel())) hasCharAt = true;
+        }
+        assertTrue("Expected toUpperCase in string completions", hasToUpperCase);
+        assertTrue("Expected charAt in string completions", hasCharAt);
+    }
+
+    @Test
+    public void testMultilineDotChaining_3Level() {
+        String code = "let result = 10;\nresult\n    .toFixed(2)\n    .charAt(0)\n    .";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        boolean hasToUpperCase = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+        }
+        assertTrue("Expected toUpperCase after 3-level chain", hasToUpperCase);
+    }
+
+    @Test
+    public void testMultilineDotChaining_TrailingDots() {
+        String code = "let result = 10;\nresult.\n    toFixed(2).\n    ";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        boolean hasToUpperCase = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+        }
+        assertTrue("Expected toUpperCase with trailing dots", hasToUpperCase);
+    }
+
+    @Test
+    public void testMultilineDotChaining_WithComments() {
+        String code = "let result = 10;\nresult\n    // format decimal\n    .toFixed(2)\n    /* get char */\n    .";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        boolean hasToUpperCase = false;
+        for (CompletionItem item : comps) {
+            if ("toUpperCase".equals(item.getLabel())) hasToUpperCase = true;
+        }
+        assertTrue("Expected toUpperCase with comments in chain", hasToUpperCase);
+    }
+
     private boolean hasCompletion(List<CompletionItem> items, String label) {
         if (items == null) return false;
         for (CompletionItem ci : items) {
