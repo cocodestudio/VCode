@@ -957,28 +957,6 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
     // Dot-member completion
 
-    /**
-     * K.3: build the import-statement auto-insert for a
-     * cross-file completion. The caller (the editor's
-     * completion-popup handler) is responsible for performing the
-     * text edit using the returned {@link
-     * com.cocode.vcode.ide.core.lsp.ImportStatementBuilder.Result}.
-     *
-     * @param name           the exported symbol name (the
-     *                       completion's label)
-     * @param sourceFileUri  the URI of the file that exports the
-     *                       symbol (the completion's source URI)
-     * @param currentFileUri the URI of the file the user is editing
-     * @param currentText    the current text of the editing file
-     * @return the import statement and insertion offset, or null if
-     * the two files are the same
-     */
-    public com.cocode.vcode.ide.core.lsp.ImportStatementBuilder.Result buildImportInsert(
-            String name, String sourceFileUri, String currentFileUri, String currentText) {
-        return com.cocode.vcode.ide.core.lsp.ImportStatementBuilder.build(
-                name, sourceFileUri, currentFileUri, currentText);
-    }
-
     private static final String[] BUILTIN_NODE_MODULES = {
             "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster",
             "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns",

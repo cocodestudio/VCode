@@ -19,7 +19,6 @@ import com.cocode.vcode.ide.core.language.js.ParseResult;
 import com.cocode.vcode.ide.core.language.js.ScopeTree;
 import com.cocode.vcode.ide.core.lsp.CancellationToken;
 import com.cocode.vcode.ide.core.lsp.HoverInfo;
-import com.cocode.vcode.ide.core.lsp.ImportStatementBuilder;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -282,9 +281,6 @@ public final class JsLspServer implements LspServer {
         if (suggestions == null || suggestions.isEmpty()) return Collections.emptyList();
 
         List<com.cocode.vcode.ide.core.lsp.model.CompletionItem> out = new ArrayList<>();
-        File currentFile = new File(doc.uri);
-        File currentDir = currentFile.getParentFile();
-
         for (CompletionItem item : suggestions) {
             if (token != null && token.isCancelled()) break;
             com.cocode.vcode.ide.core.lsp.model.CompletionItem.Builder b =
@@ -292,23 +288,6 @@ public final class JsLspServer implements LspServer {
                             .setInsertText(item.getInsertText() != null ? item.getInsertText() : item.getLabel())
                             .setDetail(item.getDetail())
                             .setKind(mapCompletionKind(item.getType()));
-
-            String sourceUri = item.getSourceUri();
-            if (sourceUri != null && !isSameUri(sourceUri, doc.uri) && currentDir != null) {
-                ImportStatementBuilder.Result impRes =
-                        ImportStatementBuilder.build(item.getLabel(), sourceUri, doc.uri, doc.text);
-                if (impRes != null && impRes.insertText != null) {
-                    com.cocode.vcode.ide.core.lsp.model.LspPosition insertPos =
-                            doc.toModelPosition(impRes.insertAtOffset);
-                    TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(insertPos, insertPos), impRes.insertText);
-                    b.setAdditionalTextEdits(Collections.singletonList(edit));
-
-                    String rel = ImportStatementBuilder.computeRelativePath(currentDir, new File(sourceUri));
-                    if (rel != null) {
-                        b.setDetail("Auto import from " + rel);
-                    }
-                }
-            }
 
             if (item.getReplaceLength() >= 0) {
                 int startOff = Math.max(0, offset - item.getReplaceLength());
@@ -406,58 +385,12 @@ public final class JsLspServer implements LspServer {
         if (token != null && token.isCancelled()) return Collections.emptyList();
 
         List<CodeAction> actions = new ArrayList<>();
-        File currentFile = new File(doc.uri);
-        File currentDir = currentFile.getParentFile();
 
         // 1. Diagnostics-driven quick fixes
         if (params.context != null && params.context.diagnostics != null) {
             for (Diagnostic diag : params.context.diagnostics) {
                 if (token != null && token.isCancelled()) break;
                 String msg = diag.message != null ? diag.message : "";
-
-                // Check for undeclared variable / missing import
-                if (msg.contains("is not defined") || msg.contains("Cannot find name") || "JS_UNDECLARED_VARIABLE".equals(diag.code)) {
-                    int offset = doc.toOffset(diag.range.start);
-                    String missingName = extractWord(doc.text, offset);
-                    if (missingName.isEmpty()) {
-                        int quote1 = msg.indexOf('\'');
-                        int quote2 = quote1 >= 0 ? msg.indexOf('\'', quote1 + 1) : -1;
-                        if (quote1 >= 0 && quote2 > quote1) {
-                            missingName = msg.substring(quote1 + 1, quote2);
-                        }
-                    }
-
-                    if (!missingName.isEmpty() && currentDir != null) {
-                        ProjectIndex pIndex = projectIndex != null ? projectIndex : ProjectIndex.getInstance();
-                        List<ProjectIndex.ExportRef> refs = pIndex != null ? pIndex.getExportsByPrefix(missingName) : null;
-                        if (refs != null) {
-                            for (ProjectIndex.ExportRef ref : refs) {
-                                if (missingName.equals(ref.name) && ref.sourceUri != null && !isSameUri(ref.sourceUri, doc.uri)) {
-                                    ImportStatementBuilder.Result impRes =
-                                            ImportStatementBuilder.build(ref.name, ref.sourceUri, doc.uri, doc.text);
-                                    if (impRes != null && impRes.insertText != null) {
-                                        String rel = ImportStatementBuilder.computeRelativePath(currentDir, new File(ref.sourceUri));
-                                        com.cocode.vcode.ide.core.lsp.model.LspPosition insertPos =
-                                                doc.toModelPosition(impRes.insertAtOffset);
-                                        TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(insertPos, insertPos), impRes.insertText);
-                                        WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
-
-                                        CodeAction action = new CodeAction(
-                                                "Import '" + ref.name + "' from '" + (rel != null ? rel : ref.sourceUri) + "'",
-                                                CodeActionKind.QUICKFIX,
-                                                Collections.singletonList(diag),
-                                                true,
-                                                wsEdit,
-                                                null,
-                                                null
-                                        );
-                                        actions.add(action);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
 
                 // Check for unused variable
                 if (msg.contains("is declared but never used") || "JS_UNUSED_VARIABLE".equals(diag.code)) {

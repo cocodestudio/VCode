@@ -18,7 +18,6 @@ import com.cocode.vcode.ide.core.language.ts.TsLinter;
 import com.cocode.vcode.ide.core.language.ts.TsParser;
 import com.cocode.vcode.ide.core.lsp.CancellationToken;
 import com.cocode.vcode.ide.core.lsp.HoverInfo;
-import com.cocode.vcode.ide.core.lsp.ImportStatementBuilder;
 import com.cocode.vcode.ide.core.lsp.LspCompletionConverter;
 import com.cocode.vcode.ide.core.lsp.LspCompletionItem;
 import com.cocode.vcode.ide.core.lsp.LspDocument;
@@ -286,7 +285,6 @@ public final class TsLspServer implements LspServer {
         if (rawItems == null || rawItems.isEmpty()) return Collections.emptyList();
 
         List<CompletionItem> result = new ArrayList<>(rawItems.size());
-        File currentDir = new File(doc.uri).getParentFile();
 
         for (com.cocode.vcode.ide.core.model.CompletionItem ri : rawItems) {
             if (token != null && token.isCancelled()) break;
@@ -295,21 +293,6 @@ public final class TsLspServer implements LspServer {
                             .setInsertText(ri.getInsertText() != null ? ri.getInsertText() : ri.getLabel())
                             .setDetail(ri.getDetail())
                             .setKind(mapCompletionKind(ri.getType()));
-
-            // Auto-import for exported types from other workspace files
-            String declFile = ri.getSourceUri();
-            if (declFile != null && currentDir != null && !declFile.isEmpty() && !declFile.equals(doc.uri)) {
-                String impPath = ImportStatementBuilder.computeRelativePath(currentDir, new File(declFile));
-                if (impPath != null) {
-                    ImportStatementBuilder.Result bRes = ImportStatementBuilder.build(ri.getLabel(), declFile, doc.uri, doc.text);
-                    if (bRes != null && bRes.insertText != null) {
-                        com.cocode.vcode.ide.core.lsp.model.LspPosition insPos = doc.toModelPosition(bRes.insertAtOffset);
-                        TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(insPos, insPos), bRes.insertText);
-                        b.setAdditionalTextEdits(Collections.singletonList(edit));
-                        b.setDetail("Auto-import from '" + impPath + "'");
-                    }
-                }
-            }
             if (ri.getReplaceLength() >= 0) {
                 int startOff = Math.max(0, offset - ri.getReplaceLength());
                 b.setTextEdit(new TextEdit(
@@ -555,33 +538,6 @@ public final class TsLspServer implements LspServer {
                     TextEdit edit = new TextEdit(diag.range, "as unknown");
                     WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
                     actions.add(new CodeAction("Replace 'as any' with 'as unknown'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
-                }
-
-                // 4. Missing import / undeclared type
-                if (msg.contains("is not defined") || "JS_UNDECLARED_VARIABLE".equals(code)) {
-                    int offset = doc.toOffset(diag.range.start);
-                    String missingName = extractWord(doc.text, offset);
-                    if (!missingName.isEmpty()) {
-                        File currentFile = new File(doc.uri);
-                        File currentDir = currentFile.getParentFile();
-                        ProjectIndex pIndex = projectIndex != null ? projectIndex : ProjectIndex.getInstance();
-                        List<ProjectIndex.ExportRef> refs = pIndex != null ? pIndex.getExportsByPrefix(missingName) : null;
-                        if (refs != null && currentDir != null) {
-                            for (ProjectIndex.ExportRef ref : refs) {
-                                if (missingName.equals(ref.name) && ref.sourceUri != null && !ref.sourceUri.equals(doc.uri)) {
-                                    ImportStatementBuilder.Result impRes = ImportStatementBuilder.build(ref.name, ref.sourceUri, doc.uri, doc.text);
-                                    if (impRes != null && impRes.insertText != null) {
-                                        String rel = ImportStatementBuilder.computeRelativePath(currentDir, new File(ref.sourceUri));
-                                        com.cocode.vcode.ide.core.lsp.model.LspPosition insPos = doc.toModelPosition(impRes.insertAtOffset);
-                                        TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(insPos, insPos), impRes.insertText);
-                                        WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
-                                        actions.add(new CodeAction("Import '" + ref.name + "' from '" + (rel != null ? rel : ref.sourceUri) + "'",
-                                                CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
