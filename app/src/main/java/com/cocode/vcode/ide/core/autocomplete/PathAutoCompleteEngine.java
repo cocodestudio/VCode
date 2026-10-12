@@ -69,7 +69,9 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
 
     public void setCurrentFile(File file) {
         this.currentFile = file;
-        this.workspaceRoot = null; // Recompute on switch
+        if (workspaceRoot != null && !isWithinDirectory(file, workspaceRoot)) {
+            this.workspaceRoot = null;
+        }
     }
 
     public File getCurrentFile() {
@@ -83,7 +85,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
     public File getWorkspaceRoot() {
         if (workspaceRoot != null && workspaceRoot.exists()) return workspaceRoot;
         if (currentFile != null) {
-            File root = ProjectRepository.findProjectRoot(currentFile);
+            File root = com.cocode.vcode.ide.utils.FileUtils.resolveProjectRoot(currentFile);
             if (root != null) {
                 workspaceRoot = root;
                 return root;
@@ -152,20 +154,21 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             if (lastSlash > 0) {
                 String dirPart = path.substring(1, lastSlash);
                 filterPrefix = path.substring(lastSlash + 1);
-                searchDir = resolvePathSegments(searchDir, dirPart);
+                searchDir = resolvePathSegments(searchDir, dirPart, projectRoot);
             } else {
                 filterPrefix = path.substring(1);
             }
         } else if (lastSlash != -1) {
             String dirPart = path.substring(0, lastSlash);
             filterPrefix = path.substring(lastSlash + 1);
-            searchDir = resolvePathSegments(baseDir, dirPart);
+            searchDir = resolvePathSegments(baseDir, dirPart, projectRoot);
         } else {
             filterPrefix = path;
             searchDir = baseDir;
         }
 
-        if (searchDir == null || !searchDir.exists() || !searchDir.isDirectory()) {
+        if (searchDir == null || !searchDir.exists() || !searchDir.isDirectory()
+                || (projectRoot != null && !isWithinDirectory(searchDir, projectRoot))) {
             return Collections.emptyList();
         }
 
@@ -176,26 +179,16 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             File[] disk = searchDir.listFiles();
             if (disk != null) {
                 files = new ArrayList<>(disk.length);
-                Collections.addAll(files, disk);
+                for (File d : disk) {
+                    String dName = d.getName();
+                    if (!dName.equalsIgnoreCase(".git")) {
+                        files.add(d);
+                    }
+                }
             }
         }
 
         if (files == null || files.isEmpty()) {
-            if (filterPrefix.equals(".") || filterPrefix.equals("..")) {
-                List<CompletionItem> navItems = new ArrayList<>(2);
-                CompletionItem dotItem = new CompletionItem("./", "./", "Directory", CompletionItem.Type.FOLDER, 0);
-                dotItem.setReplaceLength(filterPrefix.length());
-                dotItem.setSortScore(1200);
-                navItems.add(dotItem);
-
-                CompletionItem dotDotItem = new CompletionItem("../", "../", "Directory", CompletionItem.Type.FOLDER, 0);
-                dotDotItem.setReplaceLength(filterPrefix.length());
-                dotDotItem.setSortScore(1100);
-                navItems.add(dotDotItem);
-                return navItems;
-            }
-            // When user types without a slash in HTML/CSS/Markdown and local directory matches nothing,
-            // fall back to recursive search across project folders
             if (lastSlash == -1 && !filterPrefix.isEmpty() && !isGitIgnore && projectRoot != null) {
                 return searchProjectFilesRecursively(projectRoot, baseDir, filterPrefix, filter);
             }
@@ -205,21 +198,10 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         String lowerPrefix = filterPrefix.toLowerCase(Locale.ROOT);
         List<CompletionItem> candidates = new ArrayList<>();
 
-        if (filterPrefix.equals(".") || filterPrefix.equals("..")) {
-            CompletionItem dotItem = new CompletionItem("./", "./", "Directory", CompletionItem.Type.FOLDER, 0);
-            dotItem.setReplaceLength(filterPrefix.length());
-            dotItem.setSortScore(1200);
-            candidates.add(dotItem);
-
-            CompletionItem dotDotItem = new CompletionItem("../", "../", "Directory", CompletionItem.Type.FOLDER, 0);
-            dotDotItem.setReplaceLength(filterPrefix.length());
-            dotDotItem.setSortScore(1100);
-            candidates.add(dotDotItem);
-        }
-
         for (File f : files) {
             String name = f.getName();
             if (name.equals(".") || name.equals("..")) continue;
+            if (name.equalsIgnoreCase(".git")) continue;
             if (!includeHidden && name.startsWith(".")) continue;
 
             if (!f.isDirectory() && currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath())) {
@@ -258,7 +240,9 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             for (File f : files) {
                 String name = f.getName();
                 if (name.equals(".") || name.equals("..")) continue;
+                if (name.equalsIgnoreCase(".git")) continue;
                 if (!includeHidden && name.startsWith(".")) continue;
+
                 if (!f.isDirectory() && currentFile != null && f.getAbsolutePath().equals(currentFile.getAbsolutePath())) {
                     continue;
                 }
@@ -325,7 +309,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
         return getSuggestionsForPath(typedPath, null);
     }
 
-    private File resolvePathSegments(File startDir, String dirPart) {
+    private File resolvePathSegments(File startDir, String dirPart, File boundaryRoot) {
         if (startDir == null || dirPart == null || dirPart.isEmpty()) return startDir;
         File current = startDir;
         String[] segments = dirPart.split("/");
@@ -334,15 +318,51 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
                 continue;
             }
             if (seg.equals("..")) {
-                File parent = current.getParentFile();
-                if (parent != null) {
-                    current = parent;
+                // Prevent walking above boundaryRoot
+                if (boundaryRoot != null && isSameOrAncestor(boundaryRoot, current)) {
+                    if (isSameCanonical(boundaryRoot, current)) {
+                        return null; // Already at project boundary; cannot traverse to parent
+                    }
                 }
+                File parent = current.getParentFile();
+                if (parent == null) {
+                    return null;
+                }
+                current = parent;
             } else {
                 current = new File(current, seg);
             }
         }
+        if (boundaryRoot != null && !isWithinDirectory(current, boundaryRoot)) {
+            return null;
+        }
         return current;
+    }
+
+    public static boolean isWithinDirectory(File file, File root) {
+        if (file == null || root == null) return false;
+        try {
+            String filePath = file.getCanonicalPath();
+            String rootPath = root.getCanonicalPath();
+            return filePath.equals(rootPath) || filePath.startsWith(rootPath + File.separator);
+        } catch (Exception e) {
+            String filePath = file.getAbsolutePath();
+            String rootPath = root.getAbsolutePath();
+            return filePath.equals(rootPath) || filePath.startsWith(rootPath + File.separator);
+        }
+    }
+
+    private static boolean isSameCanonical(File a, File b) {
+        if (a == null || b == null) return false;
+        try {
+            return a.getCanonicalPath().equals(b.getCanonicalPath());
+        } catch (Exception e) {
+            return a.getAbsolutePath().equals(b.getAbsolutePath());
+        }
+    }
+
+    private static boolean isSameOrAncestor(File ancestor, File child) {
+        return isWithinDirectory(child, ancestor);
     }
 
     private List<CompletionItem> searchProjectFilesRecursively(File projectRoot, File baseDir, String prefix, PathFilter filter) {

@@ -53,6 +53,8 @@ public class PathAutoCompleteEngineTest {
         new File(assetsDir, "logo.png").createNewFile();
         new File(projectRoot, ".env").createNewFile();
         new File(projectRoot, "package.json").createNewFile();
+        new File(projectRoot, ".git").mkdir();
+        new File(projectRoot, ".vcode").mkdir();
 
         // Invalidate VFS cache
         VFSManager.getInstance().clear();
@@ -236,41 +238,105 @@ public class PathAutoCompleteEngineTest {
     }
 
     @Test
-    public void testDotAndDotDotRelativeNavigationInjection() {
-        engine.setCurrentFile(appJs);
+    public void testNoDotOrDotDotInjectionAndGitVcodeFiltered() {
+        engine.setCurrentFile(indexHtml);
 
         // When typing single dot
         List<CompletionItem> dotItems = engine.getSuggestionsForPath(".");
         assertNotNull(dotItems);
-        boolean hasDot = false;
-        boolean hasDotDot = false;
         for (CompletionItem item : dotItems) {
-            if ("./".equals(item.getLabel())) {
-                hasDot = true;
-                assertEquals(CompletionItem.Type.FOLDER, item.getType());
-                assertEquals(1, item.getReplaceLength());
-            }
-            if ("../".equals(item.getLabel())) {
-                hasDotDot = true;
-                assertEquals(CompletionItem.Type.FOLDER, item.getType());
-                assertEquals(1, item.getReplaceLength());
+            assertFalse("Typing . must not suggest ./", "./".equals(item.getLabel()));
+            assertFalse("Typing . must not suggest ../", "../".equals(item.getLabel()));
+            assertFalse("Typing . must not suggest .git", ".git".equalsIgnoreCase(item.getLabel()) || ".git/".equalsIgnoreCase(item.getLabel()));
+            assertFalse("Typing . must not suggest .vcode", ".vcode".equalsIgnoreCase(item.getLabel()) || ".vcode/".equalsIgnoreCase(item.getLabel()));
+        }
+        boolean hasEnv = false;
+        for (CompletionItem item : dotItems) {
+            if (".env".equals(item.getLabel())) {
+                hasEnv = true;
+                break;
             }
         }
-        assertTrue("Typing . must inject ./", hasDot);
-        assertTrue("Typing . must inject ../", hasDotDot);
+        assertTrue("Typing . must still suggest valid hidden file .env", hasEnv);
 
         // When typing double dot
         List<CompletionItem> dotDotItems = engine.getSuggestionsForPath("..");
         assertNotNull(dotDotItems);
-        boolean hasParent = false;
-        for (CompletionItem item : dotDotItems) {
-            if ("../".equals(item.getLabel())) {
-                hasParent = true;
-                assertEquals(CompletionItem.Type.FOLDER, item.getType());
-                assertEquals(2, item.getReplaceLength());
+        assertTrue("Typing .. must not inject ./ or ../ and must return empty when no file matches", dotDotItems.isEmpty());
+    }
+
+    @Test
+    public void testBoundaryEnforcementRootParentTraversal() {
+        engine.setCurrentFile(indexHtml); // at projectRoot
+
+        // From project root, ../ traverses above boundary
+        List<CompletionItem> items = engine.getSuggestionsForPath("../");
+        assertNotNull(items);
+        assertTrue("Cannot traverse above project root with ../", items.isEmpty());
+    }
+
+    @Test
+    public void testBoundaryEnforcementNestedFolderTraversal() {
+        File buttonJs = new File(componentsDir, "Button.js");
+        engine.setCurrentFile(buttonJs); // in src/components
+
+        // ../ should navigate to src/
+        List<CompletionItem> parentItems = engine.getSuggestionsForPath("../");
+        assertNotNull(parentItems);
+        assertFalse(parentItems.isEmpty());
+        boolean hasAppJs = false;
+        for (CompletionItem item : parentItems) {
+            if ("app.js".equals(item.getLabel())) {
+                hasAppJs = true;
+                break;
             }
         }
-        assertTrue("Typing .. must inject ../", hasParent);
+        assertTrue("Should navigate to src/ and find app.js", hasAppJs);
+
+        // ../../ should navigate to projectRoot
+        List<CompletionItem> rootItems = engine.getSuggestionsForPath("../../");
+        assertNotNull(rootItems);
+        assertFalse(rootItems.isEmpty());
+        boolean hasIndexHtml = false;
+        for (CompletionItem item : rootItems) {
+            if ("index.html".equals(item.getLabel())) {
+                hasIndexHtml = true;
+                break;
+            }
+        }
+        assertTrue("Should navigate to project root and find index.html", hasIndexHtml);
+
+        // ../../../ exceeds projectRoot boundary
+        List<CompletionItem> outOfBoundsItems = engine.getSuggestionsForPath("../../../");
+        assertNotNull(outOfBoundsItems);
+        assertTrue("Exceeding project boundary with ../../../ must return 0 suggestions", outOfBoundsItems.isEmpty());
+    }
+
+    @Test
+    public void testBoundaryEnforcementRootRelative() {
+        engine.setCurrentFile(appJs);
+
+        // Root relative / should stay in projectRoot
+        List<CompletionItem> rootItems = engine.getSuggestionsForPath("/");
+        assertNotNull(rootItems);
+        assertFalse(rootItems.isEmpty());
+
+        // Root relative /../ attempts to escape projectRoot
+        List<CompletionItem> escapedItems = engine.getSuggestionsForPath("/../");
+        assertNotNull(escapedItems);
+        assertTrue("Root-relative /../ escaping boundary must return 0 suggestions", escapedItems.isEmpty());
+    }
+
+    @Test
+    public void testGitIgnoreNeverSuggestsGitOrVcode() {
+        engine.setCurrentFile(gitignoreFile);
+
+        List<CompletionItem> itemsDot = engine.getSuggestions(".g", 2);
+        assertNotNull(itemsDot);
+        for (CompletionItem item : itemsDot) {
+            assertFalse("Gitignore must never suggest .git", ".git".equalsIgnoreCase(item.getLabel()) || ".git/".equalsIgnoreCase(item.getLabel()));
+            assertFalse("Gitignore must never suggest .vcode", ".vcode".equalsIgnoreCase(item.getLabel()) || ".vcode/".equalsIgnoreCase(item.getLabel()));
+        }
     }
 
     @Test

@@ -176,7 +176,8 @@ public class VFSManager {
             List<File> list = new ArrayList<>();
             for (File f : diskFiles) {
                 String name = f.getName();
-                if (!name.equals(".") && !name.equals("..")) {
+                if (!name.equals(".") && !name.equals("..") 
+                        && !name.equalsIgnoreCase(".git") && !name.equalsIgnoreCase(".vcode")) {
                     list.add(f);
                 }
             }
