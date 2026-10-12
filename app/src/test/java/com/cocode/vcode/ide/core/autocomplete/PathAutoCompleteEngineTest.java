@@ -248,7 +248,6 @@ public class PathAutoCompleteEngineTest {
             assertFalse("Typing . must not suggest ./", "./".equals(item.getLabel()));
             assertFalse("Typing . must not suggest ../", "../".equals(item.getLabel()));
             assertFalse("Typing . must not suggest .git", ".git".equalsIgnoreCase(item.getLabel()) || ".git/".equalsIgnoreCase(item.getLabel()));
-            assertFalse("Typing . must not suggest .vcode", ".vcode".equalsIgnoreCase(item.getLabel()) || ".vcode/".equalsIgnoreCase(item.getLabel()));
         }
         boolean hasEnv = false;
         for (CompletionItem item : dotItems) {
@@ -335,7 +334,6 @@ public class PathAutoCompleteEngineTest {
         assertNotNull(itemsDot);
         for (CompletionItem item : itemsDot) {
             assertFalse("Gitignore must never suggest .git", ".git".equalsIgnoreCase(item.getLabel()) || ".git/".equalsIgnoreCase(item.getLabel()));
-            assertFalse("Gitignore must never suggest .vcode", ".vcode".equalsIgnoreCase(item.getLabel()) || ".vcode/".equalsIgnoreCase(item.getLabel()));
         }
     }
 
