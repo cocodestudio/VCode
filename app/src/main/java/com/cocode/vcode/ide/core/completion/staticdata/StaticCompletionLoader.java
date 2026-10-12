@@ -222,7 +222,9 @@ public final class StaticCompletionLoader {
                 if (htmlBoilerplateCache == null) {
                     String template = StaticAssetReader.readAsset(HTML_BLANK_TEMPLATE_ASSET);
                     if (template != null && !template.trim().isEmpty()) {
-                        String boilerplate = template.replace("<body>\n\n", "<body>\n    |\n")
+                        String boilerplate = template.replace("  <body>\n\n  </body>", "  <body>\n    |\n  </body>")
+                                .replace("  <body>\r\n\r\n  </body>", "  <body>\r\n    |\r\n  </body>")
+                                .replace("<body>\n\n", "<body>\n    |\n")
                                 .replace("<body>\r\n\r\n", "<body>\r\n    |\r\n");
                         if (!boilerplate.contains("|")) {
                             boilerplate = boilerplate.replace("<body>", "<body>\n    |");

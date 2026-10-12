@@ -321,12 +321,104 @@ public class EmmetParser {
         }
     }
 
-    private static String formatSnippetIndent(String snippet, String indentUnit) {
-        if (snippet == null || indentUnit == null || indentUnit.equals("    ") || !snippet.contains("    ")) {
-            return snippet;
+    static String formatSnippetIndent(String snippet, String indentUnit) {
+        if (snippet == null) {
+            return null;
         }
-        return snippet.replace("        ", indentUnit + indentUnit)
-                .replace("    ", indentUnit);
+        if (snippet.isEmpty()) {
+            return "";
+        }
+        if (indentUnit == null || indentUnit.isEmpty()) {
+            indentUnit = (defaultIndentUnit != null && !defaultIndentUnit.isEmpty()) ? defaultIndentUnit : "  ";
+        }
+
+        String[] lines = snippet.split("\n", -1);
+
+        int minLeadingSpaces = Integer.MAX_VALUE;
+        int gcdLeadingSpaces = 0;
+        for (String line : lines) {
+            int len = line.length();
+            if (len > 0 && line.charAt(len - 1) == '\r') {
+                len--;
+            }
+            int spaces = 0;
+            while (spaces < len && line.charAt(spaces) == ' ') {
+                spaces++;
+            }
+            if (spaces > 0 && spaces < len && line.charAt(spaces) != '\t') {
+                if (spaces < minLeadingSpaces) {
+                    minLeadingSpaces = spaces;
+                }
+                gcdLeadingSpaces = (gcdLeadingSpaces == 0) ? spaces : gcd(gcdLeadingSpaces, spaces);
+            }
+        }
+
+        int baseStep = 4;
+        if (minLeadingSpaces != Integer.MAX_VALUE) {
+            if (minLeadingSpaces == 2 || minLeadingSpaces == 4) {
+                baseStep = minLeadingSpaces;
+            } else if (gcdLeadingSpaces == 2 || gcdLeadingSpaces == 4) {
+                baseStep = gcdLeadingSpaces;
+            } else {
+                baseStep = minLeadingSpaces;
+            }
+        }
+
+        StringBuilder sb = new StringBuilder(snippet.length() + 32);
+        for (int idx = 0; idx < lines.length; idx++) {
+            String line = lines[idx];
+            boolean lineHasCr = line.endsWith("\r");
+            String content = lineHasCr ? line.substring(0, line.length() - 1) : line;
+
+            int leadingEnd = 0;
+            int cLen = content.length();
+            while (leadingEnd < cLen && (content.charAt(leadingEnd) == ' ' || content.charAt(leadingEnd) == '\t')) {
+                leadingEnd++;
+            }
+
+            if (leadingEnd == cLen) {
+                if (lineHasCr) {
+                    sb.append('\r');
+                }
+            } else {
+                int level;
+                if (content.charAt(0) == '\t') {
+                    int tabs = 0;
+                    while (tabs < leadingEnd && content.charAt(tabs) == '\t') {
+                        tabs++;
+                    }
+                    int remainingSpaces = leadingEnd - tabs;
+                    level = tabs + (baseStep > 0 ? remainingSpaces / baseStep : 0);
+                } else {
+                    int spaces = 0;
+                    while (spaces < leadingEnd && content.charAt(spaces) == ' ') {
+                        spaces++;
+                    }
+                    level = (baseStep > 0) ? spaces / baseStep : 0;
+                }
+
+                sb.append(getIndent(level, indentUnit));
+                sb.append(content.substring(leadingEnd));
+                if (lineHasCr) {
+                    sb.append('\r');
+                }
+            }
+
+            if (idx < lines.length - 1) {
+                sb.append('\n');
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private static int gcd(int a, int b) {
+        while (b != 0) {
+            int t = b;
+            b = a % b;
+            a = t;
+        }
+        return a;
     }
 
     private static boolean hasTreeOperators(String s) {

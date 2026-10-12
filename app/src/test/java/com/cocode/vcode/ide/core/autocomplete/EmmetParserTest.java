@@ -370,4 +370,98 @@ public class EmmetParserTest {
         assertNotNull(tabIndent);
         assertEquals("<div>\n\t<p>|</p>\n</div>", tabIndent);
     }
+
+    @Test
+    public void testHtmlBoilerplateTwoSpaceIndentation() {
+        String result = EmmetParser.expandHtml("!", null, "  ");
+        assertNotNull(result);
+        assertTrue(result.contains("<head>\n  <meta charset=\"UTF-8\">"));
+        assertTrue(result.contains("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"));
+        assertTrue(result.contains("  <title>Document</title>"));
+        assertTrue(result.contains("<body>\n  |\n</body>"));
+    }
+
+    @Test
+    public void testHtmlBoilerplateFourSpaceIndentation() {
+        String result = EmmetParser.expandHtml("!", null, "    ");
+        assertNotNull(result);
+        assertTrue(result.contains("<head>\n    <meta charset=\"UTF-8\">"));
+        assertTrue(result.contains("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"));
+        assertTrue(result.contains("    <title>Document</title>"));
+        assertTrue(result.contains("<body>\n    |\n</body>"));
+    }
+
+    @Test
+    public void testTablePlusSnippetPreservesMultiLevelIndentation() {
+        String result = EmmetParser.expandHtml("table+", null, "  ");
+        assertNotNull(result);
+        String expected = "<table>\n  <tr>\n    <td>|</td>\n  </tr>\n</table>";
+        assertEquals(expected, result);
+
+        String result4 = EmmetParser.expandHtml("table+", null, "    ");
+        assertNotNull(result4);
+        String expected4 = "<table>\n    <tr>\n        <td>|</td>\n    </tr>\n</table>";
+        assertEquals(expected4, result4);
+    }
+
+    @Test
+    public void testExpandHtmlWithCustomTwoSpaceBoilerplate() {
+        String customBoilerplate = "<!DOCTYPE html>\n"
+                + "<html lang=\"en\">\n"
+                + "  <head>\n"
+                + "    <meta charset=\"UTF-8\">\n"
+                + "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+                + "    <title>New Project</title>\n"
+                + "    <style>\n"
+                + "      * {\n"
+                + "        box-sizing: border-box;\n"
+                + "      }\n"
+                + "      body {\n"
+                + "        margin: 0;\n"
+                + "        padding: 0;\n"
+                + "        font-family: sans-serif;\n"
+                + "      }\n"
+                + "    </style>\n"
+                + "  </head>\n"
+                + "  <body>\n"
+                + "    |\n"
+                + "  </body>\n"
+                + "</html>";
+
+        // 2-space indentation unit
+        String res2 = EmmetParser.expandHtml("!", customBoilerplate, "  ");
+        assertNotNull(res2);
+        assertTrue(res2.contains("  <head>"));
+        assertTrue(res2.contains("    <meta charset=\"UTF-8\">"));
+        assertTrue(res2.contains("    <style>"));
+        assertTrue(res2.contains("      * {"));
+        assertTrue(res2.contains("        box-sizing: border-box;"));
+        assertTrue(res2.contains("  <body>"));
+        assertTrue(res2.contains("    |"));
+        assertTrue(res2.contains("  </body>"));
+
+        // 4-space indentation unit
+        String res4 = EmmetParser.expandHtml("!", customBoilerplate, "    ");
+        assertNotNull(res4);
+        assertTrue(res4.contains("    <head>"));
+        assertTrue(res4.contains("        <meta charset=\"UTF-8\">"));
+        assertTrue(res4.contains("        <style>"));
+        assertTrue(res4.contains("            * {"));
+        assertTrue(res4.contains("                box-sizing: border-box;"));
+        assertTrue(res4.contains("    <body>"));
+        assertTrue(res4.contains("        |"));
+        assertTrue(res4.contains("    </body>"));
+    }
+
+    @Test
+    public void testStaticCompletionLoaderBoilerplateAlignment() {
+        String bp = com.cocode.vcode.ide.core.completion.staticdata.StaticCompletionLoader.getHtmlBoilerplate();
+        assertNotNull(bp);
+        assertTrue(bp.contains("<body>\n    |\n  </body>") || bp.contains("<body>\r\n    |\r\n  </body>") || bp.contains("<body>\n    |"));
+        String expanded2 = EmmetParser.expandHtml("!", bp, "  ");
+        assertNotNull(expanded2);
+        assertTrue(expanded2.contains("  <body>"));
+        assertTrue(expanded2.contains("    |"));
+        assertTrue(expanded2.contains("  </body>"));
+    }
 }

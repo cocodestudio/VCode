@@ -80,7 +80,10 @@ public final class StaticAssetReader {
                          new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
                 StringBuilder sb = new StringBuilder();
                 String line;
-                while ((line = reader.readLine()) != null) sb.append(line);
+                while ((line = reader.readLine()) != null) {
+                    if (sb.length() > 0) sb.append('\n');
+                    sb.append(line);
+                }
                 String result = sb.toString();
                 assetCache.put(assetPath, result);
                 return result;
@@ -98,7 +101,10 @@ public final class StaticAssetReader {
                     new java.io.InputStreamReader(new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
                 StringBuilder sb = new StringBuilder();
                 String line;
-                while ((line = reader.readLine()) != null) sb.append(line);
+                while ((line = reader.readLine()) != null) {
+                    if (sb.length() > 0) sb.append('\n');
+                    sb.append(line);
+                }
                 String result = sb.toString();
                 assetCache.put(assetPath, result);
                 return result;
