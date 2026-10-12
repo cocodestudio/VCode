@@ -378,6 +378,9 @@ public class JsParser {
                                 inner = skipToken(stream, nextTok);
                             } else if ("of".equals(loopOp)) {
                                 int iterTok = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
+                                while (iterTok < headerEnd && stream.types[iterTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[iterTok]) == '(') {
+                                    iterTok = skipWhitespaceAndComments(stream, skipToken(stream, iterTok));
+                                }
                                 if (iterTok < headerEnd && loopVarNode > 0 && tree.nodeTypeAnn[loopVarNode] == null) {
                                     if (stream.types[iterTok] == TokenStream.TK_IDENTIFIER) {
                                         String iterName = getWord(source, stream, iterTok);
@@ -385,7 +388,8 @@ public class JsParser {
                                     } else if (stream.types[iterTok] == TokenStream.TK_STRING) {
                                         tree.nodeTypeAnn[loopVarNode] = "@STRING";
                                     } else if (stream.types[iterTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[iterTok]) == '[') {
-                                        String arrType = inferBaseType(source, stream, iterTok - 1);
+                                        int closeBracket = skipBlockFast(source, stream, iterTok, '[', ']');
+                                        String arrType = inferBaseType(source, stream, iterTok, closeBracket, tree, null);
                                         if (arrType != null) {
                                             if ("@ARRAY_OF_STRING".equals(arrType)) tree.nodeTypeAnn[loopVarNode] = "@STRING";
                                             else if ("@ARRAY_OF_NUMBER".equals(arrType)) tree.nodeTypeAnn[loopVarNode] = "@NUMBER";
@@ -1028,7 +1032,9 @@ public class JsParser {
 
                 } else if (c == ':') {
                     int propNode = tree.addNode(JsSyntaxTree.N_PROPERTY, nodeStart, 0, parent, name);
-                    String inferredPropType = inferBaseType(source, stream, i);
+                    int propStart = skipWhitespaceAndComments(stream, skipToken(stream, i));
+                    int propEnd = findExprEnd(source, stream, propStart, STOP_OBJ_PROP);
+                    String inferredPropType = inferBaseType(source, stream, propStart, propEnd, tree, null);
                     if (inferredPropType != null) {
                         tree.nodeTypeAnn[propNode] = inferredPropType;
                     }
@@ -2255,7 +2261,9 @@ public class JsParser {
 
                 if (nextTok < stream.length && stream.types[nextTok] == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[nextTok]) == '=') {
 
-                    String inferredType = inferBaseType(source, stream, nextTok);
+                    int rhsStart = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
+                    int rhsEnd = findExprEnd(source, stream, rhsStart, STOP_VAR_DECL);
+                    String inferredType = inferBaseType(source, stream, rhsStart, rhsEnd, tree, null);
                     if (inferredType != null && tree.nodeTypeAnn[declNode] == null) {
                         tree.nodeTypeAnn[declNode] = inferredType;
                         if (inferredType.startsWith("@REQUIRE:")) {
@@ -2306,7 +2314,9 @@ public class JsParser {
 
                 if (nextTok < stream.length && stream.types[nextTok] == TokenStream.TK_OPERATOR && source.charAt(stream.tokenStart[nextTok]) == '=') {
 
-                    String inferredType = inferBaseType(source, stream, nextTok);
+                    int rhsStart = skipWhitespaceAndComments(stream, skipToken(stream, nextTok));
+                    int rhsEnd = findExprEnd(source, stream, rhsStart, STOP_VAR_DECL);
+                    String inferredType = inferBaseType(source, stream, rhsStart, rhsEnd, tree, null);
                     if (inferredType != null && tree.nodeTypeAnn[declNode] == null) {
                         tree.nodeTypeAnn[declNode] = inferredType;
                     }
@@ -2543,112 +2553,44 @@ public class JsParser {
     }
 
 
+    private static int findExprEnd(String source, TokenStream stream, int startTok, int stopCond) {
+        int i = startTok;
+        int depth = 0;
+        while (i < stream.length) {
+            byte t = stream.types[i];
+            if (t == TokenStream.TK_PUNCT) {
+                char c = source.charAt(stream.tokenStart[i]);
+                if (c == '(' || c == '[' || c == '{') {
+                    depth++;
+                } else if (c == ')' || c == ']' || c == '}') {
+                    if (depth <= 0) return i;
+                    depth--;
+                } else if (c == ',' && depth <= 0 && (stopCond == STOP_VAR_DECL || stopCond == STOP_OBJ_PROP || stopCond == STOP_PARAM)) {
+                    return i;
+                } else if (c == ';' && depth <= 0) {
+                    return i;
+                }
+            }
+            int next = skipToken(stream, i);
+            if (depth <= 0 && (stopCond == STOP_STMT || stopCond == STOP_VAR_DECL)) {
+                int nextWs = skipWhitespaceAndComments(stream, next);
+                if (nextWs < stream.length && isTopLevelKeyword(source, stream, nextWs) && hasNewlineBetween(source, stream, i, nextWs)) {
+                    return i;
+                }
+            }
+            i = next;
+        }
+        return i;
+    }
+
+    private static String inferBaseType(String source, TokenStream stream, int startTok, int endTok, JsSyntaxTree tree, ScopeTree scopeTree) {
+        return JsTypeInference.inferFromTokens(source, stream, startTok, endTok, tree, scopeTree);
+    }
+
     private static String inferBaseType(String source, TokenStream stream, int tokIdx) {
         int i = skipToken(stream, tokIdx);
         i = skipWhitespaceAndComments(stream, i);
-        if (i >= stream.length) return null;
-
-        byte t = stream.types[i];
-        if (t == TokenStream.TK_PUNCT) {
-            char c = source.charAt(stream.tokenStart[i]);
-            if (c == '[') {
-                int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-                if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '{') {
-                    java.util.List<String> keys = new java.util.ArrayList<>();
-                    int curr = skipToken(stream, next);
-                    int depth = 1;
-                    while (curr < stream.length && depth > 0) {
-                        curr = skipWhitespaceAndComments(stream, curr);
-                        if (curr >= stream.length) break;
-                        byte tt = stream.types[curr];
-                        if (tt == TokenStream.TK_PUNCT) {
-                            char cc = source.charAt(stream.tokenStart[curr]);
-                            if (cc == '{') depth++;
-                            else if (cc == '}') depth--;
-                        } else if (tt == TokenStream.TK_IDENTIFIER || tt == TokenStream.TK_STRING) {
-                            if (depth == 1) {
-                                int colonNext = skipWhitespaceAndComments(stream, skipToken(stream, curr));
-                                if (colonNext < stream.length && stream.types[colonNext] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[colonNext]) == ':') {
-                                    String key = getWord(source, stream, curr);
-                                    if (tt == TokenStream.TK_STRING)
-                                        key = key.substring(1, key.length() - 1);
-                                    if (!keys.contains(key)) keys.add(key);
-                                }
-                            }
-                        }
-                        curr = skipToken(stream, curr);
-                    }
-                    if (!keys.isEmpty()) {
-                        return "@ARRAY_OF_INLINE_SHAPE:" + String.join(",", keys);
-                    }
-                } else if (next < stream.length && stream.types[next] == TokenStream.TK_NUMBER) {
-                    return "@ARRAY_OF_NUMBER";
-                } else if (next < stream.length && stream.types[next] == TokenStream.TK_STRING) {
-                    return "@ARRAY_OF_STRING";
-                } else if (next < stream.length && (stream.types[next] == TokenStream.TK_IDENTIFIER || stream.types[next] == TokenStream.TK_KEYWORD)) {
-                    String firstWord = getWord(source, stream, next);
-                    if ("Promise".equals(firstWord)) {
-                        int dotTok = skipWhitespaceAndComments(stream, skipToken(stream, next));
-                        if (dotTok < stream.length && stream.types[dotTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[dotTok]) == '.') {
-                            int methodTok = skipWhitespaceAndComments(stream, skipToken(stream, dotTok));
-                            if (methodTok < stream.length && "resolve".equals(getWord(source, stream, methodTok))) {
-                                int parenTok = skipWhitespaceAndComments(stream, skipToken(stream, methodTok));
-                                if (parenTok < stream.length && stream.types[parenTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[parenTok]) == '(') {
-                                    int argTok = skipWhitespaceAndComments(stream, skipToken(stream, parenTok));
-                                    if (argTok < stream.length) {
-                                        if (stream.types[argTok] == TokenStream.TK_STRING) {
-                                            return "@ARRAY_OF_PROMISE_OF:@STRING";
-                                        } else if (stream.types[argTok] == TokenStream.TK_NUMBER) {
-                                            return "@ARRAY_OF_PROMISE_OF:@NUMBER";
-                                        } else if (stream.types[argTok] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[argTok]) == '{') {
-                                            return "@ARRAY_OF_PROMISE_OF:@OBJECT";
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        return "@ARRAY_OF_PROMISE";
-                    }
-                }
-                return "@ARRAY";
-            }
-            if (c == '{') return "@OBJECT";
-        } else if (t == TokenStream.TK_STRING) {
-            return "@STRING";
-        } else if (t == TokenStream.TK_NUMBER) {
-            return "@NUMBER";
-        } else if (t == TokenStream.TK_KEYWORD) {
-            String kw = getWord(source, stream, i);
-            if ("new".equals(kw)) {
-                int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-                if (next < stream.length && stream.types[next] == TokenStream.TK_IDENTIFIER) {
-                    String className = getWord(source, stream, next);
-                    if ("Map".equals(className)) return "@MAP";
-                    if ("Set".equals(className)) return "@SET";
-                    if ("Promise".equals(className)) return "@PROMISE";
-                    return className;
-                }
-            } else if ("async".equals(kw)) {
-                return "@PROMISE";
-            } else if ("true".equals(kw) || "false".equals(kw)) {
-                return "@BOOLEAN";
-            }
-        } else if (t == TokenStream.TK_IDENTIFIER) {
-            String id = getWord(source, stream, i);
-            if ("require".equals(id)) {
-                int next = skipWhitespaceAndComments(stream, skipToken(stream, i));
-                if (next < stream.length && stream.types[next] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[next]) == '(') {
-                    int arg = skipWhitespaceAndComments(stream, skipToken(stream, next));
-                    if (arg < stream.length && stream.types[arg] == TokenStream.TK_STRING) {
-                        String raw = getWord(source, stream, arg);
-                        if (raw != null && raw.length() >= 2) {
-                            return "@REQUIRE:" + raw.substring(1, raw.length() - 1);
-                        }
-                    }
-                }
-            }
-        }
-        return null;
+        return JsTypeInference.inferFromTokens(source, stream, i, stream.length, null, null);
     }
 
     private static void convertObjectLiteralToParams(JsSyntaxTree tree, int nodeId) {

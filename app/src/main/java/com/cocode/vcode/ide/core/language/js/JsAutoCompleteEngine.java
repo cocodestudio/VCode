@@ -1244,12 +1244,18 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             boolean isNamespace = false;
             String inferredType = null;
 
-            if (baseToken.equals("@STRING_LITERAL")) {
+            if (baseToken.equals("@STRING_LITERAL") || baseToken.equals("@STRING")) {
                 inferredType = "@STRING";
-            } else if (baseToken.equals("@ARRAY_LITERAL")) {
+            } else if (baseToken.equals("@ARRAY_LITERAL") || baseToken.equals("@ARRAY")) {
                 inferredType = "@ARRAY";
-            } else if (baseToken.equals("@NUMBER_LITERAL")) {
+            } else if (baseToken.equals("@NUMBER_LITERAL") || baseToken.equals("@NUMBER")) {
                 inferredType = "@NUMBER";
+            } else if (baseToken.equals("@BOOLEAN")) {
+                inferredType = "@BOOLEAN";
+            } else if (baseToken.equals("@REGEXP")) {
+                inferredType = "@REGEXP";
+            } else if (baseToken.equals("@DATE")) {
+                inferredType = "@DATE";
             } else if (baseToken.startsWith("@OBJECT_LITERAL:")) {
                 inferredType = "@INLINE_SHAPE:" + baseToken.substring(16);
             } else {
@@ -1815,18 +1821,16 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                                 int eqIdx = text.indexOf('=', cachedTree.nodeStart[activeNodeId]);
                                 if (eqIdx > 0 && eqIdx < declPos) {
                                     String rhs = text.substring(eqIdx + 1, declPos).trim();
-                                    if (rhs.startsWith("\"") || rhs.startsWith("'") || rhs.startsWith("`")) initType = "string";
-                                    else if (!rhs.isEmpty() && (Character.isDigit(rhs.charAt(0)) || rhs.startsWith("-"))) initType = "number";
-                                    else if (rhs.startsWith("[") || rhs.startsWith("Array.")) initType = "array";
-                                    else if (rhs.startsWith("true") || rhs.startsWith("false")) initType = "boolean";
-                                    else if (rhs.startsWith("{")) initType = "object";
+                                    initType = JsTypeInference.inferFromText(rhs, cachedTree, cachedScopeTree, varTypeMap);
                                 }
                             }
                         }
                         if (initType != null) {
-                            String[] specificMethods = JsStandardLibrary.PROTOTYPE_METHODS.get(initType);
+                            String normType = initType.startsWith("@") ? initType.substring(1).toLowerCase() : initType.toLowerCase();
+                            if (normType.startsWith("array_of_") || normType.startsWith("tuple_of_")) normType = "array";
+                            String[] specificMethods = JsStandardLibrary.PROTOTYPE_METHODS.get(normType);
                             if (specificMethods != null) {
-                                return buildMemberList(initType, specificMethods, word, CompletionItem.Type.FUNCTION);
+                                return buildMemberList(normType, specificMethods, word, CompletionItem.Type.FUNCTION);
                             }
                         }
                         methods = new String[]{
@@ -2103,14 +2107,32 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
                         hasAwait = true;
                         inner = inner.substring(6).trim();
                     }
-                    List<String> innerChain = extractChainBeforeDot(inner + ".", inner.length());
-                    if (!innerChain.isEmpty()) {
-                        if (hasAwait) {
+                    if (hasAwait) {
+                        List<String> innerChain = extractChainBeforeDot(inner + ".", inner.length());
+                        if (!innerChain.isEmpty()) {
                             innerChain.add("!AWAIT");
+                            chain.addAll(0, innerChain);
+                        } else {
+                            chain.add(0, "@EXPR");
                         }
-                        chain.addAll(0, innerChain);
                     } else {
-                        chain.add(0, "@EXPR");
+                        List<String> innerChain = extractChainBeforeDot(inner + ".", inner.length());
+                        if (!innerChain.isEmpty() && isSimpleChain(inner)) {
+                            chain.addAll(0, innerChain);
+                        } else {
+                            String evaluatedType = JsTypeInference.inferFromText(inner, cachedTree, cachedScopeTree, varTypeMap);
+                            if (evaluatedType != null) {
+                                if ("@NUMBER".equals(evaluatedType)) {
+                                    chain.add(0, "@NUMBER_LITERAL");
+                                } else {
+                                    chain.add(0, evaluatedType);
+                                }
+                            } else if (!innerChain.isEmpty()) {
+                                chain.addAll(0, innerChain);
+                            } else {
+                                chain.add(0, "@EXPR");
+                            }
+                        }
                     }
                     break;
                 }
@@ -2140,6 +2162,15 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
         return chain;
+    }
+
+    private boolean isSimpleChain(String str) {
+        if (str == null || str.isEmpty()) return false;
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (!isWordChar(c) && c != '.') return false;
+        }
+        return true;
     }
 
     private String[] findReturnShapeDFS(JsSyntaxTree tree, int nodeId) {
@@ -2817,61 +2848,25 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
 
         if (snippet.startsWith("=")) {
             snippet = snippet.substring(1).trim();
-            if (snippet.startsWith("[") || snippet.startsWith("Array.from"))
-                varTypeMap.put(varName, "array");
-            else if (snippet.startsWith("\"") || snippet.startsWith("'") || snippet.startsWith("`"))
-                varTypeMap.put(varName, "string");
-            else if (snippet.startsWith("{"))
-                varTypeMap.put(varName, "object");
-            else if (snippet.startsWith("new ")) {
+            String inferred = JsTypeInference.inferFromText(snippet, cachedTree, cachedScopeTree, varTypeMap);
+            if (inferred != null) {
+                String normalized = inferred.startsWith("@") ? inferred.substring(1).toLowerCase() : inferred.toLowerCase();
+                if (normalized.startsWith("array_of_") || normalized.startsWith("tuple_of_")) normalized = "array";
+                varTypeMap.put(varName, normalized);
+            } else if (snippet.startsWith("new ")) {
                 String afterNew = snippet.substring(4).trim();
                 int paren = afterNew.indexOf('(');
                 String cls = paren != -1 ? afterNew.substring(0, paren).trim() : afterNew;
                 if (!cls.isEmpty() && isWordChar(cls.charAt(0))) {
                     varTypeMap.put(varName, cls);
                 }
-            } else if (snippet.startsWith("new Promise")) varTypeMap.put(varName, "promise");
-            else if (snippet.startsWith("fetch(") || snippet.startsWith("axios"))
-                varTypeMap.put(varName, "promise");
-            else if (snippet.startsWith("new Map")) varTypeMap.put(varName, "map");
-            else if (snippet.startsWith("new Set")) varTypeMap.put(varName, "set");
-            else if (snippet.startsWith("new Date")) varTypeMap.put(varName, "date");
-            else if (snippet.startsWith("new RegExp") || snippet.startsWith("/"))
-                varTypeMap.put(varName, "regexp");
-            else if (snippet.contains("new IntersectionObserver"))
-                varTypeMap.put(varName, "IntersectionObserver");
-            else if (snippet.contains("new ResizeObserver"))
-                varTypeMap.put(varName, "ResizeObserver");
-            else if (snippet.contains("new MutationObserver"))
-                varTypeMap.put(varName, "MutationObserver");
-            else if (snippet.contains("new WebSocket")) varTypeMap.put(varName, "WebSocket");
-            else if (snippet.contains("new Worker")) varTypeMap.put(varName, "Worker");
-            else if (snippet.contains("new BroadcastChannel"))
-                varTypeMap.put(varName, "BroadcastChannel");
-            else if (snippet.contains("new AbortController"))
-                varTypeMap.put(varName, "AbortController");
-            else if (snippet.contains("new URL(")) varTypeMap.put(varName, "URL");
-            else if (snippet.contains("new URLSearchParams"))
-                varTypeMap.put(varName, "URLSearchParams");
-            else if (snippet.contains("new FormData")) varTypeMap.put(varName, "FormData");
-            else if (snippet.contains("new Headers")) varTypeMap.put(varName, "Headers");
-            else if (snippet.contains("new FileReader")) varTypeMap.put(varName, "filereader");
-            else if (snippet.contains("new Blob")) varTypeMap.put(varName, "blob");
-            else if (snippet.contains("new File(")) varTypeMap.put(varName, "file");
-            else if (snippet.contains("getContext('2d')") || snippet.contains("getContext(\"2d\")"))
+            } else if (snippet.contains("getContext('2d')") || snippet.contains("getContext(\"2d\")")) {
                 varTypeMap.put(varName, "canvascontext");
-            else if (snippet.startsWith("document.querySelector") || snippet.startsWith("document.getElementById") || snippet.startsWith("document.createElement"))
+            } else if (snippet.startsWith("document.querySelector") || snippet.startsWith("document.getElementById") || snippet.startsWith("document.createElement")) {
                 varTypeMap.put(varName, "element");
-            else if (snippet.startsWith("document.querySelectorAll") || snippet.startsWith("document.getElementsBy"))
+            } else if (snippet.startsWith("document.querySelectorAll") || snippet.startsWith("document.getElementsBy")) {
                 varTypeMap.put(varName, "nodelist");
-            else if (snippet.contains(".filter(") || snippet.contains(".map(") || snippet.contains(".slice(") || snippet.contains(".concat(") || snippet.contains(".flat(") || snippet.contains("Array.from"))
-                varTypeMap.put(varName, "array");
-            else if (snippet.contains(".then(")) varTypeMap.put(varName, "promise");
-            else if (snippet.contains(".split(")) varTypeMap.put(varName, "array");
-            else if (snippet.contains(".toString(") || snippet.contains(".trim(") || snippet.contains(".replace("))
-                varTypeMap.put(varName, "string");
-            else if (!snippet.isEmpty() && Character.isDigit(snippet.charAt(0)))
-                varTypeMap.put(varName, "number");
+            }
         }
     }
 

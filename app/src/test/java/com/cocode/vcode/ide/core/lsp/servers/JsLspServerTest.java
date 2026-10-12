@@ -80,4 +80,16 @@ public class JsLspServerTest {
         }
         assertTrue("Should suggest array.push", foundPush);
     }
+
+    @Test
+    public void testHoverInferredTypeNumber() {
+        String code = "let result = ((10 - 6) * 3);";
+        LspDocument doc = new LspDocument("/test.js", code, "javascript", 1);
+        int offset = code.indexOf("result");
+        com.cocode.vcode.ide.core.lsp.HoverInfo hover = server.hover(doc, new LspPosition(0, offset + 2));
+        assertNotNull(hover);
+        assertNotNull(hover.getMarkdownContent());
+        assertTrue("Hover should render 'let result: number', but got: " + hover.getMarkdownContent(),
+                hover.getMarkdownContent().contains("let result: number"));
+    }
 }

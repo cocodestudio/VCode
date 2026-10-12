@@ -1424,8 +1424,11 @@ public final class JsLspServer implements LspServer {
         } else if (type == JsSyntaxTree.N_VAR_DECL) {
             String typeAnn = tree.nodeTypeAnn != null ? tree.nodeTypeAnn[node] : null;
             sig = getVarKindPrefix(tree, node, source) + displayName;
-            if (typeAnn != null && !typeAnn.isEmpty() && !typeAnn.startsWith("@")) {
-                sig += ": " + typeAnn;
+            if (typeAnn != null && !typeAnn.isEmpty()) {
+                String displayType = com.cocode.vcode.ide.core.language.js.JsTypeInference.toDisplayType(typeAnn);
+                if (displayType != null && !displayType.isEmpty()) {
+                    sig += ": " + displayType;
+                }
             }
         } else if (type == JsSyntaxTree.N_INTERFACE) {
             sig = "interface " + displayName;

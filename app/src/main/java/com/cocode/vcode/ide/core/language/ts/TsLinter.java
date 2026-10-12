@@ -613,6 +613,14 @@ public class TsLinter {
     }
 
     private static String inferLiteralTypeFromToken(String text, TokenStream stream, int tok, int endOffset) {
+        int endTok = Math.min(stream.length, endOffset);
+        String inferred = com.cocode.vcode.ide.core.language.js.JsTypeInference.inferFromTokens(text, stream, tok, endTok, null, null);
+        if (inferred != null) {
+            String display = com.cocode.vcode.ide.core.language.js.JsTypeInference.toDisplayType(inferred);
+            if ("string".equals(display) || "number".equals(display) || "boolean".equals(display)) {
+                return display;
+            }
+        }
         byte t = stream.types[tok];
         if (t == TokenStream.TK_STRING || t == TokenStream.TK_TEMPLATE) return "string";
         if (t == TokenStream.TK_NUMBER) return "number";

@@ -343,6 +343,10 @@ public class JsStandardLibrary {
                 return "__canvascontext__";
             case "FILEREADER":
                 return "__filereader__";
+            case "@BOOLEAN":
+            case "BOOLEAN":
+                return "__boolean__";
+            case "@REGEXP":
             case "REGEXP":
                 return "__regexp__";
             default:

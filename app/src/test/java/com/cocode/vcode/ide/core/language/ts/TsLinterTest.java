@@ -243,4 +243,18 @@ public class TsLinterTest {
                     p.getMessage().contains("Type mismatch"));
         }
     }
+
+    @Test
+    public void testCompoundExpressionTypeMismatch() {
+        String ts = "let s: string = ((10 - 6) * 3);";
+        List<Problem> problems = TsLinter.analyze(mockFile, ts);
+        boolean foundMismatch = false;
+        for (Problem p : problems) {
+            if (p.getMessage().toLowerCase().contains("type mismatch")) {
+                foundMismatch = true;
+                break;
+            }
+        }
+        assertTrue("Compound arithmetic assigned to string should trigger type mismatch", foundMismatch);
+    }
 }

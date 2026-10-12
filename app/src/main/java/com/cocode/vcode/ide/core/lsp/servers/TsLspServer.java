@@ -921,7 +921,8 @@ public final class TsLspServer implements LspServer {
                     } else if (t == JsSyntaxTree.N_VAR_DECL || t == JsSyntaxTree.N_PARAM) {
                         String ann = tree.nodeTypeAnn[i];
                         if (ann != null && !ann.isEmpty() && name != null) {
-                            return new Hover(new MarkupContent("markdown", "```typescript\n(variable) " + name + ": " + ann + "\n```"), toModelRange(doc, tree.nodeStart[i], tree.nodeEnd[i]));
+                            String displayType = com.cocode.vcode.ide.core.language.js.JsTypeInference.toDisplayType(ann);
+                            return new Hover(new MarkupContent("markdown", "```typescript\n(variable) " + name + ": " + displayType + "\n```"), toModelRange(doc, tree.nodeStart[i], tree.nodeEnd[i]));
                         }
                     }
                 }

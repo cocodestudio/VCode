@@ -471,4 +471,89 @@ public class JsDotCompletionTest extends BaseJsAstTest {
         }
         assertTrue("Expected 'toUpperCase' for TypeScript fruit.", hasToUpperCase);
     }
+
+    @Test
+    public void testParenthesizedArithmeticInference() {
+        String code = "let result = ((10 - 6) * 3); result.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toFixed' for result.", hasCompletion(comps, "toFixed"));
+        assertTrue("Expected 'toPrecision' for result.", hasCompletion(comps, "toPrecision"));
+        assertTrue("Expected 'toExponential' for result.", hasCompletion(comps, "toExponential"));
+    }
+
+    @Test
+    public void testBinarySubtractionInference() {
+        String code = "let diff = a - b; diff.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toFixed' for diff.", hasCompletion(comps, "toFixed"));
+    }
+
+    @Test
+    public void testUnaryPlusInference() {
+        String code = "let n = +str; n.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toFixed' for n.", hasCompletion(comps, "toFixed"));
+    }
+
+    @Test
+    public void testRelationalOperatorBooleanInference() {
+        String code = "let flag = count > 0; flag.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'valueOf' for flag.", hasCompletion(comps, "valueOf"));
+        assertTrue("Expected 'toString' for flag.", hasCompletion(comps, "toString"));
+    }
+
+    @Test
+    public void testTemplateLiteralStringInference() {
+        String code = "let msg = `Hello ${name}`; msg.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toUpperCase' for msg.", hasCompletion(comps, "toUpperCase"));
+        assertTrue("Expected 'trim' for msg.", hasCompletion(comps, "trim"));
+        assertTrue("Expected 'slice' for msg.", hasCompletion(comps, "slice"));
+    }
+
+    @Test
+    public void testRegexLiteralInference() {
+        String code = "let re = /^[a-z]+$/; re.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'test' for re.", hasCompletion(comps, "test"));
+        assertTrue("Expected 'exec' for re.", hasCompletion(comps, "exec"));
+    }
+
+    @Test
+    public void testMathBuiltinCallInference() {
+        String code = "let rounded = Math.round(x); rounded.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toFixed' for rounded.", hasCompletion(comps, "toFixed"));
+    }
+
+    @Test
+    public void testDateConstructorInference() {
+        String code = "let d = new Date(); d.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'getTime' for d.", hasCompletion(comps, "getTime"));
+        assertTrue("Expected 'getFullYear' for d.", hasCompletion(comps, "getFullYear"));
+    }
+
+    @Test
+    public void testVariableAliasingInference() {
+        String code = "let a = 10; let b = a; b.";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toFixed' for b.", hasCompletion(comps, "toFixed"));
+    }
+
+    @Test
+    public void testDirectParenthesizedArithmeticDotAccess() {
+        String code = "((10 - 6) * 3).";
+        List<CompletionItem> comps = getCompletions(code, code.length());
+        assertTrue("Expected 'toFixed' for ((10 - 6) * 3).", hasCompletion(comps, "toFixed"));
+    }
+
+    private boolean hasCompletion(List<CompletionItem> items, String label) {
+        if (items == null) return false;
+        for (CompletionItem ci : items) {
+            if (label.equals(ci.getLabel())) return true;
+        }
+        return false;
+    }
 }
