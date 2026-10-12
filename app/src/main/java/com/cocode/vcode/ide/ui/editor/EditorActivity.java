@@ -715,6 +715,47 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
     }
 
+    private void updateDiagnosticBarVisibility() {
+        if (viewModel == null || binding == null) return;
+        AppSettings currentSettings = viewModel.getSettingsLiveData().getValue();
+        boolean diagnosticsAllowed = currentSettings == null || currentSettings.enableDiagnostics;
+        if (!diagnosticsAllowed) {
+            binding.diagnosticBar.setVisibility(View.GONE);
+            return;
+        }
+        List<EditorFile> files = viewModel.getOpenFiles().getValue();
+        Integer idx = viewModel.getActiveTabIndex().getValue();
+        if (files == null || idx == null || idx < 0 || idx >= files.size()) {
+            binding.diagnosticBar.setVisibility(View.GONE);
+            return;
+        }
+        EditorFile activeFile = files.get(idx);
+        if (!isFileDiagnosable(activeFile)) {
+            binding.diagnosticBar.setVisibility(View.GONE);
+            return;
+        }
+        // Diagnostics only apply when an interactive code editor is active.
+        // In preview mode (e.g. Markdown/SVG/CSV in WebPreviewViewer) or for non-code viewers,
+        // no editor bridge runs diagnostics and the bar must be hidden.
+        if (!(activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) || getActiveCodeEditor() == null) {
+            binding.diagnosticBar.setVisibility(View.GONE);
+            return;
+        }
+        CodeEditText editor = getActiveCodeEditor();
+        boolean isEmpty = (editor != null) ? editor.length() == 0 : (activeFile.getContent() == null || activeFile.getContent().trim().isEmpty());
+        if (isEmpty) {
+            binding.diagnosticBar.setVisibility(View.GONE);
+            return;
+        }
+        binding.diagnosticBar.setVisibility(View.VISIBLE);
+        int[] counts = viewModel.getActiveFileDiagnostics().getValue();
+        if (counts != null) {
+            binding.diagnosticBar.update(counts[0], counts[1], counts[2]);
+        } else {
+            binding.diagnosticBar.setLoading();
+        }
+    }
+
     private void executeActiveFilePreviewIntent() {
         EditorPreviewHelper.executeActiveFilePreviewIntent(this, viewModel, localWebServer);
     }
@@ -737,9 +778,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                 }
             }
             binding.tabBar.setAutoSaveOn(settings.autoSave);
-            if (!settings.enableDiagnostics) {
-                binding.diagnosticBar.setVisibility(View.GONE);
-            }
+            updateDiagnosticBarVisibility();
             binding.quickSymbolBar.setSymbols(settings.getQuickSymbolsList());
             updateQuickSymbolBarVisibility();
             updateToolbarVisibility();
@@ -924,48 +963,16 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     }
                 }
                 updateActiveViewer(activeFile, isPreview);
-                boolean isEmpty;
-                if (activeViewer != null && activeViewer.getCodeEditor() != null) {
-                    isEmpty = activeViewer.getCodeEditor().length() == 0;
-                } else {
-                    String content = activeFile.getContent();
-                    isEmpty = (content == null || content.trim().isEmpty());
-                }
-                AppSettings currentSettings = viewModel.getSettingsLiveData().getValue();
-                boolean diagnosticsAllowed = currentSettings == null || currentSettings.enableDiagnostics;
-                boolean showDiagnostic = diagnosticsAllowed && isFileDiagnosable(activeFile) && !isEmpty;
-                binding.diagnosticBar.setVisibility(showDiagnostic ? View.VISIBLE : View.GONE);
+                updateDiagnosticBarVisibility();
             }
             updateToolbarVisibility();
         });
 
         viewModel.getActiveFileDiagnostics().observe(this, counts -> {
-            AppSettings currentSettings = viewModel.getSettingsLiveData().getValue();
-            if (currentSettings != null && !currentSettings.enableDiagnostics) {
-                binding.diagnosticBar.setVisibility(View.GONE);
+            updateDiagnosticBarVisibility();
+            if (binding.diagnosticBar.getVisibility() != View.VISIBLE) {
                 return;
             }
-            List<EditorFile> files = viewModel.getOpenFiles().getValue();
-            Integer idx = viewModel.getActiveTabIndex().getValue();
-            if (files == null || idx == null || idx < 0 || idx >= files.size() || !isFileDiagnosable(files.get(idx))) {
-                binding.diagnosticBar.setVisibility(View.GONE);
-                return;
-            }
-
-            boolean isEmpty;
-            if (activeViewer != null && activeViewer.getCodeEditor() != null) {
-                isEmpty = activeViewer.getCodeEditor().length() == 0;
-            } else {
-                String content = files.get(idx).getContent();
-                isEmpty = (content == null || content.trim().isEmpty());
-            }
-
-            if (isEmpty) {
-                binding.diagnosticBar.setVisibility(View.GONE);
-                return;
-            }
-
-            binding.diagnosticBar.setVisibility(View.VISIBLE);
             if (counts != null) {
                 binding.diagnosticBar.update(counts[0], counts[1], counts[2]);
             } else {
@@ -1013,6 +1020,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         if (activeViewer == targetViewer) {
             updateQuickSymbolBarVisibility();
             applyReadOnlyState();
+            updateDiagnosticBarVisibility();
             return;
         }
 
@@ -1063,6 +1071,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
 
         updateIndexingCardMargin();
+        updateDiagnosticBarVisibility();
     }
 
     private void handleTabClose(int index) {
