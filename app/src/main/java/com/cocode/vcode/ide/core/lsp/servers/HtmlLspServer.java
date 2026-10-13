@@ -44,7 +44,6 @@ import com.cocode.vcode.ide.core.lsp.model.DocumentSymbolParams;
 import com.cocode.vcode.ide.core.lsp.model.Hover;
 import com.cocode.vcode.ide.core.lsp.model.HoverParams;
 import com.cocode.vcode.ide.core.lsp.model.MarkupContent;
-import com.cocode.vcode.ide.core.lsp.model.MarkupKind;
 import com.cocode.vcode.ide.core.lsp.model.ReferenceParams;
 import com.cocode.vcode.ide.core.lsp.model.SymbolKind;
 import com.cocode.vcode.ide.core.lsp.model.TextDocumentContentChangeEvent;
@@ -883,7 +882,7 @@ public final class HtmlLspServer implements LspServer {
         HoverInfo info = hover(doc, legacyPos);
         if (info == null || info.getMarkdownContent() == null || info.getMarkdownContent().isEmpty()) return null;
 
-        MarkupContent content = new MarkupContent(MarkupKind.MARKDOWN, info.getMarkdownContent());
+        MarkupContent content = MarkupContent.markdown(info.getMarkdownContent());
         com.cocode.vcode.ide.core.lsp.LspRange lr = info.getRange();
         com.cocode.vcode.ide.core.lsp.model.LspRange modelRange = null;
         if (lr != null && lr.start != null && lr.end != null) {

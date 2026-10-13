@@ -48,10 +48,32 @@ public class DocumentationPopup {
     private final TextView tvParamDoc;
     private final TextView tvContent;
 
+    private final int colorFunction;
+    private final int colorParam;
+    private final int colorActiveParam;
+    private final int colorKeyword;
+    private final int colorType;
+    private final int colorString;
+    private final int colorNumber;
+    private final int colorOperator;
+    private final int colorPunctuation;
+    private final int colorComment;
+
     private PopupMode currentMode = PopupMode.NONE;
 
     public DocumentationPopup(Context context) {
         this.context = context;
+
+        colorFunction = ContextCompat.getColor(context, R.color.vcode_color_js_function);
+        colorParam = ContextCompat.getColor(context, R.color.vcode_color_html_attribute);
+        colorActiveParam = ContextCompat.getColor(context, R.color.vcode_accent_primary);
+        colorKeyword = ContextCompat.getColor(context, R.color.vcode_color_js_keyword);
+        colorType = ContextCompat.getColor(context, R.color.vcode_color_css_property);
+        colorString = ContextCompat.getColor(context, R.color.vcode_color_js_string);
+        colorNumber = ContextCompat.getColor(context, R.color.vcode_color_js_number);
+        colorOperator = ContextCompat.getColor(context, R.color.vcode_color_js_operator);
+        colorPunctuation = ContextCompat.getColor(context, R.color.vcode_color_json_colon);
+        colorComment = ContextCompat.getColor(context, R.color.vcode_color_js_comment);
 
         container = new LinearLayout(context);
         container.setOrientation(LinearLayout.VERTICAL);
@@ -175,8 +197,8 @@ public class DocumentationPopup {
     }
 
     /**
-     * Shows signature help hints with the active parameter highlighted in bold accent color
-     * and parameter / method documentation rendered below.
+     * Shows signature help hints with the active parameter highlighted in bold accent color,
+     * inactive parameters and types highlighted with syntax colors, and documentation rendered below.
      *
      * @param help LSP signature help result
      * @param editorView the code editor view hosting the popup
@@ -226,35 +248,56 @@ public class DocumentationPopup {
             methodName = extractMethodName(label);
         }
 
-        if (activeSig.parameters == null || activeSig.parameters.isEmpty()) {
-            if (openParen >= 0) {
-                sb.append(methodName).append(label.substring(openParen));
-            } else {
-                sb.append(methodName);
-            }
-        } else {
-            sb.append(methodName).append("(");
+        // Highlight methodName
+        int mStart = sb.length();
+        sb.append(methodName);
+        sb.setSpan(new ForegroundColorSpan(colorFunction), mStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.setSpan(new StyleSpan(Typeface.BOLD), mStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
-            for (int i = 0; i < activeSig.parameters.size(); i++) {
-                LspSignatureHelp.LspParameterInformation param = activeSig.parameters.get(i);
-                int start = sb.length();
-                sb.append(param != null && param.label != null ? param.label : "");
+        if (openParen >= 0 || (activeSig.parameters != null && !activeSig.parameters.isEmpty())) {
+            int openStart = sb.length();
+            sb.append("(");
+            sb.setSpan(new ForegroundColorSpan(colorOperator), openStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
-                boolean isLast = (i == activeSig.parameters.size() - 1);
-                boolean isRest = param != null && param.label != null && param.label.trim().startsWith("...");
-                boolean isActive = (i == help.activeParameter) || (isLast && isRest && help.activeParameter >= i);
+            if (activeSig.parameters != null && !activeSig.parameters.isEmpty()) {
+                for (int i = 0; i < activeSig.parameters.size(); i++) {
+                    LspSignatureHelp.LspParameterInformation param = activeSig.parameters.get(i);
+                    String paramLabel = param != null && param.label != null ? param.label : "";
 
-                if (isActive) {
-                    sb.setSpan(new StyleSpan(Typeface.BOLD), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.vcode_accent_primary)), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    boolean isLast = (i == activeSig.parameters.size() - 1);
+                    boolean isRest = paramLabel.trim().startsWith("...");
+                    boolean isActive = (i == help.activeParameter) || (isLast && isRest && help.activeParameter >= i);
+
+                    if (isActive) {
+                        int pStart = sb.length();
+                        sb.append(paramLabel);
+                        sb.setSpan(new StyleSpan(Typeface.BOLD), pStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        sb.setSpan(new ForegroundColorSpan(colorActiveParam), pStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else {
+                        formatInactiveParameter(sb, paramLabel);
+                    }
+
+                    if (i < activeSig.parameters.size() - 1) {
+                        int commaStart = sb.length();
+                        sb.append(", ");
+                        sb.setSpan(new ForegroundColorSpan(colorPunctuation), commaStart, commaStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
                 }
-
-                if (i < activeSig.parameters.size() - 1) {
-                    sb.append(", ");
-                }
             }
 
-            sb.append(suffix);
+            int closeStart = sb.length();
+            sb.append(")");
+            sb.setSpan(new ForegroundColorSpan(colorOperator), closeStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+            if (suffix.startsWith(")")) {
+                String returnTypePart = suffix.substring(1).trim();
+                if (!returnTypePart.isEmpty()) {
+                    if (returnTypePart.startsWith(":")) {
+                        sb.append(" ");
+                    }
+                    formatTypeSnippet(sb, returnTypePart);
+                }
+            }
         }
 
         tvHeader.setText(sb);
@@ -273,7 +316,7 @@ public class DocumentationPopup {
                 if (!paramName.isEmpty()) {
                     psb.append(paramName).append(": ");
                     psb.setSpan(new StyleSpan(Typeface.BOLD), 0, paramName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    psb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(context, R.color.vcode_accent_primary)), 0, paramName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    psb.setSpan(new ForegroundColorSpan(colorActiveParam), 0, paramName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
                 psb.append(activeParam.documentation.trim());
                 tvParamDoc.setText(psb);
@@ -300,6 +343,476 @@ public class DocumentationPopup {
         scrollView.setVisibility(hasAnyDoc ? View.VISIBLE : View.GONE);
 
         updatePositionForEditor(editorView, cursorOffset);
+    }
+
+    private void formatInactiveParameter(SpannableStringBuilder sb, String paramLabel) {
+        if (paramLabel == null || paramLabel.isEmpty()) return;
+
+        int colonIdx = -1;
+        int eqIdx = -1;
+        int depth = 0;
+        for (int i = 0; i < paramLabel.length(); i++) {
+            char c = paramLabel.charAt(i);
+            if (c == '(' || c == '{' || c == '[' || c == '<') {
+                depth++;
+            } else if (c == ')' || c == '}' || c == ']' || c == '>') {
+                if (depth > 0) depth--;
+            } else if (depth == 0) {
+                if (c == ':' && colonIdx == -1) {
+                    colonIdx = i;
+                    break;
+                } else if (c == '=' && eqIdx == -1) {
+                    eqIdx = i;
+                }
+            }
+        }
+
+        if (colonIdx >= 0) {
+            String identifier = paramLabel.substring(0, colonIdx);
+            appendParameterIdentifier(sb, identifier);
+            formatTypeSnippet(sb, paramLabel.substring(colonIdx));
+        } else if (eqIdx >= 0) {
+            String identifier = paramLabel.substring(0, eqIdx);
+            appendParameterIdentifier(sb, identifier);
+            formatTypeSnippet(sb, paramLabel.substring(eqIdx));
+        } else {
+            appendParameterIdentifier(sb, paramLabel);
+        }
+    }
+
+    private void appendParameterIdentifier(SpannableStringBuilder sb, String identifier) {
+        if (identifier == null || identifier.isEmpty()) return;
+        if (identifier.startsWith("...")) {
+            int sStart = sb.length();
+            sb.append("...");
+            sb.setSpan(new ForegroundColorSpan(colorOperator), sStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            identifier = identifier.substring(3);
+        }
+        int pStart = sb.length();
+        if (identifier.endsWith("?")) {
+            String nameOnly = identifier.substring(0, identifier.length() - 1);
+            sb.append(nameOnly);
+            sb.setSpan(new ForegroundColorSpan(colorParam), pStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            int qStart = sb.length();
+            sb.append("?");
+            sb.setSpan(new ForegroundColorSpan(colorOperator), qStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        } else {
+            sb.append(identifier);
+            sb.setSpan(new ForegroundColorSpan(colorParam), pStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+    }
+
+    /**
+     * Applies syntax colors to primitive types, class/interface types, string literals,
+     * numeric literals, and union/intersection operators in type annotation snippets.
+     */
+    public void formatTypeSnippet(SpannableStringBuilder sb, String typeStr) {
+        if (sb == null || typeStr == null || typeStr.isEmpty()) return;
+        int len = typeStr.length();
+        int i = 0;
+        while (i < len) {
+            char c = typeStr.charAt(i);
+            if (Character.isWhitespace(c)) {
+                sb.append(c);
+                i++;
+            } else if (c == ':' || c == ',' || c == ';') {
+                int start = sb.length();
+                sb.append(c);
+                sb.setSpan(new ForegroundColorSpan(colorPunctuation), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i++;
+            } else if (c == '=' && i + 1 < len && typeStr.charAt(i + 1) == '>') {
+                int start = sb.length();
+                sb.append("=>");
+                sb.setSpan(new ForegroundColorSpan(colorOperator), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i += 2;
+            } else if (c == '.' && i + 2 < len && typeStr.charAt(i + 1) == '.' && typeStr.charAt(i + 2) == '.') {
+                int start = sb.length();
+                sb.append("...");
+                sb.setSpan(new ForegroundColorSpan(colorOperator), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i += 3;
+            } else if (c == '|' || c == '&' || c == '?' || c == '=' || c == '<' || c == '>' || c == '[' || c == ']' || c == '(' || c == ')') {
+                int start = sb.length();
+                sb.append(c);
+                sb.setSpan(new ForegroundColorSpan(colorOperator), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i++;
+            } else if (c == '\'' || c == '"' || c == '`') {
+                char quote = c;
+                int start = sb.length();
+                sb.append(c);
+                i++;
+                while (i < len) {
+                    char qc = typeStr.charAt(i);
+                    sb.append(qc);
+                    i++;
+                    if (qc == '\\' && i < len) {
+                        sb.append(typeStr.charAt(i));
+                        i++;
+                    } else if (qc == quote) {
+                        break;
+                    }
+                }
+                sb.setSpan(new ForegroundColorSpan(colorString), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else if (Character.isDigit(c)) {
+                int start = sb.length();
+                while (i < len && (Character.isDigit(typeStr.charAt(i)) || typeStr.charAt(i) == '.')) {
+                    sb.append(typeStr.charAt(i));
+                    i++;
+                }
+                sb.setSpan(new ForegroundColorSpan(colorNumber), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else if (Character.isJavaIdentifierStart(c)) {
+                int start = sb.length();
+                int wordStart = i;
+                while (i < len && Character.isJavaIdentifierPart(typeStr.charAt(i))) {
+                    i++;
+                }
+                String word = typeStr.substring(wordStart, i);
+                sb.append(word);
+                if (isPrimitiveType(word)) {
+                    sb.setSpan(new ForegroundColorSpan(colorKeyword), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                } else {
+                    sb.setSpan(new ForegroundColorSpan(colorType), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            } else {
+                sb.append(c);
+                i++;
+            }
+        }
+    }
+
+    private static boolean isPrimitiveType(String word) {
+        if (word == null) return false;
+        switch (word) {
+            case "number":
+            case "string":
+            case "boolean":
+            case "any":
+            case "void":
+            case "null":
+            case "undefined":
+            case "symbol":
+            case "bigint":
+            case "never":
+            case "unknown":
+            case "true":
+            case "false":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Highlights declaration code snippets (functions, methods, variables, constants,
+     * classes, interfaces, types, etc.) with rich syntax colors.
+     */
+    public SpannableStringBuilder highlightDeclarationCode(String text) {
+        if (text == null || text.isEmpty()) {
+            return new SpannableStringBuilder();
+        }
+
+        SpannableStringBuilder sb = new SpannableStringBuilder();
+        int len = text.length();
+        int i = 0;
+        int parenDepth = 0;
+        String lastKeyword = null;
+        boolean afterKindTag = false;
+
+        while (i < len) {
+            char c = text.charAt(i);
+
+            // 1. Whitespace
+            if (Character.isWhitespace(c)) {
+                sb.append(c);
+                i++;
+                continue;
+            }
+
+            // 2. Kind tags in parentheses at start or after whitespace: (method), (property), (variable), etc.
+            if (c == '(' && (sb.length() == 0 || Character.isWhitespace(sb.charAt(sb.length() - 1)))) {
+                int closeParen = text.indexOf(')', i);
+                if (closeParen > i) {
+                    String inside = text.substring(i + 1, closeParen).trim();
+                    if (!inside.isEmpty() && inside.indexOf(':') < 0 && inside.indexOf(';') < 0
+                            && inside.indexOf(',') < 0 && !inside.contains("=>")) {
+                        int pStart = sb.length();
+                        sb.append('(');
+                        sb.setSpan(new ForegroundColorSpan(colorOperator), pStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                        int tStart = sb.length();
+                        sb.append(inside);
+                        sb.setSpan(new ForegroundColorSpan(colorKeyword), tStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                        int pEnd = sb.length();
+                        sb.append(')');
+                        sb.setSpan(new ForegroundColorSpan(colorOperator), pEnd, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                        afterKindTag = true;
+                        i = closeParen + 1;
+                        continue;
+                    }
+                }
+            }
+
+            // 3. Comments
+            if (c == '/' && i + 1 < len) {
+                char nextC = text.charAt(i + 1);
+                if (nextC == '/') {
+                    int endLine = text.indexOf('\n', i);
+                    if (endLine < 0) endLine = len;
+                    int cStart = sb.length();
+                    sb.append(text, i, endLine);
+                    sb.setSpan(new ForegroundColorSpan(colorComment), cStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    i = endLine;
+                    continue;
+                } else if (nextC == '*') {
+                    int endBlock = text.indexOf("*/", i + 2);
+                    if (endBlock < 0) endBlock = len;
+                    else endBlock += 2;
+                    int cStart = sb.length();
+                    sb.append(text, i, endBlock);
+                    sb.setSpan(new ForegroundColorSpan(colorComment), cStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    i = endBlock;
+                    continue;
+                }
+            }
+
+            // 4. String Literals
+            if (c == '\'' || c == '"' || c == '`') {
+                char quote = c;
+                int sStart = sb.length();
+                sb.append(c);
+                i++;
+                while (i < len) {
+                    char sc = text.charAt(i);
+                    sb.append(sc);
+                    i++;
+                    if (sc == '\\' && i < len) {
+                        sb.append(text.charAt(i));
+                        i++;
+                    } else if (sc == quote) {
+                        break;
+                    }
+                }
+                sb.setSpan(new ForegroundColorSpan(colorString), sStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                continue;
+            }
+
+            // 5. Numeric Literals
+            if (Character.isDigit(c)) {
+                int nStart = sb.length();
+                while (i < len && (Character.isDigit(text.charAt(i)) || text.charAt(i) == '.')) {
+                    sb.append(text.charAt(i));
+                    i++;
+                }
+                sb.setSpan(new ForegroundColorSpan(colorNumber), nStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                continue;
+            }
+
+            // 6. Multi-character Operators
+            if (c == '=' && i + 1 < len && text.charAt(i + 1) == '>') {
+                int oStart = sb.length();
+                sb.append("=>");
+                sb.setSpan(new ForegroundColorSpan(colorOperator), oStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i += 2;
+                continue;
+            }
+            if (c == '.' && i + 2 < len && text.charAt(i + 1) == '.' && text.charAt(i + 2) == '.') {
+                int oStart = sb.length();
+                sb.append("...");
+                sb.setSpan(new ForegroundColorSpan(colorOperator), oStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i += 3;
+                continue;
+            }
+            if ((c == '=' || c == '!') && i + 1 < len && text.charAt(i + 1) == '=') {
+                int oStart = sb.length();
+                if (i + 2 < len && text.charAt(i + 2) == '=') {
+                    sb.append(text, i, i + 3);
+                    i += 3;
+                } else {
+                    sb.append(text, i, i + 2);
+                    i += 2;
+                }
+                sb.setSpan(new ForegroundColorSpan(colorOperator), oStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                continue;
+            }
+
+            // 7. Single-character Operators & Punctuation
+            if (c == '(') {
+                int oStart = sb.length();
+                sb.append('(');
+                sb.setSpan(new ForegroundColorSpan(colorOperator), oStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                parenDepth++;
+                i++;
+                continue;
+            }
+            if (c == ')') {
+                int oStart = sb.length();
+                sb.append(')');
+                sb.setSpan(new ForegroundColorSpan(colorOperator), oStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (parenDepth > 0) parenDepth--;
+                i++;
+                continue;
+            }
+            if (c == ':' || c == ',' || c == ';') {
+                int pStart = sb.length();
+                sb.append(c);
+                sb.setSpan(new ForegroundColorSpan(colorPunctuation), pStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i++;
+                continue;
+            }
+            if (c == '|' || c == '&' || c == '?' || c == '=' || c == '<' || c == '>'
+                    || c == '[' || c == ']' || c == '{' || c == '}' || c == '.'
+                    || c == '+' || c == '-' || c == '*' || c == '/' || c == '!'
+                    || c == '~' || c == '^' || c == '%') {
+                int oStart = sb.length();
+                sb.append(c);
+                sb.setSpan(new ForegroundColorSpan(colorOperator), oStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                i++;
+                continue;
+            }
+
+            // 8. Identifiers & Keywords
+            if (Character.isJavaIdentifierStart(c)) {
+                int wordStart = i;
+                while (i < len && Character.isJavaIdentifierPart(text.charAt(i))) {
+                    i++;
+                }
+                String word = text.substring(wordStart, i);
+                int wStart = sb.length();
+                sb.append(word);
+
+                if (isDeclarationKeyword(word)) {
+                    sb.setSpan(new ForegroundColorSpan(colorKeyword), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    lastKeyword = word;
+                } else if (isPrimitiveType(word)) {
+                    sb.setSpan(new ForegroundColorSpan(colorKeyword), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                } else {
+                    boolean isFunc = isFollowedByParen(text, i);
+                    boolean isReceiver = (i < len && text.charAt(i) == '.');
+
+                    if (isFunc && !"class".equals(lastKeyword) && !"interface".equals(lastKeyword) && !"type".equals(lastKeyword)) {
+                        sb.setSpan(new ForegroundColorSpan(colorFunction), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        sb.setSpan(new StyleSpan(Typeface.BOLD), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if ("class".equals(lastKeyword) || "interface".equals(lastKeyword) || "type".equals(lastKeyword) || "enum".equals(lastKeyword)) {
+                        sb.setSpan(new ForegroundColorSpan(colorType), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        sb.setSpan(new StyleSpan(Typeface.BOLD), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        lastKeyword = null;
+                    } else if ("extends".equals(lastKeyword) || "implements".equals(lastKeyword) || "new".equals(lastKeyword)) {
+                        sb.setSpan(new ForegroundColorSpan(colorType), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        lastKeyword = null;
+                    } else if ("const".equals(lastKeyword) || "let".equals(lastKeyword) || "var".equals(lastKeyword)) {
+                        sb.setSpan(new ForegroundColorSpan(colorParam), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        sb.setSpan(new StyleSpan(Typeface.BOLD), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        lastKeyword = null;
+                    } else if (isReceiver) {
+                        sb.setSpan(new ForegroundColorSpan(colorType), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        afterKindTag = false;
+                    } else if (afterKindTag) {
+                        afterKindTag = false;
+                        sb.setSpan(new ForegroundColorSpan(colorParam), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        sb.setSpan(new StyleSpan(Typeface.BOLD), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if (parenDepth > 0 && isParameterName(text, i)) {
+                        sb.setSpan(new ForegroundColorSpan(colorParam), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if (Character.isUpperCase(word.charAt(0))) {
+                        sb.setSpan(new ForegroundColorSpan(colorType), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else {
+                        sb.setSpan(new ForegroundColorSpan(colorParam), wStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                }
+                continue;
+            }
+
+            // Fallback for any other characters
+            sb.append(c);
+            i++;
+        }
+
+        return sb;
+    }
+
+    private static boolean isDeclarationKeyword(String word) {
+        if (word == null) return false;
+        switch (word) {
+            case "function":
+            case "class":
+            case "interface":
+            case "type":
+            case "enum":
+            case "extends":
+            case "implements":
+            case "const":
+            case "let":
+            case "var":
+            case "readonly":
+            case "static":
+            case "async":
+            case "await":
+            case "new":
+            case "import":
+            case "export":
+            case "default":
+            case "as":
+            case "from":
+            case "get":
+            case "set":
+            case "public":
+            case "private":
+            case "protected":
+            case "namespace":
+            case "declare":
+            case "return":
+            case "throw":
+            case "typeof":
+            case "instanceof":
+            case "keyof":
+            case "in":
+            case "of":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static boolean isFollowedByParen(String text, int offset) {
+        if (text == null) return false;
+        int len = text.length();
+        int k = offset;
+        while (k < len && Character.isWhitespace(text.charAt(k))) {
+            k++;
+        }
+        if (k >= len) return false;
+        char c = text.charAt(k);
+        if (c == '(') return true;
+        if (c == '<') {
+            int depth = 1;
+            k++;
+            while (k < len && depth > 0) {
+                char ch = text.charAt(k);
+                if (ch == '<') depth++;
+                else if (ch == '>') depth--;
+                else if (ch == '(' || ch == ';' || ch == '\n') break;
+                k++;
+            }
+            if (depth == 0) {
+                while (k < len && Character.isWhitespace(text.charAt(k))) {
+                    k++;
+                }
+                return k < len && text.charAt(k) == '(';
+            }
+        }
+        return false;
+    }
+
+    private static boolean isParameterName(String text, int offset) {
+        if (text == null) return false;
+        int len = text.length();
+        int k = offset;
+        while (k < len && Character.isWhitespace(text.charAt(k))) {
+            k++;
+        }
+        if (k >= len) return false;
+        char c = text.charAt(k);
+        return c == ':' || c == '?' || c == '=' || c == ',' || c == ')';
     }
 
     /**
@@ -350,8 +863,20 @@ public class DocumentationPopup {
             }
         }
 
+        if (headerText == null) {
+            int codeBlockStart = raw.indexOf("```");
+            if (codeBlockStart >= 0) {
+                int firstNewline = raw.indexOf('\n', codeBlockStart);
+                int closingBackticks = raw.indexOf("```", codeBlockStart + 3);
+                if (firstNewline > codeBlockStart && closingBackticks > firstNewline) {
+                    headerText = raw.substring(firstNewline + 1, closingBackticks).trim();
+                    docMarkdown = (raw.substring(0, codeBlockStart).trim() + "\n\n" + raw.substring(closingBackticks + 3).trim()).trim();
+                }
+            }
+        }
+
         if (headerText != null && !headerText.isEmpty()) {
-            tvHeader.setText(headerText);
+            tvHeader.setText(highlightDeclarationCode(headerText));
             tvHeader.setVisibility(View.VISIBLE);
         } else {
             tvHeader.setVisibility(View.GONE);
@@ -584,6 +1109,10 @@ public class DocumentationPopup {
 
     public PopupMode getCurrentMode() {
         return currentMode;
+    }
+
+    public CharSequence getHeaderText() {
+        return tvHeader.getText();
     }
 
     /**

@@ -6,6 +6,11 @@ import android.view.View;
 import com.cocode.vcode.ide.core.lsp.HoverInfo;
 import com.cocode.vcode.ide.core.lsp.LspSignatureHelp;
 
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -130,5 +135,72 @@ public class DocumentationPopupTest {
         hoverAdapter.dismiss();
         assertFalse(hoverAdapter.isShowing());
         assertFalse(popup.isShowing());
+    }
+
+    @Test
+    public void testHighlightDeclarationCodeFunction() {
+        SpannableStringBuilder sb = popup.highlightDeclarationCode("function myFunc(a: string, b: number): boolean");
+        assertNotNull(sb);
+        assertEquals("function myFunc(a: string, b: number): boolean", sb.toString());
+
+        ForegroundColorSpan[] colorSpans = sb.getSpans(0, sb.length(), ForegroundColorSpan.class);
+        assertTrue("Should have multiple foreground color spans", colorSpans.length >= 5);
+
+        StyleSpan[] styleSpans = sb.getSpans(0, sb.length(), StyleSpan.class);
+        assertTrue("Function name should have style span", styleSpans.length >= 1);
+    }
+
+    @Test
+    public void testHighlightDeclarationCodeMethod() {
+        SpannableStringBuilder sb = popup.highlightDeclarationCode("(method) Console.log(...data: any[]): void");
+        assertNotNull(sb);
+        assertEquals("(method) Console.log(...data: any[]): void", sb.toString());
+
+        ForegroundColorSpan[] colorSpans = sb.getSpans(0, sb.length(), ForegroundColorSpan.class);
+        assertTrue("Method declaration should have color spans", colorSpans.length >= 6);
+
+        StyleSpan[] styleSpans = sb.getSpans(0, sb.length(), StyleSpan.class);
+        assertTrue("Method name log should have bold style span", styleSpans.length >= 1);
+    }
+
+    @Test
+    public void testHighlightDeclarationCodeVariable() {
+        SpannableStringBuilder sb1 = popup.highlightDeclarationCode("const myVar: string");
+        assertNotNull(sb1);
+        assertEquals("const myVar: string", sb1.toString());
+        assertTrue(sb1.getSpans(0, sb1.length(), ForegroundColorSpan.class).length >= 3);
+
+        SpannableStringBuilder sb2 = popup.highlightDeclarationCode("(variable) name: string");
+        assertNotNull(sb2);
+        assertEquals("(variable) name: string", sb2.toString());
+        assertTrue(sb2.getSpans(0, sb2.length(), ForegroundColorSpan.class).length >= 3);
+    }
+
+    @Test
+    public void testHighlightDeclarationCodeClassAndInterface() {
+        SpannableStringBuilder sb1 = popup.highlightDeclarationCode("class MyClass extends BaseClass");
+        assertNotNull(sb1);
+        assertEquals("class MyClass extends BaseClass", sb1.toString());
+        assertTrue(sb1.getSpans(0, sb1.length(), ForegroundColorSpan.class).length >= 4);
+
+        SpannableStringBuilder sb2 = popup.highlightDeclarationCode("interface User<T>");
+        assertNotNull(sb2);
+        assertEquals("interface User<T>", sb2.toString());
+        assertTrue(sb2.getSpans(0, sb2.length(), ForegroundColorSpan.class).length >= 3);
+    }
+
+    @Test
+    public void testHoverHeaderHasSyntaxHighlighting() {
+        String markdown = "```typescript\nfunction greet(name: string): string\n```\n\nGreets someone.";
+        HoverInfo info = new HoverInfo(markdown);
+
+        popup.showHover(info, anchorView, 50, 100);
+        CharSequence header = popup.getHeaderText();
+        assertNotNull(header);
+        assertTrue(header instanceof Spanned);
+
+        Spanned spannedHeader = (Spanned) header;
+        ForegroundColorSpan[] spans = spannedHeader.getSpans(0, spannedHeader.length(), ForegroundColorSpan.class);
+        assertTrue("Hover header must contain syntax highlighting spans", spans.length >= 4);
     }
 }
