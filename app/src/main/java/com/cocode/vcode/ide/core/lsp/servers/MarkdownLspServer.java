@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -124,6 +125,12 @@ public final class MarkdownLspServer implements LspServer {
     @Override
     public void initialize(InitializeParams params) {
         this.ready = true;
+        if (params != null && params.rootUri != null) {
+            File root = uriToFile(params.rootUri);
+            if (root != null) {
+                markdownEngine.setWorkspaceRoot(root);
+            }
+        }
     }
 
     @Override
@@ -226,7 +233,7 @@ public final class MarkdownLspServer implements LspServer {
         int flatOffset = doc.toOffset(params.position);
         if (flatOffset < 0) flatOffset = doc.text.length();
 
-        File file = doc.uri != null ? new File(doc.uri) : null;
+        File file = doc.uri != null ? uriToFile(doc.uri) : null;
         if (file != null) {
             markdownEngine.setCurrentFile(file);
         }
@@ -250,11 +257,23 @@ public final class MarkdownLspServer implements LspServer {
                         .setInsertText(insertText)
                         .setDetail(detail)
                         .setKind(kind);
+
+        // Align filter text so typing after '#' matches the slug query directly without mismatching
+        String filterText = (insertText != null && !insertText.isEmpty())
+                ? insertText.replaceFirst("^#", "")
+                : (label != null ? label.replaceFirst("^#", "") : "");
+        b.setFilterText(filterText);
+
         if (ci.getReplaceLength() >= 0 && doc != null) {
             int startOff = Math.max(0, flatOffset - ci.getReplaceLength());
+            String editInsertText = insertText;
+            if (editInsertText != null && editInsertText.startsWith("#")
+                    && startOff > 0 && doc.text.charAt(startOff - 1) == '#') {
+                editInsertText = editInsertText.substring(1);
+            }
             b.setTextEdit(new TextEdit(
                     new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(startOff), doc.toModelPosition(flatOffset)),
-                    insertText
+                    editInsertText
             ));
         }
         return b.build();
@@ -295,7 +314,7 @@ public final class MarkdownLspServer implements LspServer {
         int flatOffset = doc.toOffset(pos);
         if (flatOffset < 0) flatOffset = doc.text.length();
 
-        File file = doc.uri != null ? new File(doc.uri) : null;
+        File file = doc.uri != null ? uriToFile(doc.uri) : null;
         if (file != null) {
             markdownEngine.setCurrentFile(file);
         }
@@ -379,13 +398,9 @@ public final class MarkdownLspServer implements LspServer {
             Set<String> headingSlugs = new HashSet<>();
             MdLineStream stream = MdLexer.lex(doc.text);
             MdSyntaxTree tree = MdParser.parseBlocks(stream, doc.text);
-            for (int i = 1; i < tree.nodeCount; i++) {
-                if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
-                    String title = tree.nodeName[i];
-                    if (title != null && !title.isEmpty()) {
-                        headingSlugs.add(MdParser.toSlug(title));
-                    }
-                }
+            List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, doc.text);
+            for (MdParser.HeadingSlug hs : slugs) {
+                headingSlugs.add(hs.slug);
             }
 
             for (Diagnostic diag : params.context.diagnostics) {
@@ -524,22 +539,20 @@ public final class MarkdownLspServer implements LspServer {
                     // Extract heading title and section preview if found
                     MdLineStream stream = MdLexer.lex(doc.text);
                     MdSyntaxTree tree = MdParser.parseBlocks(stream, doc.text);
-                    for (int i = 1; i < tree.nodeCount; i++) {
-                        if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
-                            String title = tree.nodeName[i];
-                            if (title != null && slug.equals(MdParser.toSlug(title))) {
-                                sb.append("**Section:** ").append(title).append(" (H").append(tree.nodeExtra[i]).append(")\n\n");
-                                int nextLine = doc.text.indexOf('\n', tree.nodeEnd[i]);
-                                if (nextLine != -1 && nextLine < doc.text.length()) {
-                                    int lineEnd = doc.text.indexOf('\n', nextLine + 1);
-                                    if (lineEnd == -1) lineEnd = doc.text.length();
-                                    String preview = doc.text.substring(nextLine + 1, lineEnd).trim();
-                                    if (!preview.isEmpty()) {
-                                        sb.append("> ").append(preview).append("\n\n");
-                                    }
+                    List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, doc.text);
+                    for (MdParser.HeadingSlug hs : slugs) {
+                        if (slug.equals(hs.slug)) {
+                            sb.append("**Section:** ").append(hs.title).append(" (H").append(hs.level).append(")\n\n");
+                            int nextLine = doc.text.indexOf('\n', hs.startOffset);
+                            if (nextLine != -1 && nextLine < doc.text.length()) {
+                                int lineEnd = doc.text.indexOf('\n', nextLine + 1);
+                                if (lineEnd == -1) lineEnd = doc.text.length();
+                                String preview = doc.text.substring(nextLine + 1, lineEnd).trim();
+                                if (!preview.isEmpty()) {
+                                    sb.append("> ").append(preview).append("\n\n");
                                 }
-                                break;
                             }
+                            break;
                         }
                     }
                 } else if (!target.startsWith("http://") && !target.startsWith("https://") && doc.uri != null) {
@@ -778,16 +791,14 @@ public final class MarkdownLspServer implements LspServer {
 
                 // 1. Heading anchor jump
                 if (linkTarget.startsWith("#")) {
-                    String slug = linkTarget.substring(1).trim().toLowerCase();
+                    String slug = linkTarget.substring(1).trim().toLowerCase(Locale.ROOT);
                     MdLineStream stream = MdLexer.lex(doc.text);
                     MdSyntaxTree tree = MdParser.parseBlocks(stream, doc.text);
-                    for (int i = 1; i < tree.nodeCount; i++) {
-                        if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
-                            String title = tree.nodeName[i];
-                            if (title != null && slug.equals(MdParser.toSlug(title))) {
-                                int hLine = LinterUtils.getLine(doc.text, tree.nodeStart[i]) - 1;
-                                return new LspLocation(doc.uri, new LspRange(hLine, 0, hLine, 0));
-                            }
+                    List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, doc.text);
+                    for (MdParser.HeadingSlug hs : slugs) {
+                        if (slug.equals(hs.slug)) {
+                            int hLine = LinterUtils.getLine(doc.text, hs.startOffset) - 1;
+                            return new LspLocation(doc.uri, new LspRange(hLine, 0, hLine, 0));
                         }
                     }
                     return null;
@@ -832,12 +843,15 @@ public final class MarkdownLspServer implements LspServer {
         // 1. Check if cursor is on a heading to find all inbound anchor links
         MdLineStream stream = MdLexer.lex(doc.text);
         MdSyntaxTree tree = MdParser.parseBlocks(stream, doc.text);
+        List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, doc.text);
         String targetSlug = null;
         for (int i = 1; i < tree.nodeCount; i++) {
             if (tree.nodeType[i] == MdSyntaxTree.N_HEADER && offset >= tree.nodeStart[i] && offset <= tree.nodeEnd[i]) {
-                String title = tree.nodeName[i];
-                if (title != null) {
-                    targetSlug = MdParser.toSlug(title);
+                for (MdParser.HeadingSlug hs : slugs) {
+                    if (hs.startOffset == tree.nodeStart[i]) {
+                        targetSlug = hs.slug;
+                        break;
+                    }
                 }
                 break;
             }

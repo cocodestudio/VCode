@@ -1,5 +1,7 @@
 package com.cocode.vcode.ide.core.language.md;
 
+import java.util.Locale;
+
 /**
  * Zero-allocation, high-performance lexical context scanner for Markdown documents.
  * Isolates grammatical contexts according to the LSP Completion Master Specification:
@@ -32,9 +34,17 @@ public final class MarkdownContextScanner {
         public final int blockStartOffset;
         public final int blockEndOffset;
         public final int lineStart;
+        public final String targetFilePath;
+        public final boolean isWikilink;
 
         public MarkdownContext(ContextType type, String query, int replaceLength,
                                String language, int blockStartOffset, int blockEndOffset, int lineStart) {
+            this(type, query, replaceLength, language, blockStartOffset, blockEndOffset, lineStart, null, false);
+        }
+
+        public MarkdownContext(ContextType type, String query, int replaceLength,
+                               String language, int blockStartOffset, int blockEndOffset, int lineStart,
+                               String targetFilePath, boolean isWikilink) {
             this.type = type;
             this.query = query != null ? query : "";
             this.replaceLength = replaceLength;
@@ -42,6 +52,8 @@ public final class MarkdownContextScanner {
             this.blockStartOffset = blockStartOffset;
             this.blockEndOffset = blockEndOffset;
             this.lineStart = lineStart;
+            this.targetFilePath = targetFilePath;
+            this.isWikilink = isWikilink;
         }
     }
 
@@ -176,7 +188,12 @@ public final class MarkdownContextScanner {
         }
         curLineStart++;
 
-        // Check if inside link or image destination: [text](...cursor...) or ![alt](...cursor...)
+        int curLineEnd = cursorPos;
+        while (curLineEnd < len && text.charAt(curLineEnd) != '\n' && text.charAt(curLineEnd) != '\r') {
+            curLineEnd++;
+        }
+
+        // Case A: Inside link or image destination: [text](...cursor...) or ![alt](...cursor...)
         int parenPos = -1;
         int p = cursorPos - 1;
         while (p >= curLineStart) {
@@ -207,22 +224,143 @@ public final class MarkdownContextScanner {
 
         if (parenPos != -1) {
             String destPrefix = text.substring(parenPos + 1, cursorPos);
-            int trimStart = 0;
-            while (trimStart < destPrefix.length() && (destPrefix.charAt(trimStart) == ' ' || destPrefix.charAt(trimStart) == '\t')) {
-                trimStart++;
+            int lastHashInDest = -1;
+            for (int d = 0; d < destPrefix.length(); d++) {
+                if (destPrefix.charAt(d) == '#' && !isEscaped(destPrefix, d)) {
+                    lastHashInDest = d;
+                }
             }
-            if (trimStart < destPrefix.length() && destPrefix.charAt(trimStart) == '#') {
-                // Heading Anchor destination: [text](#...|
-                int hashPos = parenPos + 1 + trimStart;
-                String anchorQuery = text.substring(hashPos + 1, cursorPos).trim().toLowerCase();
-                int replaceLen = cursorPos - (hashPos + 1);
-                return new MarkdownContext(ContextType.HEADING_ANCHOR, anchorQuery, replaceLen, null, -1, -1, curLineStart);
-            } else {
-                // Link File Path destination: [text](path...|
-                String pathQuery = destPrefix.trim();
-                int lastSlash = pathQuery.lastIndexOf('/');
-                String filterPrefix = (lastSlash != -1) ? pathQuery.substring(lastSlash + 1) : pathQuery;
-                return new MarkdownContext(ContextType.LINK_FILE_PATH, filterPrefix, filterPrefix.length(), pathQuery, -1, -1, curLineStart);
+
+            if (lastHashInDest != -1) {
+                int hashPos = parenPos + 1 + lastHashInDest;
+                String rawTarget = destPrefix.substring(0, lastHashInDest).trim();
+                if (rawTarget.startsWith("<") && rawTarget.endsWith(">")) {
+                    rawTarget = rawTarget.substring(1, rawTarget.length() - 1).trim();
+                } else if (rawTarget.startsWith("<")) {
+                    rawTarget = rawTarget.substring(1).trim();
+                }
+
+                boolean isExternalWeb = rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
+                        || rawTarget.startsWith("mailto:") || rawTarget.startsWith("ftp://");
+                if (!isExternalWeb) {
+                    String targetFilePath = rawTarget.isEmpty() ? null : rawTarget;
+                    String anchorQuery = destPrefix.substring(lastHashInDest + 1).trim().toLowerCase(Locale.ROOT);
+                    int replaceLen = cursorPos - (hashPos + 1);
+                    return new MarkdownContext(ContextType.HEADING_ANCHOR, anchorQuery, replaceLen,
+                            null, -1, -1, curLineStart, targetFilePath, false);
+                }
+            }
+
+            // Link File Path destination: [text](path...|
+            String pathQuery = destPrefix.trim();
+            if (pathQuery.startsWith("<")) pathQuery = pathQuery.substring(1).trim();
+            int lastSlash = pathQuery.lastIndexOf('/');
+            String filterPrefix = (lastSlash != -1) ? pathQuery.substring(lastSlash + 1) : pathQuery;
+            return new MarkdownContext(ContextType.LINK_FILE_PATH, filterPrefix, filterPrefix.length(), pathQuery, -1, -1, curLineStart);
+        }
+
+        // Case B: Inside wikilink: [[...cursor...]]
+        int wikiOpenPos = -1;
+        int w = cursorPos - 1;
+        while (w > curLineStart) {
+            if (text.charAt(w) == ']' && text.charAt(w - 1) == ']' && !isEscaped(text, w - 1)) {
+                // Closed wikilink before cursor
+                break;
+            }
+            if (text.charAt(w) == '[' && text.charAt(w - 1) == '[' && !isEscaped(text, w - 1)) {
+                wikiOpenPos = w - 1;
+                break;
+            }
+            w--;
+        }
+
+        if (wikiOpenPos != -1) {
+            String wikiContent = text.substring(wikiOpenPos + 2, cursorPos);
+            int pipePos = wikiContent.indexOf('|');
+            if (pipePos == -1) {
+                int lastHashInWiki = -1;
+                for (int d = 0; d < wikiContent.length(); d++) {
+                    if (wikiContent.charAt(d) == '#' && !isEscaped(wikiContent, d)) {
+                        lastHashInWiki = d;
+                    }
+                }
+
+                if (lastHashInWiki != -1) {
+                    int hashPos = wikiOpenPos + 2 + lastHashInWiki;
+                    String rawTarget = wikiContent.substring(0, lastHashInWiki).trim();
+                    String targetFilePath = rawTarget.isEmpty() ? null : rawTarget;
+                    String anchorQuery = wikiContent.substring(lastHashInWiki + 1).trim().toLowerCase(Locale.ROOT);
+                    int replaceLen = cursorPos - (hashPos + 1);
+                    return new MarkdownContext(ContextType.HEADING_ANCHOR, anchorQuery, replaceLen,
+                            null, -1, -1, curLineStart, targetFilePath, true);
+                } else {
+                    String pathQuery = wikiContent.trim();
+                    return new MarkdownContext(ContextType.LINK_FILE_PATH, pathQuery, pathQuery.length(),
+                            pathQuery, -1, -1, curLineStart, null, true);
+                }
+            }
+        }
+
+        // Case C: Reference-style link definition: [id]: ...cursor...
+        int lineNonWs = curLineStart;
+        while (lineNonWs < cursorPos && (text.charAt(lineNonWs) == ' ' || text.charAt(lineNonWs) == '\t')) {
+            lineNonWs++;
+        }
+        if (lineNonWs < cursorPos && text.charAt(lineNonWs) == '[') {
+            int closeBracket = -1;
+            for (int b = lineNonWs + 1; b < curLineEnd; b++) {
+                if (text.charAt(b) == ']' && !isEscaped(text, b)) {
+                    closeBracket = b;
+                    break;
+                }
+            }
+            if (closeBracket != -1) {
+                int colonPos = closeBracket + 1;
+                while (colonPos < curLineEnd && (text.charAt(colonPos) == ' ' || text.charAt(colonPos) == '\t')) {
+                    colonPos++;
+                }
+                if (colonPos < curLineEnd && text.charAt(colonPos) == ':') {
+                    int destStart = colonPos + 1;
+                    while (destStart < curLineEnd && (text.charAt(destStart) == ' ' || text.charAt(destStart) == '\t')) {
+                        destStart++;
+                    }
+                    if (cursorPos >= destStart) {
+                        String refDest = text.substring(destStart, cursorPos);
+                        int lastHashInRef = -1;
+                        for (int d = 0; d < refDest.length(); d++) {
+                            if (refDest.charAt(d) == '#' && !isEscaped(refDest, d)) {
+                                lastHashInRef = d;
+                            }
+                        }
+
+                        if (lastHashInRef != -1) {
+                            int hashPos = destStart + lastHashInRef;
+                            String rawTarget = refDest.substring(0, lastHashInRef).trim();
+                            if (rawTarget.startsWith("<") && rawTarget.endsWith(">")) {
+                                rawTarget = rawTarget.substring(1, rawTarget.length() - 1).trim();
+                            } else if (rawTarget.startsWith("<")) {
+                                rawTarget = rawTarget.substring(1).trim();
+                            }
+
+                            boolean isExternalWeb = rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
+                                    || rawTarget.startsWith("mailto:") || rawTarget.startsWith("ftp://");
+                            if (!isExternalWeb) {
+                                String targetFilePath = rawTarget.isEmpty() ? null : rawTarget;
+                                String anchorQuery = refDest.substring(lastHashInRef + 1).trim().toLowerCase(Locale.ROOT);
+                                int replaceLen = cursorPos - (hashPos + 1);
+                                return new MarkdownContext(ContextType.HEADING_ANCHOR, anchorQuery, replaceLen,
+                                        null, -1, -1, curLineStart, targetFilePath, false);
+                            }
+                        } else if (!refDest.trim().isEmpty()) {
+                            String pathQuery = refDest.trim();
+                            if (pathQuery.startsWith("<")) pathQuery = pathQuery.substring(1).trim();
+                            int lastSlash = pathQuery.lastIndexOf('/');
+                            String filterPrefix = (lastSlash != -1) ? pathQuery.substring(lastSlash + 1) : pathQuery;
+                            return new MarkdownContext(ContextType.LINK_FILE_PATH, filterPrefix, filterPrefix.length(),
+                                    pathQuery, -1, -1, curLineStart);
+                        }
+                    }
+                }
             }
         }
 

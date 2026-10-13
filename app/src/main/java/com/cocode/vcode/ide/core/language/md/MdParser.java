@@ -1,5 +1,15 @@
 package com.cocode.vcode.ide.core.language.md;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * Block and inline parser for Markdown documents.
  * Consumes an {@link MdLineStream} and generates an {@link MdSyntaxTree} modeling block containers
@@ -495,17 +505,114 @@ public final class MdParser {
         return MdLineStream.L_PARAGRAPH;
     }
 
+    public static class HeadingSlug {
+        public final String slug;
+        public final String title;
+        public final int level;
+        public final int startOffset;
+
+        public HeadingSlug(String slug, String title, int level, int startOffset) {
+            this.slug = slug;
+            this.title = title;
+            this.level = level;
+            this.startOffset = startOffset;
+        }
+    }
+
     /**
      * Converts a heading title string into a GitHub/CommonMark-compatible anchor slug.
-     * Lowercases text, strips special punctuation characters, replaces whitespace with hyphens,
-     * and trims leading/trailing hyphens.
+     * Lowercases text, strips inline markdown and invalid punctuation while preserving
+     * Unicode letters/numbers, replaces whitespace with hyphens, and trims leading/trailing hyphens.
      */
     public static String toSlug(String title) {
         if (title == null) return "";
-        String s = title.trim().toLowerCase();
-        s = s.replaceAll("[^a-z0-9 _-]", "");
+        String s = title.trim();
+        if (s.isEmpty()) return "";
+
+        // Strip leading and trailing '#' markers
+        s = s.replaceFirst("^#+\\s*", "");
+        s = s.replaceFirst("\\s*#+$", "");
+
+        // Strip inline markdown links and images [text](url) -> text
+        s = s.replaceAll("!\\[([^\\]]*)\\]\\([^)]*\\)", "$1");
+        s = s.replaceAll("\\[([^\\]]+)\\]\\([^)]*\\)", "$1");
+
+        // Strip inline code `code` -> code
+        s = s.replaceAll("`([^`]+)`", "$1");
+
+        // Strip bold, italic, and strikethrough wrappers
+        s = s.replaceAll("~~([^~]+)~~", "$1");
+        s = s.replaceAll("\\*{1,3}([^*]+)\\*{1,3}", "$1");
+        s = s.replaceAll("(^|\\s)___?([^_]+)___?(\\s|$)", "$1$2$3");
+        s = s.replaceAll("(^|\\s)__([^_]+)__(\\s|$)", "$1$2$3");
+        s = s.replaceAll("(^|\\s)_([^_]+)_(\\s|$)", "$1$2$3");
+
+        s = s.toLowerCase(Locale.ROOT);
+
+        // Strip punctuation except unicode letters, numbers, spaces, underscores, and hyphens
+        s = s.replaceAll("[^\\p{L}\\p{Nd}\\s_-]", "");
+
+        // Replace whitespace runs with single hyphens
         s = s.replaceAll("\\s+", "-");
+
+        // Trim leading and trailing hyphens
         s = s.replaceAll("^-+|-+$", "");
+
         return s;
+    }
+
+    /**
+     * Extracts heading slugs from an AST with GitHub-style collision disambiguation (-1, -2).
+     */
+    public static List<HeadingSlug> extractHeadingSlugs(MdSyntaxTree tree, String text) {
+        if (tree == null) return Collections.emptyList();
+        List<HeadingSlug> result = new ArrayList<>();
+        Map<String, Integer> slugCounts = new HashMap<>();
+        Set<String> usedSlugs = new HashSet<>();
+
+        for (int i = 1; i < tree.nodeCount; i++) {
+            if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
+                String title = tree.nodeName[i];
+                if ((title == null || title.isEmpty()) && text != null
+                        && tree.nodeStart[i] >= 0 && tree.nodeStart[i] < tree.nodeEnd[i]
+                        && tree.nodeEnd[i] <= text.length()) {
+                    int s = tree.nodeStart[i];
+                    while (s < tree.nodeEnd[i] && text.charAt(s) == '#') s++;
+                    while (s < tree.nodeEnd[i] && Character.isWhitespace(text.charAt(s))) s++;
+                    title = text.substring(s, tree.nodeEnd[i]).trim();
+                }
+                if (title == null || title.isEmpty()) continue;
+
+                String baseSlug = toSlug(title);
+                if (baseSlug.isEmpty()) continue;
+
+                String finalSlug = baseSlug;
+                int count = slugCounts.getOrDefault(baseSlug, 0);
+                if (count > 0 || usedSlugs.contains(finalSlug)) {
+                    while (true) {
+                        count++;
+                        finalSlug = baseSlug + "-" + count;
+                        if (!usedSlugs.contains(finalSlug)) {
+                            break;
+                        }
+                    }
+                }
+                slugCounts.put(baseSlug, count);
+                usedSlugs.add(finalSlug);
+
+                int level = tree.nodeExtra[i];
+                result.add(new HeadingSlug(finalSlug, title, level, tree.nodeStart[i]));
+            }
+        }
+        return result;
+    }
+
+    public static Map<String, Integer> extractHeadingSlugMap(MdSyntaxTree tree, String text) {
+        List<HeadingSlug> slugs = extractHeadingSlugs(tree, text);
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (HeadingSlug hs : slugs) {
+            map.put(hs.slug, hs.level);
+        }
+        return map;
     }
 }

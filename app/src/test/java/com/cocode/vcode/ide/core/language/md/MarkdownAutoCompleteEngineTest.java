@@ -199,4 +199,140 @@ public class MarkdownAutoCompleteEngineTest {
         }
         assertTrue("Markdown link [Click](app/. should suggest index.html with replaceLength = 1", hasIndexInDot);
     }
+
+    @Test
+    public void testDuplicateHeadingSlugDisambiguation() {
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        String doc = "# Setup\n\n## Setup\n\n[Jump](#";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertNotNull(items);
+
+        boolean foundSetup = false;
+        boolean foundSetup1 = false;
+        for (CompletionItem item : items) {
+            if ("#setup".equals(item.getLabel())) {
+                foundSetup = true;
+                assertEquals("setup", item.getEffectiveInsertText());
+            }
+            if ("#setup-1".equals(item.getLabel())) {
+                foundSetup1 = true;
+                assertEquals("setup-1", item.getEffectiveInsertText());
+            }
+        }
+        assertTrue("Should suggest #setup", foundSetup);
+        assertTrue("Should suggest #setup-1 for duplicate heading", foundSetup1);
+    }
+
+    @Test
+    public void testCrossFileHeadingCompletions() throws IOException {
+        File projectRoot = tempFolder.newFolder("cross_project");
+        File docsDir = new File(projectRoot, "docs");
+        docsDir.mkdir();
+        File guide = new File(docsDir, "guide.md");
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(guide, "# Overview\n\n## Getting Started\n");
+
+        File mainMd = new File(projectRoot, "main.md");
+        mainMd.createNewFile();
+
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        engine.setCurrentFile(mainMd);
+        engine.setWorkspaceRoot(projectRoot);
+
+        String doc = "[Link](docs/guide.md#";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean foundOverview = false;
+        boolean foundGettingStarted = false;
+        for (CompletionItem item : items) {
+            if ("#overview".equals(item.getLabel())) {
+                foundOverview = true;
+                assertEquals("overview", item.getEffectiveInsertText());
+                assertTrue(item.getDetail().contains("guide.md"));
+                assertEquals(0, item.getReplaceLength());
+            }
+            if ("#getting-started".equals(item.getLabel())) {
+                foundGettingStarted = true;
+                assertEquals("getting-started", item.getEffectiveInsertText());
+                assertTrue(item.getDetail().contains("guide.md"));
+            }
+        }
+        assertTrue("Should suggest cross-file #overview", foundOverview);
+        assertTrue("Should suggest cross-file #getting-started", foundGettingStarted);
+    }
+
+    @Test
+    public void testWikilinkHeadingCompletions() throws IOException {
+        File projectRoot = tempFolder.newFolder("wiki_project");
+        File guide = new File(projectRoot, "guide.md");
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(guide, "# Quickstart\n\n## Configuration\n");
+
+        File mainMd = new File(projectRoot, "main.md");
+        mainMd.createNewFile();
+
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        engine.setCurrentFile(mainMd);
+        engine.setWorkspaceRoot(projectRoot);
+
+        // Cross-file wikilink: [[guide#
+        String crossWiki = "[[guide#";
+        List<CompletionItem> crossItems = engine.getSuggestions(crossWiki, crossWiki.length());
+        assertNotNull(crossItems);
+        assertFalse(crossItems.isEmpty());
+
+        boolean foundQuickstart = false;
+        for (CompletionItem item : crossItems) {
+            if ("#quickstart".equals(item.getLabel())) {
+                foundQuickstart = true;
+                assertEquals("quickstart", item.getEffectiveInsertText());
+            }
+        }
+        assertTrue("Wikilink [[guide# should suggest #quickstart from guide.md", foundQuickstart);
+    }
+
+    @Test
+    public void testReferenceStyleLinkHeadingCompletions() throws IOException {
+        File projectRoot = tempFolder.newFolder("ref_project");
+        File docMd = new File(projectRoot, "doc.md");
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(docMd, "# Architecture\n");
+
+        File mainMd = new File(projectRoot, "main.md");
+        mainMd.createNewFile();
+
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        engine.setCurrentFile(mainMd);
+        engine.setWorkspaceRoot(projectRoot);
+
+        String refDoc = "[ref]: doc.md#";
+        List<CompletionItem> items = engine.getSuggestions(refDoc, refDoc.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean foundArch = false;
+        for (CompletionItem item : items) {
+            if ("#architecture".equals(item.getLabel())) {
+                foundArch = true;
+                assertEquals("architecture", item.getEffectiveInsertText());
+            }
+        }
+        assertTrue("Reference link [ref]: doc.md# should suggest #architecture", foundArch);
+    }
+
+    @Test
+    public void testUnicodeHeadingCompletions() {
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        String doc = "# Über Uns\n\n[Link](#";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertNotNull(items);
+
+        boolean foundUber = false;
+        for (CompletionItem item : items) {
+            if ("#über-uns".equals(item.getLabel())) {
+                foundUber = true;
+                assertEquals("über-uns", item.getEffectiveInsertText());
+            }
+        }
+        assertTrue("Unicode heading should produce #über-uns suggestion", foundUber);
+    }
 }

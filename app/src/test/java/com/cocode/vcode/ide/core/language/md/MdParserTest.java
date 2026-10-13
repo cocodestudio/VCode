@@ -69,4 +69,42 @@ public class MdParserTest {
         }
         assertTrue("Tree should contain N_CODE_BLOCK", foundCodeBlock);
     }
+
+    @Test
+    public void testToSlugUnicodeAndFormatting() {
+        assertEquals("über-uns", MdParser.toSlug("Über Uns"));
+        assertEquals("hello-world", MdParser.toSlug("  ### Hello World!  "));
+        assertEquals("bold-and-italic", MdParser.toSlug("**Bold** and *Italic*"));
+        assertEquals("use-code-here", MdParser.toSlug("Use `code` here"));
+        assertEquals("visit-google", MdParser.toSlug("Visit [Google](https://google.com)"));
+        assertEquals("español-y-olé", MdParser.toSlug("Español y Olé"));
+    }
+
+    @Test
+    public void testExtractHeadingSlugsDisambiguation() {
+        String md = "# Overview\n\n" +
+                "## Setup\n\n" +
+                "## Overview\n\n" +
+                "## Overview\n\n" +
+                "## Über Uns\n";
+        MdLineStream lines = MdLexer.lex(md);
+        MdSyntaxTree tree = MdParser.parseBlocks(lines, md);
+
+        java.util.List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, md);
+        assertEquals(5, slugs.size());
+
+        assertEquals("overview", slugs.get(0).slug);
+        assertEquals(1, slugs.get(0).level);
+
+        assertEquals("setup", slugs.get(1).slug);
+        assertEquals(2, slugs.get(1).level);
+
+        assertEquals("overview-1", slugs.get(2).slug);
+        assertEquals(2, slugs.get(2).level);
+
+        assertEquals("overview-2", slugs.get(3).slug);
+        assertEquals(2, slugs.get(3).level);
+
+        assertEquals("über-uns", slugs.get(4).slug);
+    }
 }

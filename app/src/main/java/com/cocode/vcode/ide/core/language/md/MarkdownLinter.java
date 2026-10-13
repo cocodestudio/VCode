@@ -173,20 +173,9 @@ public class MarkdownLinter {
 
         // Heading slugs for local anchor validation
         java.util.Set<String> headingSlugs = new java.util.HashSet<>();
-        for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
-                String title = tree.nodeName[i];
-                if (title == null && tree.nodeStart[i] < tree.nodeEnd[i]) {
-                    int s = tree.nodeStart[i];
-                    while (s < tree.nodeEnd[i] && text.charAt(s) == '#') s++;
-                    while (s < tree.nodeEnd[i] && Character.isWhitespace(text.charAt(s))) s++;
-                    title = text.substring(s, tree.nodeEnd[i]).trim();
-                }
-                String slug = MdParser.toSlug(title);
-                if (!slug.isEmpty()) {
-                    headingSlugs.add(slug);
-                }
-            }
+        java.util.List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, text);
+        for (MdParser.HeadingSlug hs : slugs) {
+            headingSlugs.add(hs.slug);
         }
 
         // Validate inline links [text](target)

@@ -124,4 +124,64 @@ public class MarkdownContextScannerTest {
         assertNotNull(ctx);
         assertEquals(MarkdownContextScanner.ContextType.NONE, ctx.type);
     }
+
+    @Test
+    public void testCrossFileAnchorLink() {
+        String text = "See [doc](docs/guide.md#";
+        MarkdownContextScanner.MarkdownContext ctx = MarkdownContextScanner.scan(text, text.length());
+        assertNotNull(ctx);
+        assertEquals(MarkdownContextScanner.ContextType.HEADING_ANCHOR, ctx.type);
+        assertEquals("docs/guide.md", ctx.targetFilePath);
+        assertEquals("", ctx.query);
+        assertEquals(0, ctx.replaceLength);
+        org.junit.Assert.assertFalse(ctx.isWikilink);
+
+        String textWithQuery = "See [doc](docs/guide.md#over";
+        MarkdownContextScanner.MarkdownContext ctx2 = MarkdownContextScanner.scan(textWithQuery, textWithQuery.length());
+        assertNotNull(ctx2);
+        assertEquals(MarkdownContextScanner.ContextType.HEADING_ANCHOR, ctx2.type);
+        assertEquals("docs/guide.md", ctx2.targetFilePath);
+        assertEquals("over", ctx2.query);
+        assertEquals(4, ctx2.replaceLength);
+    }
+
+    @Test
+    public void testWikilinkAnchor() {
+        String text = "See [[#";
+        MarkdownContextScanner.MarkdownContext ctx = MarkdownContextScanner.scan(text, text.length());
+        assertNotNull(ctx);
+        assertEquals(MarkdownContextScanner.ContextType.HEADING_ANCHOR, ctx.type);
+        org.junit.Assert.assertNull(ctx.targetFilePath);
+        org.junit.Assert.assertTrue(ctx.isWikilink);
+        assertEquals("", ctx.query);
+        assertEquals(0, ctx.replaceLength);
+
+        String textCross = "See [[guide#setup";
+        MarkdownContextScanner.MarkdownContext ctx2 = MarkdownContextScanner.scan(textCross, textCross.length());
+        assertNotNull(ctx2);
+        assertEquals(MarkdownContextScanner.ContextType.HEADING_ANCHOR, ctx2.type);
+        assertEquals("guide", ctx2.targetFilePath);
+        org.junit.Assert.assertTrue(ctx2.isWikilink);
+        assertEquals("setup", ctx2.query);
+        assertEquals(5, ctx2.replaceLength);
+    }
+
+    @Test
+    public void testReferenceStyleLinkAnchor() {
+        String text = "[my-ref]: #";
+        MarkdownContextScanner.MarkdownContext ctx = MarkdownContextScanner.scan(text, text.length());
+        assertNotNull(ctx);
+        assertEquals(MarkdownContextScanner.ContextType.HEADING_ANCHOR, ctx.type);
+        org.junit.Assert.assertNull(ctx.targetFilePath);
+        assertEquals("", ctx.query);
+        assertEquals(0, ctx.replaceLength);
+
+        String textCross = "[my-ref]: readme.md#intro";
+        MarkdownContextScanner.MarkdownContext ctx2 = MarkdownContextScanner.scan(textCross, textCross.length());
+        assertNotNull(ctx2);
+        assertEquals(MarkdownContextScanner.ContextType.HEADING_ANCHOR, ctx2.type);
+        assertEquals("readme.md", ctx2.targetFilePath);
+        assertEquals("intro", ctx2.query);
+        assertEquals(5, ctx2.replaceLength);
+    }
 }

@@ -84,6 +84,8 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         return "[(#*`!|-/.\"<";
     }
 
+    private File workspaceRoot;
+
     @Override
     public void setCurrentFile(File file) {
         super.setCurrentFile(file);
@@ -98,6 +100,7 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     public void setWorkspaceRoot(File root) {
+        this.workspaceRoot = root;
         if (pathEngine != null) {
             pathEngine.setWorkspaceRoot(root);
         }
@@ -252,26 +255,144 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private List<CompletionItem> getHeadingAnchorSuggestions(MarkdownContextScanner.MarkdownContext ctx, String fullText) {
+        String targetText;
+        boolean isExternal = false;
+        String targetFileName = null;
+
+        if (ctx.targetFilePath == null || ctx.targetFilePath.trim().isEmpty()) {
+            targetText = fullText;
+        } else {
+            File targetFile = resolveTargetMarkdownFile(ctx.targetFilePath);
+            if (targetFile == null) {
+                return Collections.emptyList();
+            }
+            targetText = readTargetContent(targetFile);
+            if (targetText == null) {
+                return Collections.emptyList();
+            }
+            isExternal = true;
+            targetFileName = targetFile.getName();
+        }
+
         List<CompletionItem> anchorItems = new ArrayList<>();
         String query = ctx.query;
-        MdLineStream stream = MdLexer.lex(fullText);
-        MdSyntaxTree tree = MdParser.parseBlocks(stream, fullText);
-        for (int i = 1; i < tree.nodeCount; i++) {
-            if (tree.nodeType[i] == MdSyntaxTree.N_HEADER) {
-                String title = tree.nodeName[i];
-                if (title != null && !title.isEmpty()) {
-                    String slug = MdParser.toSlug(title);
-                    int level = tree.nodeExtra[i];
-                    if (query.isEmpty() || slug.startsWith(query) || computeFuzzyScore(slug, query) > 0) {
-                        CompletionItem item = new CompletionItem(
-                                "#" + slug, slug, title + " (H" + level + ")", CompletionItem.Type.VALUE, 0);
-                        item.setReplaceLength(ctx.replaceLength);
-                        anchorItems.add(item);
+        MdLineStream stream = MdLexer.lex(targetText);
+        MdSyntaxTree tree = MdParser.parseBlocks(stream, targetText);
+        List<MdParser.HeadingSlug> slugs = MdParser.extractHeadingSlugs(tree, targetText);
+
+        for (MdParser.HeadingSlug hs : slugs) {
+            String slug = hs.slug;
+            String title = hs.title;
+            int level = hs.level;
+
+            if (query.isEmpty() || slug.startsWith(query) || computeFuzzyScore(slug, query) > 0) {
+                String detail = title + " (H" + level + (isExternal ? " in " + targetFileName : "") + ")";
+                CompletionItem item = new CompletionItem(
+                        "#" + slug, slug, detail, CompletionItem.Type.VALUE, 0);
+                item.setReplaceLength(ctx.replaceLength);
+                anchorItems.add(item);
+            }
+        }
+        return anchorItems;
+    }
+
+    private File resolveTargetMarkdownFile(String rawPath) {
+        if (rawPath == null) return null;
+        String path = rawPath.trim();
+        if (path.isEmpty()) return null;
+
+        if (path.startsWith("<") && path.endsWith(">")) {
+            path = path.substring(1, path.length() - 1).trim();
+        }
+
+        File candidate = null;
+        if (currentFile != null) {
+            File parent = currentFile.getParentFile();
+            if (parent != null) {
+                File direct = new File(parent, path);
+                if (direct.isFile() && direct.canRead()) {
+                    candidate = direct;
+                } else if (!hasMarkdownExtension(path)) {
+                    File withMd = new File(parent, path + ".md");
+                    if (withMd.isFile() && withMd.canRead()) {
+                        candidate = withMd;
+                    } else {
+                        File withMarkdown = new File(parent, path + ".markdown");
+                        if (withMarkdown.isFile() && withMarkdown.canRead()) {
+                            candidate = withMarkdown;
+                        }
                     }
                 }
             }
         }
-        return anchorItems;
+
+        if (candidate == null && workspaceRoot != null) {
+            String relFromRoot = path.startsWith("/") ? path.substring(1) : path;
+            File directRoot = new File(workspaceRoot, relFromRoot);
+            if (directRoot.isFile() && directRoot.canRead()) {
+                candidate = directRoot;
+            } else if (!hasMarkdownExtension(relFromRoot)) {
+                File withMd = new File(workspaceRoot, relFromRoot + ".md");
+                if (withMd.isFile() && withMd.canRead()) {
+                    candidate = withMd;
+                } else {
+                    File withMarkdown = new File(workspaceRoot, relFromRoot + ".markdown");
+                    if (withMarkdown.isFile() && withMarkdown.canRead()) {
+                        candidate = withMarkdown;
+                    }
+                }
+            }
+        }
+
+        if (candidate == null) return null;
+
+        if (!hasMarkdownExtension(candidate.getName())) {
+            return null;
+        }
+
+        if (workspaceRoot != null) {
+            try {
+                String rootPath = workspaceRoot.getCanonicalPath();
+                String targetPath = candidate.getCanonicalPath();
+                if (!targetPath.startsWith(rootPath)) {
+                    return null;
+                }
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        return candidate;
+    }
+
+    private static boolean hasMarkdownExtension(String fileName) {
+        if (fileName == null) return false;
+        String lower = fileName.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith(".md") || lower.endsWith(".markdown");
+    }
+
+    private String readTargetContent(File file) {
+        if (file == null || !file.exists() || !file.isFile() || !file.canRead()) {
+            return null;
+        }
+        if (file.length() > 1_048_576L) {
+            return null;
+        }
+
+        try {
+            com.cocode.vcode.ide.core.lsp.LspDocument openDoc =
+                    com.cocode.vcode.ide.core.lsp.LspDocumentManager.getInstance().getDocument(file.getAbsolutePath());
+            if (openDoc != null && openDoc.text != null) {
+                return openDoc.text;
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return com.cocode.vcode.ide.utils.FileUtils.readFile(file);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private List<CompletionItem> getSnippetSuggestions(MarkdownContextScanner.MarkdownContext ctx, String fullText, int cursorPos) {
