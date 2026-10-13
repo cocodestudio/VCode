@@ -15,4 +15,6 @@ public interface IEditorCallback {
     void navigateToLocation(com.cocode.vcode.ide.core.lsp.LspLocation location);
 
     void showReferences(java.util.List<com.cocode.vcode.ide.core.lsp.LspLocation> references);
+
+    void reportBreadcrumbSymbols(java.io.File file, java.util.List<com.cocode.vcode.ide.views.BreadcrumbView.BreadcrumbSymbol> symbols);
 }

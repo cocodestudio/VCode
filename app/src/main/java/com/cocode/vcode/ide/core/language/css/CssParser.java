@@ -42,7 +42,7 @@ public class CssParser {
                     char punct = source.charAt(nextP);
                     if (punct == '{') {
                         int nodeType = isAtRule ? CssSyntaxTree.N_AT_RULE : CssSyntaxTree.N_RULE;
-                        int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, null, null);
+                        int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, selectorText, null);
                         tree.addNode(CssSyntaxTree.N_SELECTOR, startP, endP, ruleNode, selectorText, null);
 
                         if (depth >= parentStack.length) {
@@ -56,7 +56,7 @@ public class CssParser {
                     } else if (punct == ';') {
                         if (isAtRule || currentParent == root) {
                             int nodeType = isAtRule ? CssSyntaxTree.N_AT_RULE : CssSyntaxTree.N_RULE;
-                            int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, null, null);
+                            int ruleNode = tree.addNode(nodeType, startP, nextP + 1, currentParent, selectorText, null);
                             tree.addNode(CssSyntaxTree.N_SELECTOR, startP, endP, ruleNode, selectorText, null);
                         } else {
                             // Malformed declaration inside a rule (e.g. "color red;")

@@ -26,6 +26,8 @@ public class SyntaxTreeDomAdapter implements DomNode {
         int getNodeSibling(int id);
         String getNodeName(int id);
         int findNodeAt(int offset);
+        default String getNodeValue(int id) { return ""; }
+        default int getNodeExtra(int id) { return 0; }
     }
 
     protected final FlatTreeAccessor accessor;
@@ -51,6 +53,19 @@ public class SyntaxTreeDomAdapter implements DomNode {
         if (nodeId <= 0 || nodeId >= accessor.getNodeCount()) return "";
         String name = accessor.getNodeName(nodeId);
         return name != null ? name : "";
+    }
+
+    @Override
+    public String getValue() {
+        if (nodeId <= 0 || nodeId >= accessor.getNodeCount()) return "";
+        String val = accessor.getNodeValue(nodeId);
+        return val != null ? val : "";
+    }
+
+    @Override
+    public int getExtra() {
+        if (nodeId <= 0 || nodeId >= accessor.getNodeCount()) return 0;
+        return accessor.getNodeExtra(nodeId);
     }
 
     @Override
@@ -117,6 +132,8 @@ public class SyntaxTreeDomAdapter implements DomNode {
             @Override public int getNodeSibling(int id) { return tree.nodeSibling[id]; }
             @Override public String getNodeName(int id) { return tree.nodeName[id]; }
             @Override public int findNodeAt(int offset) { return tree.findNodeAt(offset); }
+            @Override public String getNodeValue(int id) { return tree.nodeValue[id]; }
+            @Override public int getNodeExtra(int id) { return tree.nodeExtra[id]; }
         };
         return new DomFileImpl(FileType.HTML, accessor, 0);
     }
@@ -133,6 +150,8 @@ public class SyntaxTreeDomAdapter implements DomNode {
             @Override public int getNodeSibling(int id) { return tree.nodeSibling[id]; }
             @Override public String getNodeName(int id) { return tree.nodeName[id]; }
             @Override public int findNodeAt(int offset) { return tree.findNodeAt(offset); }
+            @Override public String getNodeValue(int id) { return ""; }
+            @Override public int getNodeExtra(int id) { return tree.nodeExtra[id]; }
         };
         return new DomFileImpl(type != null ? type : FileType.JAVASCRIPT, accessor, 0);
     }
@@ -149,6 +168,8 @@ public class SyntaxTreeDomAdapter implements DomNode {
             @Override public int getNodeSibling(int id) { return tree.nodeSibling[id]; }
             @Override public String getNodeName(int id) { return tree.nodeName[id]; }
             @Override public int findNodeAt(int offset) { return tree.findNodeAt(offset); }
+            @Override public String getNodeValue(int id) { return tree.nodeValue[id]; }
+            @Override public int getNodeExtra(int id) { return tree.nodeExtra[id]; }
         };
         return new DomFileImpl(FileType.CSS, accessor, 0);
     }
@@ -165,6 +186,7 @@ public class SyntaxTreeDomAdapter implements DomNode {
             @Override public int getNodeSibling(int id) { return tree.nodeSibling[id]; }
             @Override public String getNodeName(int id) { return tree.nodeName[id]; }
             @Override public int findNodeAt(int offset) { return tree.getNodeAtOffset(offset); }
+            @Override public String getNodeValue(int id) { return ""; }
         };
         return new DomFileImpl(FileType.JSON, accessor, 0);
     }
@@ -181,6 +203,8 @@ public class SyntaxTreeDomAdapter implements DomNode {
             @Override public int getNodeSibling(int id) { return tree.nodeSibling[id]; }
             @Override public String getNodeName(int id) { return tree.nodeName[id]; }
             @Override public int findNodeAt(int offset) { return tree.findNodeAt(offset); }
+            @Override public String getNodeValue(int id) { return ""; }
+            @Override public int getNodeExtra(int id) { return tree.nodeExtra[id]; }
         };
         return new DomFileImpl(FileType.MARKDOWN, accessor, 0);
     }

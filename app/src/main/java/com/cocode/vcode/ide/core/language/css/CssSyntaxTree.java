@@ -298,39 +298,53 @@ public final class CssSyntaxTree {
      * the tightest matching node.
      */
     public int findNodeAt(int offset) {
-        if (nodesByOffset == null || nodeCount <= 1) return 0;
+        if (nodesByOffset == null || nodeCount <= 1) {
+            int best = 0;
+            int bestSpan = Integer.MAX_VALUE;
+            for (int i = 1; i < nodeCount; i++) {
+                if (offset >= nodeStart[i] && offset <= nodeEnd[i]) {
+                    int span = nodeEnd[i] - nodeStart[i];
+                    if (span < bestSpan) {
+                        best = i;
+                        bestSpan = span;
+                    }
+                }
+            }
+            return best;
+        }
+
         int bestId = 0;
         int bestSpan = Integer.MAX_VALUE;
 
         int low = 1;
         int high = nodeCount - 1;
+        int candidateIdx = -1;
 
-        // Binary search to find initial insertion point
+        // Binary search to find highest index where start <= offset
         while (low <= high) {
             int mid = (low + high) >>> 1;
             int id = nodesByOffset[mid];
             int start = nodeStart[id];
 
             if (start <= offset) {
+                candidateIdx = mid;
                 low = mid + 1;
             } else {
                 high = mid - 1;
             }
         }
 
-        // Scan backwards and forwards near the binary search boundary to find the tightest enclosing node
-        int searchStart = Math.max(1, high - 64);
-        int searchEnd = Math.min(nodeCount - 1, high + 64);
-
-        for (int i = searchStart; i <= searchEnd; i++) {
-            int id = nodesByOffset[i];
-            int start = nodeStart[id];
-            int end = nodeEnd[id];
-            if (start <= offset && offset <= end) {
-                int span = end - start;
-                if (span < bestSpan) {
-                    bestSpan = span;
-                    bestId = id;
+        if (candidateIdx >= 1) {
+            for (int i = candidateIdx; i >= 1; i--) {
+                int id = nodesByOffset[i];
+                int start = nodeStart[id];
+                int end = nodeEnd[id];
+                if (start <= offset && offset <= end) {
+                    int span = end - start;
+                    if (span < bestSpan) {
+                        bestSpan = span;
+                        bestId = id;
+                    }
                 }
             }
         }

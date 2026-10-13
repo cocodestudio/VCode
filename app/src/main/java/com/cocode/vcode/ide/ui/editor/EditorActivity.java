@@ -63,6 +63,7 @@ import com.cocode.vcode.ide.ui.sheets.files.NewFileBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.NewFolderBottomSheet;
 import com.cocode.vcode.ide.ui.sheets.files.ProjectSearchBottomSheet;
 import com.cocode.vcode.ide.utils.CodeFormatter;
+import com.cocode.vcode.ide.views.BreadcrumbView;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.views.CustomPopupMenu;
@@ -72,6 +73,7 @@ import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.CodeEditText;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -992,7 +994,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             } else {
                 binding.breadcrumb.setVisibility(View.VISIBLE);
                 String relPath = activeFile.getRelativePath(viewModel.getProjectRoot());
-                binding.breadcrumb.setPath(viewModel.getProjectName(), relPath);
+                binding.breadcrumb.updateBasePath(viewModel.getProjectName(), relPath);
             }
         } else {
             binding.breadcrumb.setVisibility(View.GONE);
@@ -1724,6 +1726,36 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         sheet.setUsages(getString(R.string.vcode_find_usages), query, result);
         sheet.setListener(this::jumpToPosition);
         sheet.show(getSupportFragmentManager(), "FindUsages");
+    }
+
+    @Override
+    public void reportBreadcrumbSymbols(File file, List<BreadcrumbView.BreadcrumbSymbol> symbols) {
+        if (viewModel == null || binding == null || file == null) return;
+        List<EditorFile> files = viewModel.getOpenFiles().getValue();
+        Integer index = viewModel.getActiveTabIndex().getValue();
+        if (files == null || index == null || index < 0 || index >= files.size()) return;
+
+        EditorFile activeFile = files.get(index);
+        if (activeFile == null || activeFile.getFile() == null || !isSameFile(activeFile.getFile(), file)) {
+            return;
+        }
+
+        if (activeFile.getFileType() == FileType.API_TESTER || activeFile.getFileType() == FileType.TERMINAL) {
+            binding.breadcrumb.setVisibility(View.GONE);
+            return;
+        }
+
+        binding.breadcrumb.setVisibility(View.VISIBLE);
+        String relPath = activeFile.getRelativePath(viewModel.getProjectRoot());
+        binding.breadcrumb.setPathAndSymbols(viewModel.getProjectName(), relPath, symbols, symbol -> {
+            if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
+                CodeEditText editor = ((com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer).getCodeEditor();
+                if (editor != null && symbol.getStartOffset() >= 0 && symbol.getStartOffset() <= editor.length()) {
+                    editor.setSelection(symbol.getStartOffset());
+                    editor.ensureCursorVisible();
+                }
+            }
+        });
     }
 
     private void setupIndexingProgressCard() {

@@ -320,7 +320,7 @@ public class JsParser {
 
         int nodeStart = stream.tokenStart[startIdx];
 
-        int forNode = tree.addNode(JsSyntaxTree.N_FOR_STMT, nodeStart, 0, parent, null);
+        int forNode = tree.addNode(JsSyntaxTree.N_FOR_STMT, nodeStart, 0, parent, "for");
 
 
         int i = skipToken(stream, startIdx); // skip 'for'
@@ -341,6 +341,16 @@ public class JsParser {
             int headerStart = i;
 
             int headerEnd = skipBlockFast(source, stream, i, '(', ')');
+
+            if (headerEnd <= stream.length) {
+                int endOffset = getOffset(stream, source, headerEnd);
+                if (endOffset > nodeStart && source != null && endOffset <= source.length()) {
+                    String hdr = source.substring(nodeStart, endOffset).trim().replaceAll("\\s+", " ");
+                    if (!hdr.isEmpty()) {
+                        tree.nodeName[forNode] = hdr;
+                    }
+                }
+            }
 
 
             int inner = skipToken(stream, headerStart);
@@ -449,7 +459,7 @@ public class JsParser {
 
         int nodeStart = stream.tokenStart[startIdx];
 
-        int catchNode = tree.addNode(JsSyntaxTree.N_CATCH_CLAUSE, nodeStart, 0, parent, null);
+        int catchNode = tree.addNode(JsSyntaxTree.N_CATCH_CLAUSE, nodeStart, 0, parent, "catch");
 
 
         int i = skipToken(stream, startIdx); // skip 'catch'
@@ -458,6 +468,17 @@ public class JsParser {
 
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
+
+            int parenEnd = skipBlockFast(source, stream, i, '(', ')');
+            if (parenEnd <= stream.length) {
+                int endOffset = getOffset(stream, source, parenEnd);
+                if (endOffset > nodeStart && source != null && endOffset <= source.length()) {
+                    String hdr = source.substring(nodeStart, endOffset).trim().replaceAll("\\s+", " ");
+                    if (!hdr.isEmpty()) {
+                        tree.nodeName[catchNode] = hdr;
+                    }
+                }
+            }
 
             i = skipToken(stream, i);
 
@@ -520,7 +541,7 @@ public class JsParser {
 
         int nodeStart = stream.tokenStart[startIdx];
 
-        int node = tree.addNode(JsSyntaxTree.N_TRY_STMT, nodeStart, 0, parent, null);
+        int node = tree.addNode(JsSyntaxTree.N_TRY_STMT, nodeStart, 0, parent, "try");
 
 
         int i = skipToken(stream, startIdx); // skip 'try'
@@ -545,7 +566,7 @@ public class JsParser {
 
         int nodeStart = stream.tokenStart[startIdx];
 
-        int node = tree.addNode(JsSyntaxTree.N_FINALLY_CLAUSE, nodeStart, 0, parent, null);
+        int node = tree.addNode(JsSyntaxTree.N_FINALLY_CLAUSE, nodeStart, 0, parent, "finally");
 
 
         int i = skipToken(stream, startIdx); // skip 'finally'
@@ -569,8 +590,9 @@ public class JsParser {
     private static int parseConditionAndBody(String source, TokenStream stream, JsSyntaxTree tree, int startIdx, int parent, int nodeType) {
 
         int nodeStart = stream.tokenStart[startIdx];
+        String kw = nodeType == JsSyntaxTree.N_IF_STMT ? "if" : (nodeType == JsSyntaxTree.N_WHILE_STMT ? "while" : "with");
 
-        int node = tree.addNode(nodeType, nodeStart, 0, parent, null);
+        int node = tree.addNode(nodeType, nodeStart, 0, parent, kw);
 
 
         int i = skipToken(stream, startIdx);
@@ -579,6 +601,17 @@ public class JsParser {
 
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
+
+            int condEnd = skipBlockFast(source, stream, i, '(', ')');
+            if (condEnd <= stream.length) {
+                int endOffset = getOffset(stream, source, condEnd);
+                if (endOffset > nodeStart && source != null && endOffset <= source.length()) {
+                    String hdr = source.substring(nodeStart, endOffset).trim().replaceAll("\\s+", " ");
+                    if (!hdr.isEmpty()) {
+                        tree.nodeName[node] = hdr;
+                    }
+                }
+            }
 
             i = skipToken(stream, i);
 
@@ -667,7 +700,7 @@ public class JsParser {
 
         int nodeStart = stream.tokenStart[startIdx];
 
-        int node = tree.addNode(JsSyntaxTree.N_DO_STMT, nodeStart, 0, parent, null);
+        int node = tree.addNode(JsSyntaxTree.N_DO_STMT, nodeStart, 0, parent, "do...while");
 
 
         int i = skipToken(stream, startIdx);
@@ -734,7 +767,7 @@ public class JsParser {
 
         int nodeStart = stream.tokenStart[startIdx];
 
-        int node = tree.addNode(JsSyntaxTree.N_SWITCH_STMT, nodeStart, 0, parent, null);
+        int node = tree.addNode(JsSyntaxTree.N_SWITCH_STMT, nodeStart, 0, parent, "switch");
 
 
         int i = skipToken(stream, startIdx);
@@ -743,6 +776,17 @@ public class JsParser {
 
 
         if (i < stream.length && stream.types[i] == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == '(') {
+
+            int condEnd = skipBlockFast(source, stream, i, '(', ')');
+            if (condEnd <= stream.length) {
+                int endOffset = getOffset(stream, source, condEnd);
+                if (endOffset > nodeStart && source != null && endOffset <= source.length()) {
+                    String hdr = source.substring(nodeStart, endOffset).trim().replaceAll("\\s+", " ");
+                    if (!hdr.isEmpty()) {
+                        tree.nodeName[node] = hdr;
+                    }
+                }
+            }
 
             i = skipToken(stream, i);
 
@@ -789,6 +833,14 @@ public class JsParser {
             byte t = stream.types[i];
 
             if (t == TokenStream.TK_PUNCT && source.charAt(stream.tokenStart[i]) == ':') {
+
+                int endOffset = stream.tokenStart[i];
+                if (endOffset > nodeStart && source != null && endOffset <= source.length()) {
+                    String hdr = source.substring(nodeStart, endOffset).trim().replaceAll("\\s+", " ");
+                    if (!hdr.isEmpty()) {
+                        tree.nodeName[node] = hdr;
+                    }
+                }
 
                 i = skipToken(stream, i);
 

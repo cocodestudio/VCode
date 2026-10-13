@@ -9,14 +9,35 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.cocode.vcode.ide.core.language.base.DomNode;
+import com.cocode.vcode.ide.core.language.base.LanguageBackend;
+import com.cocode.vcode.ide.core.language.base.LanguageRegistry;
+import com.cocode.vcode.ide.core.language.css.CssSyntaxTree;
+import com.cocode.vcode.ide.core.language.html.HtmlParser;
+import com.cocode.vcode.ide.core.language.html.HtmlSyntaxTree;
+import com.cocode.vcode.ide.core.language.js.JsSyntaxTree;
+import com.cocode.vcode.ide.core.language.js.ParseResult;
+import com.cocode.vcode.ide.core.language.json.JsonSyntaxTree;
+import com.cocode.vcode.ide.core.language.md.MdLexer;
+import com.cocode.vcode.ide.core.language.md.MdLineStream;
+import com.cocode.vcode.ide.core.language.md.MdParser;
+import com.cocode.vcode.ide.core.language.md.MdSyntaxTree;
 import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
+import com.cocode.vcode.ide.core.lsp.ProjectIndex;
+import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.data.model.AppSettings;
 import com.cocode.vcode.ide.data.model.EditorFile;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
+import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.utils.ExecutorProvider;
+import com.cocode.vcode.ide.views.BreadcrumbView;
 import com.cocode.vcode.ide.views.CodeEditText;
 import com.cocode.vcode.ide.views.CodeEditorLayout;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 
 /**
@@ -25,8 +46,11 @@ import com.cocode.vcode.ide.views.CodeEditorLayout;
 public class CodeFileViewer implements IFileViewer {
 
     private final Handler jsonValidationHandler = new Handler(Looper.getMainLooper());
+    private final Handler breadcrumbHandler = new Handler(Looper.getMainLooper());
     private final LspEditorBridge lspBridge = new LspEditorBridge();
     private final Runnable autoSaveValidationRunnable = this::performAutoSaveAndSnapshot;
+    private final Runnable breadcrumbRunnable = this::resolveBreadcrumbSymbols;
+    private final Runnable cursorChangeListener = this::onCursorMovedDebounced;
     private FrameLayout viewContainer;
     private CodeEditorLayout editorLayout;
     private CodeEditText codeEditText;
@@ -70,6 +94,7 @@ public class CodeFileViewer implements IFileViewer {
 
             this.viewContainer = container;
             codeEditText = editorLayout.getCodeEditText();
+            codeEditText.addCursorChangeListener(cursorChangeListener);
             codeEditText.addContentChangeListener(() -> {
                 if (currentFile != null && viewModel != null) {
                     if (!currentFile.isDirty()) {
@@ -196,6 +221,7 @@ public class CodeFileViewer implements IFileViewer {
                                         capturedEditor.setSelection(capturedFile.getCursorPosition());
                                         capturedEditor.post(capturedEditor::ensureCursorVisible);
                                         validateCodeIfRequired();
+                                        onCursorMovedDebounced();
                                     }
                                 }
                             });
@@ -237,6 +263,7 @@ public class CodeFileViewer implements IFileViewer {
                         codeEditText.post(() -> {
                             codeEditText.ensureCursorVisible();
                             isPositionRestoring = false;
+                            onCursorMovedDebounced();
                         });
                     }
                 }
@@ -258,6 +285,7 @@ public class CodeFileViewer implements IFileViewer {
         }
 
         validateCodeIfRequired();
+        onCursorMovedDebounced();
     }
 
     /**
@@ -302,6 +330,7 @@ public class CodeFileViewer implements IFileViewer {
         if (currentFile != null && codeEditText != null) {
             checkExternalDiskModification();
             validateCodeIfRequired();
+            onCursorMovedDebounced();
         }
     }
 
@@ -334,6 +363,7 @@ public class CodeFileViewer implements IFileViewer {
     public void onPause() {
         flushContentToViewModel();
         jsonValidationHandler.removeCallbacksAndMessages(null);
+        breadcrumbHandler.removeCallbacksAndMessages(null);
         if (editorLayout != null && editorLayout.getSelectionToolbar() != null) {
             editorLayout.getSelectionToolbar().hide();
         }
@@ -345,6 +375,7 @@ public class CodeFileViewer implements IFileViewer {
     @Override
     public void destroy() {
         jsonValidationHandler.removeCallbacksAndMessages(null);
+        breadcrumbHandler.removeCallbacksAndMessages(null);
         if (editorLayout != null && editorLayout.getSelectionToolbar() != null) {
             editorLayout.getSelectionToolbar().hide();
         }
@@ -354,6 +385,7 @@ public class CodeFileViewer implements IFileViewer {
         }
         lspBridge.detach();
         if (codeEditText != null) {
+            codeEditText.removeCursorChangeListener(cursorChangeListener);
             codeEditText.setOnProblemRemovedListener(null);
         }
         editorLayout = null;
@@ -461,5 +493,516 @@ public class CodeFileViewer implements IFileViewer {
         if (settings != null && settings.autoSave && !textSnapshot.isEmpty()) {
             viewModel.triggerAutoSave();
         }
+        onCursorMovedDebounced();
+    }
+
+    private void onCursorMovedDebounced() {
+        if (currentFile == null || codeEditText == null) return;
+        if (codeEditText.isSettingText() || isPositionRestoring) return;
+
+        breadcrumbHandler.removeCallbacks(breadcrumbRunnable);
+        breadcrumbHandler.postDelayed(breadcrumbRunnable, 120L);
+    }
+
+    private void resolveBreadcrumbSymbols() {
+        if (currentFile == null || codeEditText == null) return;
+        if (codeEditText.isSettingText() || isPositionRestoring) return;
+
+        final File file = currentFile.getFile();
+        if (file == null) return;
+
+        final int cursorOffset = Math.max(0, codeEditText.getSelectionStart());
+        final FileType fileType = currentFile.getFileType();
+        final String text = codeEditText.getTextAsString();
+
+        ExecutorProvider.getInstance().runOnCpu(() -> {
+            List<BreadcrumbView.BreadcrumbSymbol> symbolChain = extractBreadcrumbSymbols(file, fileType, text, cursorOffset);
+            ExecutorProvider.getInstance().runOnMain(() -> {
+                if (currentFile != null && FileUtils.isSameFile(currentFile.getFile(), file)) {
+                    if (editorCallback != null) {
+                        editorCallback.reportBreadcrumbSymbols(file, symbolChain);
+                    }
+                }
+            });
+        });
+    }
+
+    private static class HeadingInfo {
+        final int id;
+        final int level;
+        final String title;
+        final int startOffset;
+        int endOffset;
+
+        HeadingInfo(int id, int level, String title, int startOffset) {
+            this.id = id;
+            this.level = Math.max(1, level);
+            this.title = title != null ? title : "";
+            this.startOffset = startOffset;
+        }
+    }
+
+    private List<BreadcrumbView.BreadcrumbSymbol> extractBreadcrumbSymbols(File file, FileType fileType, String text, int cursorOffset) {
+        if (file == null || text == null || fileType == null) {
+            return Collections.emptyList();
+        }
+
+        if (fileType == FileType.MARKDOWN) {
+            return extractMarkdownSymbols(text, cursorOffset);
+        }
+
+        ParseResult cached = ProjectIndex.getInstance().getParseResult(file.getAbsolutePath());
+
+        // Check for embedded JS or CSS inside HTML files
+        if (fileType == FileType.HTML) {
+            ParseResult htmlParseResult = cached;
+            if (htmlParseResult == null || htmlParseResult.htmlTree == null || (htmlParseResult.source != null && !htmlParseResult.source.equals(text))) {
+                try {
+                    htmlParseResult = HtmlParser.parse(text);
+                } catch (Exception ignored) {
+                }
+            }
+            if (htmlParseResult != null && htmlParseResult.embeddedResults != null && !htmlParseResult.embeddedResults.isEmpty()) {
+                for (ParseResult.EmbeddedResult emb : htmlParseResult.embeddedResults) {
+                    if (emb != null && cursorOffset >= emb.startOffset && cursorOffset <= emb.endOffset && emb.result != null) {
+                        List<BreadcrumbView.BreadcrumbSymbol> chain = extractEmbeddedSymbols(htmlParseResult, emb, cursorOffset);
+                        if (chain != null && !chain.isEmpty()) {
+                            return chain;
+                        }
+                    }
+                }
+            }
+        }
+
+        DomNode root = null;
+        if (cached != null && (cached.source == null || cached.source.equals(text))) {
+            if (cached.tree != null) {
+                root = cached.tree.toDomFile(fileType);
+            } else if (cached.htmlTree != null) {
+                root = cached.htmlTree.toDomFile();
+            } else if (cached.cssTree != null) {
+                root = cached.cssTree.toDomFile();
+            } else if (cached.jsonTree != null) {
+                root = cached.jsonTree.toDomFile();
+            }
+        }
+
+        if (root == null) {
+            LanguageBackend backend = LanguageRegistry.getInstance().getBackend(fileType);
+            if (backend != null) {
+                try {
+                    root = backend.parseToDom(text);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        if (root == null) {
+            return Collections.emptyList();
+        }
+
+        DomNode deepest = root.findDeepestNodeAt(cursorOffset);
+        if (deepest == null) {
+            return Collections.emptyList();
+        }
+
+        List<BreadcrumbView.BreadcrumbSymbol> symbolChain = new ArrayList<>();
+        DomNode current = deepest;
+        int depthLimit = 0;
+        while (current != null && depthLimit < 60) {
+            depthLimit++;
+            BreadcrumbView.BreadcrumbSymbol symbol = createBreadcrumbSymbol(current, fileType);
+            if (symbol != null) {
+                if (symbolChain.isEmpty() || !symbolChain.get(0).equals(symbol)) {
+                    symbolChain.add(0, symbol);
+                }
+            }
+            current = current.getParent();
+        }
+
+        return symbolChain;
+    }
+
+    private List<BreadcrumbView.BreadcrumbSymbol> extractEmbeddedSymbols(ParseResult htmlResult, ParseResult.EmbeddedResult emb, int cursorOffset) {
+        List<BreadcrumbView.BreadcrumbSymbol> symbolChain = new ArrayList<>();
+
+        // Collect HTML ancestor tags up to <script> or <style>
+        if (htmlResult != null && htmlResult.htmlTree != null) {
+            DomNode htmlRoot = htmlResult.htmlTree.toDomFile();
+            DomNode deepestHtml = htmlRoot.findDeepestNodeAt(emb.startOffset);
+            DomNode current = deepestHtml;
+            int depth = 0;
+            while (current != null && depth < 30) {
+                depth++;
+                BreadcrumbView.BreadcrumbSymbol sym = createBreadcrumbSymbol(current, FileType.HTML);
+                if (sym != null) {
+                    if (symbolChain.isEmpty() || !symbolChain.get(0).equals(sym)) {
+                        symbolChain.add(0, sym);
+                    }
+                }
+                current = current.getParent();
+            }
+        }
+
+        if (emb.result == null) {
+            return symbolChain;
+        }
+
+        int relOffset = cursorOffset - emb.startOffset;
+
+        if (emb.result.tree != null) {
+            boolean isZeroBased = emb.result.tree.nodeCount > 1 && emb.result.tree.nodeStart[1] < emb.startOffset;
+            int queryOffset = isZeroBased ? relOffset : cursorOffset;
+            int offsetDelta = isZeroBased ? emb.startOffset : 0;
+
+            DomNode jsRoot = emb.result.tree.toDomFile(FileType.JAVASCRIPT);
+            DomNode deepestJs = jsRoot.findDeepestNodeAt(queryOffset);
+            List<BreadcrumbView.BreadcrumbSymbol> jsChain = new ArrayList<>();
+            DomNode current = deepestJs;
+            int depth = 0;
+            while (current != null && depth < 40) {
+                depth++;
+                BreadcrumbView.BreadcrumbSymbol sym = createBreadcrumbSymbol(current, FileType.JAVASCRIPT);
+                if (sym != null) {
+                    BreadcrumbView.BreadcrumbSymbol adjustedSym = new BreadcrumbView.BreadcrumbSymbol(
+                            sym.getName(), sym.getKind(), sym.getStartOffset() + offsetDelta, sym.getEndOffset() + offsetDelta);
+                    if (jsChain.isEmpty() || !jsChain.get(0).equals(adjustedSym)) {
+                        jsChain.add(0, adjustedSym);
+                    }
+                }
+                current = current.getParent();
+            }
+            symbolChain.addAll(jsChain);
+        } else if (emb.result.cssTree != null) {
+            boolean isZeroBased = emb.result.cssTree.nodeCount > 1 && emb.result.cssTree.nodeStart[1] < emb.startOffset;
+            int queryOffset = isZeroBased ? relOffset : cursorOffset;
+            int offsetDelta = isZeroBased ? emb.startOffset : 0;
+
+            DomNode cssRoot = emb.result.cssTree.toDomFile();
+            DomNode deepestCss = cssRoot.findDeepestNodeAt(queryOffset);
+            List<BreadcrumbView.BreadcrumbSymbol> cssChain = new ArrayList<>();
+            DomNode current = deepestCss;
+            int depth = 0;
+            while (current != null && depth < 40) {
+                depth++;
+                BreadcrumbView.BreadcrumbSymbol sym = createBreadcrumbSymbol(current, FileType.CSS);
+                if (sym != null) {
+                    BreadcrumbView.BreadcrumbSymbol adjustedSym = new BreadcrumbView.BreadcrumbSymbol(
+                            sym.getName(), sym.getKind(), sym.getStartOffset() + offsetDelta, sym.getEndOffset() + offsetDelta);
+                    if (cssChain.isEmpty() || !cssChain.get(0).equals(adjustedSym)) {
+                        cssChain.add(0, adjustedSym);
+                    }
+                }
+                current = current.getParent();
+            }
+            symbolChain.addAll(cssChain);
+        }
+
+        return symbolChain;
+    }
+
+    private List<BreadcrumbView.BreadcrumbSymbol> extractMarkdownSymbols(String text, int cursorOffset) {
+        if (text == null) return Collections.emptyList();
+        MdLineStream stream = MdLexer.lex(text);
+        MdSyntaxTree mdTree = MdParser.parseBlocks(stream, text);
+        if (mdTree == null || mdTree.nodeCount <= 1) return Collections.emptyList();
+
+        List<HeadingInfo> headings = new ArrayList<>();
+        int codeBlockId = 0;
+
+        for (int i = 1; i < mdTree.nodeCount; i++) {
+            int type = mdTree.nodeType[i];
+            if (type == MdSyntaxTree.N_HEADER) {
+                int level = mdTree.nodeExtra[i];
+                String title = mdTree.nodeName[i];
+                int start = mdTree.nodeStart[i];
+                headings.add(new HeadingInfo(i, level, title, start));
+            } else if (type == MdSyntaxTree.N_CODE_BLOCK) {
+                int start = mdTree.nodeStart[i];
+                int end = mdTree.nodeEnd[i];
+                if (cursorOffset >= start && cursorOffset <= end) {
+                    codeBlockId = i;
+                }
+            }
+        }
+
+        int textLen = text.length();
+        for (int i = 0; i < headings.size(); i++) {
+            HeadingInfo curr = headings.get(i);
+            int sectionEnd = textLen;
+            for (int j = i + 1; j < headings.size(); j++) {
+                HeadingInfo next = headings.get(j);
+                if (next.level <= curr.level) {
+                    sectionEnd = next.startOffset;
+                    break;
+                }
+            }
+            curr.endOffset = sectionEnd;
+        }
+
+        List<BreadcrumbView.BreadcrumbSymbol> symbolChain = new ArrayList<>();
+        for (HeadingInfo h : headings) {
+            boolean enclosed = cursorOffset >= h.startOffset
+                    && (h.endOffset == textLen ? cursorOffset <= h.endOffset : cursorOffset < h.endOffset);
+            if (enclosed) {
+                StringBuilder sb = new StringBuilder();
+                for (int k = 0; k < h.level; k++) {
+                    sb.append('#');
+                }
+                sb.append(' ');
+                if (h.title != null) {
+                    sb.append(h.title);
+                }
+                String displayName = sb.toString();
+                symbolChain.add(new BreadcrumbView.BreadcrumbSymbol(
+                        displayName, MdSyntaxTree.N_HEADER, h.startOffset, h.endOffset));
+            }
+        }
+
+        if (codeBlockId > 0) {
+            String lang = mdTree.nodeName[codeBlockId];
+            String blockName = (lang != null && !lang.trim().isEmpty()) ? "```" + lang.trim() : "```";
+            symbolChain.add(new BreadcrumbView.BreadcrumbSymbol(
+                    blockName, MdSyntaxTree.N_CODE_BLOCK, mdTree.nodeStart[codeBlockId], mdTree.nodeEnd[codeBlockId]));
+        }
+
+        return symbolChain;
+    }
+
+    private BreadcrumbView.BreadcrumbSymbol createBreadcrumbSymbol(DomNode node, FileType fileType) {
+        if (node == null) return null;
+        int kind = node.getKind();
+        String rawName = node.getName();
+        if (rawName != null) {
+            rawName = rawName.trim();
+        }
+        if (rawName == null) {
+            rawName = "";
+        }
+
+        String displayName = null;
+
+        if (fileType == FileType.JAVASCRIPT || fileType == FileType.TYPESCRIPT) {
+            switch (kind) {
+                case JsSyntaxTree.N_CLASS_DECL:
+                    displayName = rawName.isEmpty() ? "class" : "class " + rawName;
+                    break;
+                case JsSyntaxTree.N_INTERFACE:
+                    displayName = rawName.isEmpty() ? "interface" : "interface " + rawName;
+                    break;
+                case JsSyntaxTree.N_ENUM:
+                    displayName = rawName.isEmpty() ? "enum" : "enum " + rawName;
+                    break;
+                case JsSyntaxTree.N_TYPE_ALIAS:
+                    displayName = rawName.isEmpty() ? "type" : "type " + rawName;
+                    break;
+                case JsSyntaxTree.N_FUNC_DECL:
+                    if (!rawName.isEmpty()) {
+                        displayName = rawName + "()";
+                    } else {
+                        DomNode parent = node.getParent();
+                        if (parent != null && (parent.getKind() == JsSyntaxTree.N_VAR_DECL || parent.getKind() == JsSyntaxTree.N_PROPERTY)
+                                && !parent.getName().isEmpty()) {
+                            displayName = parent.getName() + "()";
+                        } else {
+                            displayName = "function()";
+                        }
+                    }
+                    break;
+                case JsSyntaxTree.N_METHOD:
+                    if ("constructor".equals(rawName)) {
+                        displayName = "constructor";
+                    } else {
+                        displayName = rawName.isEmpty() ? "method()" : rawName + "()";
+                    }
+                    break;
+                case JsSyntaxTree.N_GETTER:
+                    displayName = "get " + rawName;
+                    break;
+                case JsSyntaxTree.N_SETTER:
+                    displayName = "set " + rawName;
+                    break;
+                case JsSyntaxTree.N_ARROW_FUNC:
+                    if (!rawName.isEmpty()) {
+                        displayName = rawName + "()";
+                    } else {
+                        DomNode parent = node.getParent();
+                        if (parent != null) {
+                            if ((parent.getKind() == JsSyntaxTree.N_VAR_DECL || parent.getKind() == JsSyntaxTree.N_PROPERTY)
+                                    && !parent.getName().isEmpty()) {
+                                displayName = parent.getName() + "()";
+                            } else if (parent.getKind() == JsSyntaxTree.N_CALL_EXPR && !parent.getName().isEmpty()) {
+                                displayName = parent.getName() + "(callback)";
+                            } else {
+                                displayName = "(anonymous)()";
+                            }
+                        } else {
+                            displayName = "(anonymous)()";
+                        }
+                    }
+                    break;
+                case JsSyntaxTree.N_VAR_DECL:
+                    if (rawName.isEmpty()) {
+                        return null;
+                    }
+                    // Suppress variable declaration if it directly defines a function/arrow function,
+                    // because the function itself already appears in the breadcrumb trail.
+                    List<? extends DomNode> varChildren = node.getChildren();
+                    if (varChildren != null) {
+                        boolean definesFunc = false;
+                        for (DomNode child : varChildren) {
+                            if (child != null && (child.getKind() == JsSyntaxTree.N_ARROW_FUNC || child.getKind() == JsSyntaxTree.N_FUNC_DECL)) {
+                                definesFunc = true;
+                                break;
+                            }
+                        }
+                        if (definesFunc) {
+                            return null;
+                        }
+                    }
+                    int flag = node.getExtra();
+                    String kwPrefix = (flag == JsSyntaxTree.FLAG_CONST) ? "const " :
+                                     ((flag == JsSyntaxTree.FLAG_LET) ? "let " :
+                                     ((flag == JsSyntaxTree.FLAG_VAR) ? "var " : ""));
+                    if ("{destructure}".equals(rawName)) {
+                        displayName = kwPrefix.isEmpty() ? "{...}" : kwPrefix + "{...}";
+                    } else {
+                        displayName = kwPrefix + rawName;
+                    }
+                    break;
+                case JsSyntaxTree.N_PROPERTY:
+                    if (rawName.isEmpty()) {
+                        return null;
+                    }
+                    List<? extends DomNode> propChildren = node.getChildren();
+                    if (propChildren != null) {
+                        boolean definesFunc = false;
+                        for (DomNode child : propChildren) {
+                            if (child != null && (child.getKind() == JsSyntaxTree.N_ARROW_FUNC || child.getKind() == JsSyntaxTree.N_FUNC_DECL)) {
+                                definesFunc = true;
+                                break;
+                            }
+                        }
+                        if (definesFunc) {
+                            return null;
+                        }
+                    }
+                    displayName = rawName;
+                    break;
+                case JsSyntaxTree.N_FOR_STMT:
+                    displayName = rawName.isEmpty() ? "for" : rawName;
+                    break;
+                case JsSyntaxTree.N_WHILE_STMT:
+                    displayName = rawName.isEmpty() ? "while" : rawName;
+                    break;
+                case JsSyntaxTree.N_DO_STMT:
+                    displayName = rawName.isEmpty() ? "do...while" : rawName;
+                    break;
+                case JsSyntaxTree.N_IF_STMT:
+                    displayName = rawName.isEmpty() ? "if" : rawName;
+                    break;
+                case JsSyntaxTree.N_SWITCH_STMT:
+                    displayName = rawName.isEmpty() ? "switch" : rawName;
+                    break;
+                case JsSyntaxTree.N_CASE_CLAUSE:
+                    displayName = rawName.isEmpty() ? "case" : rawName;
+                    break;
+                case JsSyntaxTree.N_TRY_STMT:
+                    displayName = "try";
+                    break;
+                case JsSyntaxTree.N_CATCH_CLAUSE:
+                    displayName = rawName.isEmpty() ? "catch" : rawName;
+                    break;
+                case JsSyntaxTree.N_FINALLY_CLAUSE:
+                    displayName = "finally";
+                    break;
+                default:
+                    return null;
+            }
+        } else if (fileType == FileType.HTML || fileType == FileType.SVG) {
+            if (kind == HtmlSyntaxTree.N_ELEMENT && !rawName.isEmpty()) {
+                String id = null;
+                String firstClass = null;
+                List<? extends DomNode> children = node.getChildren();
+                if (children != null) {
+                    for (DomNode child : children) {
+                        if (child != null && child.getKind() == HtmlSyntaxTree.N_ATTRIBUTE) {
+                            String attrName = child.getName();
+                            String attrVal = child.getValue();
+                            if (attrVal != null) {
+                                attrVal = attrVal.trim();
+                                if (attrVal.length() >= 2 && ((attrVal.startsWith("\"") && attrVal.endsWith("\"")) || (attrVal.startsWith("'") && attrVal.endsWith("'")))) {
+                                    attrVal = attrVal.substring(1, attrVal.length() - 1).trim();
+                                }
+                            }
+                            if ("id".equalsIgnoreCase(attrName) && attrVal != null && !attrVal.isEmpty()) {
+                                id = attrVal;
+                            } else if ("class".equalsIgnoreCase(attrName) && attrVal != null && !attrVal.isEmpty() && firstClass == null) {
+                                String[] parts = attrVal.split("\\s+");
+                                for (String p : parts) {
+                                    if (!p.isEmpty()) {
+                                        firstClass = p;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                StringBuilder sb = new StringBuilder();
+                sb.append('<').append(rawName);
+                if (id != null && !id.isEmpty()) {
+                    sb.append('#').append(id);
+                }
+                if (firstClass != null && !firstClass.isEmpty()) {
+                    sb.append('.').append(firstClass);
+                }
+                sb.append('>');
+                displayName = sb.toString();
+            } else {
+                return null;
+            }
+        } else if (fileType == FileType.CSS || fileType == FileType.SCSS) {
+            if ((kind == CssSyntaxTree.N_RULE || kind == CssSyntaxTree.N_AT_RULE || kind == CssSyntaxTree.N_PROPERTY) && !rawName.isEmpty()) {
+                displayName = rawName;
+            } else {
+                return null;
+            }
+        } else if (fileType == FileType.JSON) {
+            if (kind == JsonSyntaxTree.N_KEY && !rawName.isEmpty()) {
+                displayName = rawName;
+            } else {
+                return null;
+            }
+        } else if (fileType == FileType.MARKDOWN) {
+            if (kind == MdSyntaxTree.N_HEADER && !rawName.isEmpty()) {
+                displayName = rawName;
+            } else {
+                return null;
+            }
+        } else {
+            if (!rawName.isEmpty()) {
+                displayName = rawName;
+            } else {
+                return null;
+            }
+        }
+
+        if (displayName == null || displayName.isEmpty()) {
+            return null;
+        }
+
+        if (displayName.length() > 40) {
+            displayName = displayName.substring(0, 39) + "\u2026";
+        }
+
+        int start = node.getStartOffset();
+        int end = node.getEndOffset();
+        if (start < 0 || end <= start) {
+            return null;
+        }
+
+        return new BreadcrumbView.BreadcrumbSymbol(displayName, kind, start, end);
     }
 }

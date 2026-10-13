@@ -43,4 +43,18 @@ public interface DomNode {
      * Recursively searches for the deepest child node containing the specified character offset.
      */
     DomNode findDeepestNodeAt(int offset);
+
+    /**
+     * Returns the string value of the node (e.g. attribute value, text content), or empty string if none.
+     */
+    default String getValue() {
+        return "";
+    }
+
+    /**
+     * Returns extra integer metadata or flags associated with this node (e.g. variable flag, header level).
+     */
+    default int getExtra() {
+        return 0;
+    }
 }
