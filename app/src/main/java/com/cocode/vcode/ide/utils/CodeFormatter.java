@@ -5,6 +5,7 @@ import com.cocode.vcode.ide.core.language.css.CssFormatter;
 import com.cocode.vcode.ide.core.language.html.HtmlFormatter;
 import com.cocode.vcode.ide.core.language.js.JsFormatter;
 import com.cocode.vcode.ide.core.language.json.JsonFormatter;
+import com.cocode.vcode.ide.core.language.md.MarkdownFormatter;
 import com.cocode.vcode.ide.core.language.ts.TsFormatter;
 import com.cocode.vcode.ide.core.language.base.LanguageBackend;
 import com.cocode.vcode.ide.core.language.base.LanguageRegistry;
@@ -15,7 +16,7 @@ import java.util.Map;
 
 /**
  * Dispatcher that routes source code formatting requests to language-specific formatters
- * (HTML, CSS, JavaScript, TypeScript, JSON, etc.) via {@link LanguageRegistry}.
+ * (HTML, CSS, JavaScript, TypeScript, JSON, Markdown, etc.) via {@link LanguageRegistry}.
  */
 public class CodeFormatter {
 
@@ -27,6 +28,7 @@ public class CodeFormatter {
         FORMATTERS.put(FileType.CSS, new CssFormatter());
         FORMATTERS.put(FileType.JAVASCRIPT, new JsFormatter());
         FORMATTERS.put(FileType.TYPESCRIPT, new TsFormatter());
+        FORMATTERS.put(FileType.MARKDOWN, new MarkdownFormatter());
     }
 
     /**

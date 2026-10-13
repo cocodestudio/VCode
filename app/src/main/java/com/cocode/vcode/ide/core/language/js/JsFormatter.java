@@ -3,6 +3,8 @@ package com.cocode.vcode.ide.core.language.js;
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.language.base.BaseFormatter;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -16,6 +18,15 @@ public class JsFormatter extends BaseFormatter {
     public static final String DEFAULT_INDENT = "    ";
     private static final Pattern MULTI_NL = Pattern.compile("\\n{3,}");
     private static final Pattern TRAILING_SP = Pattern.compile("[ \t]+\n");
+
+    public JsFormatter() {
+        super();
+    }
+
+    public JsFormatter(String indent) {
+        super();
+        setIndentUnit(indent);
+    }
 
     // ---------------------------------------------------------------
     // AST-driven formatter
@@ -431,6 +442,10 @@ public class JsFormatter extends BaseFormatter {
         boolean inString = false;
         char stringChar = 0;
         int parenDepth = 0;
+        int singleLineBraceDepth = 0;
+        int bracketDepth = 0;
+        int totalBraceDepth = 0;
+        long multilineObjectMask = 0L;
 
         for (int i = 0; i < len; i++) {
             char c = code.charAt(i);
@@ -462,7 +477,6 @@ public class JsFormatter extends BaseFormatter {
                     continue;
                 }
                 if (c == stringChar) {
-                    if (stringChar == '`') ;
                     inString = false;
                 }
                 continue;
@@ -487,8 +501,35 @@ public class JsFormatter extends BaseFormatter {
             if (c == '"' || c == '\'' || c == '`') {
                 inString = true;
                 stringChar = c;
-                if (c == '`') ;
                 out.append(c);
+                continue;
+            }
+
+            // Static import statements
+            if (parenDepth == 0 && isImportStart(code, i)) {
+                int end = findStatementEnd(code, i);
+                String rawStmt = code.substring(i, end);
+                String normStmt = normalizeImportExportStatement(rawStmt);
+                trimTrailingSpace(out);
+                if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
+                    out.append('\n');
+                }
+                out.append(normStmt).append('\n');
+                i = end - 1;
+                continue;
+            }
+
+            // Export clause statements (export { ... } / export type { ... })
+            if (parenDepth == 0 && isExportClauseStart(code, i)) {
+                int end = findStatementEnd(code, i);
+                String rawStmt = code.substring(i, end);
+                String normStmt = normalizeImportExportStatement(rawStmt);
+                trimTrailingSpace(out);
+                if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
+                    out.append('\n');
+                }
+                out.append(normStmt).append('\n');
+                i = end - 1;
                 continue;
             }
 
@@ -503,7 +544,7 @@ public class JsFormatter extends BaseFormatter {
                 continue;
             }
             if (c == '\n') {
-                if (parenDepth > 0) {
+                if (parenDepth > 0 && multilineObjectMask == 0) {
                     if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
                             && out.charAt(out.length() - 1) != '('
                             && out.charAt(out.length() - 1) != '['
@@ -511,6 +552,24 @@ public class JsFormatter extends BaseFormatter {
                         out.append(' ');
                     }
                     continue;
+                }
+                // When line ends with a member dot, transfer the dot to the next line for leading dot style
+                if (out.length() > 0 && out.charAt(out.length() - 1) == '.') {
+                    boolean isSpread = (out.length() >= 3 && out.charAt(out.length() - 2) == '.' && out.charAt(out.length() - 3) == '.');
+                    boolean isFloat = (out.length() >= 2 && Character.isDigit(out.charAt(out.length() - 2)));
+                    if (!isSpread && !isFloat) {
+                        boolean isOpt = (out.length() >= 2 && out.charAt(out.length() - 2) == '?');
+                        if (isOpt) {
+                            out.delete(out.length() - 2, out.length());
+                            trimTrailingSpace(out);
+                            out.append("\n?.");
+                        } else {
+                            out.deleteCharAt(out.length() - 1);
+                            trimTrailingSpace(out);
+                            out.append("\n.");
+                        }
+                        continue;
+                    }
                 }
                 // Keep at most one newline
                 if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') out.append('\n');
@@ -544,6 +603,7 @@ public class JsFormatter extends BaseFormatter {
 
             // Bracket tracking: index access (arr[i]) vs array literal
             if (c == '[') {
+                bracketDepth++;
                 int k = out.length() - 1;
                 while (k >= 0 && out.charAt(k) == ' ') k--;
                 char prevChar = k >= 0 ? out.charAt(k) : 0;
@@ -565,6 +625,7 @@ public class JsFormatter extends BaseFormatter {
                 continue;
             }
             if (c == ']') {
+                bracketDepth = Math.max(0, bracketDepth - 1);
                 trimTrailingSpace(out);
                 out.append(']');
                 continue;
@@ -572,17 +633,62 @@ public class JsFormatter extends BaseFormatter {
 
             // Structural characters
             if (c == '{') {
+                totalBraceDepth++;
+                if (isSingleLineBrace(code, i)) {
+                    singleLineBraceDepth++;
+                    ensureSpace(out);
+                    out.append("{ ");
+                    while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t')) {
+                        i++;
+                    }
+                    continue;
+                }
+                if (isObjectOrDestructuringBrace(code, i)) {
+                    multilineObjectMask |= (1L << Math.min(62, totalBraceDepth));
+                    ensureSpace(out);
+                    out.append("{\n");
+                    while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t'
+                            || code.charAt(i + 1) == '\n' || code.charAt(i + 1) == '\r')) {
+                        i++;
+                    }
+                    continue;
+                }
                 ensureSpace(out);
                 out.append(c).append('\n');
                 continue;
             }
             if (c == '}') {
+                if (singleLineBraceDepth > 0) {
+                    singleLineBraceDepth--;
+                    totalBraceDepth = Math.max(0, totalBraceDepth - 1);
+                    trimTrailingSpace(out);
+                    if (out.length() > 0 && out.charAt(out.length() - 1) != '{') {
+                        out.append(' ');
+                    }
+                    out.append('}');
+                    int j = i + 1;
+                    while (j < len && (code.charAt(j) == ' ' || code.charAt(j) == '\t')) j++;
+                    char next = j < len ? code.charAt(j) : 0;
+                    if (next == '=' || next == ';' || next == ',' || next == ')' || next == ']') {
+                        if (next == '=') out.append(' ');
+                    } else {
+                        String rem = j < len ? code.substring(j) : "";
+                        if (rem.startsWith("from")) {
+                            out.append(' ');
+                        }
+                    }
+                    continue;
+                }
+
+                boolean isMultilineObject = (multilineObjectMask & (1L << Math.min(62, totalBraceDepth))) != 0;
+                multilineObjectMask &= ~(1L << Math.min(62, totalBraceDepth));
+                totalBraceDepth = Math.max(0, totalBraceDepth - 1);
+
                 trimTrailingSpace(out);
                 if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
                     out.append('\n');
                 }
                 out.append(c);
-                // peek: if followed by ; or , or ) keep on same line, else newline
                 int j = i + 1;
                 while (j < len && (code.charAt(j) == ' ' || code.charAt(j) == '\t')) j++;
                 char next = j < len ? code.charAt(j) : 0;
@@ -590,10 +696,12 @@ public class JsFormatter extends BaseFormatter {
                     // stay same line — nothing
                 } else if (next == '.' || next == '?') {
                     // method chaining — stay same line
+                } else if (isMultilineObject && (next == 0 || next == '\n' || next == '\r') && parenDepth == 0 && bracketDepth == 0) {
+                    out.append(';').append('\n');
+                    continue;
                 } else {
-                    // check for else/catch/finally
                     String rem = j < len ? code.substring(j) : "";
-                    if (rem.startsWith("else") || rem.startsWith("catch") || rem.startsWith("finally")) {
+                    if (rem.startsWith("else") || rem.startsWith("catch") || rem.startsWith("finally") || rem.startsWith("from")) {
                         out.append(' ');
                     } else {
                         out.append('\n');
@@ -621,10 +729,15 @@ public class JsFormatter extends BaseFormatter {
                 }
                 continue;
             }
-            // Comma: space after, newline if at statement level handled in re-indent
+            // Comma: space after, newline if at statement level in multiline object
             if (c == ',') {
                 trimTrailingSpace(out);
-                out.append(',').append(' ');
+                boolean inMultilineObj = (multilineObjectMask & (1L << Math.min(62, totalBraceDepth))) != 0;
+                if (inMultilineObj && singleLineBraceDepth == 0 && parenDepth == 0 && bracketDepth == 0) {
+                    out.append(',').append('\n');
+                } else {
+                    out.append(',').append(' ');
+                }
                 while (i + 1 < len && (code.charAt(i + 1) == ' ' || code.charAt(i + 1) == '\t'
                         || code.charAt(i + 1) == '\n' || code.charAt(i + 1) == '\r')) {
                     i++;
@@ -691,6 +804,41 @@ public class JsFormatter extends BaseFormatter {
                 continue;
             }
 
+            // Colon: trim preceding spaces, space after for key: value or ternary/types
+            if (c == ':') {
+                trimTrailingSpace(out);
+                out.append(':');
+                int nextIdx = i + 1;
+                while (nextIdx < len && (code.charAt(nextIdx) == ' ' || code.charAt(nextIdx) == '\t')) {
+                    nextIdx++;
+                }
+                char nextChar = nextIdx < len ? code.charAt(nextIdx) : 0;
+                if (nextChar != ':' && nextChar != '=' && nextChar != '\n' && nextChar != '\r' && nextChar != 0) {
+                    out.append(' ');
+                }
+                i = nextIdx - 1;
+                continue;
+            }
+
+            // Question mark: ternary or nullish coalescing
+            if (c == '?') {
+                if (i + 1 < len && (code.charAt(i + 1) == '.' || code.charAt(i + 1) == ':')) {
+                    out.append('?');
+                    continue;
+                }
+                if (i + 1 < len && code.charAt(i + 1) == '?') {
+                    ensureSpace(out);
+                    out.append("??");
+                    i++;
+                    ensureSpace(out);
+                    continue;
+                }
+                ensureSpace(out);
+                out.append('?');
+                ensureSpace(out);
+                continue;
+            }
+
             // Operators: surround with spaces (simple heuristic)
             if ((c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
                     || c == '&' || c == '|' || c == '<' || c == '>' || c == '!')
@@ -710,7 +858,16 @@ public class JsFormatter extends BaseFormatter {
             }
             out.append(c);
         }
-        return out.toString();
+
+        String rawNorm = out.toString();
+        String[] rawLines = rawNorm.split("\n", -1);
+        StringBuilder broken = new StringBuilder(rawNorm.length() + 64);
+        for (int idx = 0; idx < rawLines.length; idx++) {
+            String l = rawLines[idx];
+            if (idx > 0) broken.append('\n');
+            broken.append(breakMultipleDotChains(l));
+        }
+        return broken.toString();
     }
 
     // Pass 2: re-indent the normalised stream
@@ -744,7 +901,11 @@ public class JsFormatter extends BaseFormatter {
 
             if (startsWithClose) depth = Math.max(0, depth - 1);
 
-            String pad = getIndentString(depth);
+            int effectiveDepth = depth;
+            if (line.startsWith(".") || line.startsWith("?.")) {
+                effectiveDepth = depth + 1;
+            }
+            String pad = getIndentString(effectiveDepth);
 
             // Handle lines that contain both closing and opening braces on same line (e.g. "} else {")
             out.append(pad).append(line).append('\n');
@@ -762,6 +923,645 @@ public class JsFormatter extends BaseFormatter {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * Splits chained member expressions with 2 or more dots onto separate lines,
+     * leaving the receiver on the initial line and each chained dot access on its own line.
+     * Expressions with fewer than 2 dots (e.g. {@code console.log}) remain untouched.
+     */
+    public static String breakMultipleDotChains(String line) {
+        if (line == null || line.indexOf('.') == -1) return line;
+
+        int len = line.length();
+        boolean inString = false;
+        char quoteChar = 0;
+        int parenDepth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+
+        int[] dotOffsets = new int[32];
+        int dotCount = 0;
+
+        for (int i = 0; i < len; i++) {
+            char c = line.charAt(i);
+
+            if (inString) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == quoteChar) {
+                    inString = false;
+                }
+                continue;
+            }
+
+            if (c == '\'' || c == '"' || c == '`') {
+                inString = true;
+                quoteChar = c;
+                continue;
+            }
+
+            if (c == '/' && i + 1 < len && line.charAt(i + 1) == '/') {
+                break;
+            }
+
+            if (c == '(') { parenDepth++; continue; }
+            if (c == ')') { if (parenDepth > 0) parenDepth--; continue; }
+            if (c == '[') { bracketDepth++; continue; }
+            if (c == ']') { if (bracketDepth > 0) bracketDepth--; continue; }
+            if (c == '{') { braceDepth++; continue; }
+            if (c == '}') { if (braceDepth > 0) braceDepth--; continue; }
+
+            if (parenDepth == 0 && bracketDepth == 0 && braceDepth == 0) {
+                if (c == '?' && i + 1 < len && line.charAt(i + 1) == '.') {
+                    boolean isDigit = (i + 2 < len && Character.isDigit(line.charAt(i + 2)));
+                    if (!isDigit) {
+                        if (dotCount == dotOffsets.length) {
+                            int[] newArr = new int[dotOffsets.length * 2];
+                            System.arraycopy(dotOffsets, 0, newArr, 0, dotCount);
+                            dotOffsets = newArr;
+                        }
+                        dotOffsets[dotCount++] = i;
+                        i++; // skip '.'
+                        continue;
+                    }
+                }
+
+                if (c == '.') {
+                    if ((i + 1 < len && line.charAt(i + 1) == '.')
+                            || (i > 0 && line.charAt(i - 1) == '.')) {
+                        continue;
+                    }
+                    boolean prevDigit = (i > 0 && Character.isDigit(line.charAt(i - 1)));
+                    boolean nextDigit = (i + 1 < len && Character.isDigit(line.charAt(i + 1)));
+                    if (prevDigit && nextDigit) {
+                        continue;
+                    }
+
+                    if (dotCount == dotOffsets.length) {
+                        int[] newArr = new int[dotOffsets.length * 2];
+                        System.arraycopy(dotOffsets, 0, newArr, 0, dotCount);
+                        dotOffsets = newArr;
+                    }
+                    dotOffsets[dotCount++] = i;
+                }
+            }
+        }
+
+        if (dotCount < 2) {
+            return line;
+        }
+
+        StringBuilder sb = new StringBuilder(len + dotCount * 2);
+        int prevEnd = 0;
+
+        for (int d = 0; d < dotCount; d++) {
+            int dotIdx = dotOffsets[d];
+            String part = line.substring(prevEnd, dotIdx).trim();
+            if (sb.length() == 0) {
+                sb.append(part);
+            } else if (!part.isEmpty()) {
+                sb.append('\n').append(part);
+            }
+            prevEnd = dotIdx;
+        }
+
+        String lastPart = line.substring(prevEnd).trim();
+        if (!lastPart.isEmpty()) {
+            sb.append('\n').append(lastPart);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Normalizes import and export clause statements into Prettier-style formatting.
+     * Short statements are kept on a clean single line, while statements with many
+     * specifiers (> 3) or exceeding length budget (> 45 chars) break across multiple lines.
+     */
+    public static String normalizeImportExportStatement(String stmt) {
+        if (stmt == null || stmt.trim().isEmpty()) return "";
+
+        String trimmed = stmt.trim();
+        int len = trimmed.length();
+
+        int openBrace = -1;
+        int closeBrace = -1;
+        boolean inStr = false;
+        char q = 0;
+        int braceDepth = 0;
+
+        for (int i = 0; i < len; i++) {
+            char c = trimmed.charAt(i);
+            if (inStr) {
+                if (c == '\\') i++;
+                else if (c == q) inStr = false;
+                continue;
+            }
+            if (c == '\'' || c == '"' || c == '`') {
+                inStr = true;
+                q = c;
+                continue;
+            }
+            if (c == '/' && i + 1 < len) {
+                if (trimmed.charAt(i + 1) == '/') {
+                    while (i < len && trimmed.charAt(i) != '\n') i++;
+                    continue;
+                }
+                if (trimmed.charAt(i + 1) == '*') {
+                    i += 2;
+                    while (i + 1 < len && !(trimmed.charAt(i) == '*' && trimmed.charAt(i + 1) == '/')) i++;
+                    i++;
+                    continue;
+                }
+            }
+            if (c == '{') {
+                if (braceDepth == 0 && openBrace == -1) {
+                    openBrace = i;
+                }
+                braceDepth++;
+            } else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0 && closeBrace == -1) {
+                    closeBrace = i;
+                    break;
+                }
+            }
+        }
+
+        if (openBrace == -1 || closeBrace == -1) {
+            return normalizeSingleLineImportExport(trimmed);
+        }
+
+        String prefix = trimmed.substring(0, openBrace).replaceAll("\\s+", " ").trim();
+        String body = trimmed.substring(openBrace + 1, closeBrace);
+        String suffix = trimmed.substring(closeBrace + 1).replaceAll("\\s+", " ").trim();
+
+        if (!suffix.isEmpty()) {
+            if (suffix.startsWith(";")) {
+                suffix = ";";
+            } else {
+                if (!suffix.endsWith(";")) {
+                    suffix = suffix + ";";
+                }
+            }
+        } else {
+            suffix = ";";
+        }
+
+        List<String> items = new ArrayList<>();
+        StringBuilder curItem = new StringBuilder();
+        inStr = false;
+        q = 0;
+        int pDepth = 0;
+
+        for (int i = 0; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (inStr) {
+                curItem.append(c);
+                if (c == '\\') {
+                    if (i + 1 < body.length()) curItem.append(body.charAt(++i));
+                } else if (c == q) {
+                    inStr = false;
+                }
+                continue;
+            }
+            if (c == '\'' || c == '"' || c == '`') {
+                inStr = true;
+                q = c;
+                curItem.append(c);
+                continue;
+            }
+            if (c == '(') pDepth++;
+            else if (c == ')') { if (pDepth > 0) pDepth--; }
+
+            if (c == ',' && pDepth == 0) {
+                String it = curItem.toString().replaceAll("\\s+", " ").trim();
+                if (!it.isEmpty()) items.add(it);
+                curItem.setLength(0);
+                continue;
+            }
+            curItem.append(c);
+        }
+        String lastIt = curItem.toString().replaceAll("\\s+", " ").trim();
+        if (!lastIt.isEmpty()) items.add(lastIt);
+
+        StringBuilder singleLine = new StringBuilder();
+        singleLine.append(prefix).append(" { ");
+        for (int k = 0; k < items.size(); k++) {
+            if (k > 0) singleLine.append(", ");
+            singleLine.append(items.get(k));
+        }
+        singleLine.append(" }");
+        if (!suffix.equals(";")) {
+            singleLine.append(' ').append(suffix);
+        } else {
+            singleLine.append(';');
+        }
+
+        boolean isLong = items.size() > 3 || singleLine.length() > 45;
+        if (!isLong) {
+            return normalizeSingleLineImportExport(stmt);
+        }
+
+        StringBuilder multi = new StringBuilder();
+        multi.append(prefix).append(" {\n");
+        for (int k = 0; k < items.size(); k++) {
+            multi.append(items.get(k));
+            if (k < items.size() - 1) {
+                multi.append(",\n");
+            } else {
+                multi.append('\n');
+            }
+        }
+        if (!suffix.equals(";")) {
+            multi.append("} ").append(suffix);
+        } else {
+            multi.append("};");
+        }
+
+        return multi.toString();
+    }
+
+    public static String normalizeSingleLineImportExport(String stmt) {
+        if (stmt == null || stmt.trim().isEmpty()) return "";
+
+        String trimmed = stmt.trim();
+        int len = trimmed.length();
+        StringBuilder out = new StringBuilder(len + 16);
+
+        boolean inString = false;
+        char quoteChar = 0;
+        boolean inBlockComment = false;
+        boolean inLineComment = false;
+
+        for (int i = 0; i < len; i++) {
+            char c = trimmed.charAt(i);
+
+            if (inBlockComment) {
+                out.append(c);
+                if (c == '*' && i + 1 < len && trimmed.charAt(i + 1) == '/') {
+                    out.append('/');
+                    i++;
+                    inBlockComment = false;
+                }
+                continue;
+            }
+
+            if (inLineComment) {
+                out.append(c);
+                if (c == '\n') inLineComment = false;
+                continue;
+            }
+
+            if (inString) {
+                out.append(c);
+                if (c == '\\') {
+                    if (i + 1 < len) {
+                        out.append(trimmed.charAt(++i));
+                    }
+                } else if (c == quoteChar) {
+                    inString = false;
+                }
+                continue;
+            }
+
+            if (c == '/' && i + 1 < len) {
+                if (trimmed.charAt(i + 1) == '/') {
+                    inLineComment = true;
+                    if (out.length() > 0 && out.charAt(out.length() - 1) != ' ') {
+                        out.append(' ');
+                    }
+                    out.append("//");
+                    i++;
+                    continue;
+                }
+                if (trimmed.charAt(i + 1) == '*') {
+                    inBlockComment = true;
+                    if (out.length() > 0 && out.charAt(out.length() - 1) != ' ') {
+                        out.append(' ');
+                    }
+                    out.append("/*");
+                    i++;
+                    continue;
+                }
+            }
+
+            if (c == '\'' || c == '"' || c == '`') {
+                inString = true;
+                quoteChar = c;
+                if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
+                        && out.charAt(out.length() - 1) != '('
+                        && out.charAt(out.length() - 1) != '{') {
+                    out.append(' ');
+                }
+                out.append(c);
+                continue;
+            }
+
+            if (Character.isWhitespace(c)) {
+                if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
+                        && out.charAt(out.length() - 1) != '{'
+                        && out.charAt(out.length() - 1) != '(') {
+                    out.append(' ');
+                }
+                continue;
+            }
+
+            if (c == '{') {
+                if (out.length() > 0 && out.charAt(out.length() - 1) != ' ') {
+                    out.append(' ');
+                }
+                out.append('{');
+                int nextIdx = i + 1;
+                while (nextIdx < len && Character.isWhitespace(trimmed.charAt(nextIdx))) nextIdx++;
+                if (nextIdx < len && trimmed.charAt(nextIdx) != '}') {
+                    out.append(' ');
+                }
+                i = nextIdx - 1;
+                continue;
+            }
+
+            if (c == '}') {
+                if (out.length() > 0 && out.charAt(out.length() - 1) != ' '
+                        && out.charAt(out.length() - 1) != '{') {
+                    out.append(' ');
+                }
+                out.append('}');
+                int nextIdx = i + 1;
+                while (nextIdx < len && Character.isWhitespace(trimmed.charAt(nextIdx))) nextIdx++;
+                if (nextIdx < len && trimmed.charAt(nextIdx) != ';' && trimmed.charAt(nextIdx) != ',') {
+                    out.append(' ');
+                }
+                i = nextIdx - 1;
+                continue;
+            }
+
+            if (c == ',') {
+                while (out.length() > 0 && out.charAt(out.length() - 1) == ' ') {
+                    out.deleteCharAt(out.length() - 1);
+                }
+                out.append(',').append(' ');
+                int nextIdx = i + 1;
+                while (nextIdx < len && Character.isWhitespace(trimmed.charAt(nextIdx))) nextIdx++;
+                i = nextIdx - 1;
+                continue;
+            }
+
+            if (c == ';') {
+                while (out.length() > 0 && out.charAt(out.length() - 1) == ' ') {
+                    out.deleteCharAt(out.length() - 1);
+                }
+                out.append(';');
+                continue;
+            }
+
+            out.append(c);
+        }
+
+        int commentIdx = -1;
+        boolean inStr = false;
+        char q = 0;
+        for (int i = 0; i < out.length(); i++) {
+            char c = out.charAt(i);
+            if (inStr) {
+                if (c == '\\') i++;
+                else if (c == q) inStr = false;
+                continue;
+            }
+            if (c == '\'' || c == '"' || c == '`') {
+                inStr = true;
+                q = c;
+                continue;
+            }
+            if (c == '/' && i + 1 < out.length() && (out.charAt(i + 1) == '/' || out.charAt(i + 1) == '*')) {
+                commentIdx = i;
+                break;
+            }
+        }
+
+        if (commentIdx != -1) {
+            int pre = commentIdx - 1;
+            while (pre >= 0 && Character.isWhitespace(out.charAt(pre))) pre--;
+            if (pre >= 0 && out.charAt(pre) != ';') {
+                out.insert(pre + 1, ';');
+            }
+        } else {
+            int k = out.length() - 1;
+            while (k >= 0 && Character.isWhitespace(out.charAt(k))) k--;
+            if (k >= 0 && out.charAt(k) != ';') {
+                out.setLength(k + 1);
+                out.append(';');
+            } else if (k >= 0) {
+                out.setLength(k + 1);
+            }
+        }
+
+        return out.toString();
+    }
+
+    private static boolean isImportStart(String code, int i) {
+        if (!code.startsWith("import", i)) return false;
+        if (i > 0 && Character.isJavaIdentifierPart(code.charAt(i - 1))) return false;
+        int after = i + 6;
+        int len = code.length();
+        while (after < len && (code.charAt(after) == ' ' || code.charAt(after) == '\t')) after++;
+        if (after >= len) return false;
+        char next = code.charAt(after);
+        return next != '(' && next != '.';
+    }
+
+    private static boolean isExportClauseStart(String code, int i) {
+        if (!code.startsWith("export", i)) return false;
+        if (i > 0 && Character.isJavaIdentifierPart(code.charAt(i - 1))) return false;
+        int after = i + 6;
+        int len = code.length();
+        while (after < len && (code.charAt(after) == ' ' || code.charAt(after) == '\t' || code.charAt(after) == '\n' || code.charAt(after) == '\r')) after++;
+        if (after >= len) return false;
+        if (code.charAt(after) == '{') return true;
+        if (code.startsWith("type", after)) {
+            int afterType = after + 4;
+            while (afterType < len && (code.charAt(afterType) == ' ' || code.charAt(afterType) == '\t' || code.charAt(afterType) == '\n' || code.charAt(afterType) == '\r')) afterType++;
+            return afterType < len && code.charAt(afterType) == '{';
+        }
+        return false;
+    }
+
+    private static int findStatementEnd(String code, int start) {
+        int len = code.length();
+        boolean inStr = false;
+        char q = 0;
+        boolean inLineComm = false;
+        boolean inBlockComm = false;
+        int braceDepth = 0;
+        boolean seenFrom = false;
+        boolean seenModuleString = false;
+
+        for (int i = start; i < len; i++) {
+            char c = code.charAt(i);
+
+            if (inBlockComm) {
+                if (c == '*' && i + 1 < len && code.charAt(i + 1) == '/') {
+                    i++;
+                    inBlockComm = false;
+                }
+                continue;
+            }
+            if (inLineComm) {
+                if (c == '\n') {
+                    inLineComm = false;
+                    if (seenModuleString) return i;
+                }
+                continue;
+            }
+            if (inStr) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == q) {
+                    inStr = false;
+                    seenModuleString = true;
+                    int j = i + 1;
+                    while (j < len && (code.charAt(j) == ' ' || code.charAt(j) == '\t')) j++;
+                    if (j < len && code.charAt(j) == ';') {
+                        return j + 1;
+                    }
+                    if (j < len && (code.charAt(j) == '\n' || code.charAt(j) == '\r')) {
+                        return j;
+                    }
+                    if (j >= len) return len;
+                }
+                continue;
+            }
+
+            if (c == '/' && i + 1 < len) {
+                if (code.charAt(i + 1) == '/') {
+                    inLineComm = true;
+                    i++;
+                    continue;
+                }
+                if (code.charAt(i + 1) == '*') {
+                    inBlockComm = true;
+                    i++;
+                    continue;
+                }
+            }
+
+            if (c == '\'' || c == '"' || c == '`') {
+                inStr = true;
+                q = c;
+                continue;
+            }
+
+            if (c == '{') braceDepth++;
+            else if (c == '}') braceDepth = Math.max(0, braceDepth - 1);
+
+            if (braceDepth == 0 && (c == 'f' || c == 'F') && i + 4 <= len && code.substring(i, i + 4).equalsIgnoreCase("from")) {
+                int before = i - 1;
+                int after = i + 4;
+                boolean beforeOk = before < 0 || !Character.isJavaIdentifierPart(code.charAt(before));
+                boolean afterOk = after >= len || !Character.isJavaIdentifierPart(code.charAt(after));
+                if (beforeOk && afterOk) {
+                    seenFrom = true;
+                }
+            }
+
+            if (c == ';') {
+                return i + 1;
+            }
+
+            if (braceDepth == 0 && c == '\n') {
+                if (seenModuleString) {
+                    return i;
+                }
+                int j = i + 1;
+                while (j < len && (code.charAt(j) == ' ' || code.charAt(j) == '\t' || code.charAt(j) == '\n' || code.charAt(j) == '\r')) j++;
+                if (j + 4 <= len && code.substring(j, j + 4).equalsIgnoreCase("from")) {
+                    continue;
+                }
+                if (!seenFrom) {
+                    return i;
+                }
+            }
+        }
+        return len;
+    }
+
+    private static boolean isSingleLineBrace(String code, int openIdx) {
+        int len = code.length();
+        int depth = 1;
+        boolean inStr = false;
+        char q = 0;
+        int commaCount = 0;
+        for (int j = openIdx + 1; j < len; j++) {
+            char ch = code.charAt(j);
+            if (inStr) {
+                if (ch == '\\') j++;
+                else if (ch == q) inStr = false;
+                continue;
+            }
+            if (ch == '\'' || ch == '"' || ch == '`') {
+                inStr = true;
+                q = ch;
+                continue;
+            }
+            if (ch == '\n' || ch == '\r') {
+                return false;
+            }
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    int contentLen = j - openIdx - 1;
+                    if (contentLen > 40 || commaCount > 2) {
+                        return false;
+                    }
+                    return true;
+                }
+            } else if (depth == 1) {
+                if (ch == ';') return false;
+                if (ch == ',') commaCount++;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isObjectOrDestructuringBrace(String code, int openIdx) {
+        int len = code.length();
+        int depth = 1;
+        boolean inStr = false;
+        char q = 0;
+        boolean hasColonOrComma = false;
+
+        for (int j = openIdx + 1; j < len; j++) {
+            char ch = code.charAt(j);
+            if (inStr) {
+                if (ch == '\\') j++;
+                else if (ch == q) inStr = false;
+                continue;
+            }
+            if (ch == '\'' || ch == '"' || ch == '`') {
+                inStr = true;
+                q = ch;
+                continue;
+            }
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    return hasColonOrComma;
+                }
+            } else if (depth == 1) {
+                if (ch == ';') {
+                    return false;
+                }
+                if (ch == ':' || ch == ',') {
+                    hasColonOrComma = true;
+                }
+            }
+        }
+        return false;
     }
 
     private void ensureSpace(StringBuilder sb) {

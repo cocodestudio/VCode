@@ -3286,6 +3286,9 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
     public void formatText(String formattedText) {
         if (formattedText == null) return;
         String currentText = content.getText();
+        if (!currentText.endsWith("\n") && formattedText.endsWith("\n")) {
+            formattedText = formattedText.substring(0, formattedText.length() - 1);
+        }
         if (currentText.equals(formattedText)) return;
 
         int originalCursorFlat = getSelectionStart();
@@ -4878,14 +4881,23 @@ public class CodeEditText extends View implements com.cocode.vcode.ide.core.quic
 
         beginAtomicGroup();
         try {
+            int docTotal = content.totalLength();
+            String currentDocText = docTotal > 0 ? content.getText() : "";
+            boolean docHadTrailingNl = currentDocText.endsWith("\n");
+
             for (TextEdit edit : sorted) {
                 if (edit.range == null || edit.range.start == null || edit.range.end == null) continue;
+                String newText = edit.newText != null ? edit.newText : "";
+                int editEndOffset = toOffset(edit.range.end);
+                if (editEndOffset >= docTotal && !docHadTrailingNl && newText.endsWith("\n")) {
+                    newText = newText.substring(0, newText.length() - 1);
+                }
                 replaceRange(
                         edit.range.start.line,
                         edit.range.start.character,
                         edit.range.end.line,
                         edit.range.end.character,
-                        edit.newText != null ? edit.newText : ""
+                        newText
                 );
             }
         } finally {

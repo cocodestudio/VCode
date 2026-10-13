@@ -1235,6 +1235,9 @@ public final class CssLspServer implements LspServer {
         if (doc == null || doc.text == null || doc.text.isEmpty()) return Collections.emptyList();
 
         String formatted = new CssFormatter().format(doc.text);
+        if (formatted != null && !doc.text.endsWith("\n") && formatted.endsWith("\n")) {
+            formatted = formatted.substring(0, formatted.length() - 1);
+        }
         if (formatted == null || formatted.equals(doc.text)) {
             return Collections.emptyList();
         }

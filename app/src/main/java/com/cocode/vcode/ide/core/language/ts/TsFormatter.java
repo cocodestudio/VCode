@@ -8,6 +8,14 @@ import com.cocode.vcode.ide.core.language.js.JsFormatter;
  */
 public class TsFormatter extends JsFormatter {
 
+    public TsFormatter() {
+        super();
+    }
+
+    public TsFormatter(String indent) {
+        super(indent);
+    }
+
     @Override
     public String format(String code) {
         if (code == null || code.isEmpty()) return code;

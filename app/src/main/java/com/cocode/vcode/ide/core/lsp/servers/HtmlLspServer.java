@@ -716,6 +716,9 @@ public final class HtmlLspServer implements LspServer {
         if (token != null && token.isCancelled()) return Collections.emptyList();
 
         String formatted = new HtmlFormatter().format(doc.text);
+        if (formatted != null && !doc.text.endsWith("\n") && formatted.endsWith("\n")) {
+            formatted = formatted.substring(0, formatted.length() - 1);
+        }
         if (formatted == null || formatted.equals(doc.text)) {
             return Collections.emptyList();
         }

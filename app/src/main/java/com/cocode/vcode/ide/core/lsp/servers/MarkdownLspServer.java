@@ -732,6 +732,9 @@ public final class MarkdownLspServer implements LspServer {
         if (token != null && token.isCancelled()) return Collections.emptyList();
 
         String formatted = new MarkdownFormatter().format(doc.text);
+        if (formatted != null && !doc.text.endsWith("\n") && formatted.endsWith("\n")) {
+            formatted = formatted.substring(0, formatted.length() - 1);
+        }
         if (formatted == null || formatted.equals(doc.text)) return Collections.emptyList();
 
         com.cocode.vcode.ide.core.lsp.model.LspPosition start = new com.cocode.vcode.ide.core.lsp.model.LspPosition(0, 0);

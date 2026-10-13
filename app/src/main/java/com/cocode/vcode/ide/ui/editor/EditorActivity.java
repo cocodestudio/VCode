@@ -1441,11 +1441,12 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
             return;
         }
 
+        Toast.makeText(this, R.string.vcode_formatting, Toast.LENGTH_SHORT).show();
+
         // Check if LSP bridge is available and active for formatting
         if (activeViewer instanceof com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) {
             com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer cfv = (com.cocode.vcode.ide.ui.editor.viewer.CodeFileViewer) activeViewer;
             if (cfv.getLspBridge() != null && cfv.getLspBridge().isLspActive()) {
-                Toast.makeText(this, R.string.vcode_formatting, Toast.LENGTH_SHORT).show();
                 cfv.getLspBridge().requestFormatting(new com.cocode.vcode.ide.core.lsp.LspCallback<List<com.cocode.vcode.ide.core.lsp.model.TextEdit>>() {
                     @Override
                     public void onResult(List<com.cocode.vcode.ide.core.lsp.model.TextEdit> edits) {
@@ -1457,6 +1458,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             viewModel.notifyFileDirtyStatusChanged();
                             viewModel.triggerAutoSave();
                             Toast.makeText(EditorActivity.this, R.string.vcode_formatted_successfully, Toast.LENGTH_SHORT).show();
+                        } else if (edits != null) {
+                            Toast.makeText(EditorActivity.this, R.string.vcode_code_is_already_formatted, Toast.LENGTH_SHORT).show();
                         } else {
                             formatWithFallbackFormatter(activeFile, codeEditText, rawCode, lang);
                         }
@@ -1475,17 +1478,25 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
     }
 
     private void formatWithFallbackFormatter(EditorFile activeFile, CodeEditText codeEditText, String rawCode, FileType lang) {
-        Toast.makeText(this, R.string.vcode_formatting, Toast.LENGTH_SHORT).show();
         ExecutorProvider.getInstance().runOnIo(() -> {
             String formattedCode = CodeFormatter.format(rawCode, lang);
             ExecutorProvider.getInstance().runOnMain(() -> {
-                if (!rawCode.equals(formattedCode)) {
-                    activeFile.setContent(formattedCode);
+                String normalizedFormatted = formattedCode;
+                if (normalizedFormatted != null) {
+                    if (!rawCode.endsWith("\n") && normalizedFormatted.endsWith("\n")) {
+                        normalizedFormatted = normalizedFormatted.substring(0, normalizedFormatted.length() - 1);
+                    } else if (rawCode.endsWith("\n") && !normalizedFormatted.endsWith("\n")) {
+                        normalizedFormatted = normalizedFormatted + "\n";
+                    }
+                }
+
+                if (!rawCode.equals(normalizedFormatted) && normalizedFormatted != null) {
+                    activeFile.setContent(normalizedFormatted);
                     activeFile.setDirty(true);
                     viewModel.notifyFileDirtyStatusChanged();
                     viewModel.triggerAutoSave();
 
-                    codeEditText.formatText(formattedCode);
+                    codeEditText.formatText(normalizedFormatted);
                     Toast.makeText(this, R.string.vcode_formatted_successfully, Toast.LENGTH_SHORT).show();
                 } else {
                     Toast.makeText(this, R.string.vcode_code_is_already_formatted, Toast.LENGTH_SHORT).show();
