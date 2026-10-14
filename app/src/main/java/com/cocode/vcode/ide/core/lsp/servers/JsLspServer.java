@@ -3,6 +3,7 @@ package com.cocode.vcode.ide.core.lsp.servers;
 import android.content.Context;
 
 import com.cocode.vcode.ide.core.diagnostic.DiagnosticEngine;
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.TokenStream;
 import com.cocode.vcode.ide.core.editor.indent.BracketMatcher;
 import com.cocode.vcode.ide.core.language.js.DocCommentParser;
@@ -379,8 +380,12 @@ public final class JsLspServer implements LspServer {
 
     @Override
     public List<CodeAction> codeAction(CodeActionParams params, CancellationToken token) {
+        return codeAction(params, token, null);
+    }
+
+    public List<CodeAction> codeAction(CodeActionParams params, CancellationToken token, LspDocument overrideDoc) {
         if (params == null || params.textDocument == null) return Collections.emptyList();
-        LspDocument doc = getDocument(params.textDocument.uri);
+        LspDocument doc = overrideDoc != null ? overrideDoc : getDocument(params.textDocument.uri);
         if (doc == null || doc.text == null) return Collections.emptyList();
         if (token != null && token.isCancelled()) return Collections.emptyList();
 
@@ -390,23 +395,7 @@ public final class JsLspServer implements LspServer {
         if (params.context != null && params.context.diagnostics != null) {
             for (Diagnostic diag : params.context.diagnostics) {
                 if (token != null && token.isCancelled()) break;
-                String msg = diag.message != null ? diag.message : "";
-
-                // Check for unused variable
-                if (msg.contains("is declared but never used") || "JS_UNUSED_VARIABLE".equals(diag.code)) {
-                    TextEdit edit = computeUnusedVariableRemovalEdit(doc, diag.range);
-                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
-                    CodeAction action = new CodeAction(
-                            "Remove unused variable",
-                            CodeActionKind.QUICKFIX,
-                            Collections.singletonList(diag),
-                            false,
-                            wsEdit,
-                            null,
-                            null
-                    );
-                    actions.add(action);
-                }
+                addNativeJsFixes(doc, diag, actions);
             }
         }
 
@@ -454,6 +443,99 @@ public final class JsLspServer implements LspServer {
         }
 
         return actions;
+    }
+
+    private void addNativeJsFixes(LspDocument doc, Diagnostic diag, List<CodeAction> actions) {
+        if (doc == null || doc.text == null || diag == null) return;
+        String code = diag.code != null ? diag.code : "";
+        String msg = diag.message != null ? diag.message : "";
+
+        // 1. JS_UNUSED_VARIABLE
+        if (ProblemCode.JS_UNUSED_VARIABLE.name().equals(code) || msg.contains("is declared but never used") || msg.contains("Unused variable")) {
+            TextEdit edit = computeUnusedVariableRemovalEdit(doc, diag.range);
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove unused variable", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEdit, null, null));
+        }
+
+        // 2. JS_CONST_REASSIGNMENT
+        if (ProblemCode.JS_CONST_REASSIGNMENT.name().equals(code) || msg.contains("Assignment to constant variable")) {
+            String varName = extractQuotedName(msg);
+            if (!varName.isEmpty()) {
+                int declIdx = doc.text.indexOf("const " + varName);
+                if (declIdx >= 0) {
+                    com.cocode.vcode.ide.core.lsp.model.LspRange range =
+                            new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(declIdx), doc.toModelPosition(declIdx + 5));
+                    TextEdit edit = new TextEdit(range, "let");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Change 'const " + varName + "' declaration to 'let'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+            }
+        }
+
+        // 3. JS_MISSING_SEMICOLON
+        if (ProblemCode.JS_MISSING_SEMICOLON.name().equals(code) || msg.contains("Missing semicolon")) {
+            TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(diag.range.end, diag.range.end), ";");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Insert missing semicolon ';'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 4. JS_CONSOLE_STATEMENT (2 choices: delete vs comment out)
+        if (ProblemCode.JS_CONSOLE_STATEMENT.name().equals(code) || msg.contains("console statement") || msg.contains("Unexpected console statement")) {
+            com.cocode.vcode.ide.core.lsp.model.LspRange delRange = expandToFullLine(doc, diag.range);
+            TextEdit editDel = new TextEdit(delRange, "");
+            WorkspaceEdit wsEditDel = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editDel)));
+            actions.add(new CodeAction("Remove console statement", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditDel, null, null));
+
+            com.cocode.vcode.ide.core.lsp.model.LspPosition lineStart = new com.cocode.vcode.ide.core.lsp.model.LspPosition(diag.range.start.line, 0);
+            TextEdit editComment = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(lineStart, lineStart), "// ");
+            WorkspaceEdit wsEditComment = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editComment)));
+            actions.add(new CodeAction("Comment out console statement", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditComment, null, null));
+        }
+
+        // 5. JS_TYPEOF_UNDEFINED_COMPARISON
+        if (ProblemCode.JS_TYPEOF_UNDEFINED_COMPARISON.name().equals(code)
+                || msg.contains("typeof comparison with undefined")
+                || (msg.contains("typeof") && msg.contains("undefined"))) {
+            TextEdit edit = new TextEdit(diag.range, "\"undefined\"");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Wrap 'undefined' in quotes ('\"undefined\"')", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 6. JS_DUPLICATE_DECLARATION
+        if (ProblemCode.JS_DUPLICATE_DECLARATION.name().equals(code) || msg.contains("Identifier has already been declared") || msg.contains("already been declared")) {
+            com.cocode.vcode.ide.core.lsp.model.LspRange delRange = expandToFullLine(doc, diag.range);
+            TextEdit edit = new TextEdit(delRange, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove duplicate declaration", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 7. JS_TOO_MANY_ARGUMENTS
+        if (ProblemCode.JS_TOO_MANY_ARGUMENTS.name().equals(code) || msg.contains("Expected at most") || msg.contains("Too many arguments")) {
+            TextEdit edit = new TextEdit(diag.range, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove extraneous arguments", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+    }
+
+    private static String extractQuotedName(String msg) {
+        if (msg == null) return "";
+        int q1 = msg.indexOf('\'');
+        if (q1 >= 0) {
+            int q2 = msg.indexOf('\'', q1 + 1);
+            if (q2 > q1) return msg.substring(q1 + 1, q2);
+        }
+        return "";
+    }
+
+    private static com.cocode.vcode.ide.core.lsp.model.LspRange expandToFullLine(LspDocument doc, com.cocode.vcode.ide.core.lsp.model.LspRange range) {
+        if (doc == null || doc.text == null || range == null || range.start == null) return range;
+        int startOff = doc.toOffset(range.start);
+        int endOff = doc.toOffset(range.end);
+        int lineStart = doc.text.lastIndexOf('\n', Math.max(0, startOff - 1));
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        int lineEnd = doc.text.indexOf('\n', endOff);
+        int deleteEnd = (lineEnd == -1) ? doc.text.length() : lineEnd + 1;
+        return new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(lineStart), doc.toModelPosition(deleteEnd));
     }
 
     private TextEdit computeUnusedVariableRemovalEdit(LspDocument doc, com.cocode.vcode.ide.core.lsp.model.LspRange range) {

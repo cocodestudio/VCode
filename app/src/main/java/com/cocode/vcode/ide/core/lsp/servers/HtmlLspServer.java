@@ -53,6 +53,7 @@ import com.cocode.vcode.ide.core.lsp.model.TextEdit;
 import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.lsp.model.WorkspaceEdit;
 import com.cocode.vcode.ide.core.model.CompletionItem;
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.utils.FileUtils;
 
@@ -63,6 +64,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -455,13 +458,13 @@ public final class HtmlLspServer implements LspServer {
             if (reg.type == HtmlEmbeddedProjector.EmbeddedRegion.TYPE_CSS && cssServer != null) {
                 LspDocument vCss = HtmlEmbeddedProjector.createVirtualCssDocument(doc, regions);
                 if (vCss != null) {
-                    List<CodeAction> cssActions = cssServer.codeAction(params, token);
+                    List<CodeAction> cssActions = cssServer.codeAction(params, token, vCss);
                     if (cssActions != null) actions.addAll(cssActions);
                 }
             } else if (reg.type == HtmlEmbeddedProjector.EmbeddedRegion.TYPE_JS && jsServer != null) {
                 LspDocument vJs = HtmlEmbeddedProjector.createVirtualJsDocument(doc, regions);
                 if (vJs != null) {
-                    List<CodeAction> jsActions = jsServer.codeAction(params, token);
+                    List<CodeAction> jsActions = jsServer.codeAction(params, token, vJs);
                     if (jsActions != null) actions.addAll(jsActions);
                 }
             }
@@ -484,9 +487,9 @@ public final class HtmlLspServer implements LspServer {
         String msg = diag.message != null ? diag.message : "";
 
         // 1. Missing alt="" on <img>
-        if ("HTML_MISSING_ALT".equals(code) || msg.contains("missing 'alt'")) {
+        if (ProblemCode.HTML_MISSING_ALT.name().equals(code) || msg.contains("missing 'alt'")) {
             int offset = doc.toOffset(diag.range.start);
-            int tagStart = doc.text.lastIndexOf("<img", Math.max(0, offset));
+            int tagStart = findTagStartIgnoreCase(doc.text, offset, "<img");
             if (tagStart == -1) tagStart = offset;
             int gt = doc.text.indexOf('>', tagStart);
             if (gt > tagStart) {
@@ -499,9 +502,9 @@ public final class HtmlLspServer implements LspServer {
         }
 
         // 2. Missing type="button" on <button>
-        if ("HTML_BUTTON_MISSING_TYPE".equals(code) || (msg.contains("missing 'type'") && msg.contains("button"))) {
+        if (ProblemCode.HTML_BUTTON_MISSING_TYPE.name().equals(code) || (msg.contains("missing 'type'") && msg.contains("button"))) {
             int offset = doc.toOffset(diag.range.start);
-            int tagStart = doc.text.lastIndexOf("<button", Math.max(0, offset));
+            int tagStart = findTagStartIgnoreCase(doc.text, offset, "<button");
             if (tagStart == -1) tagStart = offset;
             int gt = doc.text.indexOf('>', tagStart);
             if (gt > tagStart) {
@@ -514,31 +517,186 @@ public final class HtmlLspServer implements LspServer {
         }
 
         // 3. Missing <meta charset="UTF-8">
-        if ("HTML_MISSING_CHARSET".equals(code) || msg.contains("charset")) {
-            int headIdx = indexOfIgnoreCase(doc.text, "<head>");
-            int insertOffset;
-            String insertText;
-            if (headIdx >= 0) {
-                insertOffset = headIdx + 6;
-                insertText = "\n    <meta charset=\"UTF-8\">";
-            } else {
-                int htmlIdx = indexOfIgnoreCase(doc.text, "<html>");
-                if (htmlIdx >= 0) {
-                    insertOffset = htmlIdx + 6;
-                    insertText = "\n<head>\n    <meta charset=\"UTF-8\">\n</head>";
-                } else {
-                    insertOffset = 0;
-                    insertText = "<meta charset=\"UTF-8\">\n";
-                }
-            }
-            com.cocode.vcode.ide.core.lsp.model.LspPosition pos = doc.toModelPosition(insertOffset);
-            TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), insertText);
-            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
-            actions.add(new CodeAction("Add <meta charset=\"UTF-8\">", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        if (ProblemCode.HTML_MISSING_CHARSET.name().equals(code) || msg.contains("charset")) {
+            insertHeadElementAction(doc, diag, actions, "Add <meta charset=\"UTF-8\">", "<meta charset=\"UTF-8\">");
         }
 
-        // 4. Close unclosed tag
-        if ("HTML_UNCLOSED_TAG".equals(code) || msg.contains("Unclosed tag")) {
+        // 4. Missing viewport <meta>
+        if (ProblemCode.HTML_MISSING_VIEWPORT.name().equals(code) || msg.contains("viewport")) {
+            insertHeadElementAction(doc, diag, actions, "Add viewport <meta> tag", "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+        }
+
+        // 5. Missing <title>
+        if (ProblemCode.HTML_MISSING_TITLE.name().equals(code) || msg.contains("Missing <title>")) {
+            insertHeadElementAction(doc, diag, actions, "Add <title> tag", "<title>Document</title>");
+        }
+
+        // 6. Missing meta description
+        if (ProblemCode.HTML_MISSING_META_DESCRIPTION.name().equals(code) || msg.contains("meta description")) {
+            insertHeadElementAction(doc, diag, actions, "Add meta description tag", "<meta name=\"description\" content=\"\">");
+        }
+
+        // 7. Missing lang on <html>
+        if (ProblemCode.HTML_MISSING_LANG.name().equals(code) || msg.contains("missing 'lang'")) {
+            int htmlIdx = indexOfIgnoreCase(doc.text, "<html");
+            if (htmlIdx >= 0) {
+                int insOff = htmlIdx + 5;
+                com.cocode.vcode.ide.core.lsp.model.LspPosition pos = doc.toModelPosition(insOff);
+                TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), " lang=\"en\"");
+                WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                actions.add(new CodeAction("Add lang=\"en\" to <html>", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+            }
+        }
+
+        // 8. Target blank security (rel="noopener noreferrer")
+        if (ProblemCode.HTML_TARGET_BLANK_SECURITY.name().equals(code) || msg.contains("rel=\"noopener noreferrer\"") || msg.contains("target=\"_blank\"")) {
+            int offset = doc.toOffset(diag.range.start);
+            int tagStart = findTagStartIgnoreCase(doc.text, offset, "<a");
+            if (tagStart == -1) tagStart = offset;
+            int gt = doc.text.indexOf('>', tagStart);
+            if (gt > tagStart) {
+                int insOff = (gt > 0 && doc.text.charAt(gt - 1) == '/') ? gt - 1 : gt;
+                com.cocode.vcode.ide.core.lsp.model.LspPosition pos = doc.toModelPosition(insOff);
+                TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), " rel=\"noopener noreferrer\"");
+                WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                actions.add(new CodeAction("Add rel=\"noopener noreferrer\"", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+            }
+        }
+
+        // 9. Void element closing slash
+        if (ProblemCode.HTML_VOID_ELEMENT_CLOSING.name().equals(code) || msg.contains("self-closing slash")) {
+            int offset = doc.toOffset(diag.range.start);
+            int gt = doc.text.indexOf('>', offset);
+            if (gt > 0 && doc.text.charAt(gt - 1) == '/') {
+                com.cocode.vcode.ide.core.lsp.model.LspRange slashRange =
+                        new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(gt - 1), doc.toModelPosition(gt));
+                TextEdit edit = new TextEdit(slashRange, "");
+                WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                actions.add(new CodeAction("Remove self-closing slash", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+            }
+        }
+
+        // 10. Deprecated tag replacement
+        if (ProblemCode.HTML_DEPRECATED_TAG.name().equals(code) || msg.contains("Deprecated HTML tag")) {
+            String tagName = extractTagName(msg, doc.text, diag.range);
+            if ("center".equalsIgnoreCase(tagName)) {
+                addDeprecatedTagAction(doc, diag, actions, "center", "div", true);
+            } else if ("font".equalsIgnoreCase(tagName)) {
+                addDeprecatedTagAction(doc, diag, actions, "font", "span", true);
+            } else if ("strike".equalsIgnoreCase(tagName)) {
+                addDeprecatedTagAction(doc, diag, actions, "strike", "s", true);
+                addDeprecatedTagAction(doc, diag, actions, "strike", "del", false);
+            } else if ("tt".equalsIgnoreCase(tagName)) {
+                addDeprecatedTagAction(doc, diag, actions, "tt", "code", true);
+            } else if ("big".equalsIgnoreCase(tagName)) {
+                addDeprecatedTagAction(doc, diag, actions, "big", "span", true);
+            }
+        }
+
+        // 11. Deprecated attribute
+        if (ProblemCode.HTML_DEPRECATED_ATTR.name().equals(code) || msg.contains("Deprecated attribute")) {
+            TextEdit edit = new TextEdit(diag.range, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove deprecated attribute", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 12. Duplicate attribute
+        if (ProblemCode.HTML_DUPLICATE_ATTR.name().equals(code) || msg.contains("Duplicate attribute")) {
+            TextEdit edit = new TextEdit(diag.range, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove duplicate attribute", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 13. Redundant type attribute
+        if (ProblemCode.HTML_REDUNDANT_TYPE_ATTR.name().equals(code) || msg.contains("type attribute is unnecessary") || msg.contains("Redundant")) {
+            TextEdit edit = new TextEdit(diag.range, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove redundant type attribute", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 14. Blocking script without defer or async (2 choices)
+        if (ProblemCode.HTML_SCRIPT_MISSING_DEFER.name().equals(code) || msg.contains("missing defer") || msg.contains("blocking script")) {
+            int offset = doc.toOffset(diag.range.start);
+            int tagStart = findTagStartIgnoreCase(doc.text, offset, "<script");
+            if (tagStart == -1) tagStart = offset;
+            int gt = doc.text.indexOf('>', tagStart);
+            if (gt > tagStart) {
+                int insOff = (gt > 0 && doc.text.charAt(gt - 1) == '/') ? gt - 1 : gt;
+                com.cocode.vcode.ide.core.lsp.model.LspPosition pos = doc.toModelPosition(insOff);
+
+                TextEdit editDefer = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), " defer");
+                WorkspaceEdit wsEditDefer = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editDefer)));
+                actions.add(new CodeAction("Add 'defer' attribute to <script>", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditDefer, null, null));
+
+                TextEdit editAsync = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), " async");
+                WorkspaceEdit wsEditAsync = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editAsync)));
+                actions.add(new CodeAction("Add 'async' attribute to <script>", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditAsync, null, null));
+            }
+        }
+
+        // 15. Anchor tag used as button (2 choices)
+        if (ProblemCode.HTML_ANCHOR_AS_BUTTON.name().equals(code) || msg.contains("Anchor tag used as button") || msg.contains("href=\"#\"")) {
+            int offset = doc.toOffset(diag.range.start);
+            int aTagStart = findTagStartIgnoreCase(doc.text, offset, "<a");
+            if (aTagStart == -1) aTagStart = offset;
+
+            // Choice 1: Add role="button" inserted right after "<a"
+            int roleInsOff = aTagStart + 2;
+            com.cocode.vcode.ide.core.lsp.model.LspPosition rolePos = doc.toModelPosition(roleInsOff);
+            TextEdit editRole = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(rolePos, rolePos), " role=\"button\"");
+            WorkspaceEdit wsEditRole = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editRole)));
+            actions.add(new CodeAction("Add role=\"button\" to anchor", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditRole, null, null));
+
+            // Choice 2: Convert <a> to <button type="button">, remove href="#", and convert closing </a>
+            List<TextEdit> convEdits = new ArrayList<>();
+            com.cocode.vcode.ide.core.lsp.model.LspPosition openStart = doc.toModelPosition(aTagStart);
+            com.cocode.vcode.ide.core.lsp.model.LspPosition openEnd = doc.toModelPosition(aTagStart + 2);
+            convEdits.add(new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(openStart, openEnd), "<button type=\"button\""));
+
+            int gt = doc.text.indexOf('>', aTagStart);
+            if (gt > aTagStart) {
+                String tagSlice = doc.text.substring(aTagStart, gt);
+                Matcher hrefMatcher = Pattern.compile("(?i)(\\s*href\\s*=\\s*[\"']#[\"'])").matcher(tagSlice);
+                if (hrefMatcher.find()) {
+                    int hStart = aTagStart + hrefMatcher.start();
+                    int hEnd = aTagStart + hrefMatcher.end();
+                    convEdits.add(new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(hStart), doc.toModelPosition(hEnd)), ""));
+                }
+
+                int closeA = doc.text.toLowerCase(Locale.ROOT).indexOf("</a>", gt);
+                if (closeA >= 0) {
+                    com.cocode.vcode.ide.core.lsp.model.LspPosition cAStart = doc.toModelPosition(closeA);
+                    com.cocode.vcode.ide.core.lsp.model.LspPosition cAEnd = doc.toModelPosition(closeA + 4);
+                    convEdits.add(new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(cAStart, cAEnd), "</button>"));
+                }
+            }
+
+            WorkspaceEdit wsEditBtn = new WorkspaceEdit(Collections.singletonMap(doc.uri, convEdits));
+            actions.add(new CodeAction("Convert <a> to <button type=\"button\">", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditBtn, null, null));
+        }
+
+        // 16. Empty tag
+        if (ProblemCode.HTML_EMPTY_TAG.name().equals(code) || msg.contains("Empty element")) {
+            TextEdit edit = new TextEdit(diag.range, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove empty tag", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 17. Lazy loading attribute
+        if (ProblemCode.HTML_LAZY_LOADING.name().equals(code) || msg.contains("loading=\"lazy\"")) {
+            int offset = doc.toOffset(diag.range.start);
+            int gt = doc.text.indexOf('>', offset);
+            if (gt > offset) {
+                int insOff = (gt > 0 && doc.text.charAt(gt - 1) == '/') ? gt - 1 : gt;
+                com.cocode.vcode.ide.core.lsp.model.LspPosition pos = doc.toModelPosition(insOff);
+                TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), " loading=\"lazy\"");
+                WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                actions.add(new CodeAction("Add loading=\"lazy\" attribute", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+            }
+        }
+
+        // 18. Close unclosed tag
+        if (ProblemCode.HTML_UNCLOSED_TAG.name().equals(code) || msg.contains("Unclosed tag")) {
             String tagName = extractTagNameFromMsg(msg);
             if (!tagName.isEmpty()) {
                 int offset = doc.toOffset(diag.range.end);
@@ -552,6 +710,45 @@ public final class HtmlLspServer implements LspServer {
                 actions.add(new CodeAction("Close tag </" + tagName + ">", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
             }
         }
+    }
+
+    private static void insertHeadElementAction(LspDocument doc, Diagnostic diag, List<CodeAction> actions, String title, String tag) {
+        int headIdx = indexOfIgnoreCase(doc.text, "<head>");
+        int insertOffset;
+        String insertText;
+        if (headIdx >= 0) {
+            insertOffset = headIdx + 6;
+            insertText = "\n    " + tag;
+        } else {
+            int htmlIdx = indexOfIgnoreCase(doc.text, "<html>");
+            if (htmlIdx >= 0) {
+                insertOffset = htmlIdx + 6;
+                insertText = "\n<head>\n    " + tag + "\n</head>";
+            } else {
+                insertOffset = 0;
+                insertText = tag + "\n";
+            }
+        }
+        com.cocode.vcode.ide.core.lsp.model.LspPosition pos = doc.toModelPosition(insertOffset);
+        TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pos, pos), insertText);
+        WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+        actions.add(new CodeAction(title, CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+    }
+
+    private static String extractTagName(String msg, String text, com.cocode.vcode.ide.core.lsp.model.LspRange range) {
+        if (msg != null) {
+            int q1 = msg.indexOf('\'');
+            if (q1 >= 0) {
+                int q2 = msg.indexOf('\'', q1 + 1);
+                if (q2 > q1) return msg.substring(q1 + 1, q2).replace("<", "").replace(">", "").trim();
+            }
+            int l1 = msg.indexOf('<');
+            if (l1 >= 0) {
+                int l2 = msg.indexOf('>', l1 + 1);
+                if (l2 > l1) return msg.substring(l1 + 1, l2).trim();
+            }
+        }
+        return "";
     }
 
     private static String extractTagNameFromMsg(String msg) {
@@ -569,6 +766,39 @@ public final class HtmlLspServer implements LspServer {
     private static int indexOfIgnoreCase(String text, String needle) {
         if (text == null || needle == null) return -1;
         return text.toLowerCase(Locale.ROOT).indexOf(needle.toLowerCase(Locale.ROOT));
+    }
+
+    private static int findTagStartIgnoreCase(String text, int off, String tagPrefix) {
+        if (text == null || tagPrefix == null) return -1;
+        String lowerText = text.toLowerCase(Locale.ROOT);
+        String lowerPrefix = tagPrefix.toLowerCase(Locale.ROOT);
+        int maxLookahead = Math.min(lowerText.length(), off + 20);
+        int tagStart = lowerText.lastIndexOf(lowerPrefix, maxLookahead);
+        if (tagStart == -1) {
+            int minLookbehind = Math.max(0, off - 20);
+            tagStart = lowerText.indexOf(lowerPrefix, minLookbehind);
+        }
+        return tagStart;
+    }
+
+    private void addDeprecatedTagAction(LspDocument doc, Diagnostic diag, List<CodeAction> actions,
+                                        String oldTag, String newTag, boolean isPreferred) {
+        List<TextEdit> edits = new ArrayList<>();
+        edits.add(new TextEdit(diag.range, "<" + newTag + ">"));
+
+        int startOff = doc.toOffset(diag.range.end);
+        String lowerText = doc.text.toLowerCase(Locale.ROOT);
+        String closeTarget = "</" + oldTag.toLowerCase(Locale.ROOT) + ">";
+        int closeIdx = lowerText.indexOf(closeTarget, startOff);
+        if (closeIdx >= 0) {
+            com.cocode.vcode.ide.core.lsp.model.LspPosition cStart = doc.toModelPosition(closeIdx);
+            com.cocode.vcode.ide.core.lsp.model.LspPosition cEnd = doc.toModelPosition(closeIdx + closeTarget.length());
+            edits.add(new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(cStart, cEnd), "</" + newTag + ">"));
+        }
+
+        WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, edits));
+        actions.add(new CodeAction("Replace <" + oldTag + "> with <" + newTag + ">",
+                CodeActionKind.QUICKFIX, Collections.singletonList(diag), isPreferred, wsEdit, null, null));
     }
 
     // -------------------------------------------------------------------------

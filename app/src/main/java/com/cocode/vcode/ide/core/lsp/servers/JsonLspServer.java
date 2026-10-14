@@ -47,6 +47,7 @@ import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
 import com.cocode.vcode.ide.core.lsp.model.TextEdit;
 import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.lsp.model.WorkspaceEdit;
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.model.CompletionItem;
 import com.cocode.vcode.ide.core.model.Problem;
 
@@ -441,8 +442,10 @@ public final class JsonLspServer implements LspServer {
                     }
                 }
 
+                String code = diag.code != null ? diag.code : "";
+
                 // 4. Remove duplicate key
-                if (msg.contains("Duplicate object key")) {
+                if (ProblemCode.JSON_DUPLICATE_KEY.name().equals(code) || msg.contains("Duplicate object key")) {
                     int startOffset = doc.toOffset(diag.range.start);
                     int lineStart = doc.text.lastIndexOf('\n', startOffset);
                     lineStart = (lineStart == -1) ? 0 : lineStart + 1;
@@ -457,9 +460,40 @@ public final class JsonLspServer implements LspServer {
                     actions.add(new CodeAction("Remove duplicate key" + (!keyName.isEmpty() ? " '" + keyName + "'" : ""),
                             CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
                 }
+
+                // 5. Remove disallowed JSON comments
+                if (ProblemCode.JSON_COMMENTS_DISALLOWED.name().equals(code) || msg.contains("Comments are not permitted in standard JSON") || msg.contains("Comments are not permitted")) {
+                    com.cocode.vcode.ide.core.lsp.model.LspRange delRange = expandToFullLine(doc, diag.range);
+                    TextEdit edit = new TextEdit(delRange, "");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Remove disallowed JSON comment",
+                            CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 6. Wrap multiple root values into a JSON array
+                if (ProblemCode.JSON_MULTIPLE_ROOTS.name().equals(code) || msg.contains("Multiple JSON root values")) {
+                    com.cocode.vcode.ide.core.lsp.model.LspPosition pStart = new com.cocode.vcode.ide.core.lsp.model.LspPosition(0, 0);
+                    com.cocode.vcode.ide.core.lsp.model.LspPosition pEnd = doc.toModelPosition(doc.text.length());
+                    String wrapped = "[\n" + doc.text.trim() + "\n]";
+                    TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(pStart, pEnd), wrapped);
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Wrap multiple JSON values in array '[ ... ]'",
+                            CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
             }
         }
         return actions;
+    }
+
+    private static com.cocode.vcode.ide.core.lsp.model.LspRange expandToFullLine(LspDocument doc, com.cocode.vcode.ide.core.lsp.model.LspRange range) {
+        if (doc == null || doc.text == null || range == null || range.start == null) return range;
+        int startOff = doc.toOffset(range.start);
+        int endOff = doc.toOffset(range.end);
+        int lineStart = doc.text.lastIndexOf('\n', Math.max(0, startOff - 1));
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        int lineEnd = doc.text.indexOf('\n', endOff);
+        int deleteEnd = (lineEnd == -1) ? doc.text.length() : lineEnd + 1;
+        return new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(lineStart), doc.toModelPosition(deleteEnd));
     }
 
     private static String extractQuotedName(String msg) {

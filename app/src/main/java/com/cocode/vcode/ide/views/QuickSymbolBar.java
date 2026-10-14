@@ -19,6 +19,7 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 import com.cocode.vcode.ide.core.lsp.model.CodeAction;
+import com.cocode.vcode.ide.core.quickfix.QuickFix;
 import com.cocode.vcode.ide.utils.FontManager;
 import com.cocode.vcode.ide.utils.UiUtils;
 
@@ -30,7 +31,9 @@ import com.cocode.vcode.ide.core.events.Disposable;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Keyboard accessory toolbar for inserting programming symbols
@@ -283,17 +286,23 @@ public class QuickSymbolBar extends LinearLayout {
         }
         popup.setCardBackgroundColor(ContextCompat.getColor(getContext(), R.color.vcode_bg_surface));
         popup.setTextColor(ContextCompat.getColor(getContext(), R.color.vcode_text_primary));
+        Set<String> addedTitles = new HashSet<>();
         int totalFixes = 0;
 
         for (Problem p : problems) {
             List<CodeAction> candidateFixes = LspEditorBridge.getCodeActionsForProblem(p, editor);
             if (candidateFixes != null) {
                 for (CodeAction fix : candidateFixes) {
+                    if (fix == null || fix.title == null || !addedTitles.add(fix.title)) {
+                        continue;
+                    }
                     totalFixes++;
                     final Problem finalProb = p;
                     popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.title, () -> {
                         if (fix.edit != null) {
                             editor.applyWorkspaceEdit(fix.edit);
+                        } else if (fix.data instanceof QuickFix) {
+                            ((QuickFix) fix.data).apply(editor, finalProb);
                         }
                         editor.removeProblem(finalProb);
                         checkQuickFixAvailable();

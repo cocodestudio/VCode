@@ -57,6 +57,7 @@ import com.cocode.vcode.ide.core.lsp.model.TextDocumentItem;
 import com.cocode.vcode.ide.core.lsp.model.TextEdit;
 import com.cocode.vcode.ide.core.lsp.model.VersionedTextDocumentIdentifier;
 import com.cocode.vcode.ide.core.lsp.model.WorkspaceEdit;
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.utils.FileUtils;
 
@@ -418,11 +419,27 @@ public final class CssLspServer implements LspServer {
 
     @Override
     public List<CodeAction> codeAction(CodeActionParams params, CancellationToken token) {
+        return codeAction(params, token, null);
+    }
+
+    public List<CodeAction> codeAction(CodeActionParams params, CancellationToken token, LspDocument overrideDoc) {
         if (params == null || params.textDocument == null) return Collections.emptyList();
-        LspDocument doc = getDocument(params.textDocument.uri);
+        LspDocument doc = overrideDoc != null ? overrideDoc : getDocument(params.textDocument.uri);
         if (doc == null || doc.text == null || doc.text.isEmpty()) return Collections.emptyList();
 
         List<CodeAction> actions = new ArrayList<>();
+
+        // Check if context has specific diagnostics
+        boolean hasDiagnostics = params.context != null && params.context.diagnostics != null && !params.context.diagnostics.isEmpty();
+        boolean hasEmptyRuleDiag = false;
+        if (hasDiagnostics) {
+            for (Diagnostic diag : params.context.diagnostics) {
+                if ("CSS_EMPTY_RULE".equals(diag.code) || (diag.message != null && diag.message.contains("Empty rule block"))) {
+                    hasEmptyRuleDiag = true;
+                    break;
+                }
+            }
+        }
 
         // 1. Margin auto shorthand
         addMarginAutoShorthandActions(doc, params, actions);
@@ -430,8 +447,18 @@ public final class CssLspServer implements LspServer {
         // 2. Media query px to em/rem conversion
         addMediaQueryUnitConversionActions(doc, params, actions);
 
-        // 3. Empty rule block deletion
-        addEmptyRuleDeleteActions(doc, params, actions);
+        // 3. Empty rule block deletion - only query if cursor query without diagnostics or explicit empty rule diagnostic
+        if (!hasDiagnostics || hasEmptyRuleDiag) {
+            addEmptyRuleDeleteActions(doc, params, actions);
+        }
+
+        // 4. Diagnostics-driven quick fixes
+        if (hasDiagnostics) {
+            for (Diagnostic diag : params.context.diagnostics) {
+                if (token != null && token.isCancelled()) break;
+                addNativeCssFixes(doc, diag, actions);
+            }
+        }
 
         return actions;
     }
@@ -551,7 +578,14 @@ public final class CssLspServer implements LspServer {
             if (tree.nodeType[i] == CssSyntaxTree.N_RULE) {
                 int start = tree.nodeStart[i];
                 int end = tree.nodeEnd[i];
-                if (cursorOffset >= start && cursorOffset <= end) {
+                if (start >= 0 && end <= text.length() && cursorOffset >= start && cursorOffset <= end) {
+                    // Skip leading whitespace to avoid spanning before embedded boundary
+                    while (start < end && Character.isWhitespace(text.charAt(start))) {
+                        start++;
+                    }
+                    int braceIdx = text.indexOf('{', start);
+                    if (braceIdx == -1 || braceIdx > end) continue;
+
                     boolean hasDeclarations = false;
                     int child = tree.nodeChild[i];
                     while (child != 0) {
@@ -567,12 +601,215 @@ public final class CssLspServer implements LspServer {
                             deleteEnd++;
                         }
                         WorkspaceEdit edit = new WorkspaceEdit();
-                        edit.addEdit(doc.uri, new TextEdit(doc.toModelRange(start, deleteEnd), ""));
+                        String targetUri = (params.textDocument != null && params.textDocument.uri != null)
+                                ? params.textDocument.uri : doc.uri;
+                        edit.addEdit(targetUri, new TextEdit(doc.toModelRange(start, deleteEnd), ""));
                         actions.add(new CodeAction("Remove empty rule block", CodeActionKind.QUICKFIX, edit));
                         break;
                     }
                 }
             }
+        }
+    }
+
+    private void addNativeCssFixes(LspDocument doc, Diagnostic diag, List<CodeAction> actions) {
+        if (doc == null || doc.text == null || diag == null) return;
+        String code = diag.code != null ? diag.code : "";
+        String msg = diag.message != null ? diag.message : "";
+
+        // 1. CSS_ZERO_UNIT: 1 fix (remove unit from zero: 0px -> 0)
+        if (ProblemCode.CSS_ZERO_UNIT.name().equals(code) || msg.contains("Unit unnecessary on zero") || msg.contains("unnecessary on zero")) {
+            int startOff = doc.toOffset(diag.range.start);
+            int endOff = doc.toOffset(diag.range.end);
+            String slice = safeSubstring(doc.text, startOff, endOff);
+            String replacement = slice.replaceAll("(?i)^0[a-z%]+$", "0");
+            if (replacement.isEmpty()) replacement = "0";
+            TextEdit edit = new TextEdit(diag.range, replacement);
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove unit from zero value", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 2. CSS_PT_UNIT: 2 choices (convert to px vs convert to rem)
+        if (ProblemCode.CSS_PT_UNIT.name().equals(code) || msg.contains("pt unit")) {
+            int startOff = doc.toOffset(diag.range.start);
+            int endOff = doc.toOffset(diag.range.end);
+            String slice = safeSubstring(doc.text, startOff, endOff).trim();
+            float val = parseLeadingNumber(slice, 12f);
+            int px = Math.round(val * 1.3333f);
+            float rem = Math.round((val / 12f) * 100f) / 100f;
+
+            TextEdit editPx = new TextEdit(diag.range, px + "px");
+            WorkspaceEdit wsEditPx = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editPx)));
+            actions.add(new CodeAction("Convert 'pt' to 'px' (" + px + "px)", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditPx, null, null));
+
+            TextEdit editRem = new TextEdit(diag.range, rem + "rem");
+            WorkspaceEdit wsEditRem = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editRem)));
+            actions.add(new CodeAction("Convert 'pt' to 'rem' (" + rem + "rem)", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditRem, null, null));
+        }
+
+        // 3. CSS_IMPORTANT_USAGE: 1 fix (remove !important)
+        if (ProblemCode.CSS_IMPORTANT_USAGE.name().equals(code) || msg.contains("!important")) {
+            int startOff = doc.toOffset(diag.range.start);
+            int endOff = doc.toOffset(diag.range.end);
+            int impIdx = doc.text.indexOf("!important", Math.max(0, startOff - 2));
+            if (impIdx == -1) impIdx = startOff;
+            int delStart = impIdx;
+            // Consume preceding whitespace to prevent orphaned spaces before the semicolon
+            while (delStart > 0 && (doc.text.charAt(delStart - 1) == ' ' || doc.text.charAt(delStart - 1) == '\t')) {
+                delStart--;
+            }
+            int delEnd = (impIdx + "!important".length() <= doc.text.length()) ? impIdx + "!important".length() : endOff;
+            LspRange targetRange = doc.toModelRange(delStart, delEnd);
+            TextEdit edit = new TextEdit(targetRange, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove '!important'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 4. CSS_HEX_SHORTENABLE: 1 fix (shorten #ffffff -> #fff)
+        if (ProblemCode.CSS_HEX_SHORTENABLE.name().equals(code) || msg.contains("can be shortened")) {
+            int startOff = doc.toOffset(diag.range.start);
+            int endOff = doc.toOffset(diag.range.end);
+            String hex = safeSubstring(doc.text, startOff, endOff).trim();
+            String shortened = shortenHex(hex);
+            TextEdit edit = new TextEdit(diag.range, shortened);
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Shorten hex color to '" + shortened + "'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 5. CSS_DUPLICATE_PROPERTY: 1 fix (remove duplicate declaration)
+        if (ProblemCode.CSS_DUPLICATE_PROPERTY.name().equals(code) || msg.contains("Duplicate property")) {
+            LspRange delRange = expandToFullLine(doc, diag.range);
+            TextEdit edit = new TextEdit(delRange, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove duplicate property declaration", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 6. CSS_VENDOR_PREFIX_NEEDED: 1 fix (add standard/vendor-prefixed property)
+        if (ProblemCode.CSS_VENDOR_PREFIX_NEEDED.name().equals(code) || msg.contains("vendor prefix") || msg.contains("broader browser support") || msg.contains("Missing standard property")) {
+            String targetProp = extractVendorTargetProperty(msg);
+            int startOff = doc.toOffset(diag.range.start);
+            int semi = doc.text.indexOf(';', startOff);
+            String val = "";
+            int colon = doc.text.indexOf(':', startOff);
+            if (colon != -1 && semi != -1 && colon < semi) {
+                val = doc.text.substring(colon + 1, semi).trim();
+            }
+            int insertOff = (semi != -1) ? semi + 1 : doc.toOffset(diag.range.end);
+            LspPosition insPos = doc.toModelPosition(insertOff);
+            String insertText = "\n  " + targetProp + ": " + val + ";";
+            TextEdit edit = new TextEdit(new LspRange(insPos, insPos), insertText);
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Add standard property declaration", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+
+        // 7. CSS_VAR_NO_FALLBACK: 2 choices (fallback initial vs inherit)
+        if (ProblemCode.CSS_VAR_NO_FALLBACK.name().equals(code) || msg.contains("custom property lacks a fallback") || msg.contains("fallback")) {
+            int startOff = doc.toOffset(diag.range.start);
+            int endOff = doc.toOffset(diag.range.end);
+            String varSlice = safeSubstring(doc.text, startOff, endOff).trim();
+            if (varSlice.endsWith(")")) {
+                String inner = varSlice.substring(0, varSlice.length() - 1);
+                TextEdit editInit = new TextEdit(diag.range, inner + ", initial)");
+                WorkspaceEdit wsEditInit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editInit)));
+                actions.add(new CodeAction("Add 'initial' fallback to var()", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditInit, null, null));
+
+                TextEdit editInherit = new TextEdit(diag.range, inner + ", inherit)");
+                WorkspaceEdit wsEditInherit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editInherit)));
+                actions.add(new CodeAction("Add 'inherit' fallback to var()", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditInherit, null, null));
+            }
+        }
+
+        // 8. CSS_VAR_UNUSED: 1 fix (remove unused CSS custom property)
+        if (ProblemCode.CSS_VAR_UNUSED.name().equals(code) || msg.contains("Unused CSS custom property")) {
+            LspRange delRange = expandToFullLine(doc, diag.range);
+            TextEdit edit = new TextEdit(delRange, "");
+            WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+            actions.add(new CodeAction("Remove unused CSS custom property", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+        }
+    }
+
+    private static String extractVendorTargetProperty(String msg) {
+        if (msg == null) return "transform";
+        int needIdx = msg.indexOf("may need");
+        if (needIdx != -1) {
+            int q1 = msg.indexOf('\'', needIdx);
+            if (q1 != -1) {
+                int q2 = msg.indexOf('\'', q1 + 1);
+                if (q2 > q1) return msg.substring(q1 + 1, q2);
+            }
+        }
+        int q1 = msg.indexOf('\'');
+        if (q1 != -1) {
+            int q2 = msg.indexOf('\'', q1 + 1);
+            if (q2 > q1) return msg.substring(q1 + 1, q2);
+        }
+        return "transform";
+    }
+
+    private static LspRange expandToFullLine(LspDocument doc, LspRange range) {
+        if (doc == null || doc.text == null || range == null || range.start == null) return range;
+        int startOff = doc.toOffset(range.start);
+        int endOff = doc.toOffset(range.end);
+        String text = doc.text;
+        int lineStart = text.lastIndexOf('\n', Math.max(0, startOff - 1));
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        int lineEnd = text.indexOf('\n', endOff);
+        if (lineEnd == -1) lineEnd = text.length();
+
+        // Check if there is other meaningful content on this line before or after
+        String before = text.substring(lineStart, Math.min(startOff, text.length())).trim();
+        int semi = text.indexOf(';', endOff);
+        int declEnd = (semi != -1 && semi <= lineEnd) ? semi + 1 : endOff;
+        String after = text.substring(Math.min(declEnd, text.length()), lineEnd).trim();
+
+        // If line contains other properties, braces, or selector, only delete the declaration
+        if (!before.isEmpty() || !after.isEmpty()) {
+            while (declEnd < text.length() && (text.charAt(declEnd) == ' ' || text.charAt(declEnd) == '\t')) {
+                declEnd++;
+            }
+            return new LspRange(doc.toModelPosition(startOff), doc.toModelPosition(declEnd));
+        }
+
+        int deleteEnd = (lineEnd < text.length() && text.charAt(lineEnd) == '\n') ? lineEnd + 1 : lineEnd;
+        return new LspRange(doc.toModelPosition(lineStart), doc.toModelPosition(deleteEnd));
+    }
+
+    private static String safeSubstring(String text, int start, int end) {
+        if (text == null) return "";
+        int s = Math.max(0, Math.min(start, text.length()));
+        int e = Math.max(s, Math.min(end, text.length()));
+        return text.substring(s, e);
+    }
+
+    private static String shortenHex(String hex) {
+        if (hex == null) return "#fff";
+        hex = hex.trim();
+        if (hex.length() == 7 && hex.startsWith("#")) {
+            char r1 = hex.charAt(1), r2 = hex.charAt(2);
+            char g1 = hex.charAt(3), g2 = hex.charAt(4);
+            char b1 = hex.charAt(5), b2 = hex.charAt(6);
+            if (r1 == r2 && g1 == g2 && b1 == b2) {
+                return "#" + r1 + g1 + b1;
+            }
+        }
+        return hex;
+    }
+
+    private static float parseLeadingNumber(String s, float fallback) {
+        if (s == null) return fallback;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if ((c >= '0' && c <= '9') || c == '.') {
+                sb.append(c);
+            } else if (sb.length() > 0) {
+                break;
+            }
+        }
+        try {
+            return Float.parseFloat(sb.toString());
+        } catch (Exception e) {
+            return fallback;
         }
     }
 

@@ -40,6 +40,7 @@ import com.cocode.vcode.ide.ui.sheets.editor.KeyboardShortcutsBottomSheet;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 import com.cocode.vcode.ide.core.lsp.model.CodeAction;
+import com.cocode.vcode.ide.core.quickfix.QuickFix;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -582,7 +583,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
     }
 
-    private CodeEditText getActiveCodeEditor() {
+    public CodeEditText getActiveCodeEditor() {
         if (activeViewer != null) {
             return activeViewer.getCodeEditor();
         }
@@ -1337,6 +1338,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                             CodeAction action = fixes.get(0);
                             if (action.edit != null) {
                                 editor.applyWorkspaceEdit(action.edit);
+                            } else if (action.data instanceof QuickFix) {
+                                ((QuickFix) action.data).apply(editor, problem);
                             }
                             editor.removeProblem(problem);
                             if (viewModel != null) {
@@ -1354,6 +1357,8 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                                 popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.title, () -> {
                                     if (fix.edit != null) {
                                         editor.applyWorkspaceEdit(fix.edit);
+                                    } else if (fix.data instanceof QuickFix) {
+                                        ((QuickFix) fix.data).apply(editor, problem);
                                     }
                                     editor.removeProblem(problem);
                                     if (viewModel != null) {

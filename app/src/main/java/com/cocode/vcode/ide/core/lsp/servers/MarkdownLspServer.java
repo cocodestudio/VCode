@@ -2,6 +2,7 @@ package com.cocode.vcode.ide.core.lsp.servers;
 
 import android.content.Context;
 
+import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.language.md.MarkdownAutoCompleteEngine;
 import com.cocode.vcode.ide.core.language.md.MarkdownDocumentationProvider;
@@ -415,8 +416,10 @@ public final class MarkdownLspServer implements LspServer {
                 if (token != null && token.isCancelled()) break;
                 String msg = diag.message != null ? diag.message : "";
 
+                String code = diag.code != null ? diag.code : "";
+
                 // 1. Create missing relative file
-                if (msg.contains("Broken link: target file '") || msg.contains("Broken image link: target file '")) {
+                if (ProblemCode.MD_BROKEN_LINK.name().equals(code) || msg.contains("Broken link: target file '") || msg.contains("Broken image link: target file '")) {
                     String missingPath = extractQuotedPath(msg);
                     if (!missingPath.isEmpty() && doc.uri != null) {
                         File docFile = uriToFile(doc.uri);
@@ -434,7 +437,7 @@ public final class MarkdownLspServer implements LspServer {
                 }
 
                 // 2. Fix broken anchor slug
-                if (msg.contains("Broken anchor: '")) {
+                if (ProblemCode.MD_BROKEN_ANCHOR.name().equals(code) || msg.contains("Broken anchor: '")) {
                     String brokenSlug = extractQuotedPath(msg);
                     if (brokenSlug.startsWith("#")) brokenSlug = brokenSlug.substring(1);
                     String bestSlug = findBestMatchingSlug(brokenSlug, headingSlugs);
@@ -462,16 +465,132 @@ public final class MarkdownLspServer implements LspServer {
                 }
 
                 // 3. Close unclosed code block
-                if (msg.contains("Unclosed code block")) {
+                if (ProblemCode.MD_UNCLOSED_CODE_BLOCK.name().equals(code) || msg.contains("Unclosed code block")) {
                     com.cocode.vcode.ide.core.lsp.model.LspPosition eof = doc.toModelPosition(doc.text.length());
                     TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(eof, eof), "\n```\n");
                     WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
                     actions.add(new CodeAction("Close code block",
                             CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
                 }
+
+                // 4. MD_MISSING_IMAGE_ALT (2 choices: empty ![] vs placeholder ![Image])
+                if (ProblemCode.MD_MISSING_IMAGE_ALT.name().equals(code) || msg.contains("Image missing alt text") || msg.contains("empty alt text")) {
+                    TextEdit editEmpty = new TextEdit(diag.range, "![]");
+                    WorkspaceEdit wsEditEmpty = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editEmpty)));
+                    actions.add(new CodeAction("Add empty alt text: ![]", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditEmpty, null, null));
+
+                    TextEdit editImg = new TextEdit(diag.range, "![Image]");
+                    WorkspaceEdit wsEditImg = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editImg)));
+                    actions.add(new CodeAction("Add descriptive alt text: ![Image]", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditImg, null, null));
+                }
+
+                // 5. MD_USELESS_IMAGE_ALT
+                if (ProblemCode.MD_USELESS_IMAGE_ALT.name().equals(code) || msg.contains("Image alt text contains redundant words")) {
+                    int startOff = doc.toOffset(diag.range.start);
+                    int endOff = doc.toOffset(diag.range.end);
+                    String slice = safeSubstring(doc.text, startOff, endOff);
+                    String cleaned = slice.replaceAll("(?i)\\b(image|photo|picture)\\s+(of\\s+)?", "");
+                    TextEdit edit = new TextEdit(diag.range, cleaned);
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Remove redundant 'image'/'photo' prefix", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 6. MD_EMPTY_LINK_TEXT
+                if (ProblemCode.MD_EMPTY_LINK_TEXT.name().equals(code) || msg.contains("Empty link text")) {
+                    TextEdit edit = new TextEdit(diag.range, "[Link]");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Add link text placeholder '[Link]'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 7. MD_RAW_URL (2 choices: <url> vs [url](url))
+                if (ProblemCode.MD_RAW_URL.name().equals(code) || msg.contains("Bare URL found")) {
+                    int startOff = doc.toOffset(diag.range.start);
+                    int endOff = doc.toOffset(diag.range.end);
+                    String rawUrl = safeSubstring(doc.text, startOff, endOff).trim();
+                    TextEdit editAngle = new TextEdit(diag.range, "<" + rawUrl + ">");
+                    WorkspaceEdit wsEditAngle = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editAngle)));
+                    actions.add(new CodeAction("Enclose URL in angle brackets <" + rawUrl + ">", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditAngle, null, null));
+
+                    TextEdit editLink = new TextEdit(diag.range, "[" + rawUrl + "](" + rawUrl + ")");
+                    WorkspaceEdit wsEditLink = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editLink)));
+                    actions.add(new CodeAction("Convert URL to Markdown link [" + rawUrl + "](" + rawUrl + ")", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditLink, null, null));
+                }
+
+                // 8. MD_TRAILING_WHITESPACE
+                if (ProblemCode.MD_TRAILING_WHITESPACE.name().equals(code) || msg.contains("Trailing whitespace")) {
+                    TextEdit edit = new TextEdit(diag.range, "");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Trim trailing whitespace", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 9. MD_HARD_TAB (2 choices: 2 spaces vs 4 spaces)
+                if (ProblemCode.MD_HARD_TAB.name().equals(code) || msg.contains("Hard tab characters")) {
+                    TextEdit edit2 = new TextEdit(diag.range, "  ");
+                    WorkspaceEdit wsEdit2 = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit2)));
+                    actions.add(new CodeAction("Convert tab to 2 spaces", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit2, null, null));
+
+                    TextEdit edit4 = new TextEdit(diag.range, "    ");
+                    WorkspaceEdit wsEdit4 = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit4)));
+                    actions.add(new CodeAction("Convert tab to 4 spaces", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEdit4, null, null));
+                }
+
+                // 10. MD_INCONSISTENT_LIST_MARKER
+                if (ProblemCode.MD_INCONSISTENT_LIST_MARKER.name().equals(code) || msg.contains("Inconsistent list marker")) {
+                    String marker = "-";
+                    int expIdx = msg.indexOf("Expected '");
+                    if (expIdx != -1) {
+                        int qEnd = msg.indexOf('\'', expIdx + 10);
+                        if (qEnd != -1) {
+                            marker = msg.substring(expIdx + 10, qEnd);
+                        }
+                    }
+                    TextEdit edit = new TextEdit(diag.range, marker);
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Normalize list marker to '" + marker + "'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 11. MD_EMPTY_BLOCKQUOTE
+                if (ProblemCode.MD_EMPTY_BLOCKQUOTE.name().equals(code) || msg.contains("Empty blockquote line")) {
+                    com.cocode.vcode.ide.core.lsp.model.LspRange delRange = expandToFullLine(doc, diag.range);
+                    TextEdit edit = new TextEdit(delRange, "");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Remove empty blockquote marker", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 12. MD_HEADING_INCREMENT
+                if (ProblemCode.MD_HEADING_INCREMENT.name().equals(code) || msg.contains("Heading levels should only increment by one level")) {
+                    int startOff = doc.toOffset(diag.range.start);
+                    int hashCount = 0;
+                    while (startOff + hashCount < doc.text.length() && doc.text.charAt(startOff + hashCount) == '#') {
+                        hashCount++;
+                    }
+                    com.cocode.vcode.ide.core.lsp.model.LspPosition hashEnd = doc.toModelPosition(startOff + Math.max(1, hashCount));
+                    com.cocode.vcode.ide.core.lsp.model.LspRange hashRange = new com.cocode.vcode.ide.core.lsp.model.LspRange(diag.range.start, hashEnd);
+                    TextEdit edit = new TextEdit(hashRange, "##");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Adjust heading level to increment by 1", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
             }
         }
         return actions;
+    }
+
+    private static com.cocode.vcode.ide.core.lsp.model.LspRange expandToFullLine(LspDocument doc, com.cocode.vcode.ide.core.lsp.model.LspRange range) {
+        if (doc == null || doc.text == null || range == null || range.start == null) return range;
+        int startOff = doc.toOffset(range.start);
+        int endOff = doc.toOffset(range.end);
+        int lineStart = doc.text.lastIndexOf('\n', Math.max(0, startOff - 1));
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        int lineEnd = doc.text.indexOf('\n', endOff);
+        int deleteEnd = (lineEnd == -1) ? doc.text.length() : lineEnd + 1;
+        return new com.cocode.vcode.ide.core.lsp.model.LspRange(doc.toModelPosition(lineStart), doc.toModelPosition(deleteEnd));
+    }
+
+    private static String safeSubstring(String text, int start, int end) {
+        if (text == null) return "";
+        int s = Math.max(0, Math.min(start, text.length()));
+        int e = Math.max(s, Math.min(end, text.length()));
+        return text.substring(s, e);
     }
 
     private static String extractQuotedPath(String msg) {
