@@ -30,7 +30,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     public static final Set<String> IMAGE_MEDIA_EXTS = new HashSet<>(Arrays.asList(
-            "png", "jpg", "jpeg", "svg", "webp", "gif", "ico", "mp4", "mp3", "webm", "ogg"
+            "png", "jpg", "jpeg", "svg", "webp", "gif", "ico", "avif", "bmp", "mp4", "mp3", "wav", "webm", "ogg"
     ));
     public static final Set<String> STYLESHEET_EXTS = new HashSet<>(Arrays.asList(
             "css", "scss", "less", "ico", "png"
@@ -45,10 +45,15 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             "css", "scss"
     ));
     public static final Set<String> MARKDOWN_DOC_EXTS = new HashSet<>(Arrays.asList(
-            "md", "markdown", "png", "jpg", "jpeg", "svg", "webp", "gif", "pdf"
+            "md", "markdown", "png", "jpg", "jpeg", "svg", "webp", "gif", "ico", "avif", "pdf"
     ));
     public static final Set<String> HYPERLINK_EXTS = new HashSet<>(Arrays.asList(
             "html", "htm", "md"
+    ));
+    public static final Set<String> WEB_ASSET_EXTS = new HashSet<>(Arrays.asList(
+            "png", "jpg", "jpeg", "svg", "webp", "gif", "ico", "avif", "bmp",
+            "css", "scss", "less", "woff", "woff2", "ttf", "otf", "eot",
+            "mp3", "wav", "ogg", "mp4", "webm", "json", "wasm"
     ));
 
     private File currentFile;
@@ -610,13 +615,13 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             return (f, isDir) -> isDir || isExtensionIn(f, CSS_IMPORT_EXTS);
         }
         if (token.equals("src") || token.equals("poster")) {
-            return (f, isDir) -> isDir || isExtensionIn(f, IMAGE_MEDIA_EXTS) || isExtensionIn(f, SCRIPT_EXTS);
+            return (f, isDir) -> isDir || isExtensionIn(f, IMAGE_MEDIA_EXTS) || isExtensionIn(f, SCRIPT_EXTS) || isExtensionIn(f, HYPERLINK_EXTS);
         }
         if (token.equals("href")) {
-            return (f, isDir) -> isDir || isExtensionIn(f, STYLESHEET_EXTS) || isExtensionIn(f, HYPERLINK_EXTS);
+            return (f, isDir) -> true;
         }
         if (token.equals("from") || token.equals("require") || token.equals("import")) {
-            return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS);
+            return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS) || isExtensionIn(f, WEB_ASSET_EXTS);
         }
         if (token.equals("main") || token.equals("module") || token.equals("types") || token.equals("typings")) {
             return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS);
@@ -628,7 +633,7 @@ public class PathAutoCompleteEngine extends AutoCompleteEngine {
             return (f, isDir) -> true;
         }
         if (fileName.endsWith(".js") || fileName.endsWith(".ts") || fileName.endsWith(".jsx") || fileName.endsWith(".tsx")) {
-            return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS);
+            return (f, isDir) -> isDir || isExtensionIn(f, SCRIPT_EXTS) || isExtensionIn(f, WEB_ASSET_EXTS);
         }
 
         return null;

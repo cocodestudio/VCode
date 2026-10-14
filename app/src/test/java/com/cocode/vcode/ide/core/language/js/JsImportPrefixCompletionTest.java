@@ -123,6 +123,34 @@ public class JsImportPrefixCompletionTest extends BaseJsAstTest {
                 labels(items).contains("fetchData"));
     }
 
+    @Test
+    public void importPathCompletionSuggestsWebAssets() throws Exception {
+        File tempDir = new File(RuntimeEnvironment.getApplication().getCacheDir(), "js_test_" + System.currentTimeMillis());
+        tempDir.mkdirs();
+        File assetsDir = new File(tempDir, "assets");
+        assetsDir.mkdirs();
+        new File(assetsDir, "logo.png").createNewFile();
+        new File(assetsDir, "icon.svg").createNewFile();
+        new File(assetsDir, "style.css").createNewFile();
+
+        File jsFile = new File(tempDir, "index.js");
+        jsFile.createNewFile();
+
+        JsAutoCompleteEngine engine = new JsAutoCompleteEngine(RuntimeEnvironment.getApplication());
+        engine.setCurrentFile(jsFile);
+        engine.setWorkspaceRoot(tempDir);
+
+        String text = "import logo from './assets/";
+        List<CompletionItem> items = engine.getSuggestions(text, text.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        Set<String> s = labels(items);
+        assertTrue("Import path must suggest logo.png", s.contains("logo.png"));
+        assertTrue("Import path must suggest icon.svg", s.contains("icon.svg"));
+        assertTrue("Import path must suggest style.css", s.contains("style.css"));
+    }
+
     // --- helpers --------------------------------------------------------
 
     private static JsAutoCompleteEngine newEngine(String currentFileUri) {

@@ -106,6 +106,21 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
         }
     }
 
+    public File getWorkspaceRoot() {
+        if (workspaceRoot != null && workspaceRoot.exists()) return workspaceRoot;
+        if (currentFile != null) {
+            try {
+                File root = com.cocode.vcode.ide.utils.FileUtils.resolveProjectRoot(currentFile);
+                if (root != null) {
+                    this.workspaceRoot = root;
+                    if (pathEngine != null) pathEngine.setWorkspaceRoot(root);
+                    return root;
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
     private void initSnippets() {
         try {
             String json = loadAssetJson("completions/markdown_snippets.json");
@@ -326,17 +341,18 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
             }
         }
 
-        if (candidate == null && workspaceRoot != null) {
+        File root = getWorkspaceRoot();
+        if (candidate == null && root != null) {
             String relFromRoot = path.startsWith("/") ? path.substring(1) : path;
-            File directRoot = new File(workspaceRoot, relFromRoot);
+            File directRoot = new File(root, relFromRoot);
             if (directRoot.isFile() && directRoot.canRead()) {
                 candidate = directRoot;
             } else if (!hasMarkdownExtension(relFromRoot)) {
-                File withMd = new File(workspaceRoot, relFromRoot + ".md");
+                File withMd = new File(root, relFromRoot + ".md");
                 if (withMd.isFile() && withMd.canRead()) {
                     candidate = withMd;
                 } else {
-                    File withMarkdown = new File(workspaceRoot, relFromRoot + ".markdown");
+                    File withMarkdown = new File(root, relFromRoot + ".markdown");
                     if (withMarkdown.isFile() && withMarkdown.canRead()) {
                         candidate = withMarkdown;
                     }
@@ -350,9 +366,9 @@ public class MarkdownAutoCompleteEngine extends AutoCompleteEngine {
             return null;
         }
 
-        if (workspaceRoot != null) {
+        if (root != null) {
             try {
-                String rootPath = workspaceRoot.getCanonicalPath();
+                String rootPath = root.getCanonicalPath();
                 String targetPath = candidate.getCanonicalPath();
                 if (!targetPath.startsWith(rootPath)) {
                     return null;

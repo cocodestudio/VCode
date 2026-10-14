@@ -256,6 +256,58 @@ public class MarkdownLspServerTest {
     }
 
     @Test
+    public void testHeadingAnchorCompletionsWithAngleBrackets() {
+        File mdFile = new File(projectRoot, "angle_anchors.md");
+        String uri = mdFile.getAbsolutePath();
+        String content = "# Getting Started\n\n## Installation\n\nCheck [docs](<#\n";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        int anchorCursor = content.indexOf("(<#") + 3;
+        LspPosition pos = server.getDocument(uri).toPosition(anchorCursor);
+
+        CompletionParams params = new CompletionParams(uri, pos.line, pos.character);
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+
+        boolean foundGettingStarted = false;
+        boolean foundInstallation = false;
+        for (CompletionItem ci : completions) {
+            if ("#getting-started".equals(ci.label)) foundGettingStarted = true;
+            if ("#installation".equals(ci.label)) foundInstallation = true;
+        }
+
+        assertTrue("Should suggest #getting-started with angle bracket", foundGettingStarted);
+        assertTrue("Should suggest #installation with angle bracket", foundInstallation);
+    }
+
+    @Test
+    public void testCrossFileHeadingCompletionsFromLspServer() throws Exception {
+        File docsDir = new File(projectRoot, "docs");
+        docsDir.mkdirs();
+        File readme = new File(docsDir, "readme.md");
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(readme, "# Installation Guide\n");
+
+        File mainMd = new File(projectRoot, "main.md");
+        String uri = mainMd.getAbsolutePath();
+        String content = "[Setup](docs/readme.md#";
+        server.didOpen(new TextDocumentItem(uri, "markdown", 1, content));
+
+        CompletionParams params = new CompletionParams(uri, 0, content.length());
+        List<CompletionItem> completions = server.completion(params, null);
+        assertNotNull(completions);
+        assertFalse("Cross-file completion from LSP server should return suggestions", completions.isEmpty());
+
+        boolean foundGuide = false;
+        for (CompletionItem ci : completions) {
+            if ("#installation-guide".equals(ci.label)) {
+                foundGuide = true;
+                break;
+            }
+        }
+        assertTrue("Should suggest #installation-guide from docs/readme.md", foundGuide);
+    }
+
+    @Test
     public void testCodeActionFixAnchorSlug() {
         File mdFile = new File(projectRoot, "fix_anchor.md");
         String uri = mdFile.getAbsolutePath();

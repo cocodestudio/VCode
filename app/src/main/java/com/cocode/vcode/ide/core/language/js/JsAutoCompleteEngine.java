@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -199,10 +200,14 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
     }
 
     private PathAutoCompleteEngine pathEngine;
+    private File workspaceRoot;
 
     private PathAutoCompleteEngine getPathEngine() {
         if (pathEngine == null) {
             pathEngine = new PathAutoCompleteEngine(context);
+            if (workspaceRoot != null) {
+                pathEngine.setWorkspaceRoot(workspaceRoot);
+            }
         }
         pathEngine.setCurrentFile(currentFile);
         return pathEngine;
@@ -212,6 +217,13 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
         this.currentFile = file;
         if (pathEngine != null) {
             pathEngine.setCurrentFile(file);
+        }
+    }
+
+    public void setWorkspaceRoot(File root) {
+        this.workspaceRoot = root;
+        if (pathEngine != null) {
+            pathEngine.setWorkspaceRoot(root);
         }
     }
 
@@ -1125,11 +1137,23 @@ public class JsAutoCompleteEngine extends AutoCompleteEngine {
      */
     protected List<CompletionItem> buildFileCompletions(String typedPath) {
         PathAutoCompleteEngine engine = getPathEngine();
-        return engine.getSuggestionsForPath(typedPath, (f, isDirectory) -> isDirectory || isJsLike(f.getName()) || (typedPath != null && typedPath.isEmpty()));
+        return engine.getSuggestionsForPath(typedPath, (f, isDirectory) -> isDirectory || isImportableFile(f.getName()) || (typedPath != null && typedPath.isEmpty()));
+    }
+
+    private boolean isImportableFile(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".js") || lower.endsWith(".ts") || lower.endsWith(".jsx")
+                || lower.endsWith(".tsx") || lower.endsWith(".json") || lower.endsWith(".mjs")
+                || lower.endsWith(".cjs") || lower.endsWith(".vue") || lower.endsWith(".css")
+                || lower.endsWith(".scss") || lower.endsWith(".less") || lower.endsWith(".png")
+                || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".svg")
+                || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".ico")
+                || lower.endsWith(".avif") || lower.endsWith(".wasm") || lower.endsWith(".woff")
+                || lower.endsWith(".woff2") || lower.endsWith(".ttf");
     }
 
     private boolean isJsLike(String name) {
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);
         return lower.endsWith(".js") || lower.endsWith(".ts") || lower.endsWith(".jsx")
                 || lower.endsWith(".tsx") || lower.endsWith(".json") || lower.endsWith(".mjs");
     }

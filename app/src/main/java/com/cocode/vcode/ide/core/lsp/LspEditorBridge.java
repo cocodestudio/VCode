@@ -214,6 +214,13 @@ public final class LspEditorBridge {
                     parenDepth++;
                 } else if (c == '(') {
                     if (parenDepth == 0) {
+                        int prev = i - 1;
+                        while (prev >= 0 && (text.charAt(prev) == ' ' || text.charAt(prev) == '\t')) {
+                            prev--;
+                        }
+                        if (prev >= 0 && text.charAt(prev) == ']') {
+                            return false;
+                        }
                         return true;
                     }
                     parenDepth--;
@@ -497,7 +504,8 @@ public final class LspEditorBridge {
                     || k == LspCompletionItem.KIND_TEXT
                     || k == LspCompletionItem.KIND_PROPERTY
                     || k == LspCompletionItem.KIND_FILE
-                    || k == LspCompletionItem.KIND_FOLDER) {
+                    || k == LspCompletionItem.KIND_FOLDER
+                    || k == LspCompletionItem.KIND_REFERENCE) {
                 filtered.add(item);
             }
         }
@@ -1089,8 +1097,15 @@ public final class LspEditorBridge {
             return;
         }
 
-        final boolean isInsideCallArgs = isInsideCallArguments(doc.text, flatCursor);
-        final boolean isInsideFuncDef = isInsideFunctionDefinition(doc.text, flatCursor);
+        FileType ft = (editor != null && editor.getFileType() != null)
+                ? editor.getFileType()
+                : (doc != null ? FileType.fromExtension(doc.uri) : FileType.TEXT);
+        String langId = ft != null ? ft.getLspLanguageId() : "plaintext";
+
+        final boolean isInsideCallArgs = ("javascript".equals(langId) || "typescript".equals(langId))
+                && isInsideCallArguments(doc.text, flatCursor);
+        final boolean isInsideFuncDef = ("javascript".equals(langId) || "typescript".equals(langId))
+                && isInsideFunctionDefinition(doc.text, flatCursor);
 
         if (isInsideFuncDef) {
             editor.dismissAutoCompletePopup();
@@ -1102,11 +1117,6 @@ public final class LspEditorBridge {
             editor.dismissAutoCompletePopup();
             return;
         }
-
-        FileType ft = (editor != null && editor.getFileType() != null)
-                ? editor.getFileType()
-                : (doc != null ? FileType.fromExtension(doc.uri) : FileType.TEXT);
-        String langId = ft != null ? ft.getLspLanguageId() : "plaintext";
         LspServer server = LspClientManager.getInstance().getServer(langId);
         String triggerChars = (server != null && server.getTriggerCharacters() != null && !server.getTriggerCharacters().isEmpty())
                 ? server.getTriggerCharacters()

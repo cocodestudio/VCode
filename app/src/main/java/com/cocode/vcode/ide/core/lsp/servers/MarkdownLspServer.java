@@ -236,6 +236,10 @@ public final class MarkdownLspServer implements LspServer {
         File file = doc.uri != null ? uriToFile(doc.uri) : null;
         if (file != null) {
             markdownEngine.setCurrentFile(file);
+            File root = com.cocode.vcode.ide.utils.FileUtils.resolveProjectRoot(file);
+            if (root != null) {
+                markdownEngine.setWorkspaceRoot(root);
+            }
         }
 
         List<CompletionItem> legacy = markdownEngine.getSuggestions(doc.text, flatOffset);
@@ -317,6 +321,10 @@ public final class MarkdownLspServer implements LspServer {
         File file = doc.uri != null ? uriToFile(doc.uri) : null;
         if (file != null) {
             markdownEngine.setCurrentFile(file);
+            File root = com.cocode.vcode.ide.utils.FileUtils.resolveProjectRoot(file);
+            if (root != null) {
+                markdownEngine.setWorkspaceRoot(root);
+            }
         }
 
         List<CompletionItem> legacy = markdownEngine.getSuggestions(doc.text, flatOffset);

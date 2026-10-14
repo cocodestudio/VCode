@@ -335,4 +335,82 @@ public class MarkdownAutoCompleteEngineTest {
         }
         assertTrue("Unicode heading should produce #über-uns suggestion", foundUber);
     }
+
+    @Test
+    public void testAngleBracketHeadingSlugCompletions() {
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        String doc = "# Overview\n\n## Getting Started\n\n[Intro](<#";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean foundOverview = false;
+        boolean foundGettingStarted = false;
+        for (CompletionItem item : items) {
+            if ("#overview".equals(item.getLabel())) {
+                foundOverview = true;
+                assertEquals("overview", item.getEffectiveInsertText());
+            }
+            if ("#getting-started".equals(item.getLabel())) {
+                foundGettingStarted = true;
+                assertEquals("getting-started", item.getEffectiveInsertText());
+            }
+        }
+        assertTrue("Angle bracket syntax [Intro](<# should suggest #overview", foundOverview);
+        assertTrue("Angle bracket syntax [Intro](<# should suggest #getting-started", foundGettingStarted);
+    }
+
+    @Test
+    public void testHeadingSlugPrefixFiltering() {
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        String doc = "# Overview\n\n## Getting Started\n\n[Intro](#over";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertNotNull(items);
+
+        boolean foundOverview = false;
+        boolean foundGettingStarted = false;
+        for (CompletionItem item : items) {
+            if ("#overview".equals(item.getLabel())) {
+                foundOverview = true;
+                assertEquals(4, item.getReplaceLength());
+            }
+            if ("#getting-started".equals(item.getLabel())) {
+                foundGettingStarted = true;
+            }
+        }
+        assertTrue("Querying #over must match #overview", foundOverview);
+        assertFalse("Querying #over must filter out #getting-started", foundGettingStarted);
+    }
+
+    @Test
+    public void testCrossFileProjectRootResolutionFromSubdir() throws IOException {
+        File projectRoot = tempFolder.newFolder("sub_cross_project");
+        File docsDir = new File(projectRoot, "docs");
+        docsDir.mkdir();
+        File readme = new File(docsDir, "readme.md");
+        com.cocode.vcode.ide.utils.FileUtils.writeFile(readme, "# Installation\n\n## Prerequisites\n");
+
+        File subDir = new File(projectRoot, "articles");
+        subDir.mkdir();
+        File article = new File(subDir, "post.md");
+        article.createNewFile();
+
+        MarkdownAutoCompleteEngine engine = new MarkdownAutoCompleteEngine(null);
+        engine.setCurrentFile(article);
+        engine.setWorkspaceRoot(projectRoot);
+
+        String doc = "[Guide](docs/readme.md#";
+        List<CompletionItem> items = engine.getSuggestions(doc, doc.length());
+        assertNotNull(items);
+        assertFalse("Cross-file link from subfolder must resolve docs/readme.md from project root", items.isEmpty());
+
+        boolean foundInstall = false;
+        for (CompletionItem item : items) {
+            if ("#installation".equals(item.getLabel())) {
+                foundInstall = true;
+                assertEquals("installation", item.getEffectiveInsertText());
+            }
+        }
+        assertTrue("Should suggest #installation from docs/readme.md", foundInstall);
+    }
 }

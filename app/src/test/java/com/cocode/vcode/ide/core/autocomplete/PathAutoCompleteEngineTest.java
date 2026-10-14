@@ -598,4 +598,84 @@ public class PathAutoCompleteEngineTest {
         }
         assertTrue("Querying 'app/.' must list app contents and replace the dot", hasMain);
     }
+
+    @Test
+    public void testImportAndRequireAllowWebAssets() throws IOException {
+        new File(assetsDir, "icon.svg").createNewFile();
+        new File(assetsDir, "style.css").createNewFile();
+        new File(assetsDir, "font.woff2").createNewFile();
+        VFSManager.getInstance().clear();
+
+        engine.setCurrentFile(appJs);
+
+        String importText = "import logo from \"../assets/";
+        List<CompletionItem> items = engine.getSuggestions(importText, importText.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean hasPng = false;
+        boolean hasSvg = false;
+        boolean hasCss = false;
+        boolean hasFont = false;
+        for (CompletionItem item : items) {
+            if ("logo.png".equals(item.getLabel())) hasPng = true;
+            if ("icon.svg".equals(item.getLabel())) hasSvg = true;
+            if ("style.css".equals(item.getLabel())) hasCss = true;
+            if ("font.woff2".equals(item.getLabel())) hasFont = true;
+        }
+        assertTrue("Import must allow png", hasPng);
+        assertTrue("Import must allow svg", hasSvg);
+        assertTrue("Import must allow css", hasCss);
+        assertTrue("Import must allow fonts", hasFont);
+    }
+
+    @Test
+    public void testHrefAllowsAllProjectFiles() throws IOException {
+        new File(projectRoot, "manual.pdf").createNewFile();
+        new File(projectRoot, "download.zip").createNewFile();
+        new File(projectRoot, "about.html").createNewFile();
+        VFSManager.getInstance().clear();
+
+        engine.setCurrentFile(indexHtml);
+
+        String hrefText = "<a href=\"./";
+        List<CompletionItem> items = engine.getSuggestions(hrefText, hrefText.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean hasPdf = false;
+        boolean hasZip = false;
+        boolean hasHtml = false;
+        for (CompletionItem item : items) {
+            if ("manual.pdf".equals(item.getLabel())) hasPdf = true;
+            if ("download.zip".equals(item.getLabel())) hasZip = true;
+            if ("about.html".equals(item.getLabel())) hasHtml = true;
+        }
+        assertTrue("href must allow PDF files", hasPdf);
+        assertTrue("href must allow zip downloads", hasZip);
+        assertTrue("href must allow html files", hasHtml);
+    }
+
+    @Test
+    public void testSrcAllowsHtmlForIframe() throws IOException {
+        File subPage = new File(projectRoot, "embed.html");
+        subPage.createNewFile();
+        VFSManager.getInstance().clear();
+
+        engine.setCurrentFile(indexHtml);
+
+        String iframeText = "<iframe src=\"./";
+        List<CompletionItem> items = engine.getSuggestions(iframeText, iframeText.length());
+        assertNotNull(items);
+        assertFalse(items.isEmpty());
+
+        boolean hasEmbedHtml = false;
+        for (CompletionItem item : items) {
+            if ("embed.html".equals(item.getLabel())) {
+                hasEmbedHtml = true;
+                break;
+            }
+        }
+        assertTrue("src must allow html files for iframe", hasEmbedHtml);
+    }
 }
