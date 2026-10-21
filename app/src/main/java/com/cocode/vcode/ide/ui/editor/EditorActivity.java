@@ -40,6 +40,7 @@ import com.cocode.vcode.ide.ui.sheets.editor.KeyboardShortcutsBottomSheet;
 import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 import com.cocode.vcode.ide.core.lsp.model.CodeAction;
+import com.cocode.vcode.ide.core.quickfix.QuickFix;
 import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.core.model.FileType;
 import com.cocode.vcode.ide.core.model.Problem;
@@ -73,8 +74,11 @@ import com.cocode.vcode.ide.utils.UiUtils;
 import com.cocode.vcode.ide.views.CodeEditText;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Main IDE editor activity hosting the code editor, file tabs, drawer, and action bars.
@@ -582,7 +586,7 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
         }
     }
 
-    private CodeEditText getActiveCodeEditor() {
+    public CodeEditText getActiveCodeEditor() {
         if (activeViewer != null) {
             return activeViewer.getCodeEditor();
         }
@@ -1333,36 +1337,49 @@ public class EditorActivity extends BaseActivity implements FileTreeFragment.Fil
                     CodeEditText editor = getActiveCodeEditor();
                     if (editor != null) {
                         List<CodeAction> fixes = LspEditorBridge.getCodeActionsForProblem(problem, editor);
-                        if (fixes.size() == 1) {
-                            CodeAction action = fixes.get(0);
-                            if (action.edit != null) {
-                                editor.applyWorkspaceEdit(action.edit);
+                        if (fixes != null && !fixes.isEmpty()) {
+                            List<CodeAction> uniqueFixes = new ArrayList<>();
+                            Set<String> addedTitles = new HashSet<>();
+                            for (CodeAction fix : fixes) {
+                                if (fix != null && fix.title != null && addedTitles.add(fix.title)) {
+                                    uniqueFixes.add(fix);
+                                }
                             }
-                            editor.removeProblem(problem);
-                            if (viewModel != null) {
-                                viewModel.removeProblem(problem);
+                            if (uniqueFixes.size() == 1) {
+                                CodeAction action = uniqueFixes.get(0);
+                                if (action.edit != null) {
+                                    editor.applyWorkspaceEdit(action.edit);
+                                } else if (action.data instanceof QuickFix) {
+                                    ((QuickFix) action.data).apply(editor, problem);
+                                }
+                                editor.removeProblem(problem);
+                                if (viewModel != null) {
+                                    viewModel.removeProblem(problem);
+                                }
+                                binding.quickSymbolBar.checkQuickFixAvailable();
+                            } else if (uniqueFixes.size() > 1) {
+                                View anchor = anchorView != null ? anchorView : binding.quickSymbolBar;
+                                CustomPopupMenu popup = new CustomPopupMenu(anchor.getContext(), anchor);
+                                popup.setTokenView(editor);
+                                popup.setCardBackgroundColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_bg_surface));
+                                popup.setTextColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_text_primary));
+                                for (int i = 0; i < uniqueFixes.size(); i++) {
+                                    final CodeAction fix = uniqueFixes.get(i);
+                                    popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.title, () -> {
+                                        if (fix.edit != null) {
+                                            editor.applyWorkspaceEdit(fix.edit);
+                                        } else if (fix.data instanceof QuickFix) {
+                                            ((QuickFix) fix.data).apply(editor, problem);
+                                        }
+                                        editor.removeProblem(problem);
+                                        if (viewModel != null) {
+                                            viewModel.removeProblem(problem);
+                                        }
+                                        binding.quickSymbolBar.checkQuickFixAvailable();
+                                    });
+                                }
+                                popup.show();
                             }
-                            binding.quickSymbolBar.checkQuickFixAvailable();
-                        } else if (fixes.size() > 1) {
-                            View anchor = anchorView != null ? anchorView : binding.quickSymbolBar;
-                            CustomPopupMenu popup = new CustomPopupMenu(anchor.getContext(), anchor);
-                            popup.setTokenView(editor);
-                            popup.setCardBackgroundColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_bg_surface));
-                            popup.setTextColor(androidx.core.content.ContextCompat.getColor(anchor.getContext(), R.color.vcode_text_primary));
-                            for (int i = 0; i < fixes.size(); i++) {
-                                final CodeAction fix = fixes.get(i);
-                                popup.addItem(R.drawable.ic_lightbulb, R.color.vcode_accent_warning, fix.title, () -> {
-                                    if (fix.edit != null) {
-                                        editor.applyWorkspaceEdit(fix.edit);
-                                    }
-                                    editor.removeProblem(problem);
-                                    if (viewModel != null) {
-                                        viewModel.removeProblem(problem);
-                                    }
-                                    binding.quickSymbolBar.checkQuickFixAvailable();
-                                });
-                            }
-                            popup.show();
                         }
                     }
                 }

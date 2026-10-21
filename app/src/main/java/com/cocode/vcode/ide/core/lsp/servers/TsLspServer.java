@@ -533,11 +533,86 @@ public final class TsLspServer implements LspServer {
                     if (ca != null) actions.add(ca);
                 }
 
-                // 3. ts-replace-any: Replace 'as any' with 'unknown'
-                if (ProblemCode.TS_EXPLICIT_ANY.name().equals(code) && msg.contains("'as any'")) {
-                    TextEdit edit = new TextEdit(diag.range, "as unknown");
+                // 3. ts-replace-any: Replace 'any' / 'as any' with 'unknown' or 'Record<string, unknown>'
+                if (ProblemCode.TS_EXPLICIT_ANY.name().equals(code) || msg.contains("Explicit 'any'") || msg.contains("Unexpected any") || msg.contains("'as any'")) {
+                    boolean isAsAny = msg.contains("'as any'");
+                    String repl1 = isAsAny ? "as unknown" : "unknown";
+                    String repl2 = isAsAny ? "as Record<string, unknown>" : "Record<string, unknown>";
+                    String title1 = isAsAny ? "Replace 'as any' with 'as unknown'" : "Replace 'any' with 'unknown'";
+                    String title2 = isAsAny ? "Replace 'as any' with 'as Record<string, unknown>'" : "Replace 'any' with 'Record<string, unknown>'";
+
+                    TextEdit edit1 = new TextEdit(diag.range, repl1);
+                    WorkspaceEdit wsEdit1 = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit1)));
+                    actions.add(new CodeAction(title1, CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit1, null, null));
+
+                    TextEdit edit2 = new TextEdit(diag.range, repl2);
+                    WorkspaceEdit wsEdit2 = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit2)));
+                    actions.add(new CodeAction(title2, CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEdit2, null, null));
+                }
+
+                // 4. TS_REDUNDANT_TYPE
+                if (ProblemCode.TS_REDUNDANT_TYPE.name().equals(code) || msg.contains("Redundant type annotation")) {
+                    TextEdit edit = new TextEdit(diag.range, "");
                     WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
-                    actions.add(new CodeAction("Replace 'as any' with 'as unknown'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                    actions.add(new CodeAction("Remove redundant type annotation", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 5. TS_UNION_UNDEFINED
+                if (ProblemCode.TS_UNION_UNDEFINED.name().equals(code) || msg.contains("optional instead of union with undefined") || msg.contains("union with undefined")) {
+                    List<TextEdit> edits = new ArrayList<>();
+                    // Insert ? immediately after parameter name (e.g. arg?)
+                    edits.add(new TextEdit(new LspRange(diag.range.end, diag.range.end), "?"));
+
+                    // Delete "| undefined" from the type annotation
+                    int pEndOff = doc.toOffset(diag.range.end);
+                    int colonIdx = doc.text.indexOf(':', pEndOff);
+                    if (colonIdx >= 0) {
+                        int pipeIdx = doc.text.indexOf('|', colonIdx);
+                        if (pipeIdx >= 0) {
+                            int undefIdx = doc.text.indexOf("undefined", pipeIdx);
+                            if (undefIdx >= 0) {
+                                int delStart = pipeIdx;
+                                while (delStart > colonIdx + 1 && Character.isWhitespace(doc.text.charAt(delStart - 1))) {
+                                    delStart--;
+                                }
+                                int delEnd = undefIdx + "undefined".length();
+                                edits.add(new TextEdit(new LspRange(doc.toModelPosition(delStart), doc.toModelPosition(delEnd)), ""));
+                            }
+                        }
+                    }
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, edits));
+                    actions.add(new CodeAction("Convert parameter to optional '?:'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 6. TS_READONLY_ARRAY
+                if (ProblemCode.TS_READONLY_ARRAY.name().equals(code) || msg.contains("Array<T> should be readonly") || msg.contains("should be readonly")) {
+                    // Insert "readonly " before the property name instead of overwriting it
+                    TextEdit edit = new TextEdit(new LspRange(diag.range.start, diag.range.start), "readonly ");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Convert to 'readonly T[]'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
+                }
+
+                // 7. TS_NON_NULL_ASSERTION (2 choices)
+                if (ProblemCode.TS_NON_NULL_ASSERTION.name().equals(code) || msg.contains("Forbidden non-null assertion") || msg.contains("non-null assertion")) {
+                    TextEdit editOpt = new TextEdit(diag.range, "?.");
+                    WorkspaceEdit wsEditOpt = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editOpt)));
+                    actions.add(new CodeAction("Replace '!' with optional chaining '?.'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEditOpt, null, null));
+
+                    TextEdit editRem = new TextEdit(diag.range, "");
+                    WorkspaceEdit wsEditRem = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(editRem)));
+                    actions.add(new CodeAction("Remove non-null assertion '!'", CodeActionKind.QUICKFIX, Collections.singletonList(diag), false, wsEditRem, null, null));
+                }
+
+                // 8. TS_MISSING_RETURN_TYPE
+                if (ProblemCode.TS_MISSING_RETURN_TYPE.name().equals(code) || msg.contains("Missing return type")) {
+                    // Insert ": void" right after closing parenthesis of parameter list
+                    int fnEndOff = doc.toOffset(diag.range.end);
+                    int openParen = doc.text.indexOf('(', fnEndOff);
+                    int closeParen = (openParen >= 0) ? doc.text.indexOf(')', openParen) : -1;
+                    com.cocode.vcode.ide.core.lsp.model.LspPosition insPos = (closeParen >= 0) ? doc.toModelPosition(closeParen + 1) : diag.range.end;
+                    TextEdit edit = new TextEdit(new com.cocode.vcode.ide.core.lsp.model.LspRange(insPos, insPos), ": void");
+                    WorkspaceEdit wsEdit = new WorkspaceEdit(Collections.singletonMap(doc.uri, Collections.singletonList(edit)));
+                    actions.add(new CodeAction("Add explicit return type annotation (': void')", CodeActionKind.QUICKFIX, Collections.singletonList(diag), true, wsEdit, null, null));
                 }
             }
         }

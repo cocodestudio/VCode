@@ -22,13 +22,18 @@ import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.core.lsp.index.WorkspaceIndexService;
 import com.cocode.vcode.ide.core.lsp.model.FormattingOptions;
 import com.cocode.vcode.ide.core.lsp.model.TextEdit;
+import com.cocode.vcode.ide.core.quickfix.QuickFix;
+import com.cocode.vcode.ide.core.quickfix.QuickFixRegistry;
 import com.cocode.vcode.ide.ui.editor.viewer.IEditorCallback;
+import com.cocode.vcode.ide.utils.FileUtils;
 import com.cocode.vcode.ide.views.CodeEditText;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -1283,7 +1288,8 @@ public final class LspEditorBridge {
 
     /**
      * Resolves available CodeActions for the given problem diagnostic.
-     * Queries the active language server natively using the LSP codeAction capability.
+     * Queries the active language server natively using the LSP codeAction capability,
+     * and supplements with {@link QuickFixRegistry} intentions.
      */
     public static List<CodeAction> getCodeActionsForProblem(Problem problem, CodeEditText editor) {
         if (problem == null) return Collections.emptyList();
@@ -1293,45 +1299,85 @@ public final class LspEditorBridge {
         }
         if (file == null) return Collections.emptyList();
 
+        String uri = file.getAbsolutePath();
+        String docText = null;
+        if (editor != null && editor.getText() != null) {
+            docText = editor.getText().toString();
+        } else {
+            LspDocument lspDoc = LspDocumentManager.getInstance().getDocument(uri);
+            if (lspDoc != null && lspDoc.text != null) {
+                docText = lspDoc.text;
+            } else {
+                try {
+                    docText = FileUtils.readFile(file);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        List<CodeAction> result = new ArrayList<>();
+        Set<String> seenTitles = new HashSet<>();
+
         FileType ft = (editor != null && editor.getFileType() != null)
                 ? editor.getFileType()
                 : FileType.fromExtension(file.getName());
         String langId = ft != null ? ft.getLspLanguageId() : "plaintext";
         LspServer server = LspClientManager.getInstance().getServer(langId);
-        if (server == null) return Collections.emptyList();
 
-        String uri = file.getAbsolutePath();
-        int line = Math.max(0, problem.getLine() - 1);
-        int col = Math.max(0, problem.getColumn() - 1);
-        int length = Math.max(1, problem.getLength());
-        LspRange range = new LspRange(line, col, line, col + length);
+        if (server != null) {
+            int line = Math.max(0, problem.getLine() - 1);
+            int col = Math.max(0, problem.getColumn() - 1);
+            int length = Math.max(1, problem.getLength());
+            LspRange range = new LspRange(line, col, line, col + length);
 
-        Diagnostic diag = new Diagnostic(
-                range,
-                mapSeverityToLsp(problem.getSeverity()),
-                problem.getCode() != null ? problem.getCode() : "",
-                langId,
-                problem.getMessage() != null ? problem.getMessage() : ""
-        );
+            Diagnostic diag = new Diagnostic(
+                    range,
+                    mapSeverityToLsp(problem.getSeverity()),
+                    problem.getCode() != null ? problem.getCode() : "",
+                    langId,
+                    problem.getMessage() != null ? problem.getMessage() : ""
+            );
 
-        CodeActionContext context = new CodeActionContext(
-                Collections.singletonList(diag),
-                Collections.singletonList(CodeActionKind.QUICKFIX)
-        );
-        CodeActionParams params = new CodeActionParams(new TextDocumentIdentifier(uri), range, context);
+            CodeActionContext context = new CodeActionContext(
+                    Collections.singletonList(diag),
+                    Collections.singletonList(CodeActionKind.QUICKFIX)
+            );
+            CodeActionParams params = new CodeActionParams(new TextDocumentIdentifier(uri), range, context);
 
-        try {
-            List<CodeAction> actions = server.codeAction(params, new CancellationToken());
-            return actions != null ? actions : Collections.emptyList();
-        } catch (Exception e) {
-            return Collections.emptyList();
+            try {
+                List<CodeAction> serverActions = server.codeAction(params, new CancellationToken());
+                if (serverActions != null) {
+                    for (CodeAction action : serverActions) {
+                        if (action != null && action.title != null && seenTitles.add(action.title)) {
+                            result.add(action);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
         }
+
+        List<CodeAction> fallbackActions = QuickFixRegistry.getCodeActions(problem, uri, docText);
+        if (fallbackActions != null) {
+            for (CodeAction action : fallbackActions) {
+                if (action != null && action.title != null && seenTitles.add(action.title)) {
+                    result.add(action);
+                }
+            }
+        }
+
+        return result;
     }
 
     /**
      * Checks if any CodeAction / QuickFix is available for the given problem.
      */
     public static boolean hasCodeActionsForProblem(Problem problem, CodeEditText editor) {
+        if (problem == null) return false;
+        List<QuickFix> custom = problem.getCustomQuickFixes();
+        if (custom != null && !custom.isEmpty()) {
+            return true;
+        }
         List<CodeAction> actions = getCodeActionsForProblem(problem, editor);
         return actions != null && !actions.isEmpty();
     }

@@ -5,6 +5,7 @@ import com.cocode.vcode.ide.core.diagnostic.ProblemCode;
 import com.cocode.vcode.ide.core.diagnostic.util.KnownElements;
 import com.cocode.vcode.ide.core.diagnostic.util.LinterUtils;
 import com.cocode.vcode.ide.core.model.Problem;
+import com.cocode.vcode.ide.core.quickfix.QuickFixRegistry;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -279,7 +280,8 @@ public class CssLinter {
                     }
 
                     // ID selector check
-                    if (selector.contains("#") && !selector.startsWith("@") && !isInsideSpecialAtRule(tree, i)) {
+                    if (!selector.startsWith("@") && !isInsideSpecialAtRule(tree, i)
+                            && !QuickFixRegistry.findIdSelectorsInSlice(selector, 0).isEmpty()) {
                         problems.add(new Problem(file, selLine, selCol, selLen,
                                 "Avoid using ID selectors ('#id') for styling: prefer class selectors",
                                 Problem.Severity.INFO,

@@ -16,10 +16,12 @@ import com.cocode.vcode.ide.R;
 import com.cocode.vcode.ide.core.lsp.LspEditorBridge;
 import com.cocode.vcode.ide.core.model.Problem;
 import com.cocode.vcode.ide.databinding.BottomSheetProblemsBinding;
+import com.cocode.vcode.ide.ui.editor.EditorActivity;
 import com.cocode.vcode.ide.ui.editor.EditorViewModel;
 import com.cocode.vcode.ide.ui.editor.EditorViewModelFactory;
 import com.cocode.vcode.ide.ui.sheets.BaseBottomSheetDialogFragment;
 import com.cocode.vcode.ide.utils.FontManager;
+import com.cocode.vcode.ide.views.CodeEditText;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -155,7 +157,11 @@ public class ProblemsBottomSheet extends BaseBottomSheetDialogFragment {
             holder.binding.ivSeverity.setColorFilter(
                     androidx.core.content.ContextCompat.getColor(ctx, colorRes));
 
-            boolean hasFix = LspEditorBridge.hasCodeActionsForProblem(item, null);
+            CodeEditText activeEditor = null;
+            if (getActivity() instanceof EditorActivity) {
+                activeEditor = ((EditorActivity) getActivity()).getActiveCodeEditor();
+            }
+            boolean hasFix = LspEditorBridge.hasCodeActionsForProblem(item, activeEditor);
             holder.binding.btnQuickFix.setVisibility(hasFix ? View.VISIBLE : View.GONE);
             if (hasFix) {
                 holder.binding.btnQuickFix.setOnClickListener(v -> {
